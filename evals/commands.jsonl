@@ -1,0 +1,40 @@
+{"request": "split right and run htop", "expect": [["open_pane", {"side": "right", "program": "htop"}]]}
+{"request": "open htop in a pane below", "expect": [["open_pane", {"side": "below", "program": "htop"}]]}
+{"request": "split the screen", "expect": [["open_pane", {}]]}
+{"request": "split below", "expect": [["open_pane", {"side": "below"}]]}
+{"request": "open a terminal on the left called notes", "expect": [["open_pane", {"side": "left", "name": "notes"}]]}
+{"request": "new tab for logs", "expect": [["open_tab", {"name": "logs"}]]}
+{"request": "open a new tab running btop", "expect": [["open_tab", {"program": "btop"}]]}
+{"request": "new tab", "expect": [["open_tab", {}]]}
+{"request": "close this pane", "expect": [["close_pane", {"pane": "current"}]]}
+{"request": "close the htop pane", "expect": [["close_pane", {"pane": "htop"}]]}
+{"request": "kill the pane on the right", "expect": [["close_pane", {"pane": "right"}]]}
+{"request": "close tab 2", "expect": [["close_tab", {"tab": "2"}]]}
+{"request": "close this tab", "expect": [["close_tab", {"tab": "current"}]]}
+{"request": "go to the left pane", "expect": [["go_to_pane", {"pane": "left"}]]}
+{"request": "switch to the htop pane", "expect": [["go_to_pane", {"pane": "htop"}]]}
+{"request": "focus the pane above", "expect": [["go_to_pane", {"pane": "above"}]]}
+{"request": "switch to tab 3", "expect": [["go_to_tab", {"tab": "3"}]]}
+{"request": "next tab", "expect": [["go_to_tab", {"tab": "next"}]]}
+{"request": "go back to the previous tab", "expect": [["go_to_tab", {"tab": "previous"}]]}
+{"request": "go to the logs tab", "expect": [["go_to_tab", {"tab": "logs"}]]}
+{"request": "make it a grid", "expect": [["arrange_panes", {"layout": "grid"}]]}
+{"request": "stack the panes", "expect": [["arrange_panes", {"layout": "stack"}]]}
+{"request": "put the panes side by side", "expect": [["arrange_panes", {"layout": "vertical"}]]}
+{"request": "rename this tab to build", "expect": [["rename_tab", {"name": "build"}]]}
+{"request": "call this tab server", "expect": [["rename_tab", {"name": "server"}]]}
+{"request": "make this pane wider by 10", "expect": [["resize_pane", {"direction": "wider", "amount": 10}]]}
+{"request": "make the pane taller", "expect": [["resize_pane", {"direction": "taller"}]]}
+{"request": "run make test in the left pane", "expect": [["run_in_pane", {"pane": "left", "command": "make test"}]]}
+{"request": "type git status in the right pane", "expect": [["run_in_pane", {"pane": "right", "command": "git status"}]]}
+{"request": "close tab 2 and go to tab 1", "expect": [["close_tab", {"tab": "2"}], ["go_to_tab", {"tab": "1"}]]}
+{"request": "what's the weather", "expect": []}
+{"request": "tell me a joke", "expect": []}
+{"request": "delete all my files", "expect": []}
+{"request": "close the logs tab", "expect": [["close_tab", {"tab": "logs"}]]}
+{"request": "go to tab 2 and close this pane", "expect": [["go_to_tab", {"tab": "2"}], ["close_pane", {"pane": "current"}]]}
+{"request": "exit vim in the left pane", "expect": []}
+{"request": "open a new tab and run top", "expect": [["open_tab", {"program": "top"}]]}
+{"request": "quit", "expect": []}
+{"request": "switch panes", "expect": [["go_to_pane", {"pane": "next"}]]}
+{"request": "make the left pane bigger", "expect": [["resize_pane", {"direction": "wider"}]]}

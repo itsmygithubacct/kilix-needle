@@ -1,0 +1,2 @@
+#!/bin/sh
+exec python3 -B "$(dirname "$(readlink -f "$0")")/needle_cli.py" "$@"
