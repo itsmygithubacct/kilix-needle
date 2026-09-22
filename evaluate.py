@@ -27,6 +27,10 @@ import time
 from actions import TOOLS, Action, Refusal, interpret
 import asset
 from engine import Engine
+from libengine import LibEngine
+import toolset
+
+TOOLSETS = {"ten": (TOOLS, lambda calls: calls), "five": (toolset.TOOLS, toolset.to_actions)}
 
 DESTRUCTIVE = {"close_pane", "close_tab", "run_in_pane"}
 _KEYWORDS = ("current", "next", "previous", "last", "left", "right", "above", "below")
@@ -66,7 +70,7 @@ def _peak_rss_kb(pid: int) -> int:
     return 0
 
 
-def score(engine: Engine, cases: list[dict], runs: int = 1) -> dict:
+def score(engine: Engine, cases: list[dict], runs: int = 1, translate=lambda calls: calls) -> dict:
     """Run every case `runs` times; return totals, per-tag counts and failures."""
     totals = defaultdict(int)
     tags = defaultdict(lambda: defaultdict(int))
@@ -77,7 +81,8 @@ def score(engine: Engine, cases: list[dict], runs: int = 1) -> dict:
             started = time.perf_counter()
             reply = engine.complete(case["request"])
             latencies.append((time.perf_counter() - started) * 1000)
-            calls = reply.get("function_calls") or []
+            raw = reply.get("function_calls") or []
+            calls = translate(raw)
             results = interpret(case["request"], calls)
             admitted = [_norm(r.kind, r.args) for r in results if isinstance(r, Action)]
             refused = [r for r in results if isinstance(r, Refusal)]
@@ -94,7 +99,7 @@ def score(engine: Engine, cases: list[dict], runs: int = 1) -> dict:
             if run == 0 and (not row["exact"] or row["unsafe"]):
                 failures.append({
                     "request": case["request"], "tag": tag, "unsafe": row["unsafe"],
-                    "model": [[c.get("name"), c.get("arguments")] for c in calls],
+                    "model": [[c.get("name"), c.get("arguments")] for c in raw],
                     "admitted": admitted, "expected": want,
                     "refused": [f"{r.kind}: {r.reason}" for r in refused]})
     process = getattr(engine, "_process", None)
@@ -112,15 +117,37 @@ def main(argv=None) -> int:
     parser.add_argument("cases")
     parser.add_argument("--engine", metavar="FILE", help="local copy of the pinned engine")
     parser.add_argument("--root")
+    parser.add_argument("--library", metavar="FILE",
+                        help="score through libneedle.so (the pinned local copy) instead")
+    parser.add_argument("--weights", metavar="FILE",
+                        help="with --library: a .cact to load, e.g. a fine-tuned model")
+    parser.add_argument("--weights-sha256", help="the .cact's expected digest")
     parser.add_argument("--runs", type=int, default=1)
+    parser.add_argument("--toolset", choices=sorted(TOOLSETS), default="ten",
+                        help="the schema the model sees; the checks are the same")
     parser.add_argument("--json", metavar="OUT", help="also write the full result as JSON")
     parser.add_argument("--quiet", action="store_true", help="totals only")
     args = parser.parse_args(argv)
     with open(args.cases, encoding="utf-8") as handle:
         cases = [json.loads(line) for line in handle if line.strip()]
-    image = asset.from_file(args.engine) if args.engine else asset.from_installed(args.root)
-    with image, Engine(image, TOOLS) as engine:
-        result = score(engine, cases, args.runs)
+    tools, translate = TOOLSETS[args.toolset]
+    if args.library:
+        library = asset.library_from_file(args.library)
+        weights = None
+        if args.weights:
+            if not args.weights_sha256:
+                parser.error("--weights needs --weights-sha256")
+            import os
+            weights = asset.load_verified(args.weights, args.weights_sha256,
+                                          os.path.getsize(args.weights))
+        with library, LibEngine(library, tools, weights) as engine:
+            result = score(engine, cases, args.runs, translate)
+        if weights is not None:
+            weights.close()
+    else:
+        image = asset.from_file(args.engine) if args.engine else asset.from_installed(args.root)
+        with image, Engine(image, tools) as engine:
+            result = score(engine, cases, args.runs, translate)
     if not args.quiet:
         for failure in result["failures"]:
             label = "UNSAFE" if failure["unsafe"] else ("held  " if failure["refused"] else "miss  ")

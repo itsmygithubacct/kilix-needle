@@ -1,0 +1,383 @@
+"""Fine-tune Needle 2 for Kilix panes and tabs from the kilix-needle-tuning library.
+
+    kilix-needle tune [--base-dir DIR] [--library FILE] [--steps-only] [--background]
+    kilix-needle tune --status | --select RUN | --deselect
+
+A run works in its own directory and leaves a marker after each stage, so an
+interrupted run resumes where it stopped:
+
+  base     the checkpoint and tokenizer, verified against the manifest digests
+           (the checkpoint is a pickle and is never read before that)
+  source   Needle's training code at the pinned commit, fetched once
+  env      a Python environment from the hash-locked requirements
+  data     examples generated from the library, each checked against the
+           same rules the running tool applies, minus every eval request
+  train    LoRA fine-tuning, offline (its own network namespace when the
+           kernel allows one), at the lowest CPU priority
+  export   the tuned .cact
+  gates    the benchmarks: no unsafe action on any eval set, and a clear gain
+           on the held-out set written without sight of the library
+  select   only if every gate passed: the tuned model becomes the one used
+
+Nothing here accepts a licence: the base files come from installed content
+assets (or --base-dir for development, held to the same digests).
+"""
+from __future__ import annotations
+
+import argparse
+from datetime import datetime, timezone
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tomllib
+
+REPO = Path(__file__).resolve().parent
+LIBRARY = REPO / "third_party" / "kilix-needle-tuning"
+APP_HOME = Path(os.environ.get("GPU_TERMINAL_HOME") or Path.home() / ".local" / "gpu_terminal") \
+    / "kilix-apps" / "kilix-needle"
+SELECTION = APP_HOME / "model.json"
+STAGES = ("base", "source", "env", "data", "train", "export", "gates", "select")
+
+
+class TuneError(RuntimeError):
+    pass
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def load_manifest(library: Path = LIBRARY) -> dict:
+    path = library / "manifest.toml"
+    if not path.exists():
+        raise TuneError(f"no tuning library at {library}; run "
+                        "`git submodule update --init third_party/kilix-needle-tuning`")
+    manifest = tomllib.loads(path.read_text(encoding="utf-8"))
+    if manifest.get("schema") != "kilix-needle-tuning/v1":
+        raise TuneError(f"unsupported tuning manifest {manifest.get('schema')!r}")
+    return manifest
+
+
+class Run:
+    """One tuning run's directory, log and stage markers."""
+
+    def __init__(self, root: Path):
+        self.root = root
+        self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
+        self.log_path = root / "tune.log"
+
+    def log(self, message: str) -> None:
+        stamp = datetime.now(timezone.utc).strftime("%H:%M:%S")
+        with open(self.log_path, "a", encoding="utf-8") as handle:
+            handle.write(f"{stamp} {message}\n")
+        print(f"  {message}", flush=True)
+
+    def done(self, stage: str) -> bool:
+        return (self.root / f".{stage}.done").exists()
+
+    def mark(self, stage: str, detail: dict | None = None) -> None:
+        (self.root / f".{stage}.done").write_text(json.dumps(detail or {}), encoding="utf-8")
+
+
+def _verify(path: Path, sha: str, what: str) -> None:
+    if not path.is_file() or path.is_symlink():
+        raise TuneError(f"{what} is missing: {path}")
+    actual = sha256_file(path)
+    if actual != sha:
+        raise TuneError(f"{what} does not match its pinned digest ({actual[:12]}…); not used")
+
+
+def stage_base(run: Run, manifest: dict, base_dir: Path | None) -> None:
+    """Checkpoint and tokenizer, verified, copied into the run."""
+    base = manifest["base"]
+    if base_dir is None:
+        import asset
+        base_dir = Path(asset.installed_asset_dir(base["checkpoint_asset"]))
+    files = {"checkpoints/needle2.pkl": base["checkpoint_sha256"],
+             "tokenizer/tokenizer.model": base["tokenizer_model_sha256"],
+             "tokenizer/tokenizer.vocab": base["tokenizer_vocab_sha256"]}
+    target = run.root / "base"
+    for rel, sha in files.items():
+        source = base_dir / rel
+        _verify(source, sha, rel)
+        (target / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, target / rel)
+        _verify(target / rel, sha, rel)
+    run.log("base: checkpoint and tokenizer verified")
+
+
+def _git(*args: str, cwd: Path) -> str:
+    done = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, timeout=900)
+    if done.returncode != 0:
+        raise TuneError(f"git {args[0]}: {done.stderr.strip()[-300:]}")
+    return done.stdout.strip()
+
+
+def stage_source(run: Run, manifest: dict) -> None:
+    """The training code at exactly the pinned commit, with the base files placed."""
+    source = manifest["source"]
+    src = run.root / "src"
+    if not (src / ".git").exists():
+        src.mkdir(parents=True, exist_ok=True)
+        _git("init", "-q", cwd=src)
+        run.log(f"source: fetching {source['url']} {source['tag']}")
+        _git("fetch", "-q", "--depth", "1", source["url"], source["commit"], cwd=src)
+        _git("checkout", "-q", "--detach", "FETCH_HEAD", cwd=src)
+    head = _git("rev-parse", "HEAD", cwd=src)
+    if head != source["commit"]:
+        raise TuneError(f"source is at {head}, not the pinned {source['commit']}")
+    if _git("status", "--porcelain", "--untracked-files=no", cwd=src):
+        raise TuneError("the source checkout has local changes")
+    # Place the verified base files where upstream looks, so it never downloads them.
+    (src / "checkpoints").mkdir(exist_ok=True)
+    shutil.copyfile(run.root / "base/checkpoints/needle2.pkl", src / "checkpoints/needle2.pkl")
+    for name in ("tokenizer.model", "tokenizer.vocab"):
+        shutil.copyfile(run.root / "base/tokenizer" / name, src / "needle/model" / name)
+    run.log(f"source: {head[:12]} checked out, base files placed")
+
+
+def stage_env(run: Run, manifest: dict, library: Path) -> None:
+    env_dir = run.root / "env"
+    lock = library / manifest["environment"]["requirements"]
+    if shutil.which("uv") is None:
+        raise TuneError("uv is not installed; it builds the training environment")
+    subprocess.run(["uv", "venv", "-q", "-p", manifest["environment"]["python"], str(env_dir)],
+                   check=True, timeout=900)
+    subprocess.run(["uv", "pip", "install", "-q", "--require-hashes", "--python",
+                    str(env_dir / "bin" / "python"), "-r", str(lock)], check=True, timeout=3600)
+    run.log(f"env: {manifest['environment']['requirements']} installed with hashes")
+
+
+def build_data(library: Path, manifest: dict, out: Path) -> dict:
+    """Generate, check against the running tool's rules, write upstream's format."""
+    sys.path.insert(0, str(library))
+    try:
+        import generate as corpus
+    finally:
+        sys.path.remove(str(library))
+    from actions import Action, interpret
+    import toolset
+    data = manifest["data"]
+    if data["toolset"] != "five":
+        raise TuneError("only the five-tool schema is trained")
+    exclude = set()
+    for rel in data["exclude"]:
+        with open(REPO / rel, encoding="utf-8") as handle:
+            exclude |= {corpus._fold(json.loads(line)["request"]) for line in handle if line.strip()}
+    rows, dropped = corpus.generate(data["seed"], data["per_template"], exclude)
+    kept = inconsistent = 0
+    with open(out, "w", encoding="utf-8") as handle:
+        for row in rows:
+            calls = [{"name": kind, "arguments": args} for kind, args in row["actions"]]
+            admitted = [[a.kind, a.args] for a in interpret(row["query"], calls)
+                        if isinstance(a, Action)]
+            if len(admitted) != len(row["actions"]):
+                inconsistent += 1   # a training answer the tool would refuse teaches nothing
+                continue
+            handle.write(json.dumps({"query": row["query"], "tools": toolset.TOOLS,
+                                     "answers": toolset.from_actions(row["actions"])},
+                                    ensure_ascii=False) + "\n")
+            kept += 1
+    return {"generated": len(rows), "kept": kept, "eval_matches_dropped": dropped,
+            "inconsistent_dropped": inconsistent}
+
+
+def _offline_prefix() -> list[str]:
+    """Run inside a fresh network namespace when the kernel allows it."""
+    unshare = shutil.which("unshare")
+    if unshare and subprocess.run([unshare, "-rn", "true"], capture_output=True).returncode == 0:
+        return [unshare, "-rn"]
+    return []
+
+
+_TRAIN = """
+import argparse, sys, time, resource
+sys.path.insert(0, ".")
+from needle.model.finetune import finetune_local
+t = time.time()
+finetune_local(argparse.Namespace(jsonl_path={data!r}, checkpoint="checkpoints/needle2.pkl",
+    epochs={epochs}, batch_size={batch_size}, lr={learning_rate}, lora_rank={lora_rank},
+    lora_alpha={lora_alpha}, max_len={max_len}, val_split={val_split},
+    generate=0, model=None, workers=1, checkpoint_dir={out_dir!r}, out={lora!r}))
+print(f"TRAIN {{time.time()-t:.0f}}s peak {{resource.getrusage(resource.RUSAGE_SELF).ru_maxrss//1024}} MB")
+"""
+_EXPORT = """
+import argparse, sys
+sys.path.insert(0, ".")
+from needle.model.finetune import build_main
+build_main(argparse.Namespace(checkpoint="checkpoints/needle2.pkl", lora={lora!r}, out={out!r},
+                              bits=None, upload=False))
+"""
+
+
+def _python_stage(run: Run, script: str, what: str) -> None:
+    # generate=0 above keeps upstream from sending anything to its data service;
+    # the namespace (when available) makes any network use impossible anyway.
+    env = {"PATH": "/usr/bin:/bin", "HOME": str(run.root), "LANG": "C.UTF-8",
+           "HF_HUB_OFFLINE": "1", "NEEDLE_TELEMETRY": "0", "DO_NOT_TRACK": "1"}
+    argv = [*_offline_prefix(), "nice", "-n", "19", str(run.root / "env/bin/python"), "-c", script]
+    with open(run.log_path, "a", encoding="utf-8") as log:
+        done = subprocess.run(argv, cwd=run.root / "src", env=env, stdout=log, stderr=log)
+    if done.returncode != 0:
+        raise TuneError(f"{what} failed (status {done.returncode}); see {run.log_path}")
+
+
+def stage_train(run: Run, manifest: dict) -> None:
+    train = manifest["train"]
+    _python_stage(run, _TRAIN.format(data=str(run.root / "train.jsonl"), out_dir=str(run.root),
+                                     lora=str(run.root / "lora.pkl"), **train), "training")
+    run.log("train: LoRA adapter written")
+
+
+def stage_export(run: Run) -> str:
+    _python_stage(run, _EXPORT.format(lora=str(run.root / "lora.pkl"),
+                                      out=str(run.root / "tuned.cact")), "export")
+    digest = sha256_file(run.root / "tuned.cact")
+    run.log(f"export: tuned.cact {digest[:12]}")
+    return digest
+
+
+def gate(manifest: dict, results: dict, reference: dict) -> list[str]:
+    """Every gate the tuned results fail; empty means select it."""
+    gates, failures = manifest["gates"], []
+    for name, result in results.items():
+        unsafe = result["totals"].get("unsafe", 0)
+        if unsafe > gates["unsafe_max"]:
+            failures.append(f"{name}: {unsafe} unsafe action(s) admitted")
+    held = results["heldout"]
+    cases = held["totals"]["cases"]
+    gain = 100 * (held["totals"].get("exact", 0) - reference["totals"].get("exact", 0)) / cases
+    if gain < gates["min_heldout_exact_gain"]:
+        failures.append(f"held-out exact gain {gain:+.1f} points, needs "
+                        f"{gates['min_heldout_exact_gain']:+}")
+    for tag, row in reference["tags"].items():
+        lost = row.get("exact", 0) - held["tags"].get(tag, {}).get("exact", 0)
+        if lost > gates["no_tag_regression_above"]:
+            failures.append(f"held-out tag {tag} lost {lost} cases")
+    return failures
+
+
+def stage_gates(run: Run, manifest: dict, library_image, cact_sha: str) -> dict:
+    import asset
+    from evaluate import score
+    from libengine import LibEngine
+    import toolset
+    weights = asset.load_verified(run.root / "tuned.cact", cact_sha,
+                                  (run.root / "tuned.cact").stat().st_size)
+    sets = {"dev": "evals/dev.jsonl", "test": "evals/test.jsonl",
+            "heldout": manifest["gates"]["heldout"]}
+    results = {}
+    with weights, LibEngine(library_image, toolset.TOOLS, weights) as engine:
+        for name, rel in sets.items():
+            with open(REPO / rel, encoding="utf-8") as handle:
+                cases = [json.loads(line) for line in handle if line.strip()]
+            results[name] = score(engine, cases, 1, toolset.to_actions)
+    reference_path = REPO / "evals/results/base-heldout-v2-ten.json"
+    reference = json.loads(reference_path.read_text(encoding="utf-8"))
+    failures = gate(manifest, results, reference)
+    report = {"cact_sha256": cact_sha, "failures": failures,
+              "totals": {name: r["totals"] for name, r in results.items()},
+              "reference_totals": reference["totals"]}
+    (run.root / "gates.json").write_text(json.dumps(report, indent=1), encoding="utf-8")
+    run.log("gates: " + ("PASS" if not failures else "FAIL: " + "; ".join(failures)))
+    return report
+
+
+def select(run_root: Path, cact_sha: str) -> None:
+    APP_HOME.mkdir(parents=True, exist_ok=True, mode=0o700)
+    tmp = SELECTION.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"weights": str(run_root / "tuned.cact"), "sha256": cact_sha,
+                               "toolset": "five", "run": run_root.name}), encoding="utf-8")
+    os.replace(tmp, SELECTION)
+
+
+def selected() -> dict | None:
+    try:
+        return json.loads(SELECTION.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def tune(base_dir: Path | None, library_file: str | None, run_name: str | None) -> int:
+    import asset
+    manifest = load_manifest()
+    run = Run(APP_HOME / "tuning" / (run_name or
+                                     datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")))
+    print(f"kilix-needle tune: {run.root}")
+    library_image = asset.library_from_file(library_file) if library_file \
+        else asset.installed_library()
+    with library_image:
+        if not run.done("base"):
+            stage_base(run, manifest, base_dir); run.mark("base")
+        if not run.done("source"):
+            stage_source(run, manifest); run.mark("source")
+        if not run.done("env"):
+            stage_env(run, manifest, LIBRARY); run.mark("env")
+        if not run.done("data"):
+            stats = build_data(LIBRARY, manifest, run.root / "train.jsonl")
+            run.log(f"data: {stats}"); run.mark("data", stats)
+        if not run.done("train"):
+            stage_train(run, manifest); run.mark("train")
+        if not run.done("export"):
+            digest = stage_export(run); run.mark("export", {"sha256": digest})
+        digest = json.loads((run.root / ".export.done").read_text())["sha256"]
+        report = stage_gates(run, manifest, library_image, digest)
+        run.mark("gates", report)
+    if report["failures"]:
+        print("kilix-needle tune: gates failed; the current model stays in use")
+        return 1
+    select(run.root, digest)
+    run.mark("select")
+    run.log("select: the tuned model is now used")
+    return 0
+
+
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="kilix-needle tune", description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--base-dir", type=Path,
+                        help="development: a directory holding checkpoints/ and tokenizer/, "
+                             "held to the manifest digests")
+    parser.add_argument("--library", metavar="FILE",
+                        help="development: a local copy of the pinned libneedle.so")
+    parser.add_argument("--run", help="resume or name a run")
+    parser.add_argument("--background", action="store_true",
+                        help="detach and log to the run directory")
+    parser.add_argument("--status", action="store_true")
+    parser.add_argument("--deselect", action="store_true",
+                        help="go back to the base model")
+    args = parser.parse_args(argv)
+    if args.status:
+        print(json.dumps({"selected": selected(), "runs": sorted(
+            p.name for p in (APP_HOME / "tuning").glob("*") if p.is_dir())}, indent=1))
+        return 0
+    if args.deselect:
+        SELECTION.unlink(missing_ok=True)
+        print("kilix-needle: the base model is used")
+        return 0
+    if args.background:
+        name = args.run or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        root = APP_HOME / "tuning" / name
+        root.mkdir(parents=True, exist_ok=True, mode=0o700)
+        rest = [a for a in argv if a != "--background"]
+        if not args.run:
+            rest += ["--run", name]
+        with open(root / "background.log", "a") as log:
+            subprocess.Popen([sys.executable, "-B", str(REPO / "needle_cli.py"), "tune", *rest],
+                             stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+                             start_new_session=True)
+        print(f"kilix-needle: tuning in the background; progress in {root}/tune.log")
+        return 0
+    try:
+        return tune(args.base_dir, args.library, args.run)
+    except TuneError as error:
+        print(f"kilix-needle tune: {error}", file=sys.stderr)
+        return 1

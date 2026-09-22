@@ -105,7 +105,10 @@ _ORDINALS = {"first": "1", "second": "2", "third": "3", "fourth": "4", "fifth": 
 _RELATIVE = {"next": "next", "previous": "previous", "prev": "previous", "last one": "previous",
              "back": "previous"}
 _SIDE_WORDS = {"left": "left", "right": "right", "above": "above", "up": "above", "top": "above",
-               "below": "below", "down": "below", "bottom": "below", "under": "below"}
+               "upper": "above", "below": "below", "down": "below", "bottom": "below",
+               "under": "below", "underneath": "below", "beneath": "below", "lower": "below"}
+_CARDINALS = {"one": "1", "two": "2", "three": "3", "four": "4", "five": "5", "six": "6",
+              "seven": "7", "eight": "8", "nine": "9"}
 _LEADING_VERBS = re.compile(r"^(?:running|run|with|start|starting|launch)\s+", re.IGNORECASE)
 _FILLER = re.compile(r"\b(?:the|this|that|one|pane|panes|tab|tabs|window|on|to|of)\b",
                      re.IGNORECASE)
@@ -154,6 +157,8 @@ def _target_value(raw: str, *, relative: bool) -> str | None:
         return _RELATIVE[stripped]
     if relative and stripped in _ORDINALS:
         return _ORDINALS[stripped]
+    if relative and stripped in _CARDINALS:
+        return _CARDINALS[stripped]
     if relative and re.fullmatch(r"(?:number\s+)?\d{1,2}", stripped):
         return stripped.split()[-1]
     if re.fullmatch(r"[\w.+-][\w .+-]{0,62}", stripped):
@@ -205,7 +210,8 @@ def _mentions(target: str) -> list[str]:
     token = target[5:] if target.startswith("name:") else target
     return [token,
             *(word for word, side in _SIDE_WORDS.items() if side == token),
-            *(word for word, number in _ORDINALS.items() if number == token)]
+            *(word for word, number in _ORDINALS.items() if number == token),
+            *(word for word, number in _CARDINALS.items() if number == token)]
 
 
 def _first(words: list[str], text: str) -> re.Match | None:
@@ -228,7 +234,7 @@ def _bound_to_unit(mentions: list[str], text: str, unit_words: list[str]) -> boo
         word = re.escape(mention)
         if re.search(rf"(?<![\w]){word}\s+(?:{units})\b"
                      rf"|\b(?:{units})\s+(?:(?:called|named|running|with|number)\s+"
-                     rf"|(?:on|to|at)\s+the\s+)?{word}(?![\w])",
+                     rf"|(?:on|to|at)\s+(?:the\s+)?)?{word}(?![\w])",
                      text, re.IGNORECASE):
             return True
     return False
@@ -347,6 +353,9 @@ def _admit(name: str, args: dict, prompt: str) -> Action | Refusal:
         title = _text(args, "name")
         if not title or not _grounded(title, prompt):
             return Refusal(name, f"the name {title!r} is not in the request")
+        if title.casefold() in _UNIT_NAMES or title.casefold() in ("panes", "tabs"):
+            # measured (five-tool schema): "make this pane wider by 10" -> tab_name "pane"
+            return Refusal(name, f"{title!r} is not a name for a tab")
         return Action(name, {"name": title})
 
     # resize_pane

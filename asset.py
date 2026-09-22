@@ -31,6 +31,10 @@ ENGINE_MEMBER = "needle"
 # exists only for --engine, which has no catalog to consult.
 PINNED_SHA256 = "a2df5d661606957d2ff0e8abd4af31ee2953e759ce84e8e5921b6e8d13bd0e16"
 PINNED_BYTES = 14_888_896
+# libneedle.so from cactus_needle-2.0.4-py3-none-manylinux2014_x86_64.whl at the
+# same revision: the runtime for tuned weights (see libengine.py).
+PINNED_LIB_SHA256 = "9fa5386d3e3a8ee17914fb23643bc5f5c906b683fa33561e79c5445dd78bc389"
+PINNED_LIB_BYTES = 14_315_600
 _CONTENT_SRC = Path(__file__).resolve().parent / "third_party" / "kilix-content" / "src"
 
 
@@ -104,6 +108,11 @@ def from_file(path: str) -> EngineImage:
     return load_verified(path, PINNED_SHA256, PINNED_BYTES)
 
 
+def library_from_file(path: str) -> EngineImage:
+    """A local copy of the pinned libneedle.so, for development and tuning."""
+    return load_verified(path, PINNED_LIB_SHA256, PINNED_LIB_BYTES)
+
+
 def content_root(explicit: str | None = None) -> str:
     """The host installer root, as Kilix hands it to the apps it launches."""
     for value in (explicit, os.environ.get("KILIX_CONTENT_ROOT")):
@@ -136,10 +145,62 @@ def _content():
     return kilix_content, first_use, kilix_license
 
 
+def _installed_spec(asset_id: str, root: str | None):
+    """The verified catalog spec and install directory of a covered asset."""
+    content, first_use, lic = _content()
+    install_hint = f"install it with: kilix-needle install" if asset_id == ASSET_ID \
+        else f"install it with: kilix models install {asset_id}"
+    try:
+        catalog = content.verified_packaged_catalog()
+    except RuntimeError as error:
+        raise AssetError(f"the Content catalog failed verification: {error}") from error
+    try:
+        spec = catalog.require_asset(asset_id)
+    except content.CatalogError as error:
+        raise AssetError(f"the pinned Content catalog has no {asset_id} asset") from error
+    records = lic.load_determined_records()
+    store = lic.ReceiptStore.shared()
+    try:
+        if first_use.needs_agreement(spec, records=records, store=store):
+            raise AssetError(f"the {asset_id} licence has not been accepted; {install_hint}")
+    except lic.LicenseError as error:
+        raise AssetError(f"the licence receipt could not be checked: {error}") from error
+    destination = content.Installer(content_root(root)).asset_destination(spec)
+    if os.path.islink(destination) or not os.path.isdir(destination):
+        raise AssetError(f"{asset_id} is not installed; {install_hint}")
+    return spec, destination
+
+
+def installed_member(asset_id: str, member: str, root: str | None = None) -> EngineImage:
+    """One file of an installed, covered asset, verified and sealed in memory."""
+    spec, destination = _installed_spec(asset_id, root)
+    item = next((f for f in spec.files if f.path == member), None)
+    if item is None:
+        raise AssetError(f"the {asset_id} manifest has no {member!r} member")
+    return load_verified(os.path.join(destination, member), item.sha256, item.bytes)
+
+
+def installed_asset_dir(asset_id: str, root: str | None = None) -> str:
+    """The directory of an installed, covered asset, every manifest file verified."""
+    spec, destination = _installed_spec(asset_id, root)
+    for item in spec.files:
+        load_verified(os.path.join(destination, item.path), item.sha256, item.bytes).close()
+    return destination
+
+
+def installed_library(root: str | None = None) -> EngineImage:
+    """libneedle.so from the needle2-runtime asset: the runtime for tuned weights."""
+    spec, _destination = _installed_spec("needle2-runtime", root)
+    member = next((f.path for f in spec.files if f.path.endswith("libneedle.so")), None)
+    if member is None:
+        raise AssetError("the needle2-runtime manifest has no libneedle.so")
+    return installed_member("needle2-runtime", member, root)
+
+
 def from_installed(root: str | None = None) -> EngineImage:
     """Admit the installed needle2 asset, or say how to install it."""
     content, first_use, lic = _content()
-    install_hint = f"install it with: kilix models install {ASSET_ID}"
+    install_hint = f"install it with: kilix-needle install"
     try:
         catalog = content.verified_packaged_catalog()
     except RuntimeError as error:

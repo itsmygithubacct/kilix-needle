@@ -19,8 +19,8 @@ from __future__ import annotations
 import json
 import sys
 
-from actions import TOOLS
-from engine import Engine, EngineError
+from engine import EngineError
+from libengine import LibEngineError
 import asset
 import needle_cli
 
@@ -49,23 +49,20 @@ TOOL_LIST = [
 
 
 class Server:
-    def __init__(self, image_factory):
-        self._image_factory = image_factory
-        self._image = None
-        self._engine: Engine | None = None
+    def __init__(self, runtime_factory):
+        self._runtime_factory = runtime_factory
+        self._runtime = None
 
-    def _ensure_engine(self) -> Engine:
-        if self._engine is None:
-            self._image = self._image_factory()
-            self._engine = Engine(self._image, TOOLS)
-            self._engine.start()
-        return self._engine
+    def _ensure_engine(self):
+        if self._runtime is None:
+            runtime = self._runtime_factory()
+            runtime.__enter__()
+            self._runtime = runtime
+        return self._runtime
 
     def close(self) -> None:
-        if self._engine is not None:
-            self._engine.close()
-        if self._image is not None:
-            self._image.close()
+        if self._runtime is not None:
+            self._runtime.close()
 
     def call_tool(self, name: str, arguments: dict) -> dict:
         if name not in ("kilix_plan", "kilix_act"):
@@ -78,7 +75,7 @@ class Server:
             raise ValueError("confirm_risky must be true or false")
         try:
             engine = self._ensure_engine()
-        except (asset.AssetError, EngineError) as error:
+        except (asset.AssetError, EngineError, LibEngineError) as error:
             return {"content": [{"type": "text", "text": f"kilix-needle unavailable: {error}"}],
                     "isError": True}
         options = needle_cli.Options(dry_run=name == "kilix_plan",
@@ -113,8 +110,8 @@ class Server:
         return {"jsonrpc": "2.0", "id": ident, "result": result}
 
 
-def serve(image_factory, stdin=sys.stdin, stdout=sys.stdout) -> int:
-    server = Server(image_factory)
+def serve(runtime_factory, stdin=sys.stdin, stdout=sys.stdout) -> int:
+    server = Server(runtime_factory)
     try:
         for line in stdin:
             if not line.strip():

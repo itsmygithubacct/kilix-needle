@@ -6,6 +6,7 @@ import unittest
 
 from support import FakeKilix, desktop
 import mcp_server
+import needle_cli
 
 
 class FakeImage:
@@ -35,20 +36,15 @@ class ScriptedEngine:
 
 def converse(messages, calls=(), fail=None):
     """Feed newline-delimited messages to serve(); return the replies."""
-    saved = mcp_server.Engine
     engine = ScriptedEngine(list(calls))
-    mcp_server.Engine = lambda image, tools: engine
 
     def factory():
         if fail:
             raise mcp_server.asset.AssetError(fail)
-        return FakeImage()
+        return needle_cli.Runtime(engine, [FakeImage()])
     out = io.StringIO()
-    try:
-        stdin = io.StringIO("".join(json.dumps(m) + "\n" for m in messages) + "not json\n")
-        mcp_server.serve(factory, stdin=stdin, stdout=out)
-    finally:
-        mcp_server.Engine = saved
+    stdin = io.StringIO("".join(json.dumps(m) + "\n" for m in messages) + "not json\n")
+    mcp_server.serve(factory, stdin=stdin, stdout=out)
     return [json.loads(line) for line in out.getvalue().splitlines()], engine
 
 

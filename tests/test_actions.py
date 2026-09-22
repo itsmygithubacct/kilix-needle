@@ -88,6 +88,18 @@ class MeasuredMisreadings(unittest.TestCase):
             [result] = interpret(prompt, [item])
             self.assertIsInstance(result, Action, prompt)
 
+    def test_generated_phrasings_the_checks_once_refused(self):
+        # Found by validating the tuning corpus against these checks.
+        for prompt, item, want in (
+                ("close the pane on top", call("close_pane", pane="above"), {"pane": "above"}),
+                ("close the lower pane", call("close_pane", pane="below"), {"pane": "below"}),
+                ("close tab two", call("close_tab", tab="two"), {"tab": "2"}),
+                ("run uptime in the upper pane", call("run_in_pane", pane="upper", command="uptime"),
+                 {"pane": "above", "command": "uptime"})):
+            [result] = interpret(prompt, [item])
+            self.assertIsInstance(result, Action, prompt)
+            self.assertEqual(result.args, want, prompt)
+
     def test_exiting_a_program_in_a_pane_is_not_closing_the_pane(self):
         # engine: "exit vim in the left pane" -> close_pane(left)
         [result] = interpret("exit vim in the left pane", [call("close_pane", pane="left")])
@@ -188,6 +200,10 @@ class Normalisation(unittest.TestCase):
 
     def test_empty_values_are_dropped(self):
         self.check("new tab", call("open_tab", name=""), Action("open_tab", {}))
+
+    def test_a_tab_is_not_renamed_to_a_unit_word(self):
+        [result] = interpret("make this pane wider by 10", [call("rename_tab", name="pane")])
+        self.assertIsInstance(result, Refusal)
 
     def test_a_name_that_only_repeats_the_unit_is_dropped(self):
         # engine: "new tab" -> open_tab(name="new tab")

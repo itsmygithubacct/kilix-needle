@@ -25,6 +25,58 @@ from actions import TOOLS, Action, Refusal, interpret
 import asset
 from engine import Engine, EngineError, check_prompt
 import kilix
+from libengine import LibEngine, LibEngineError
+import toolset
+import tuning
+
+
+class Runtime:
+    """The engine in use, what its calls are translated through, and its images."""
+
+    def __init__(self, engine, images, translate=lambda calls: calls, label="base"):
+        self.engine, self.images, self.translate, self.label = engine, images, translate, label
+
+    def __enter__(self) -> "Runtime":
+        self.engine.start()
+        return self
+
+    def __exit__(self, *_exc) -> None:
+        self.close()
+
+    def close(self) -> None:
+        self.engine.close()
+        for image in self.images:
+            image.close()
+
+    def reset(self) -> None:
+        self.engine.reset()
+
+    def complete(self, text: str) -> dict:
+        return self.engine.complete(text)
+
+
+def open_runtime(args, *, may_install: bool = False) -> Runtime:
+    """The tuned model if one passed its gates and is selected, else the base engine."""
+    explicit = getattr(args, "engine", None) or os.environ.get("KILIX_NEEDLE_ENGINE")
+    choice = None if explicit else tuning.selected()
+    if choice is not None:
+        library = weights = None
+        try:
+            dev_library = os.environ.get("KILIX_NEEDLE_LIBRARY")
+            library = asset.library_from_file(dev_library) if dev_library \
+                else asset.installed_library(getattr(args, "root", None))
+            weights = asset.load_verified(choice["weights"], choice["sha256"],
+                                          os.path.getsize(choice["weights"]))
+            return Runtime(LibEngine(library, toolset.TOOLS, weights), [library, weights],
+                           toolset.to_actions, label=f"tuned {choice.get('run', '')}".strip())
+        except (asset.AssetError, OSError, KeyError) as error:
+            for image in (library, weights):
+                if image is not None:
+                    image.close()
+            print(f"kilix-needle: the selected tuned model is unavailable ({error}); "
+                  "using the base model", file=sys.stderr)
+    image = _image(args, may_install=may_install)
+    return Runtime(Engine(image, TOOLS), [image])
 
 
 @dataclass(frozen=True)
@@ -66,7 +118,8 @@ def run_request(engine: Engine, request: str, options: Options,
         return record
     engine.reset()
     reply = engine.complete(request)
-    results = interpret(request, reply.get("function_calls") or [])
+    translate = getattr(engine, "translate", lambda calls: calls)
+    results = interpret(request, translate(reply.get("function_calls") or []))
     if not results:
         record["note"] = "Needle found no pane or tab action in that request."
         return record
@@ -201,6 +254,8 @@ def main(argv: list[str] | None = None) -> int:
         status, lines = setup_surfaces.setup(only, undo=args.undo, dry_run=args.dry_run)
         print("\n".join(lines))
         return status
+    if argv[:1] == ["tune"]:
+        return tuning.main(argv[1:])
     if argv[:1] == ["install"]:
         parser = argparse.ArgumentParser(prog="kilix-needle install",
                                          description="Accept the Needle 2 licence and install "
@@ -224,7 +279,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.add_argument("--engine", metavar="FILE")
         parser.add_argument("--root")
         args = parser.parse_args(argv[1:])
-        return mcp_server.serve(lambda: _image(args))
+        return mcp_server.serve(lambda: open_runtime(args))
 
     parser = argparse.ArgumentParser(prog="kilix-needle", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -246,12 +301,12 @@ def main(argv: list[str] | None = None) -> int:
     modes = dict(dry_run=args.dry_run, assume_yes=args.yes, as_json=args.json,
                  agent=args.agent, under_overlay=args.under_overlay)
     try:
-        image = _image(args, may_install=not args.agent)
+        runtime = open_runtime(args, may_install=not args.agent)
     except asset.AssetError as error:
         print(f"kilix-needle: {error}", file=sys.stderr)
         return 2
     try:
-        with image, Engine(image, TOOLS) as engine:
+        with runtime as engine:
             if args.request:
                 return handle(engine, " ".join(args.request), **modes)
             if args.agent or not sys.stdin.isatty():
@@ -268,7 +323,7 @@ def main(argv: list[str] | None = None) -> int:
                     return status
                 if line.strip():
                     status = handle(engine, line, **modes)
-    except EngineError as error:
+    except (EngineError, LibEngineError) as error:
         print(f"kilix-needle: {error}", file=sys.stderr)
         return 2
     except KeyboardInterrupt:

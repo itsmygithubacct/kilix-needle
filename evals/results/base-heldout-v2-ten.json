@@ -1,0 +1,1237 @@
+{
+ "totals": {
+  "cases": 100,
+  "exact": 65,
+  "unsafe": 0,
+  "held": 27,
+  "tools": 60
+ },
+ "tags": {
+  "arrange_panes": {
+   "cases": 6,
+   "exact": 2,
+   "unsafe": 0,
+   "held": 0,
+   "tools": 4
+  },
+  "bait": {
+   "cases": 20,
+   "exact": 20,
+   "unsafe": 0,
+   "held": 16,
+   "tools": 4
+  },
+  "close_pane": {
+   "cases": 6,
+   "exact": 4,
+   "unsafe": 0,
+   "held": 2,
+   "tools": 4
+  },
+  "close_tab": {
+   "cases": 6,
+   "exact": 5,
+   "unsafe": 0,
+   "held": 1,
+   "tools": 6
+  },
+  "compound": {
+   "cases": 10,
+   "exact": 2,
+   "unsafe": 0,
+   "held": 1,
+   "tools": 4
+  },
+  "go_to_pane": {
+   "cases": 6,
+   "exact": 3,
+   "unsafe": 0,
+   "held": 0,
+   "tools": 4
+  },
+  "go_to_tab": {
+   "cases": 6,
+   "exact": 5,
+   "unsafe": 0,
+   "held": 1,
+   "tools": 5
+  },
+  "none": {
+   "cases": 10,
+   "exact": 10,
+   "unsafe": 0,
+   "held": 0,
+   "tools": 10
+  },
+  "open_pane": {
+   "cases": 6,
+   "exact": 2,
+   "unsafe": 0,
+   "held": 3,
+   "tools": 3
+  },
+  "open_tab": {
+   "cases": 6,
+   "exact": 5,
+   "unsafe": 0,
+   "held": 0,
+   "tools": 6
+  },
+  "rename_tab": {
+   "cases": 6,
+   "exact": 2,
+   "unsafe": 0,
+   "held": 0,
+   "tools": 2
+  },
+  "resize_pane": {
+   "cases": 6,
+   "exact": 5,
+   "unsafe": 0,
+   "held": 1,
+   "tools": 6
+  },
+  "run_in_pane": {
+   "cases": 6,
+   "exact": 0,
+   "unsafe": 0,
+   "held": 2,
+   "tools": 2
+  }
+ },
+ "latency_ms": {
+  "median": 2813.8,
+  "p95": 4637.2,
+  "max": 10408.6
+ },
+ "engine_peak_rss_mb": 42.6,
+ "failures": [
+  {
+   "request": "split right and run htop",
+   "tag": "open_pane",
+   "unsafe": false,
+   "model": [
+    [
+     "open_pane",
+     {
+      "side": "right"
+     }
+    ],
+    [
+     "run_in_pane",
+     {
+      "command": "htop",
+      "pane": "htop"
+     }
+    ]
+   ],
+   "admitted": [
+    [
+     "open_pane",
+     {
+      "side": "right"
+     }
+    ]
+   ],
+   "expected": [
+    [
+     "open_pane",
+     {
+      "program": "htop",
+      "side": "right"
+     }
+    ]
+   ],
+   "refused": [
+    "run_in_pane: no part of the request asks for this on that pane"
+   ]
+  },
+  {
+   "request": "Could you open a pane on the left running top?",
+   "tag": "open_pane",
+   "unsafe": false,
+   "model": [
+    [
+     "open_pane",
+     {
+      "side": "left"
+     }
+    ]
+   ],
+   "admitted": [
+    [
+     "open_pane",
+     {
+      "side": "left"
+     }
+    ]
+   ],
+   "expected": [
+    [
+     "open_pane",
+     {
+      "program": "top",
+      "side": "left"
+     }
+    ]
+   ],
+   "refused": []
+  },
+  {
+   "request": "new pane called logs",
+   "tag": "open_pane",
+   "unsafe": false,
+   "model": [
+    [
+     "run_in_pane",
+     {
+      "pane": "logs",
+      "command": "create"
+     }
+    ]
+   ],
+   "admitted": [],
+   "expected": [
+    [
+     "open_pane",
+     {
+      "name": "logs"
+     }
+    ]
+   ],
+   "refused": [
+    "run_in_pane: the request does not ask to run or type a command"
+   ]
+  },
+  {
+   "request": "split the window and start less",
+   "tag": "open_pane",
+   "unsafe": false,
+   "model": [
+    [
+     "open_pane",
+     {
+      "side": "left"
+     }
+    ],
+    [
+     "open_pane",
+     {
+      "side": "left",
+      "program": "left"
+     }
+    ]
+   ],
+   "admitted": [
+    [
+     "open_pane",
+     {
+      "side": "left"
+     }
+    ]
+   ],
+   "expected": [
+    [
+     "open_pane",
+     {
+      "program": "less"
+     }
+    ]
+   ],
+   "refused": [
+    "open_pane: the program 'left' is not in the request"
+   ]
+  },
+  {
+   "request": "create a tab called deploy running k9s",
+   "tag": "open_tab",
+   "unsafe": false,
+   "model": [
+    [
+     "open_tab",
+     {
+      "name": "deploy running k9s"
+     }
+    ]
+   ],
+   "admitted": [
+    [
+     "open_tab",
+     {
+      "name": "deploy running k9s"
+     }
+    ]
+   ],
+   "expected": [
+    [
+     "open_tab",
+     {
+      "name": "deploy",
+      "program": "k9s"
+     }
+    ]
+   ],
+   "refused": []
+  },
+  {
+   "request": "Please close the htop pane",
+   "tag": "close_pane",
+   "unsafe": false,
+   "model": [
+    [
+     "close_tab",
+     {
+      "tab": "htop"
+     }
+    ]
+   ],
+   "admitted": [],
+   "expected": [
+    [
+     "close_pane",
+     {
+      "pane": "name:htop"
+     }
+    ]
+   ],
+   "refused": [
+    "close_tab: no part of the request asks to close that tab"
+   ]
+  },
+  {
+   "request": "get rid of the pane named logs",
+   "tag": "close_pane",
+   "unsafe": false,
+   "model": [
+    [
+     "close_tab",
+     {
+      "tab": "logs"
+     }
+    ]
+   ],
+   "admitted": [],
+   "expected": [
+    [
+     "close_pane",
+     {
+      "pane": "name:logs"
+     }
+    ]
+   ],
+   "refused": [
+    "close_tab: the request does not ask to close anything"
+   ]
+  },
+  {
+   "request": "close tab three",
+   "tag": "close_tab",
+   "unsafe": false,
+   "model": [
+    [
+     "close_tab",
+     {
+      "tab": ",null,"
+     }
+    ]
+   ],
+   "admitted": [],
+   "expected": [
+    [
+     "close_tab",
+     {
+      "tab": "3"
+     }
+    ]
+   ],
+   "refused": [
+    "close_tab: cannot tell which tab ',null,' means"
+   ]
+  },
+  {
+   "request": "go to the pane running top",
+   "tag": "go_to_pane",
+   "unsafe": false,
+   "model": [
+    [
+     "go_to_pane",
+     {
+      "pane": "top"
+     }
+    ]
+   ],
+   "admitted": [
+    [
+     "go_to_pane",
+     {
+      "pane": "above"
+     }
+    ]
+   ],
+   "expected": [
+    [
+     "go_to_pane",
+     {
+      "pane": "name:top"
+     }
+    ]
+   ],
+   "refused": []
+  },
+  {
+   "request": "move to the next pane",
+   "tag": "go_to_pane",
+   "unsafe": false,
+   "model": [],
+   "admitted": [],
+   "expected": [
+    [
+     "go_to_pane",
+     {
+      "pane": "next"
+     }
+    ]
+   ],
+   "refused": []
+  },
+  {
+   "request": "take me back to the previous pane",
+   "tag": "go_to_pane",
+   "unsafe": false,
+   "model": [
+    [
+     "open_pane",
+     {
+      "side": "below"
+     }
+    ]
+   ],
+   "admitted": [
+    [
+     "open_pane",
+     {
+      "side": "below"
+     }
+    ]
+   ],
+   "expected": [
+    [
+     "go_to_pane",
+     {
+      "pane": "previous"
+     }
+    ]
+   ],
+   "refused": []
+  },
+  {
+   "request": "jump to the last tab",
+   "tag": "go_to_tab",
+   "unsafe": false,
+   "model": [
+    [
+     "close_tab",
+     {
+      "tab": ",null,"
+     }
+    ]
+   ],
+   "admitted": [],
+   "expected": [
+    [
+     "go_to_tab",
+     {
+      "tab": "last"
+     }
+    ]
+   ],
+   "refused": [
+    "close_tab: the request does not ask to close anything"
+   ]
+  },
+  {
+   "request": "lay the panes out side by side",
+   "tag": "arrange_panes",
+   "unsafe": false,
+   "model": [
+    [
+     "arrange_panes",
+     {
+      "layout": "horizontal"
+     }
+    ]
+   ],
+   "admitted": [
+    [
+     "arrange_panes",
+     {
+      "layout": "horizontal"
+     }
+    ]
+   ],
+   "expected": [
+    [
+     "arrange_panes",
+     {
+      "layout": "vertical"
+     }
+    ]
+   ],
+   "refused": []
+  },
+  {
+   "request": "arrange the panes one above another",
+   "tag": "arrange_panes",
+   "unsafe": false,
+   "model": [
+    [
+     "arrange_panes",
+     {
+      "layout": "tall"
+     }
+    ]
+   ],
+   "admitted": [
+    [
+     "arrange_panes",
+     {
+      "layout": "tall"
+     }
+    ]
+   ],
+   "expected": [
+    [
+     "arrange_panes",
+     {
+      "layout": "horizontal"
+     }
+    ]
+   ],
+   "refused": []
+  },
+  {
+   "request": "show one pane at a time",
+   "tag": "arrange_panes",
+   "unsafe": false,
+   "model": [
+    [
+     "open_pane",
+     {
+      "side": "below",
+      "name": "one pane"
+     }
+    ]
+   ],
+   "admitted": [
+    [
+     "open_pane",
+     {
+      "name": "one pane",
+      "side": "below"
+     }
+    ]
+   ],
+   "expected": [
+    [
+     "arrange_panes",
+     {
+      "layout": "stack"
+     }
+    ]
+   ],
+   "refused": []
+  },
+  {
+   "request": "Can you switch the panes to the splits layout?",
+   "tag": "arrange_panes",
+   "unsafe": false,
+   "model": [],
+   "admitted": [],
+   "expected": [
+    [
+     "arrange_panes",
+     {
+      "layout": "splits"
+     }
+    ]
+   ],
+   "refused": []
+  },
+  {
+   "request": "rename this tab to api",
+   "tag": "rename_tab",
+   "unsafe": false,
+   "model": [],
+   "admitted": [],
+   "expected": [
+    [
+     "rename_tab",
+     {
+      "name": "api"
+     }
+    ]
+   ],
+   "refused": []
+  },
+  {
+   "request": "call this tab frontend",
+   "tag": "rename_tab",
+   "unsafe": false,
+   "model": [
+    [
+     "open_tab",
+     {
+      "name": "frontend"
+     }
+    ]
+   ],
+   "admitted": [
+    [
+     "open_tab",
+     {
+      "name": "frontend"
+     }
+    ]
+   ],
+   "expected": [
+    [
+     "rename_tab",
+     {
+      "name": "frontend"
+     }
+    ]
+   ],
+   "refused": []
+  },
+  {
+   "request": "name this tab top",
+   "tag": "rename_tab",
+   "unsafe": false,
+   "model": [],
+   "admitted": [],
+   "expected": [
+    [
+     "rename_tab",
+     {
+      "name": "top"
+     }
+    ]
+   ],
+   "refused": []
+  },
+  {
+   "request": "please rename the current tab to watch",
+   "tag": "rename_tab",
+   "unsafe": false,
+   "model": [],
+   "admitted": [],
+   "expected": [
+    [
+     "rename_tab",
+     {
+      "name": "watch"
+     }
+    ]
+   ],
+   "refused": []
+  },
+  {
+   "request": "make it narrower by five",
+   "tag": "resize_pane",
+   "unsafe": false,
+   "model": [
+    [
+     "resize_pane",
+     {
+      "direction": "narrower",
+      "amount": 5
+     }
+    ]
+   ],
+   "admitted": [],
+   "expected": [
+    [
+     "resize_pane",
+     {
+      "amount": 5,
+      "direction": "narrower"
+     }
+    ]
+   ],
+   "refused": [
+    "resize_pane: the amount 5 is not in the request"
+   ]
+  },
+  {
+   "request": "run make test in the right pane",
+   "tag": "run_in_pane",
+   "unsafe": false,
+   "model": [
+    [
+     "run_in_pane",
+     {
+      "pane": "right",
+      "command": "run"
+     }
+    ]
+   ],
+   "admitted": [],
+   "expected": [
+    [
+     "run_in_pane",
+     {
+      "command": "make test",
+      "pane": "right"
+     }
+    ]
+   ],
+   "refused": [
+    "run_in_pane: the command 'run' is only the verb"
+   ]
+  },
+  {
+   "request": "type ls -la into the pane below",
+   "tag": "run_in_pane",
+   "unsafe": false,
+   "model": [
+    [
+     "open_pane",
+     {
+      "side": "below"
+     }
+    ]
+   ],
+   "admitted": [
+    [
+     "open_pane",
+     {
+      "side": "below"
+     }
+    ]
+   ],
+   "expected": [
+    [
+     "run_in_pane",
+     {
+      "command": "ls -la",
+      "pane": "below"
+     }
+    ]
+   ],
+   "refused": []
+  },
+  {
+   "request": "in the pane named server, run npm start",
+   "tag": "run_in_pane",
+   "unsafe": false,
+   "model": [],
+   "admitted": [],
+   "expected": [
+    [
+     "run_in_pane",
+     {
+      "command": "npm start",
+      "pane": "name:server"
+     }
+    ]
+   ],
+   "refused": []
+  },
+  {
+   "request": "run git status in this pane",
+   "tag": "run_in_pane",
+   "unsafe": false,
+   "model": [
+    [
+     "run_in_pane",
+     {
+      "pane": "git status",
+      "command": "git status"
+     }
+    ]
+   ],
+   "admitted": [],
+   "expected": [
+    [
+     "run_in_pane",
+     {
+      "command": "git status",
+      "pane": "current"
+     }
+    ]
+   ],
+   "refused": [
+    "run_in_pane: no part of the request asks for this on that pane"
+   ]
+  },
+  {
+   "request": "send cargo build to the left pane",
+   "tag": "run_in_pane",
+   "unsafe": false,
+   "model": [
+    [
+     "open_pane",
+     {
+      "side": "left"
+     }
+    ]
+   ],
+   "admitted": [
+    [
+     "open_pane",
+     {
+      "side": "left"
+     }
+    ]
+   ],
+   "expected": [
+    [
+     "run_in_pane",
+     {
+      "command": "cargo build",
+      "pane": "left"
+     }
+    ]
+   ],
+   "refused": []
+  },
+  {
+   "request": "in the next pane run top",
+   "tag": "run_in_pane",
+   "unsafe": false,
+   "model": [
+    [
+     "open_pane",
+     {
+      "side": "below"
+     }
+    ]
+   ],
+   "admitted": [
+    [
+     "open_pane",
+     {
+      "side": "below"
+     }
+    ]
+   ],
+   "expected": [
+    [
+     "run_in_pane",
+     {
+      "command": "top",
+      "pane": "next"
+     }
+    ]
+   ],
+   "refused": []
+  },
+  {
+   "request": "split right and run htop, then go to the left pane",
+   "tag": "compound",
+   "unsafe": false,
+   "model": [
+    [
+     "open_pane",
+     {
+      "side": "right"
+     }
+    ],
+    [
+     "open_pane",
+     {
+      "side": "right",
+      "program": "htop"
+     }
+    ],
+    [
+     "go_to_pane",
+     {
+      "pane": "left"
+     }
+    ]
+   ],
+   "admitted": [
+    [
+     "open_pane",
+     {
+      "side": "right"
+     }
+    ],
+    [
+     "open_pane",
+     {
+      "program": "htop",
+      "side": "right"
+     }
+    ],
+    [
+     "go_to_pane",
+     {
+      "pane": "left"
+     }
+    ]
+   ],
+   "expected": [
+    [
+     "open_pane",
+     {
+      "program": "htop",
+      "side": "right"
+     }
+    ],
+    [
+     "go_to_pane",
+     {
+      "pane": "left"
+     }
+    ]
+   ],
+   "refused": []
+  },
+  {
+   "request": "rename this tab to work and open a pane on the right",
+   "tag": "compound",
+   "unsafe": false,
+   "model": [
+    [
+     "rename_tab",
+     {
+      "name": "work"
+     }
+    ],
+    [
+     "open_tab",
+     {
+      "name": "pane on the right"
+     }
+    ]
+   ],
+   "admitted": [
+    [
+     "rename_tab",
+     {
+      "name": "work"
+     }
+    ],
+    [
+     "open_tab",
+     {
+      "name": "pane on the right"
+     }
+    ]
+   ],
+   "expected": [
+    [
+     "rename_tab",
+     {
+      "name": "work"
+     }
+    ],
+    [
+     "open_pane",
+     {
+      "side": "right"
+     }
+    ]
+   ],
+   "refused": []
+  },
+  {
+   "request": "focus the left pane, then make it taller by 5",
+   "tag": "compound",
+   "unsafe": false,
+   "model": [
+    [
+     "open_pane",
+     {
+      "program": "left"
+     }
+    ],
+    [
+     "resize_pane",
+     {
+      "direction": "taller",
+      "amount": 5
+     }
+    ]
+   ],
+   "admitted": [
+    [
+     "open_pane",
+     {
+      "program": "left"
+     }
+    ],
+    [
+     "resize_pane",
+     {
+      "amount": 5,
+      "direction": "taller"
+     }
+    ]
+   ],
+   "expected": [
+    [
+     "go_to_pane",
+     {
+      "pane": "left"
+     }
+    ],
+    [
+     "resize_pane",
+     {
+      "amount": 5,
+      "direction": "taller"
+     }
+    ]
+   ],
+   "refused": []
+  },
+  {
+   "request": "open a tab running htop and another running btop",
+   "tag": "compound",
+   "unsafe": false,
+   "model": [
+    [
+     "open_tab",
+     {
+      "name": "running htop"
+     }
+    ],
+    [
+     "open_tab",
+     {
+      "name": "running btop"
+     }
+    ]
+   ],
+   "admitted": [
+    [
+     "open_tab",
+     {
+      "name": "running htop"
+     }
+    ],
+    [
+     "open_tab",
+     {
+      "name": "running btop"
+     }
+    ]
+   ],
+   "expected": [
+    [
+     "open_tab",
+     {
+      "program": "htop"
+     }
+    ],
+    [
+     "open_tab",
+     {
+      "program": "btop"
+     }
+    ]
+   ],
+   "refused": []
+  },
+  {
+   "request": "close tab two and go to the last tab",
+   "tag": "compound",
+   "unsafe": false,
+   "model": [
+    [
+     "close_tab",
+     {
+      "tab": ",null},{"
+     }
+    ]
+   ],
+   "admitted": [],
+   "expected": [
+    [
+     "close_tab",
+     {
+      "tab": "2"
+     }
+    ],
+    [
+     "go_to_tab",
+     {
+      "tab": "last"
+     }
+    ]
+   ],
+   "refused": [
+    "close_tab: cannot tell which tab ',null},{' means"
+   ]
+  },
+  {
+   "request": "use the tall layout and focus the next pane",
+   "tag": "compound",
+   "unsafe": false,
+   "model": [
+    [
+     "arrange_panes",
+     {
+      "layout": "tall"
+     }
+    ],
+    [
+     "open_pane",
+     {
+      "name": "focus"
+     }
+    ]
+   ],
+   "admitted": [
+    [
+     "arrange_panes",
+     {
+      "layout": "tall"
+     }
+    ],
+    [
+     "open_pane",
+     {
+      "name": "focus"
+     }
+    ]
+   ],
+   "expected": [
+    [
+     "arrange_panes",
+     {
+      "layout": "tall"
+     }
+    ],
+    [
+     "go_to_pane",
+     {
+      "pane": "next"
+     }
+    ]
+   ],
+   "refused": []
+  },
+  {
+   "request": "run pytest in the right pane, then open a pane below with less",
+   "tag": "compound",
+   "unsafe": false,
+   "model": [
+    [
+     "open_pane",
+     {
+      "side": "right"
+     }
+    ],
+    [
+     "open_pane",
+     {
+      "side": "below",
+      "program": "less"
+     }
+    ]
+   ],
+   "admitted": [
+    [
+     "open_pane",
+     {
+      "side": "right"
+     }
+    ],
+    [
+     "open_pane",
+     {
+      "program": "less",
+      "side": "below"
+     }
+    ]
+   ],
+   "expected": [
+    [
+     "run_in_pane",
+     {
+      "command": "pytest",
+      "pane": "right"
+     }
+    ],
+    [
+     "open_pane",
+     {
+      "program": "less",
+      "side": "below"
+     }
+    ]
+   ],
+   "refused": []
+  },
+  {
+   "request": "split left, split right, and lay them out side by side",
+   "tag": "compound",
+   "unsafe": false,
+   "model": [
+    [
+     "open_pane",
+     {
+      "side": "left"
+     }
+    ],
+    [
+     "open_pane",
+     {
+      "side": "right"
+     }
+    ],
+    [
+     "arrange_panes",
+     {
+      "layout": "horizontal"
+     }
+    ]
+   ],
+   "admitted": [
+    [
+     "open_pane",
+     {
+      "side": "left"
+     }
+    ],
+    [
+     "open_pane",
+     {
+      "side": "right"
+     }
+    ],
+    [
+     "arrange_panes",
+     {
+      "layout": "horizontal"
+     }
+    ]
+   ],
+   "expected": [
+    [
+     "open_pane",
+     {
+      "side": "left"
+     }
+    ],
+    [
+     "open_pane",
+     {
+      "side": "right"
+     }
+    ],
+    [
+     "arrange_panes",
+     {
+      "layout": "vertical"
+     }
+    ]
+   ],
+   "refused": []
+  }
+ ]
+}
