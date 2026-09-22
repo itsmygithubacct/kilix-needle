@@ -165,3 +165,71 @@ def from_installed(root: str | None = None) -> EngineImage:
     if not os.path.lexists(engine):
         raise AssetError(f"{ASSET_ID} is not installed; {install_hint}")
     return load_verified(engine, member.sha256, member.bytes)
+
+
+# Categories Cc/Cf/Zl/Zp minus the two whitespace characters a licence may use:
+# a carriage return on a consent screen can overwrite what was just read.
+_SAFE_CONTROLS = "\n\t"
+_MAX_SCREEN = 1024 * 1024
+
+
+def _checked_screen(payload: bytes) -> bytes:
+    import unicodedata
+    if not payload or len(payload) > _MAX_SCREEN:
+        raise AssetError("the licence screen is empty or too large")
+    try:
+        text = payload.decode("utf-8")
+    except UnicodeError as error:
+        raise AssetError("the licence screen is not UTF-8") from error
+    if any(unicodedata.category(char) in ("Cc", "Cf", "Zl", "Zp") and char not in _SAFE_CONTROLS
+           for char in text):
+        raise AssetError("the licence screen contains terminal controls; not shown")
+    return payload
+
+
+def install(root: str | None = None, *, supplied: str | None = None,
+            stdin=None, stdout=None) -> str:
+    """First use: show the licence, take the typed agreement, install needle2.
+
+    The screen, agreement, receipt and fetch are kilix-content's and its
+    licence authority's; this only presents them. Consent is typed at a
+    terminal and is never assumed: there is no flag that answers it. With
+    `supplied`, the bytes are read from a directory instead of downloaded
+    and nothing touches the network.
+    """
+    import tempfile
+    stdin = stdin or sys.stdin
+    stdout = stdout or sys.stdout
+    if not (stdin.isatty() and stdout.isatty()):
+        raise AssetError(f"{ASSET_ID} is not installed, and its licence can only be "
+                         f"accepted at a terminal: run `kilix-needle install`")
+    content, first_use, lic = _content()
+    try:
+        spec = content.verified_packaged_catalog().require_asset(ASSET_ID)
+    except (RuntimeError, content.CatalogError) as error:
+        raise AssetError(f"the Content catalog cannot offer {ASSET_ID}: {error}") from error
+    records = lic.load_determined_records()
+    store = lic.ReceiptStore.shared()
+    record = first_use.license_record_for(spec, records)
+    with tempfile.TemporaryDirectory(prefix="kilix-needle-texts-") as scratch:
+        texts = lic.load_determined_texts(Path(scratch) / "texts")
+        screen = _checked_screen(first_use.present_asset(
+            spec, record, texts, receipts=store, records=records, supplied=supplied))
+        stdout.flush()
+        stdout.buffer.write(screen)
+        stdout.buffer.flush()
+        expected = lic.typed_agreement_line(record)
+        stdout.write(f"\nTo accept, type exactly:\n  {expected}\n> ")
+        stdout.flush()
+        typed = stdin.readline(512).strip()
+        if typed != expected:
+            raise AssetError("not accepted; nothing was written or downloaded")
+        installer = content.Installer(content_root(root))
+        try:
+            first_use.install_with_agreement(
+                spec, installer=installer, store=store, records=records, texts=texts,
+                typed_text=typed, supplied=supplied,
+                report=lambda message: print(f"  {message}", file=stdout))
+        except lic.LicenseError as error:
+            raise AssetError(f"the licence authority refused: {error}") from error
+        return installer.asset_destination(spec)

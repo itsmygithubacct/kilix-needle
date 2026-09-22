@@ -163,15 +163,59 @@ def handle(engine: Engine, request: str, *, dry_run: bool = False, assume_yes: b
     return record["status"]
 
 
-def _image(args):
-    engine_file = args.engine or os.environ.get("KILIX_NEEDLE_ENGINE")
+def _image(args, *, may_install: bool = False):
+    """The engine to run: --engine, then KILIX_NEEDLE_ENGINE, then the installed asset.
+
+    On first use at a terminal, a missing asset leads into `install`: the
+    licence screen and typed agreement, then the download.
+    """
+    engine_file = getattr(args, "engine", None) or os.environ.get("KILIX_NEEDLE_ENGINE")
     if engine_file:
         return asset.from_file(engine_file)
-    return asset.from_installed(args.root)
+    try:
+        return asset.from_installed(args.root)
+    except asset.AssetError as error:
+        missing = "is not installed" in str(error) or "has not been accepted" in str(error)
+        if not (may_install and missing and sys.stdin.isatty() and sys.stdout.isatty()):
+            raise
+        print(f"kilix-needle: {error}\nFirst use: installing the Needle 2 engine.\n")
+        asset.install(args.root)
+        return asset.from_installed(args.root)
 
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["setup"]:
+        import setup_surfaces
+        parser = argparse.ArgumentParser(prog="kilix-needle setup",
+                                         description=setup_surfaces.__doc__,
+                                         formatter_class=argparse.RawDescriptionHelpFormatter)
+        parser.add_argument("--dry-run", action="store_true")
+        parser.add_argument("--undo", action="store_true")
+        parser.add_argument("--only", default=",".join(setup_surfaces.SURFACES))
+        args = parser.parse_args(argv[1:])
+        only = [name.strip() for name in args.only.split(",") if name.strip()]
+        unknown = [name for name in only if name not in setup_surfaces.SURFACES]
+        if unknown:
+            parser.error(f"unknown surface: {', '.join(unknown)}")
+        status, lines = setup_surfaces.setup(only, undo=args.undo, dry_run=args.dry_run)
+        print("\n".join(lines))
+        return status
+    if argv[:1] == ["install"]:
+        parser = argparse.ArgumentParser(prog="kilix-needle install",
+                                         description="Accept the Needle 2 licence and install "
+                                                     "the engine (the needle2 content asset).")
+        parser.add_argument("--from", dest="supplied", metavar="DIR",
+                            help="read the engine from DIR instead of downloading it")
+        parser.add_argument("--root")
+        args = parser.parse_args(argv[1:])
+        try:
+            where = asset.install(args.root, supplied=args.supplied)
+        except asset.AssetError as error:
+            print(f"kilix-needle: {error}", file=sys.stderr)
+            return 1
+        print(f"installed: {where}")
+        return 0
     if argv[:1] == ["mcp"]:
         import mcp_server
         parser = argparse.ArgumentParser(prog="kilix-needle mcp",
@@ -202,7 +246,7 @@ def main(argv: list[str] | None = None) -> int:
     modes = dict(dry_run=args.dry_run, assume_yes=args.yes, as_json=args.json,
                  agent=args.agent, under_overlay=args.under_overlay)
     try:
-        image = _image(args)
+        image = _image(args, may_install=not args.agent)
     except asset.AssetError as error:
         print(f"kilix-needle: {error}", file=sys.stderr)
         return 2
