@@ -100,6 +100,17 @@ class MeasuredMisreadings(unittest.TestCase):
             self.assertIsInstance(result, Action, prompt)
             self.assertEqual(result.args, want, prompt)
 
+    def test_a_word_introduced_as_a_name_stays_a_name(self):
+        # held-out v3: both were admitted as the wrong target
+        [result] = interpret("close the pane running top", [call("close_pane", pane="top")])
+        self.assertEqual(result, Action("close_pane", {"pane": "name:top"}))
+        [result] = interpret("close the tab named two", [call("close_tab", tab="two")])
+        self.assertEqual(result, Action("close_tab", {"tab": "name:two"}))
+        [result] = interpret("close the top pane", [call("close_pane", pane="top")])
+        self.assertEqual(result, Action("close_pane", {"pane": "above"}))
+        [result] = interpret("close tab two", [call("close_tab", tab="two")])
+        self.assertEqual(result, Action("close_tab", {"tab": "2"}))
+
     def test_a_command_for_a_tab_is_not_typed_into_this_pane(self):
         # Only the pane/tab unit rule stops this one: the command span is right
         # and "current" needs no mention.

@@ -181,8 +181,17 @@ def interpret(prompt: str, calls: list) -> list[Action | Refusal]:
     return results
 
 
+_AS_NAME = r"(?:running|named|called|titled|with)\s+(?:the\s+)?"
+
+
 def _named_target(name: str, key: str, args: dict, prompt: str) -> str | Refusal:
     raw = _text(args, key)
+    word = " ".join(raw.casefold().split())
+    if word and re.search(rf"\b{_AS_NAME}{re.escape(word)}(?![\w])", prompt, re.IGNORECASE):
+        # Introduced as a name, it is a name: measured (held-out v3), "close the
+        # pane running top" became the side "above", and "close the tab named
+        # two" became tab 2.
+        return "name:" + word
     value = _target_value(raw, relative=key == "tab")
     if value is None:
         return Refusal(name, f"cannot tell which {key} {raw!r} means")

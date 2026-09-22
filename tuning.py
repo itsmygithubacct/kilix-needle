@@ -156,6 +156,36 @@ def stage_env(run: Run, manifest: dict, library: Path) -> None:
     run.log(f"env: {manifest['environment']['requirements']} installed with hashes")
 
 
+_INTENT = {"open": "open a {kind}", "close": "close a {kind}", "go_to": "go to a {kind}",
+           "adjust": "change the current tab", "run_in_pane": "type a command into a pane"}
+_NO_TOOL = ("No tool fits: the request does not ask to open, close, go to, change or "
+            "type into a pane or tab.")
+
+
+def reasoning_for(calls: list[dict], spans: list) -> str:
+    """The derivation Needle writes before its calls, in the base model's style.
+
+    Upstream trains `<think>reasoning</think>` then the calls. Run 1 left the
+    reasoning empty; the tuned model learned to skip it and filled arguments
+    with schema words ("narrower", "adjust") instead of the request's.
+    """
+    if not calls:
+        return _NO_TOOL
+    words = {str(value): surface for surface, value in spans}
+    parts = []
+    for call in calls:
+        args = call["arguments"]
+        intent = _INTENT.get(call["name"], call["name"]).format(kind=args.get("kind", "pane"))
+        derived = []
+        for key, value in args.items():
+            if key == "kind":
+                continue
+            source = words.get(str(value))
+            derived.append(f"'{source}' -> {key} '{value}'" if source else f"{key} '{value}'")
+        parts.append(f"User wants to {intent}." + (" " + "; ".join(derived) + "." if derived else ""))
+    return " ".join(parts)
+
+
 def build_data(library: Path, manifest: dict, out: Path) -> dict:
     """Generate, check against the running tool's rules, write upstream's format."""
     sys.path.insert(0, str(library))
@@ -182,9 +212,10 @@ def build_data(library: Path, manifest: dict, out: Path) -> dict:
             if len(admitted) != len(row["actions"]):
                 inconsistent += 1   # a training answer the tool would refuse teaches nothing
                 continue
+            answers = toolset.from_actions(row["actions"])
             handle.write(json.dumps({"query": row["query"], "tools": toolset.TOOLS,
-                                     "answers": toolset.from_actions(row["actions"])},
-                                    ensure_ascii=False) + "\n")
+                                     "reasoning": reasoning_for(answers, row.get("spans", [])),
+                                     "answers": answers}, ensure_ascii=False) + "\n")
             kept += 1
     return {"generated": len(rows), "kept": kept, "eval_matches_dropped": dropped,
             "inconsistent_dropped": inconsistent}

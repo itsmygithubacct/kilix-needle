@@ -64,7 +64,16 @@ class Data(unittest.TestCase):
         queries = {" ".join(r["query"].casefold().split()) for r in rows}
         self.assertEqual(queries & evals, set())
         self.assertEqual(rows[0]["tools"], toolset.TOOLS)
-        self.assertTrue(all(set(r) == {"query", "tools", "answers"} for r in rows))
+        self.assertTrue(all(set(r) == {"query", "tools", "reasoning", "answers"} for r in rows))
+        # run 1 trained with empty reasoning and lost argument filling
+        self.assertTrue(all(r["reasoning"] for r in rows))
+
+    def test_reasoning_names_the_source_words(self):
+        calls = toolset.from_actions([["open_pane", {"side": "left", "program": "htop"}]])
+        text = tuning.reasoning_for(calls, [["on the left", "left"], ["htop", "htop"]])
+        self.assertEqual(text, "User wants to open a pane. 'on the left' -> side 'left'; "
+                               "'htop' -> program 'htop'.")
+        self.assertTrue(tuning.reasoning_for([], []).startswith("No tool fits"))
 
 
 class InconsistentExamples(unittest.TestCase):
