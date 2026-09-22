@@ -87,8 +87,10 @@ def _owns_listener(pid: int, port: int) -> bool:
 class Engine:
     """One engine process serving one tool set, used as a context manager."""
 
-    def __init__(self, image, tools: list[dict], *, timeout: float = 30.0,
-                 startup: float = 10.0):
+    # Startup is normally well under a second, but measured 13.9 s at load 22 on
+    # 12 cores; a short limit fails exactly when the machine is busiest.
+    def __init__(self, image, tools: list[dict], *, timeout: float = 60.0,
+                 startup: float = 60.0):
         self.image = image
         self.tools = tools
         self.timeout = timeout
@@ -117,7 +119,8 @@ class Engine:
             # The verified bytes run from their sealed descriptor, never from a path
             # that could be replaced between the check and the exec.
             self._process = subprocess.Popen(
-                [self.image.path, "--tools", tools_path, "--serve", "--port", str(self.port)],
+                ["kilix-needle-engine", "--tools", tools_path, "--serve", "--port", str(self.port)],
+                executable=self.image.path,
                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL, env=env, cwd=self._scratch.name,
                 pass_fds=(self.image.fd,))

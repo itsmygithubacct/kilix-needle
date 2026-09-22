@@ -101,3 +101,14 @@ class ContentRoot(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CatalogAgreement(unittest.TestCase):
+    """The pinned Content component lists needle2, and --engine's pin is its pin."""
+
+    def test_the_local_pin_is_the_catalog_manifest(self):
+        content, _first_use, _lic = asset._content()
+        spec = content.verified_packaged_catalog().require_asset(asset.ASSET_ID)
+        member = next(item for item in spec.files if item.path == asset.ENGINE_MEMBER)
+        self.assertEqual((member.sha256, member.bytes), (asset.PINNED_SHA256, asset.PINNED_BYTES))
+        self.assertEqual(spec.licenses[0].license_id, "apache-2.0")
