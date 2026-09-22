@@ -2,21 +2,42 @@
 
 Drive Kilix panes and tabs from plain requests, using
 [Needle 2](https://huggingface.co/Cactus-Compute/needle2), a 45M-parameter
-tool-calling model that runs on the CPU in about 25 MB of RAM and answers a
-request in well under a second.
+tool-calling model that runs on the CPU in about 45 MB of RAM.
 
 ```sh
 kilix-needle split right
 kilix-needle close tab 2 and go to tab 1
 kilix-needle make it a grid
-kilix-needle                  # a prompt loop, one request per line
+kilix-needle                    # a prompt loop, one request per line
 kilix-needle --dry-run close this pane
 kilix-needle --yes close tab 2  # no question; for scripts and agents
 ```
 
-Requires Python 3.10+ on Linux x86-64, run inside Kilix. No Python
-dependencies. Status: a local prototype. It is not published and not part of
-a release.
+Requires Python 3.10+ on Linux x86-64, run inside Kilix. It has no Python
+dependencies. Fine-tuning, which is optional, builds its own environment.
+Status: a local prototype, not published and not part of a release.
+
+## Setup
+
+```sh
+git submodule update --init
+kilix-needle install              # licence screen, typed agreement, download
+kilix-needle setup --dry-run      # see what setup would change
+kilix-needle setup                # command, alias, hotkey, agent-harness tools
+```
+
+On first use at a terminal, a missing engine leads into `install`. It shows
+kilix-content's licence screen for `needle2` and takes the typed agreement
+`accept needle2 from Cactus Compute, Inc.`. No flag answers it. `--from DIR`
+installs from bytes you already hold, with no network. After installing,
+kilix-needle offers to fine-tune (see below).
+
+`setup` links `~/.local/bin/kilix-needle`, adds `alias kn=kilix-needle`, binds
+`ctrl+alt+space` to kilix-needle as an overlay that acts on the pane beneath it,
+and registers `kilix-needle mcp` with Claude Code, Codex, Grok and the host
+omp. It is idempotent: `--undo` reverses it, edited files are backed up, and
+a TOML or JSON edit that would not parse is not written. `--only NAME,...`
+limits it to some surfaces.
 
 ## What it can do
 
@@ -24,7 +45,7 @@ a release.
 | --- | --- | --- |
 | split right, open htop in a pane below | open a pane, optionally running a program | straight away; **asks** if it starts a program |
 | new tab, open a tab running btop | open a tab | straight away; **asks** if it starts a program |
-| go to the left pane, switch to the htop pane | focus a pane | straight away |
+| go to the left pane, next pane | focus a pane | straight away |
 | next tab, go to tab 3, go to the logs tab | focus a tab | straight away |
 | make it a grid, stack the panes | change the tab's layout (only layouts enabled in that tab) | straight away |
 | rename this tab to build | set the tab title | straight away |
@@ -33,116 +54,155 @@ a release.
 | run make test in the left pane | type a command and press Enter | **asks** |
 
 "This pane" and "this tab" mean the pane kilix-needle was started from, not
-whichever tab is on screen. Side references use Kilix's own neighbour map;
-names match a pane's title or foreground program, preferring the current tab.
-An ambiguous or missing reference is refused with the candidates listed.
+whichever tab is on screen. If a harness strips `KITTY_WINDOW_ID`, the pane
+is found through the process ancestry. With `--under-overlay` (the hotkey),
+it means the pane the overlay covers. Side references use Kilix's neighbour
+map, which reports window groups. Names match a pane's title or foreground
+program, preferring the current tab. An ambiguous or missing reference is
+refused with the candidates named.
 
 ## Why it asks, and what it refuses
 
-Needle's confidence score does not gate anything. On the pinned engine,
-"close tab 2 and go to tab 1" produced **two** close calls at confidence
-0.99, and "go to the left pane" produced a close at 0.41. So every call
-passes checks that do not depend on the model before it becomes an action:
+Needle's confidence score gates nothing. On the pinned engine, "close tab 2
+and go to tab 1" produced **two** close calls at confidence 0.99. So every
+call passes checks that do not depend on the model. Each check below was
+added because a measured model output got past the one before:
 
 - A close needs a closing verb (close, kill, quit, exit, shut) in the same
-  clause as its target, with the pane or tab as the verb's object. "Exit vim in
-  the left pane" does not close the pane.
-- A tab close needs a clause that says *tab*. A pane action is refused from a
-  clause that names only a tab. Tabs are titled after their active pane, so
-  "close the htop pane" misread as `close_tab(htop)` could otherwise match a
-  real tab.
-- Typing a command needs a run/type verb and a target named outside the command
-  text. It is refused unless shell integration reports the pane at a prompt,
-  so text never lands in an editor or a running program.
-- Every free-text value (a program, a name, a command) must appear in the
-  request. Values the model invents are refused, not run.
+  clause as its target.
+- The pane or tab must be the verb's object, bound to a pane or tab word. So
+  "exit vim in the left pane", "quit vim in the right pane" and "kill top in the
+  left pane" close nothing.
+- A tab close needs a clause that says *tab*. A pane action is never taken
+  from a clause that names only a tab.
+- A typed command must be the whole text after the run verb ("make test", not
+  "test"). Its pane must be named outside the command. It is typed only into a
+  pane at a shell prompt.
+- Every program, name and command must appear in the request. A target made
+  only of filler words is no reference.
 
 Closing, typing and starting a program wait for `y`. `--yes` answers that
-for scripts and agent harnesses. It never overrides a refusal: if any part of
-a request is refused, everything else in it waits for a typed `y`, even with
-`--yes`, and without a terminal nothing runs. The caller gets exit status 1
-and should rephrase.
+for scripts and agents. It never overrides a refusal: if any part of a request
+is refused, everything else in it waits for a typed `y`, even with `--yes`, and
+without a terminal nothing runs. With `--agent` (and in the MCP server), the
+caller's own pane and tab are never closed.
 
 Everything runs as `kilix @ ...` argv over the instance socket, never through a
 shell. Programs are split with `shlex` and executed directly.
 
+## Agent harnesses
+
+`kilix-needle mcp` is an MCP server over stdio. It offers `kilix_plan`, which
+resolves a request and runs nothing, and `kilix_act`, which runs it; closing,
+typing and starting a program need `confirm_risky=true`. The plain CLI works
+too: `kilix-needle --agent --json --yes REQUEST` prints one JSON record. Don't
+expose it inside omp.sh's Docker sandbox: its network namespace cannot reach
+Kilix's abstract socket.
+
 ## The engine
 
-The engine is the upstream `needle` binary, installed as the `needle2`
-asset of the Kilix content catalog:
-
-```sh
-kilix models install needle2     # licence screen, typed agreement, download
-```
-
-kilix-needle never downloads and never accepts a licence itself. At start it:
+The base engine is the upstream `needle` binary, installed as the `needle2`
+content asset. kilix-needle never downloads it or accepts its licence on its
+own authority. At start, it:
 
 1. verifies the packaged catalog against its pinned digest;
-2. checks that a licence receipt covers `needle2`;
-3. reads the installed engine once into a sealed memfd, checks its size and
-   SHA-256 against the catalog manifest, and executes it from that
-   descriptor. What runs is what was checked, even if the file is replaced
-   afterwards.
+2. checks that a licence receipt covers the asset;
+3. reads the engine once into a sealed memfd, checks its size and SHA-256
+   against the catalog manifest, and executes it from that descriptor.
 
-The engine serves on 127.0.0.1 at a port chosen for it. Every request first
-checks, through `/proc`, that the listening socket belongs to the engine
-process, so a local process that took the port first is never trusted. The
-engine gets a minimal environment. `NEEDLE_DEBUG` would make it write logits
-to `/tmp`.
+The engine serves on 127.0.0.1. Every request first checks, through `/proc`,
+that the listening socket belongs to the engine process. The engine gets a
+minimal environment. `NEEDLE_DEBUG` would make it write logits to `/tmp`.
 
-For development, `--engine FILE` (or `KILIX_NEEDLE_ENGINE`) admits a local
-copy instead. It is held to the same pinned digest, so it can only be the
-upstream bytes: `Cactus-Compute/needle2` at
-`32e9e3a93b205f786929697446ae669cf0a84579`, `linux-x86_64/needle`.
+A tuned model runs through `libneedle.so`, taken from the verified
+`needle2-runtime` wheel and held to its own pin. It runs in a worker that loads
+the library and weights from sealed descriptors and uses no port. The library
+keeps its built-in base weights when it rejects a `.cact`. The worker refuses
+to start instead, so a tuned model is never silently replaced.
 
-Use the standalone binary, not the `cactus-needle` Python package. The package
-sends usage telemetry by default. The binary links only libc and libm, contains
-no URLs, and imports no outbound-connection calls. Its only socket use is the
-`--serve` listener.
+For development, `--engine FILE` (or `KILIX_NEEDLE_ENGINE`) and
+`KILIX_NEEDLE_LIBRARY` admit local copies held to the same pins.
 
-Upstream server quirks the client works around (measured):
+Use the standalone binary or the library, not the `cactus-needle` Python
+package, which sends usage telemetry by default. Upstream server quirks the
+client works around (measured): the request parser reads only compact
+`{"input":"..."}`, it doesn't decode `\uXXXX` escapes, and a backslash splits
+the text. Requests are sent as compact raw UTF-8, and a request containing a
+backslash is refused.
 
-- The request parser reads `{"input":"..."}` only in compact form; with a
-  space after the colon the request arrives empty and gets no calls.
-- `\uXXXX` escapes are not decoded, so requests are sent as raw UTF-8.
-- A backslash splits the text, so requests containing one are refused.
+## Fine-tuning
 
-## Measured quality
-
-`evaluate.py` scores the whole pipeline (engine calls, then the checks) on
-the real engine. On the 40 requests in `evals/commands.jsonl`:
-
-```
-unsafe 0/40   exact 26/40   held 4/40   model picked the right tools 28/40
+```sh
+kilix-needle install --tuning         # needle2-train and needle2-runtime, each with its licence
+kilix-needle tune --background        # hours at the lowest priority; ~9 GB peak
+kilix-needle tune --status
+kilix-needle tune --deselect          # back to the base model
 ```
 
-The engine is deterministic: three runs produced byte-identical output per request.
-Weaknesses of the model on this tool set:
+The tuner reads `third_party/kilix-needle-tuning`: its corpus, its pins and its
+gates. It verifies the base checkpoint (a pickle, never read before its digest
+matches) and tokenizer. It fetches Needle's training code at `v2.0.9`
+(`571fcd68`) and builds a hash-locked environment. It generates examples,
+keeping only those that the checks above admit and none that match an eval
+request. It trains LoRA offline in its own network namespace, exports a
+`.cact`, and scores it.
 
-- It never produced `rename_tab`.
-- It often drops the program from "open X in a pane".
-- It confuses closely worded actions ("make the left pane bigger" → open a pane).
+A tuned model is selected only if it passes every gate:
 
-The checks are there so that these mistakes cost a retry, not a closed pane.
+- no unsafe action on any eval set;
+- a gain of at least 5 points over the untuned model on `evals/heldout-v3.jsonl`, measured at gate time;
+- no tag losing more than 2 cases.
+
+The tuned model uses a five-tool schema (`toolset.py`) that is translated back
+onto the same actions before the checks. Needle ranks declared tools and, above
+five, shows the model only the top five. Five tools are also about 4 times
+faster.
+
+## Measured
+
+`evaluate.py` scores the whole pipeline (model calls, then the checks) on the
+real engine. Nothing touches Kilix. Base model, ten tools:
+
+| Set | Requests | Exact | Unsafe |
+| --- | ---: | ---: | ---: |
+| `evals/dev.jsonl` (iterated on) | 40 | 26 | 0 |
+| `evals/test.jsonl` (measured only; bait extended twice) | 86 | 61 | 0 |
+| `evals/heldout-v2.jsonl` (independent; consulted once) | 100 | 65 | 0 |
+
+The engine is deterministic: repeated runs produce byte-identical output.
+Latency on a quiet i7-10700F (dev set, three runs):
+
+| Engine | Median | p95 | Peak memory |
+| --- | ---: | ---: | ---: |
+| `needle` binary, ten tools | 911 ms | 1,190 ms | 42 MB |
+| `libneedle.so`, ten tools (same answers) | 943 ms | 1,236 ms | 52 MB |
+| `libneedle.so`, five tools | 218 ms | 457 ms | 43 MB |
 
 ```sh
 make test                                          # no engine, no Kilix
-python3 evaluate.py evals/commands.jsonl --engine FILE
+python3 evaluate.py evals/dev.jsonl --engine FILE [--toolset five]
+python3 evaluate.py evals/dev.jsonl --library FILE --weights T.cact --weights-sha256 SHA --toolset five
 ```
 
-The tests never reach the live desktop: `KITTY_LISTEN_ON` is removed, and a
-recording fake stands in for `kilix`.
+The tests never reach the live desktop. `KITTY_LISTEN_ON` points at a dead
+socket, a recording fake stands in for `kilix`, and the fake `ls` has the
+real shape, including window groups.
 
 ## Files
 
 | File | Role |
 | --- | --- |
-| `actions.py` | the tool set Needle sees, and the checks between its calls and anything that runs |
+| `actions.py` | the ten actions, and the checks between the model's calls and anything that runs |
+| `toolset.py` | the five-tool schema the tuned model sees, translated onto those actions |
 | `kilix.py` | resolution against `kilix @ ls`, and the argv that performs each action |
-| `engine.py` | the private engine process and its loopback client |
-| `asset.py` | admitting the installed engine, or a pinned local copy |
-| `needle_cli.py` | the command line and prompt loop |
-| `evaluate.py` | end-to-end scoring on the real engine |
+| `engine.py` | the `needle` binary as a private loopback server |
+| `libengine.py` | `libneedle.so` in a worker, for tuned weights |
+| `asset.py` | admitting installed assets or pinned local copies; the first-use install |
+| `tuning.py` | `kilix-needle tune` |
+| `needle_cli.py` | the command line, prompt loop and runtime selection |
+| `mcp_server.py` | `kilix-needle mcp` |
+| `setup_surfaces.py` | `kilix-needle setup` |
+| `evaluate.py` | end-to-end scoring |
 
-Needle 2 is published by Cactus Compute under the Apache License 2.0. The
-licence is shown and accepted through `kilix models install`.
+Needle 2 is published by Cactus Compute under the Apache License 2.0. Its
+licence is shown and accepted through `kilix-needle install`.
