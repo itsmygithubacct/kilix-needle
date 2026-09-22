@@ -280,12 +280,19 @@ def stage_gates(run: Run, manifest: dict, library_image, cact_sha: str) -> dict:
             with open(REPO / rel, encoding="utf-8") as handle:
                 cases = [json.loads(line) for line in handle if line.strip()]
             results[name] = score(engine, cases, 1, toolset.to_actions)
-    reference_path = REPO / "evals/results/base-heldout-v2-ten.json"
-    reference = json.loads(reference_path.read_text(encoding="utf-8"))
+    # The reference is measured now, with these checks and this held-out set:
+    # the untuned model (the library's built-in weights) with the ten-tool
+    # schema, which is the configuration used when no tuned model is selected.
+    from actions import TOOLS as TEN
+    with open(REPO / sets["heldout"], encoding="utf-8") as handle:
+        heldout_cases = [json.loads(line) for line in handle if line.strip()]
+    with LibEngine(library_image, TEN) as base:
+        reference = score(base, heldout_cases, 1)
     failures = gate(manifest, results, reference)
     report = {"cact_sha256": cact_sha, "failures": failures,
               "totals": {name: r["totals"] for name, r in results.items()},
-              "reference_totals": reference["totals"]}
+              "reference_totals": reference["totals"],
+              "tags": {"tuned": results["heldout"]["tags"], "reference": reference["tags"]}}
     (run.root / "gates.json").write_text(json.dumps(report, indent=1), encoding="utf-8")
     run.log("gates: " + ("PASS" if not failures else "FAIL: " + "; ".join(failures)))
     return report

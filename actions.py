@@ -305,9 +305,9 @@ def _clause_supports(verb: re.Pattern, target: str, prompt: str, *, unit: str,
         # verb, reached without a locative; the target itself must be named.
         unit_words = ["tab", "tabs"] if unit == "tab" else ["pane", "panes", "window", "split"]
         first = _first(_mentions(target) + unit_words, tail)
-        if first is None or _LOCATIVE.search(tail[:first.start()]) \
-                or _first(_mentions(target), tail) is None:
+        if first is None or _LOCATIVE.search(tail[:first.start()]):
             continue
+        # Bound to the unit implies the target is named at all.
         if not _bound_to_unit(_mentions(target), tail, unit_words):
             continue
         return True

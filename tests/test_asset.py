@@ -151,6 +151,11 @@ class Wheel(unittest.TestCase):
         with self.assertRaisesRegex(asset.AssetError, "holds no usable"):
             asset.library_from_wheel(self.image_of(self.zipped({"needle/other.so": b"x"})))
 
+    def test_a_same_size_substitute_is_refused_by_digest(self):
+        fake = bytes(asset.PINNED_LIB_BYTES)
+        with self.assertRaisesRegex(asset.AssetError, "does not match its pinned SHA-256"):
+            asset.library_from_wheel(self.image_of(self.zipped({"needle/libneedle.so": fake})))
+
     def test_a_substituted_library_is_refused(self):
         with self.assertRaisesRegex(asset.AssetError, "pinned"):
             asset.library_from_wheel(self.image_of(self.zipped({"needle/libneedle.so": b"x"})))

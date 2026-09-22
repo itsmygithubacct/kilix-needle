@@ -67,6 +67,22 @@ class Data(unittest.TestCase):
         self.assertTrue(all(set(r) == {"query", "tools", "answers"} for r in rows))
 
 
+class InconsistentExamples(unittest.TestCase):
+    def test_an_example_the_checks_refuse_is_dropped_and_counted(self):
+        rows = [{"query": "go to the left pane", "actions": [["close_pane", {"pane": "left"}]]},
+                {"query": "next tab", "actions": [["go_to_tab", {"tab": "next"}]]}]
+        fake = mock.Mock(generate=mock.Mock(return_value=(rows, 0)), _fold=lambda t: t)
+        manifest = dict(tuning.load_manifest())
+        manifest["data"] = dict(manifest["data"], exclude=[])
+        with tempfile.TemporaryDirectory(prefix="kn-") as tmp, \
+                mock.patch.dict(sys.modules, {"generate": fake}):
+            out = Path(tmp) / "train.jsonl"
+            stats = tuning.build_data(Path(tmp), manifest, out)
+            lines = out.read_text().splitlines()
+        self.assertEqual((stats["kept"], stats["inconsistent_dropped"]), (1, 1))
+        self.assertEqual(json.loads(lines[0])["query"], "next tab")
+
+
 class Selection(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory(prefix="kn-")

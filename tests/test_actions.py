@@ -100,6 +100,15 @@ class MeasuredMisreadings(unittest.TestCase):
             self.assertIsInstance(result, Action, prompt)
             self.assertEqual(result.args, want, prompt)
 
+    def test_a_command_for_a_tab_is_not_typed_into_this_pane(self):
+        # Only the pane/tab unit rule stops this one: the command span is right
+        # and "current" needs no mention.
+        [result] = interpret("run ls in tab 2", [call("run_in_pane", pane="current", command="ls")])
+        self.assertIsInstance(result, Refusal)
+        [result] = interpret("type make in the build tab",
+                             [call("run_in_pane", pane="current", command="make")])
+        self.assertIsInstance(result, Refusal)
+
     def test_a_truncated_command_is_refused(self):
         # engine (five-tool schema): "run make test in the right pane" -> command "test"
         [result] = interpret("run make test in the right pane",
