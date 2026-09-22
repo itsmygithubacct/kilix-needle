@@ -79,9 +79,16 @@ def window(wid, title="bash", program="bash", *, active=False, neighbors=None,
             "foreground_processes": [{"cmdline": [f"/usr/bin/{program}"], "pid": 5_000_000 + wid}]}
 
 
+def group(wid):
+    """Kitty's window group id for a window: distinct from the window id."""
+    return 9000 + wid
+
+
 def tab(tid, title, windows, *, active=False, layouts=("splits", "stack", "tall", "grid")):
+    # As in a real `kilix @ ls`: one group per window, and neighbours name groups.
     return {"id": tid, "title": title, "is_active": active, "is_focused": active,
-            "enabled_layouts": list(layouts), "windows": windows}
+            "enabled_layouts": list(layouts), "windows": windows,
+            "groups": [{"id": group(w["id"]), "windows": [w["id"]]} for w in windows]}
 
 
 def desktop():
@@ -89,13 +96,13 @@ def desktop():
     return [{"id": 1, "is_active": True, "is_focused": True, "tabs": [
         tab(10, "logs", [window(100, "tail", "tail", active=True)]),
         tab(20, "work", [
-            window(200, "editor", "vim", active=True, neighbors={"right": [201]},
+            window(200, "editor", "vim", active=True, neighbors={"right": [group(201)]},
                    at_prompt=False),
-            window(201, "htop", "htop", neighbors={"left": [200]}, at_prompt=False),
+            window(201, "htop", "htop", neighbors={"left": [group(200)]}, at_prompt=False),
         ], active=True),
         tab(30, "shell", [
-            window(300, "needle", "python3", active=True, neighbors={"left": [301]}),
-            window(301, "build", "bash", neighbors={"right": [300]}, broker="ab" * 8),
+            window(300, "needle", "python3", active=True, neighbors={"left": [group(301)]}),
+            window(301, "build", "bash", neighbors={"right": [group(300)]}, broker="ab" * 8),
             window(302, "notes", "bash"),
         ]),
     ]}]

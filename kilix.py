@@ -180,12 +180,18 @@ class Tree:
             index = windows.index(self.active_pane)
             return windows[(index + (1 if ref == "next" else -1)) % len(windows)]
         if ref in _NEIGHBOR:
+            # Kitty reports neighbours as window *group* ids (measured: window 31's
+            # right neighbour 122 is the group holding window 114). A group's
+            # visible window is its last one; an overlay sits on top of the rest.
             ids = (self.active_pane.get("neighbors") or {}).get(_NEIGHBOR[ref]) or []
             if len(ids) != 1:
                 raise KilixError(f"there is {'no' if not ids else 'more than one'} pane {ref} "
                                  "of the current one")
-            for _tab, window in self._all_panes():
-                if window.get("id") == ids[0]:
+            group = next((g for g in self.active_tab.get("groups") or [] if g.get("id") == ids[0]),
+                         None)
+            members = (group or {}).get("windows") or []
+            for window in self.active_tab.get("windows") or []:
+                if members and window.get("id") == members[-1]:
                     return window
             raise KilixError(f"the pane {ref} of the current one is not listed")
         name = ref[5:].casefold()
@@ -248,8 +254,13 @@ def resolve(action: Action, tree: Tree) -> Step:
     """Bind an admitted action to concrete ids and the argv that performs it."""
     kind, args = action.kind, action.args
     if kind == "open_pane":
+        # Measured live: without a tab match, launch opens the pane in whichever
+        # tab is active, and --cwd=current takes that tab's directory. Both are
+        # bound to the anchor pane explicitly.
         anchor = tree.active_pane
-        argv = ["launch", "--type=window", "--cwd=current", f"--next-to=id:{anchor['id']}"]
+        argv = ["launch", "--type=window", f"--match=window_id:{anchor['id']}",
+                f"--source-window=id:{anchor['id']}", "--cwd=current",
+                f"--next-to=id:{anchor['id']}"]
         side = args.get("side")
         if side:
             argv.append(f"--location={_LOCATION[side]}")
@@ -261,7 +272,8 @@ def resolve(action: Action, tree: Tree) -> Step:
             words += f" running {args['program']!r}"
         return Step(action, words, ((tuple(argv), None),))
     if kind == "open_tab":
-        argv = ["launch", "--type=tab", "--cwd=current"]
+        argv = ["launch", "--type=tab", f"--source-window=id:{tree.active_pane['id']}",
+                "--cwd=current"]
         if args.get("name"):
             argv.append(f"--tab-title={args['name']}")
         words = "open a new tab" + (f" called {args['name']!r}" if args.get("name") else "")

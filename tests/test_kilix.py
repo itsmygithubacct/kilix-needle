@@ -57,9 +57,23 @@ class References(unittest.TestCase):
         with self.assertRaisesRegex(kilix.KilixError, "no pane right"):
             resolve(Action("go_to_pane", {"pane": "right"}), caller=300)
 
+    def test_neighbours_are_group_ids_not_window_ids(self):
+        # A window id where kitty puts a group id must not resolve: that is the
+        # shape of the bug the live run found.
+        tree = copy.deepcopy(desktop())
+        tree[0]["tabs"][2]["windows"][0]["neighbors"] = {"left": [301]}
+        with self.assertRaisesRegex(kilix.KilixError, "not listed"):
+            resolve(Action("go_to_pane", {"pane": "left"}), tree=tree)
+
+    def test_the_visible_window_of_a_group_is_its_last(self):
+        tree = copy.deepcopy(desktop())
+        tree[0]["tabs"][2]["groups"][1]["windows"] = [301, 302]   # 302 overlays 301
+        step = resolve(Action("go_to_pane", {"pane": "left"}), tree=tree)
+        self.assertEqual(step.commands[0][0], ("focus-window", "--match=id:302"))
+
     def test_two_neighbours_on_one_side_is_ambiguous(self):
         tree = copy.deepcopy(desktop())
-        tree[0]["tabs"][2]["windows"][0]["neighbors"] = {"left": [301, 302]}
+        tree[0]["tabs"][2]["windows"][0]["neighbors"] = {"left": [9301, 9302]}
         with self.assertRaisesRegex(kilix.KilixError, "more than one"):
             resolve(Action("go_to_pane", {"pane": "left"}), tree=tree)
 
@@ -89,9 +103,17 @@ class Commands(unittest.TestCase):
     def test_open_pane_is_anchored_to_the_caller(self):
         step = resolve(Action("open_pane", {"side": "left", "name": "notes",
                                             "program": "htop -d 5"}))
+        # The tab is matched and the directory sourced from the anchor pane: a live
+        # run without them opened the pane in the user's active tab instead.
         self.assertEqual(step.commands[0][0], (
-            "launch", "--type=window", "--cwd=current", "--next-to=id:300",
+            "launch", "--type=window", "--match=window_id:300", "--source-window=id:300",
+            "--cwd=current", "--next-to=id:300",
             "--location=vsplit-before", "--title=notes", "--", "htop", "-d", "5"))
+
+    def test_new_tab_takes_the_callers_directory(self):
+        step = resolve(Action("open_tab", {}))
+        self.assertEqual(step.commands[0][0], ("launch", "--type=tab",
+                                               "--source-window=id:300", "--cwd=current"))
 
     def test_program_is_argv_never_a_shell(self):
         step = resolve(Action("open_tab", {"program": "echo $HOME; rm -rf x"}))
