@@ -112,3 +112,45 @@ class CatalogAgreement(unittest.TestCase):
         member = next(item for item in spec.files if item.path == asset.ENGINE_MEMBER)
         self.assertEqual((member.sha256, member.bytes), (asset.PINNED_SHA256, asset.PINNED_BYTES))
         self.assertEqual(spec.licenses[0].license_id, "apache-2.0")
+
+
+class Wheel(unittest.TestCase):
+    """libneedle.so is taken out of the verified wheel and held to its own pin."""
+
+    WHEEL = os.path.expanduser("~/research/refs/needle2/hf/python/"
+                               "cactus_needle-2.0.4-py3-none-manylinux2014_x86_64.whl")
+
+    def image_of(self, data):
+        directory = tempfile.TemporaryDirectory(prefix="kn-")
+        self.addCleanup(directory.cleanup)
+        path = os.path.join(directory.name, "w.whl")
+        with open(path, "wb") as handle:
+            handle.write(data)
+        image = asset.load_verified(path, hashlib.sha256(data).hexdigest(), len(data))
+        self.addCleanup(image.close)
+        return image
+
+    def zipped(self, members):
+        import io
+        import zipfile
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            for name, data in members.items():
+                archive.writestr(name, data)
+        return buffer.getvalue()
+
+    @unittest.skipUnless(os.path.exists(WHEEL), "needs the reference wheel")
+    def test_the_pinned_wheel_yields_the_pinned_library(self):
+        with open(self.WHEEL, "rb") as handle:
+            wheel = self.image_of(handle.read())
+        with asset.library_from_wheel(wheel) as library:
+            self.assertEqual(library.sha256, asset.PINNED_LIB_SHA256)
+            self.assertEqual(os.fstat(library.fd).st_size, asset.PINNED_LIB_BYTES)
+
+    def test_a_wheel_without_the_library_is_refused(self):
+        with self.assertRaisesRegex(asset.AssetError, "holds no usable"):
+            asset.library_from_wheel(self.image_of(self.zipped({"needle/other.so": b"x"})))
+
+    def test_a_substituted_library_is_refused(self):
+        with self.assertRaisesRegex(asset.AssetError, "pinned"):
+            asset.library_from_wheel(self.image_of(self.zipped({"needle/libneedle.so": b"x"})))

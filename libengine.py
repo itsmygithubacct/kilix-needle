@@ -125,8 +125,10 @@ def _worker(library_fd: int, weights_fd: int | None) -> int:
                                                "refusing to fall back to the base model"})
                     return 1
             tools = json.dumps(message["tools"], ensure_ascii=False).encode("utf-8")
+            # needle_init reports success with a positive value (measured: 1 with ten
+            # tools); needle_load, above, with exactly 0.
             status = lib.needle_init(None, tools, None)
-            say({"ok": True} if status >= 0 else {"ok": False, "error": f"needle_init {status}"})
+            say({"ok": True} if status > 0 else {"ok": False, "error": f"needle_init {status}"})
         elif op == "complete":
             written = lib.needle_complete(message["input"].encode("utf-8"), 256, buffer, _BUFFER)
             if written < 0:

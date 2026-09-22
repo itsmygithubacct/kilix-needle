@@ -18,7 +18,7 @@ int needle_load(const char *b, unsigned long long n) {
     if (n >= 4 && memcmp(b, "GOOD", 4) == 0) { loaded = 1; return 0; }
     return -1;
 }
-int needle_init(const char *s, const char *tools, const char *idx) { return 0; }
+int needle_init(const char *s, const char *tools, const char *idx) { return 1; }
 void needle_reset(void) {}
 int needle_complete(const char *in, int max, char *out, int cap) {
     return snprintf(out, cap, "{\"type\":\"call\",\"function_calls\":[],\"echo\":\"%s\",\"tuned\":%d}",

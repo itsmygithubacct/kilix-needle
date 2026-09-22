@@ -188,13 +188,50 @@ def installed_asset_dir(asset_id: str, root: str | None = None) -> str:
     return destination
 
 
+_WHEEL_LIBRARY = "needle/libneedle.so"
+
+
+def library_from_wheel(wheel: EngineImage) -> EngineImage:
+    """libneedle.so out of verified wheel bytes, held to its own pin.
+
+    The needle2-runtime asset is the upstream wheel itself (kilix-content's
+    archive mode needs one top-level directory; a wheel has two), so the
+    catalog verifies the wheel and this verifies the library inside it.
+    """
+    import io
+    import zipfile
+    size = os.fstat(wheel.fd).st_size
+    try:
+        with zipfile.ZipFile(io.BytesIO(os.pread(wheel.fd, size, 0))) as archive:
+            info = archive.getinfo(_WHEEL_LIBRARY)
+            if info.file_size != PINNED_LIB_BYTES:
+                raise AssetError("the wheel's libneedle.so is not the pinned size")
+            data = archive.read(info)
+    except (KeyError, zipfile.BadZipFile) as error:
+        raise AssetError(f"the runtime wheel holds no usable {_WHEEL_LIBRARY}") from error
+    if hashlib.sha256(data).hexdigest() != PINNED_LIB_SHA256:
+        raise AssetError("the wheel's libneedle.so does not match its pinned SHA-256")
+    image = os.memfd_create("kilix-needle-library", os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING)
+    try:
+        view = memoryview(data)
+        while view:
+            view = view[os.write(image, view):]
+        fcntl.fcntl(image, fcntl.F_ADD_SEALS, fcntl.F_SEAL_WRITE | fcntl.F_SEAL_GROW
+                    | fcntl.F_SEAL_SHRINK | fcntl.F_SEAL_SEAL)
+    except OSError:
+        os.close(image)
+        raise
+    return EngineImage(image, PINNED_LIB_SHA256)
+
+
 def installed_library(root: str | None = None) -> EngineImage:
     """libneedle.so from the needle2-runtime asset: the runtime for tuned weights."""
     spec, _destination = _installed_spec("needle2-runtime", root)
-    member = next((f.path for f in spec.files if f.path.endswith("libneedle.so")), None)
-    if member is None:
-        raise AssetError("the needle2-runtime manifest has no libneedle.so")
-    return installed_member("needle2-runtime", member, root)
+    wheel = next((f.path for f in spec.files if f.path.endswith(".whl")), None)
+    if wheel is None:
+        raise AssetError("the needle2-runtime manifest has no wheel")
+    with installed_member("needle2-runtime", wheel, root) as image:
+        return library_from_wheel(image)
 
 
 def from_installed(root: str | None = None) -> EngineImage:

@@ -100,6 +100,27 @@ class MeasuredMisreadings(unittest.TestCase):
             self.assertIsInstance(result, Action, prompt)
             self.assertEqual(result.args, want, prompt)
 
+    def test_a_truncated_command_is_refused(self):
+        # engine (five-tool schema): "run make test in the right pane" -> command "test"
+        [result] = interpret("run make test in the right pane",
+                             [call("run_in_pane", pane="right", command="test")])
+        self.assertIsInstance(result, Refusal)
+        for prompt, command, pane in (("run make test in the right pane", "make test", "right"),
+                                      ("type ls -la into the pane below", "ls -la", "below"),
+                                      ("in the left pane run git log", "git log", "left"),
+                                      ("run npm run dev in the notes pane", "npm run dev", "notes"),
+                                      ("type uptime", "uptime", "current")):
+            [result] = interpret(prompt, [call("run_in_pane", pane=pane, command=command)])
+            self.assertIsInstance(result, Action, prompt)
+
+    def test_a_filler_only_target_is_not_this_pane(self):
+        # engine (five-tool schema): "type ls -la into the pane below" -> pane "pane", command "below"
+        [result] = interpret("type ls -la into the pane below",
+                             [call("run_in_pane", pane="pane", command="below")])
+        self.assertIsInstance(result, Refusal)
+        [result] = interpret("close the pane", [call("close_pane", pane="the pane")])
+        self.assertIsInstance(result, Refusal)
+
     def test_exiting_a_program_in_a_pane_is_not_closing_the_pane(self):
         # engine: "exit vim in the left pane" -> close_pane(left)
         [result] = interpret("exit vim in the left pane", [call("close_pane", pane="left")])

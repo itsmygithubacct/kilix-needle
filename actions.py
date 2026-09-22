@@ -150,7 +150,9 @@ def _target_value(raw: str, *, relative: bool) -> str | None:
         return "current"
     stripped = " ".join(_FILLER.sub(" ", lowered).split())
     if not stripped:
-        return "current"
+        # Only filler ("pane", "the tab"): no reference at all. Measured (five-tool
+        # schema): pane "pane" with command "below" would otherwise mean "this pane".
+        return None
     if stripped in _SIDE_WORDS:
         return _SIDE_WORDS[stripped]
     if stripped in _RELATIVE:
@@ -240,6 +242,27 @@ def _bound_to_unit(mentions: list[str], text: str, unit_words: list[str]) -> boo
     return False
 
 
+_LOCATION = re.compile(r"(?:\s+(?:in|into|on|at)\s+(?:the\s+)?(?:[\w.+-]+\s+){0,2}"
+                       r"(?:pane|panes|window|split|tab)\b.*|\s+(?:here|in\s+here))$",
+                       re.IGNORECASE)
+
+
+def _command_spans(prompt: str) -> set[str]:
+    """What the request asks to type: the whole text after a run verb, up to the
+    location phrase or the end of its clause ("run make test in the right pane"
+    -> "make test"). A command must equal one of these, not merely occur in the
+    request: measured, the five-tool schema returned command "test" for it.
+    """
+    spans = set()
+    for clause in _CLAUSE.split(prompt):
+        for match in _RUN_VERB.finditer(clause):
+            span = _LOCATION.sub("", clause[match.end():]).strip()
+            span = re.sub(r"^(?:the\s+command\s+)", "", span, flags=re.IGNORECASE)
+            if span:
+                spans.add(span.casefold())
+    return spans
+
+
 def _clause_supports(verb: re.Pattern, target: str, prompt: str, *, unit: str,
                      typed: str = "") -> bool:
     """Some one clause of the request holds the verb, this target and its unit.
@@ -326,6 +349,9 @@ def _admit(name: str, args: dict, prompt: str) -> Action | Refusal:
             if _RUN_VERB.fullmatch(command):
                 # measured: "run make test in the left pane" -> command "run"
                 return Refusal(name, f"the command {command!r} is only the verb")
+            if command.casefold() not in _command_spans(prompt):
+                return Refusal(name, f"the command {command!r} is not all of what the "
+                                     "request asks to type")
         verb = {"close_pane": _CLOSE_VERB, "run_in_pane": _RUN_VERB}.get(name)
         if verb is not None and not _clause_supports(verb, target, prompt, unit="pane",
                                                      typed=command):
