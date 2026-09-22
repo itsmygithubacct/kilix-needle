@@ -104,3 +104,31 @@ class Selection(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FirstUseOffer(unittest.TestCase):
+    def offer(self, missing, answer):
+        args = type("A", (), {"root": None})()
+        out = io.StringIO()
+        with mock.patch("asset.missing_for_tuning", return_value=missing), \
+                mock.patch("builtins.input", return_value=answer) as asked, \
+                mock.patch.object(tuning, "main") as start, \
+                mock.patch.object(sys, "stdout", out):
+            needle_cli._offer_tuning(args)
+        return start, asked, out.getvalue()
+
+    def test_missing_assets_are_named_and_nothing_starts(self):
+        start, asked, out = self.offer(["needle2-train"], "y")
+        start.assert_not_called()
+        asked.assert_not_called()
+        self.assertIn("kilix-needle install --tuning", out)
+
+    def test_yes_or_enter_starts_in_the_background(self):
+        for answer in ("", "y", "YES"):
+            start, _, _ = self.offer([], answer)
+            start.assert_called_once_with(["--background"])
+
+    def test_no_starts_nothing(self):
+        start, _, out = self.offer([], "n")
+        start.assert_not_called()
+        self.assertIn("tune --background", out)

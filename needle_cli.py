@@ -216,6 +216,23 @@ def handle(engine: Engine, request: str, *, dry_run: bool = False, assume_yes: b
     return record["status"]
 
 
+def _offer_tuning(args) -> None:
+    """After the first install, at a terminal only: offer to fine-tune in the background."""
+    missing = asset.missing_for_tuning(getattr(args, "root", None))
+    print("\nkilix-needle can fine-tune Needle 2 for Kilix on this machine. It runs in the\n"
+          "background at the lowest priority, takes several hours, peaks near 9 GB of\n"
+          "memory, and is used only if it beats the base model on every benchmark gate.")
+    if missing:
+        print(f"It needs {', '.join(missing)} first: run `kilix-needle install --tuning`,\n"
+              "then `kilix-needle tune --background`.\n")
+        return
+    answer = input("Start fine-tuning now? [Y/n] ").strip().casefold()
+    if answer in ("", "y", "yes"):
+        tuning.main(["--background"])
+    else:
+        print("Not started. Run `kilix-needle tune --background` at any time.\n")
+
+
 def _image(args, *, may_install: bool = False):
     """The engine to run: --engine, then KILIX_NEEDLE_ENGINE, then the installed asset.
 
@@ -233,6 +250,7 @@ def _image(args, *, may_install: bool = False):
             raise
         print(f"kilix-needle: {error}\nFirst use: installing the Needle 2 engine.\n")
         asset.install(args.root)
+        _offer_tuning(args)
         return asset.from_installed(args.root)
 
 
@@ -261,15 +279,21 @@ def main(argv: list[str] | None = None) -> int:
                                          description="Accept the Needle 2 licence and install "
                                                      "the engine (the needle2 content asset).")
         parser.add_argument("--from", dest="supplied", metavar="DIR",
-                            help="read the engine from DIR instead of downloading it")
+                            help="read the files from DIR instead of downloading them")
+        parser.add_argument("--tuning", action="store_true",
+                            help="also install what fine-tuning needs: the base checkpoint "
+                                 "and tokenizer (needle2-train) and libneedle.so "
+                                 "(needle2-runtime), each with its own licence screen")
         parser.add_argument("--root")
         args = parser.parse_args(argv[1:])
-        try:
-            where = asset.install(args.root, supplied=args.supplied)
-        except asset.AssetError as error:
-            print(f"kilix-needle: {error}", file=sys.stderr)
-            return 1
-        print(f"installed: {where}")
+        wanted = [asset.ASSET_ID] + (list(asset.TUNING_ASSETS) if args.tuning else [])
+        for asset_id in wanted:
+            try:
+                where = asset.install(args.root, supplied=args.supplied, asset_id=asset_id)
+            except asset.AssetError as error:
+                print(f"kilix-needle: {error}", file=sys.stderr)
+                return 1
+            print(f"installed: {where}")
         return 0
     if argv[:1] == ["mcp"]:
         import mcp_server

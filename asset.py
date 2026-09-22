@@ -249,7 +249,7 @@ def _checked_screen(payload: bytes) -> bytes:
 
 
 def install(root: str | None = None, *, supplied: str | None = None,
-            stdin=None, stdout=None) -> str:
+            stdin=None, stdout=None, asset_id: str = ASSET_ID) -> str:
     """First use: show the licence, take the typed agreement, install needle2.
 
     The screen, agreement, receipt and fetch are kilix-content's and its
@@ -262,13 +262,13 @@ def install(root: str | None = None, *, supplied: str | None = None,
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
     if not (stdin.isatty() and stdout.isatty()):
-        raise AssetError(f"{ASSET_ID} is not installed, and its licence can only be "
+        raise AssetError(f"{asset_id} is not installed, and its licence can only be "
                          f"accepted at a terminal: run `kilix-needle install`")
     content, first_use, lic = _content()
     try:
-        spec = content.verified_packaged_catalog().require_asset(ASSET_ID)
+        spec = content.verified_packaged_catalog().require_asset(asset_id)
     except (RuntimeError, content.CatalogError) as error:
-        raise AssetError(f"the Content catalog cannot offer {ASSET_ID}: {error}") from error
+        raise AssetError(f"the Content catalog cannot offer {asset_id}: {error}") from error
     records = lic.load_determined_records()
     store = lic.ReceiptStore.shared()
     record = first_use.license_record_for(spec, records)
@@ -294,3 +294,17 @@ def install(root: str | None = None, *, supplied: str | None = None,
         except lic.LicenseError as error:
             raise AssetError(f"the licence authority refused: {error}") from error
         return installer.asset_destination(spec)
+
+
+TUNING_ASSETS = ("needle2-train", "needle2-runtime")
+
+
+def missing_for_tuning(root: str | None = None) -> list[str]:
+    """The tuning assets that are not installed and covered yet."""
+    missing = []
+    for asset_id in TUNING_ASSETS:
+        try:
+            _installed_spec(asset_id, root)
+        except AssetError:
+            missing.append(asset_id)
+    return missing
