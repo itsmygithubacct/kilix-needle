@@ -43,11 +43,50 @@ class Step:
     action: Action
     summary: str
     commands: tuple[tuple[tuple[str, ...], bytes | None], ...]
+    closes: frozenset = frozenset()   # ids of every pane this step would close
+
+
+def _ancestors() -> list[int]:
+    """This process and its parents, nearest first, from /proc."""
+    chain, pid = [], os.getpid()
+    while pid > 1 and len(chain) < 64:
+        chain.append(pid)
+        try:
+            with open(f"/proc/{pid}/stat", encoding="ascii", errors="replace") as stat:
+                # the command name is parenthesised and may contain spaces
+                pid = int(stat.read().rsplit(")", 1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            break
+    return chain
+
+
+def _comm(pid: int) -> str:
+    try:
+        with open(f"/proc/{pid}/comm", encoding="ascii", errors="replace") as comm:
+            return comm.read().strip()
+    except OSError:
+        return ""
+
+
+def _target() -> list[str]:
+    """How to reach this Kilix instance.
+
+    A pane has KITTY_LISTEN_ON. An agent harness may start kilix-needle as a
+    tool with a stripped environment (Codex passes only listed variables), so
+    the instance is then found as the nearest `kitty` ancestor, whose socket
+    Kilix names `unix:@kilix-<pid>`. Anything else is refused, never guessed.
+    """
+    if os.environ.get("KITTY_LISTEN_ON"):
+        return []
+    for pid in _ancestors()[1:]:
+        if _comm(pid) == "kitty":
+            return ["--to", f"unix:@kilix-{pid}"]
+    raise KilixError("not running inside Kilix: no KITTY_LISTEN_ON and no Kilix ancestor")
 
 
 def _run(argv: list[str], data: bytes | None = None) -> str:
     try:
-        done = subprocess.run([KILIX, "@", *argv], input=data, capture_output=True,
+        done = subprocess.run([KILIX, "@", *_target(), *argv], input=data, capture_output=True,
                               timeout=15, check=False)
     except (OSError, subprocess.TimeoutExpired) as error:
         raise KilixError(f"kilix @ {argv[0]} failed: {error}") from error
@@ -57,12 +96,12 @@ def _run(argv: list[str], data: bytes | None = None) -> str:
     return done.stdout.decode("utf-8", "replace")
 
 
-def snapshot() -> "Tree":
+def snapshot(*, under_overlay: bool = False) -> "Tree":
     try:
         data = json.loads(_run(["ls"]))
     except ValueError as error:
         raise KilixError("kilix @ ls returned malformed JSON") from error
-    return Tree(data)
+    return Tree(data, under_overlay=under_overlay)
 
 
 def _program(window: dict) -> str:
@@ -84,19 +123,34 @@ def _describe_pane(window: dict) -> str:
 class Tree:
     """One `kilix @ ls` snapshot, focused on the OS window being used."""
 
-    def __init__(self, data):
+    def __init__(self, data, *, under_overlay: bool = False):
         if not isinstance(data, list) or not data:
             raise KilixError("kilix reported no windows")
         # "This pane" is the pane kilix-needle was started from, not whichever
         # tab the user happens to be looking at: run from a background tab, the
-        # focused pane is someone else's session.
+        # focused pane is someone else's session. Without KITTY_WINDOW_ID (a
+        # harness may strip it) the pane is the window whose process is one of
+        # ours; that match is exact, so an unrelated window is never chosen.
         own = os.environ.get("KITTY_WINDOW_ID", "")
+        ancestry = set(_ancestors()) if not own else set()
         os_window = own_tab = own_pane = None
         for candidate in data:
             for tab in candidate.get("tabs") or []:
                 for window in tab.get("windows") or []:
-                    if own and str(window.get("id")) == own:
+                    if (own and str(window.get("id")) == own) or \
+                            (not own and window.get("pid") in ancestry):
                         os_window, own_tab, own_pane = candidate, tab, window
+        self.caller = own_pane
+        if own_pane is not None and under_overlay:
+            # Opened from a hotkey as an overlay, the overlay is the active
+            # window; the pane the user means is the one it covers.
+            history = [wid for wid in own_tab.get("active_window_history") or []
+                       if wid != own_pane.get("id")]
+            under = next((w for w in own_tab.get("windows") or []
+                          if history and w.get("id") == history[-1]), None)
+            if under is None:
+                raise KilixError("cannot tell which pane the overlay was opened over")
+            own_pane = under
         if os_window is None:
             os_window = next((w for w in data if w.get("is_focused")), None) \
                 or next((w for w in data if w.get("is_active")), data[0])
@@ -119,6 +173,12 @@ class Tree:
     def pane(self, ref: str) -> dict:
         if ref == "current":
             return self.active_pane
+        if ref in ("next", "previous"):
+            windows = self.active_tab.get("windows") or []
+            if len(windows) < 2:
+                raise KilixError("there is no other pane in this tab")
+            index = windows.index(self.active_pane)
+            return windows[(index + (1 if ref == "next" else -1)) % len(windows)]
         if ref in _NEIGHBOR:
             ids = (self.active_pane.get("neighbors") or {}).get(_NEIGHBOR[ref]) or []
             if len(ids) != 1:
@@ -214,13 +274,16 @@ def resolve(action: Action, tree: Tree) -> Step:
         verb = "close" if kind == "close_pane" else "go to"
         command = "close-window" if kind == "close_pane" else "focus-window"
         return Step(action, f"{verb} {_describe_pane(window)}",
-                    (((command, f"--match=id:{window['id']}"), None),))
+                    (((command, f"--match=id:{window['id']}"), None),),
+                    frozenset({window["id"]}) if kind == "close_pane" else frozenset())
     if kind in ("close_tab", "go_to_tab"):
         tab = tree.tab(args["tab"])
         verb = "close" if kind == "close_tab" else "go to"
         command = "close-tab" if kind == "close_tab" else "focus-tab"
         return Step(action, f"{verb} {tree.describe_tab(tab)}",
-                    (((command, f"--match=id:{tab['id']}"), None),))
+                    (((command, f"--match=id:{tab['id']}"), None),),
+                    frozenset(w["id"] for w in tab.get("windows") or [])
+                    if kind == "close_tab" else frozenset())
     if kind == "arrange_panes":
         tab = tree.active_tab
         enabled = tab.get("enabled_layouts") or []

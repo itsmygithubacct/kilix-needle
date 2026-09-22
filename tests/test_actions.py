@@ -63,6 +63,31 @@ class MeasuredMisreadings(unittest.TestCase):
                              [call("run_in_pane", pane="htop", command="htop")])
         self.assertEqual(result, Action("run_in_pane", {"pane": "name:htop", "command": "htop"}))
 
+    def test_a_bare_program_name_after_quit_is_the_program(self):
+        # engine (held-out test set): "quit vim in the right pane" -> close_pane(vim)
+        for prompt, item in (("quit vim in the right pane", call("close_pane", pane="vim")),
+                             ("close htop", call("close_pane", pane="htop")),
+                             ("kill server", call("close_tab", tab="server"))):
+            [result] = interpret(prompt, [item])
+            self.assertIsInstance(result, Refusal, prompt)
+        for prompt, item in (("close the vim pane", call("close_pane", pane="vim")),
+                             ("close the pane running vim", call("close_pane", pane="vim")),
+                             ("kill the server tab", call("close_tab", tab="server")),
+                             ("close the tab called logs", call("close_tab", tab="logs"))):
+            [result] = interpret(prompt, [item])
+            self.assertIsInstance(result, Action, prompt)
+
+    def test_a_program_named_like_a_side_is_not_a_side(self):
+        # engine (fresh bait): "kill top in the left pane" -> close_pane(top)
+        [result] = interpret("kill top in the left pane", [call("close_pane", pane="top")])
+        self.assertIsInstance(result, Refusal)
+        for prompt, item in (("close the top pane", call("close_pane", pane="top")),
+                             ("close the pane at the top", call("close_pane", pane="top")),
+                             ("close the pane above", call("close_pane", pane="above")),
+                             ("close tab number 3", call("close_tab", tab="3"))):
+            [result] = interpret(prompt, [item])
+            self.assertIsInstance(result, Action, prompt)
+
     def test_exiting_a_program_in_a_pane_is_not_closing_the_pane(self):
         # engine: "exit vim in the left pane" -> close_pane(left)
         [result] = interpret("exit vim in the left pane", [call("close_pane", pane="left")])

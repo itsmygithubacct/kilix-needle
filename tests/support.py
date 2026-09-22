@@ -5,8 +5,11 @@ import tempfile
 
 # No test may reach the real desktop: without the socket address `kilix @`
 # has nothing to connect to, and the module under test runs a recorder.
-for name in ("KITTY_LISTEN_ON", "KITTY_WINDOW_ID", "KILIX_CONTENT_ROOT"):
+for name in ("KITTY_WINDOW_ID", "KILIX_CONTENT_ROOT"):
     os.environ.pop(name, None)
+# An address nothing listens on: set, so no Kilix ancestor is looked for, and
+# dead, so a stray real `kilix @` fails instead of reaching the desktop.
+os.environ["KITTY_LISTEN_ON"] = "unix:@kilix-needle-test-no-such-socket"
 
 import kilix  # noqa: E402
 
@@ -71,7 +74,9 @@ def window(wid, title="bash", program="bash", *, active=False, neighbors=None,
     env = {"KITTY_PTY_BROKER_SESSION": broker} if broker else {}
     return {"id": wid, "title": title, "is_active": active, "is_focused": active,
             "neighbors": neighbors or {}, "at_prompt": at_prompt, "env": env,
-            "foreground_processes": [{"cmdline": [f"/usr/bin/{program}"], "pid": wid}]}
+            # pids above pid_max, so ancestry can never match a real process
+            "pid": 5_000_000 + wid,
+            "foreground_processes": [{"cmdline": [f"/usr/bin/{program}"], "pid": 5_000_000 + wid}]}
 
 
 def tab(tid, title, windows, *, active=False, layouts=("splits", "stack", "tall", "grid")):

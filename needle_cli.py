@@ -15,8 +15,11 @@ typed `y` even with `--yes`, and without a terminal nothing runs.
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
+import json
 import os
 import sys
+from typing import Callable
 
 from actions import TOOLS, Action, Refusal, interpret
 import asset
@@ -24,7 +27,17 @@ from engine import Engine, EngineError, check_prompt
 import kilix
 
 
-def _confirm(question: str) -> bool:
+@dataclass(frozen=True)
+class Options:
+    dry_run: bool = False
+    assume_yes: bool = False
+    # An agent harness is calling: it may never close its own pane or tab, and
+    # nothing is ever read from stdin (for MCP, stdin is the protocol stream).
+    agent: bool = False
+    under_overlay: bool = False
+
+
+def _terminal_confirm(question: str) -> bool:
     if not sys.stdin.isatty():
         return False
     sys.stdout.write(question)
@@ -33,58 +46,121 @@ def _confirm(question: str) -> bool:
     return answer.strip().casefold() in ("y", "yes")
 
 
-def handle(engine: Engine, request: str, *, dry_run: bool, assume_yes: bool = False,
-           out=sys.stdout) -> int:
-    """Run one request. 0 = done or nothing to do, 1 = refused or failed."""
+def _never(_question: str) -> bool:
+    return False
+
+
+def run_request(engine: Engine, request: str, options: Options,
+                confirm: Callable[[str], bool] = _terminal_confirm) -> dict:
+    """One request, as a record: {"request", "status", "note", "items": [...]}.
+
+    status 0 = done or nothing to do, 1 = something was refused, skipped or failed.
+    Each item has "outcome": refused | unresolved | would | skipped | done | failed.
+    """
+    record = {"request": request, "status": 0, "note": "", "items": []}
+    items = record["items"]
     try:
         request = check_prompt(request)
     except ValueError as error:
-        print(f"kilix-needle: {error}", file=out)
-        return 1
+        record.update(status=1, note=str(error))
+        return record
     engine.reset()
     reply = engine.complete(request)
     results = interpret(request, reply.get("function_calls") or [])
     if not results:
-        print("Needle found no pane or tab action in that request.", file=out)
-        return 0
+        record["note"] = "Needle found no pane or tab action in that request."
+        return record
 
     refused = [item for item in results if isinstance(item, Refusal)]
     for item in refused:
-        print(f"  refused {item.kind}: {item.reason}", file=out)
+        items.append({"kind": item.kind, "outcome": "refused", "reason": item.reason})
     actions = [item for item in results if isinstance(item, Action)]
-    if not actions:
-        return 1
     hold = bool(refused)
-    if hold:
-        print("  part of the request was refused, so nothing runs without a yes", file=out)
+    if refused:
+        record["status"] = 1
+    if hold and actions:
+        record["note"] = "part of the request was refused, so nothing runs without a yes"
 
-    status = 0
     for action in actions:
+        entry = {"kind": action.kind, "args": dict(action.args)}
+        items.append(entry)
         try:
-            step = kilix.resolve(action, kilix.snapshot())
+            tree = kilix.snapshot(under_overlay=options.under_overlay)
+            step = kilix.resolve(action, tree)
         except kilix.KilixError as error:
-            print(f"  cannot {action.kind.replace('_', ' ')}: {error}", file=out)
-            status = 1
+            entry.update(outcome="unresolved", reason=str(error))
+            record["status"] = 1
             continue
-        if dry_run:
-            print(f"  would {step.summary}", file=out)
+        entry["summary"] = step.summary
+        if options.agent and tree.caller is not None and tree.caller.get("id") in step.closes:
+            entry.update(outcome="refused",
+                         reason="an agent may not close its own pane or the tab it is in")
+            record["status"] = 1
+            continue
+        if options.dry_run:
+            entry["outcome"] = "would"
             continue
         # --yes answers for a risky action; a partly refused request still needs a
         # person, because what survived may be the wrong half of a misreading.
         needs_yes = hold or action.risky
-        if needs_yes and not (assume_yes and not hold) \
-                and not _confirm(f"  {step.summary}? [y/N] "):
-            print("  skipped" if sys.stdin.isatty() else
-                  f"  not run without a terminal to confirm: {step.summary}", file=out)
-            status = 1
+        if needs_yes and not (options.assume_yes and not hold) \
+                and not confirm(f"  {step.summary}? [y/N] "):
+            entry["outcome"] = "skipped"
+            entry["reason"] = ("declined" if confirm is _terminal_confirm and sys.stdin.isatty()
+                               else "needs a yes and there is no one to ask")
+            record["status"] = 1
             continue
         try:
             kilix.perform(step)
         except kilix.KilixError as error:
-            print(f"  failed: {error}", file=out)
-            return 1
-        print(f"  done: {step.summary}", file=out)
-    return status
+            entry.update(outcome="failed", reason=str(error))
+            record["status"] = 1
+            return record
+        entry["outcome"] = "done"
+    return record
+
+
+def render(record: dict) -> str:
+    """The human form of a request record."""
+    lines = []
+    items = record["items"]
+    if not items and record["note"]:
+        prefix = "kilix-needle: " if record["status"] else ""
+        return prefix + record["note"]
+    for item in items:
+        if item["outcome"] == "refused" and "summary" not in item:
+            lines.append(f"  refused {item['kind']}: {item['reason']}")
+    if record["note"]:
+        lines.append(f"  {record['note']}")
+    for item in items:
+        outcome = item["outcome"]
+        if outcome == "refused" and "summary" not in item:
+            continue
+        if outcome == "unresolved":
+            lines.append(f"  cannot {item['kind'].replace('_', ' ')}: {item['reason']}")
+        elif outcome == "refused":
+            lines.append(f"  refused: {item['summary']}: {item['reason']}")
+        elif outcome == "would":
+            lines.append(f"  would {item['summary']}")
+        elif outcome == "skipped":
+            lines.append("  skipped" if item["reason"] == "declined" else
+                         f"  not run without a terminal to confirm: {item['summary']}")
+        elif outcome == "failed":
+            lines.append(f"  failed: {item['reason']}")
+        else:
+            lines.append(f"  done: {item['summary']}")
+    return "\n".join(lines)
+
+
+def handle(engine: Engine, request: str, *, dry_run: bool = False, assume_yes: bool = False,
+           out=sys.stdout, as_json: bool = False, agent: bool = False,
+           under_overlay: bool = False) -> int:
+    """Run one request and print it. 0 = done or nothing to do, 1 = otherwise."""
+    options = Options(dry_run=dry_run, assume_yes=assume_yes, agent=agent,
+                      under_overlay=under_overlay)
+    record = run_request(engine, request, options, _never if agent else _terminal_confirm)
+    print(json.dumps(record, ensure_ascii=False) if as_json else render(record), file=out)
+    return record["status"]
 
 
 def _image(args):
@@ -95,6 +171,17 @@ def _image(args):
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["mcp"]:
+        import mcp_server
+        parser = argparse.ArgumentParser(prog="kilix-needle mcp",
+                                         description=mcp_server.__doc__,
+                                         formatter_class=argparse.RawDescriptionHelpFormatter)
+        parser.add_argument("--engine", metavar="FILE")
+        parser.add_argument("--root")
+        args = parser.parse_args(argv[1:])
+        return mcp_server.serve(lambda: _image(args))
+
     parser = argparse.ArgumentParser(prog="kilix-needle", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("request", nargs="*", help="what to do; omit for a prompt loop")
@@ -102,10 +189,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--yes", action="store_true",
                         help="run closing, typing and program starts without asking; "
                              "never overrides a refusal")
+    parser.add_argument("--json", action="store_true", help="print one JSON record per request")
+    parser.add_argument("--agent", action="store_true",
+                        help="called by an agent: never prompts, and never closes its own "
+                             "pane or tab")
+    parser.add_argument("--under-overlay", action="store_true",
+                        help="opened as an overlay (a hotkey): 'this pane' is the one beneath")
     parser.add_argument("--engine", metavar="FILE",
                         help="a local copy of the pinned engine instead of the installed asset")
     parser.add_argument("--root", help="the Kilix content root, if not inherited from Kilix")
     args = parser.parse_args(argv)
+    modes = dict(dry_run=args.dry_run, assume_yes=args.yes, as_json=args.json,
+                 agent=args.agent, under_overlay=args.under_overlay)
     try:
         image = _image(args)
     except asset.AssetError as error:
@@ -114,9 +209,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         with image, Engine(image, TOOLS) as engine:
             if args.request:
-                return handle(engine, " ".join(args.request), dry_run=args.dry_run,
-                              assume_yes=args.yes)
-            if not sys.stdin.isatty():
+                return handle(engine, " ".join(args.request), **modes)
+            if args.agent or not sys.stdin.isatty():
                 print("kilix-needle: give a request, or run it in a terminal", file=sys.stderr)
                 return 2
             status = 0
@@ -129,7 +223,7 @@ def main(argv: list[str] | None = None) -> int:
                 if line.strip() in ("quit", "exit", ":q"):
                     return status
                 if line.strip():
-                    status = handle(engine, line, dry_run=args.dry_run, assume_yes=args.yes)
+                    status = handle(engine, line, **modes)
     except EngineError as error:
         print(f"kilix-needle: {error}", file=sys.stderr)
         return 2

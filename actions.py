@@ -150,7 +150,7 @@ def _target_value(raw: str, *, relative: bool) -> str | None:
         return "current"
     if stripped in _SIDE_WORDS:
         return _SIDE_WORDS[stripped]
-    if relative and stripped in _RELATIVE:
+    if stripped in _RELATIVE:
         return _RELATIVE[stripped]
     if relative and stripped in _ORDINALS:
         return _ORDINALS[stripped]
@@ -215,6 +215,25 @@ def _first(words: list[str], text: str) -> re.Match | None:
     return min(found, key=lambda m: m.start(), default=None)
 
 
+def _bound_to_unit(mentions: list[str], text: str, unit_words: list[str]) -> bool:
+    """The target is tied to a pane/tab word: "the vim pane", "the pane on the
+    right", "tab 4", "the second tab", "the tab called logs".
+
+    A bare word after a closing verb names a program, not its pane. Measured:
+    "quit vim in the right pane" -> close_pane(vim), and "kill top in the left
+    pane" -> close_pane(top), which a side word would have made "above".
+    """
+    units = "|".join(re.escape(word) for word in unit_words)
+    for mention in mentions:
+        word = re.escape(mention)
+        if re.search(rf"(?<![\w]){word}\s+(?:{units})\b"
+                     rf"|\b(?:{units})\s+(?:(?:called|named|running|with|number)\s+"
+                     rf"|(?:on|to|at)\s+the\s+)?{word}(?![\w])",
+                     text, re.IGNORECASE):
+            return True
+    return False
+
+
 def _clause_supports(verb: re.Pattern, target: str, prompt: str, *, unit: str,
                      typed: str = "") -> bool:
     """Some one clause of the request holds the verb, this target and its unit.
@@ -257,9 +276,12 @@ def _clause_supports(verb: re.Pattern, target: str, prompt: str, *, unit: str,
         # verb, reached without a locative; the target itself must be named.
         unit_words = ["tab", "tabs"] if unit == "tab" else ["pane", "panes", "window", "split"]
         first = _first(_mentions(target) + unit_words, tail)
-        if first is not None and not _LOCATIVE.search(tail[:first.start()]) \
-                and _first(_mentions(target), tail) is not None:
-            return True
+        if first is None or _LOCATIVE.search(tail[:first.start()]) \
+                or _first(_mentions(target), tail) is None:
+            continue
+        if not _bound_to_unit(_mentions(target), tail, unit_words):
+            continue
+        return True
     return False
 
 
