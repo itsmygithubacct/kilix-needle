@@ -11,6 +11,7 @@ kilix-needle close tab 2 and go to tab 1
 kilix-needle make it a grid
 kilix-needle                  # a prompt loop, one request per line
 kilix-needle --dry-run close this pane
+kilix-needle --yes close tab 2  # no question; for scripts and agents
 ```
 
 Requires Python 3.10+ on Linux x86-64, run inside Kilix. No Python
@@ -56,9 +57,11 @@ passes checks that do not depend on the model before it becomes an action:
 - Every free-text value (a program, a name, a command) must appear in the
   request. Values the model invents are refused, not run.
 
-Closing, typing and starting a program always wait for `y`. If any part of a
-request is refused, everything else in it waits for `y` too. There is no
-flag that answers for you. Without a terminal, those actions are not run.
+Closing, typing and starting a program wait for `y`. `--yes` answers that
+for scripts and agent harnesses. It never overrides a refusal: if any part of
+a request is refused, everything else in it waits for a typed `y`, even with
+`--yes`, and without a terminal nothing runs. The caller gets exit status 1
+and should rephrase.
 
 Everything runs as `kilix @ ...` argv over the instance socket, never through a
 shell. Programs are split with `shlex` and executed directly.

@@ -38,7 +38,7 @@ def call(tool, **arguments):
 
 
 class Handle(unittest.TestCase):
-    def run_request(self, prompt, *calls, answers=(), tty=True, dry_run=False):
+    def run_request(self, prompt, *calls, answers=(), tty=True, dry_run=False, yes=False):
         os.environ["KITTY_WINDOW_ID"] = "300"
         self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
         saved = sys.stdin, sys.stdout
@@ -46,7 +46,8 @@ class Handle(unittest.TestCase):
         try:
             with FakeKilix(desktop()) as fake:
                 engine = ScriptedEngine(*calls)
-                status = needle_cli.handle(engine, prompt, dry_run=dry_run, out=sys.stdout)
+                status = needle_cli.handle(engine, prompt, dry_run=dry_run, assume_yes=yes,
+                                           out=sys.stdout)
                 return status, fake.calls(), sys.stdout.getvalue(), engine
         finally:
             sys.stdin, sys.stdout = saved
@@ -79,6 +80,27 @@ class Handle(unittest.TestCase):
         self.assertEqual(calls, [])
         self.assertIn("refused close_tab", out)
         self.assertIn("nothing runs without a yes", out)
+
+    def test_yes_runs_a_risky_action_without_a_terminal(self):
+        status, calls, out, _ = self.run_request(
+            "close this pane", call("close_pane", pane="this"), tty=False, yes=True)
+        self.assertEqual((status, calls), (0, [(["close-window", "--match=id:300"], None)]))
+        self.assertNotIn("[y/N]", out)
+
+    def test_yes_never_overrides_a_refusal(self):
+        # The refused call stays refused, and what survived still needs a person.
+        status, calls, out, _ = self.run_request(
+            "go to tab 1 and close the htop pane",
+            call("go_to_tab", tab="1"), call("close_tab", tab="htop"), tty=False, yes=True)
+        self.assertEqual((status, calls), (1, []))
+        self.assertIn("refused close_tab", out)
+
+    def test_yes_does_not_skip_resolution_checks(self):
+        status, calls, out, _ = self.run_request(
+            "run q in the htop pane", call("run_in_pane", pane="htop", command="q"),
+            tty=False, yes=True)
+        self.assertEqual((status, calls), (1, []))
+        self.assertIn("not at a shell prompt", out)
 
     def test_dry_run_runs_nothing(self):
         status, calls, out, _ = self.run_request(

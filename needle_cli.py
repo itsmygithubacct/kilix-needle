@@ -7,9 +7,10 @@
 Each request is one Needle turn. Its calls pass the checks in `actions`,
 resolve against a fresh `kilix @ ls`, and are printed before anything runs.
 Opening, focusing, arranging, renaming and resizing run straight away.
-Closing, typing into a pane and starting a program wait for `y`, and so does
-everything in a request any part of which was refused. There is no flag that
-answers for you; without a terminal, those actions are not run.
+Closing, typing into a pane and starting a program wait for `y`. `--yes`
+answers that question for you, for scripts and agent harnesses. It cannot
+override a refusal: if any part of a request was refused, the rest waits for a
+typed `y` even with `--yes`, and without a terminal nothing runs.
 """
 from __future__ import annotations
 
@@ -32,7 +33,8 @@ def _confirm(question: str) -> bool:
     return answer.strip().casefold() in ("y", "yes")
 
 
-def handle(engine: Engine, request: str, *, dry_run: bool, out=sys.stdout) -> int:
+def handle(engine: Engine, request: str, *, dry_run: bool, assume_yes: bool = False,
+           out=sys.stdout) -> int:
     """Run one request. 0 = done or nothing to do, 1 = refused or failed."""
     try:
         request = check_prompt(request)
@@ -67,7 +69,11 @@ def handle(engine: Engine, request: str, *, dry_run: bool, out=sys.stdout) -> in
         if dry_run:
             print(f"  would {step.summary}", file=out)
             continue
-        if (hold or action.risky) and not _confirm(f"  {step.summary}? [y/N] "):
+        # --yes answers for a risky action; a partly refused request still needs a
+        # person, because what survived may be the wrong half of a misreading.
+        needs_yes = hold or action.risky
+        if needs_yes and not (assume_yes and not hold) \
+                and not _confirm(f"  {step.summary}? [y/N] "):
             print("  skipped" if sys.stdin.isatty() else
                   f"  not run without a terminal to confirm: {step.summary}", file=out)
             status = 1
@@ -93,6 +99,9 @@ def main(argv: list[str] | None = None) -> int:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("request", nargs="*", help="what to do; omit for a prompt loop")
     parser.add_argument("--dry-run", action="store_true", help="show the plan and run nothing")
+    parser.add_argument("--yes", action="store_true",
+                        help="run closing, typing and program starts without asking; "
+                             "never overrides a refusal")
     parser.add_argument("--engine", metavar="FILE",
                         help="a local copy of the pinned engine instead of the installed asset")
     parser.add_argument("--root", help="the Kilix content root, if not inherited from Kilix")
@@ -105,7 +114,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         with image, Engine(image, TOOLS) as engine:
             if args.request:
-                return handle(engine, " ".join(args.request), dry_run=args.dry_run)
+                return handle(engine, " ".join(args.request), dry_run=args.dry_run,
+                              assume_yes=args.yes)
             if not sys.stdin.isatty():
                 print("kilix-needle: give a request, or run it in a terminal", file=sys.stderr)
                 return 2
@@ -119,7 +129,7 @@ def main(argv: list[str] | None = None) -> int:
                 if line.strip() in ("quit", "exit", ":q"):
                     return status
                 if line.strip():
-                    status = handle(engine, line, dry_run=args.dry_run)
+                    status = handle(engine, line, dry_run=args.dry_run, assume_yes=args.yes)
     except EngineError as error:
         print(f"kilix-needle: {error}", file=sys.stderr)
         return 2
