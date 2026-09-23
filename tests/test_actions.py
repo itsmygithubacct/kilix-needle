@@ -121,6 +121,12 @@ class MeasuredMisreadings(unittest.TestCase):
         [result] = interpret("close tab two", [call("close_tab", tab="two")])
         self.assertEqual(result, Action("close_tab", {"tab": "2"}))
 
+    def test_the_introducing_word_is_not_part_of_the_name(self):
+        [result] = interpret("close the pane running top", [call("close_pane", pane="running top")])
+        self.assertEqual(result, Action("close_pane", {"pane": "name:top"}))
+        [result] = interpret("go to the tab named logs", [call("go_to_tab", tab="named logs")])
+        self.assertEqual(result, Action("go_to_tab", {"tab": "name:logs"}))
+
     def test_a_command_for_a_tab_is_not_typed_into_this_pane(self):
         # Only the pane/tab unit rule stops this one: the command span is right
         # and "current" needs no mention.

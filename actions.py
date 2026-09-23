@@ -235,6 +235,9 @@ _AS_NAME = r"(?:running|named|called|titled|with)\s+(?:the\s+)?"
 
 def _named_target(name: str, key: str, args: dict, prompt: str) -> str | Refusal:
     raw = _text(args, key)
+    # The introducing word is not part of the name: measured (fourteen tools),
+    # "close the pane running top" -> pane "running top", which names no pane.
+    raw = re.sub(rf"^{_AS_NAME}", "", raw.strip(), flags=re.IGNORECASE)
     word = " ".join(raw.casefold().split())
     if word and re.search(rf"\b{_AS_NAME}{re.escape(word)}(?![\w])", prompt, re.IGNORECASE):
         # Introduced as a name, it is a name: measured (held-out v3), "close the
