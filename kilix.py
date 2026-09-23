@@ -308,6 +308,48 @@ def resolve(action: Action, tree: Tree) -> Step:
         tab = tree.active_tab
         return Step(action, f"rename {tree.describe_tab(tab)} to {args['name']!r}",
                     ((("set-tab-title", f"--match=id:{tab['id']}", args["name"]), None),))
+    if kind == "rename_pane":
+        window = tree.pane(args["pane"])
+        return Step(action, f"rename {_describe_pane(window)} to {args['name']!r}",
+                    ((("set-window-title", f"--match=id:{window['id']}", "--", args["name"]), None),))
+    if kind == "maximize_pane":
+        window = tree.pane(args["pane"])
+        tab = next(t for t, w in tree._all_panes() if w["id"] == window["id"])
+        stacked = tab.get("layout") == "stack"
+        if args["restore"]:
+            commands = ((("last-used-layout", f"--match=id:{tab['id']}"), None),) if stacked else ()
+            return Step(action, f"restore the layout of {tree.describe_tab(tab)}", commands)
+        if "stack" not in (tab.get("enabled_layouts") or []):
+            raise KilixError("the stack layout is not enabled in the target tab")
+        commands = ((("focus-window", f"--match=id:{window['id']}"), None),)
+        if not stacked:
+            commands += ((("goto-layout", f"--match=id:{tab['id']}", "stack"), None),)
+        return Step(action, f"maximize {_describe_pane(window)}", commands)
+    if kind == "swap_panes":
+        anchor = tree.active_pane
+        other = tree.pane(args["side"])  # refuses missing or ambiguous neighbours
+        # Tab.move_window operates on the tab's active group, not the matched
+        # window. Focus the anchor explicitly before invoking it.
+        return Step(action, f"swap {_describe_pane(anchor)} with {_describe_pane(other)}",
+                    ((("focus-window", f"--match=id:{anchor['id']}"), None),
+                     (("action", f"--match=id:{anchor['id']}",
+                       f"move_window {_NEIGHBOR[args['side']]}"), None)))
+    if kind == "move_tab":
+        tab, anchor = tree.active_tab, tree.active_pane
+        index = tree.tabs.index(tab)
+        destination = (args["position"] - 1 if "position" in args else
+                       index + (-1 if args["direction"] == "left" else 1))
+        if not 0 <= destination < len(tree.tabs):
+            raise KilixError("the requested tab position is outside this window")
+        distance = destination - index
+        commands = ()
+        if distance:
+            # Boss.move_tab_forward uses the active OS window. An action match
+            # alone does not select either the tab or its OS window.
+            commands = ((("focus-window", f"--match=id:{anchor['id']}"), None),)
+            verb = "move_tab_forward" if distance > 0 else "move_tab_backward"
+            commands += ((("action", f"--match=id:{anchor['id']}", verb), None),) * abs(distance)
+        return Step(action, f"move {tree.describe_tab(tab)} to position {destination + 1}", commands)
     if kind == "resize_pane":
         window = tree.active_pane
         axis, sign = _RESIZE[args["direction"]]

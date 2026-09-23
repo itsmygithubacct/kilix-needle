@@ -2,7 +2,7 @@
 import unittest
 
 import support  # noqa: F401
-from actions import TOOL_NAMES, Action, Refusal, interpret
+from actions import LEGACY_TOOLS, Action, Refusal, interpret
 import toolset
 
 
@@ -11,7 +11,7 @@ def call(tool, **arguments):
 
 
 class Translate(unittest.TestCase):
-    def test_every_internal_action_is_reachable(self):
+    def test_every_legacy_action_is_reachable(self):
         cases = [
             (call("open", kind="pane", side="right", program="htop", name="x"),
              call("open_pane", side="right", program="htop", name="x")),
@@ -28,7 +28,7 @@ class Translate(unittest.TestCase):
         self.assertEqual(got, [call("arrange_panes", layout="grid"), call("rename_tab", name="api"),
                                call("resize_pane", direction="wider", amount=3)])
         reached = {c["name"] for c in got} | {ten["name"] for _, ten in cases}
-        self.assertEqual(reached, TOOL_NAMES)
+        self.assertEqual(reached, {t["name"] for t in LEGACY_TOOLS})
 
     def test_malformed_calls_reach_the_checks_and_are_refused(self):
         for bad in (call("open"), call("close", kind="window", which="x"), call("adjust"),

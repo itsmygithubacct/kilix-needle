@@ -13,7 +13,7 @@ kilix-needle --dry-run close this pane
 kilix-needle --yes close tab 2  # no question; for scripts and agents
 ```
 
-Requires Python 3.10+ on Linux x86-64, run inside Kilix. It has no Python
+Requires Python 3.11+ on Linux x86-64, run inside Kilix. It has no Python
 dependencies. Fine-tuning, which is optional, builds its own environment.
 Status: a local prototype, not published and not part of a release.
 
@@ -206,3 +206,65 @@ real shape, including window groups.
 
 Needle 2 is published by Cactus Compute under the Apache License 2.0. Its
 licence is shown and accepted through `kilix-needle install`.
+
+## kilix-ml training and inference
+
+The model-independent `kilix-panes-tools/v2` interface has 14 actions. The four
+additions are `maximize_pane`, `rename_pane`, `swap_panes` and `move_tab`.
+They run without confirmation, following the existing policy for reversible
+layout and title changes. Existing Needle 2 engines still receive their original
+ten-tool or five-tool schemas; the additions are available through the external
+model interface.
+
+```sh
+kilix-needle contract > contract.json
+kilix-needle bridge < proposals.jsonl                 # validate only, offline
+kilix-needle bridge --mode plan < proposals.jsonl     # resolve, execute nothing
+kilix-needle bridge --mode execute --agent --yes < proposals.jsonl
+```
+
+Each line of `proposals.jsonl` has this shape (substitute the exported digest):
+
+```json
+{"contract_sha256":"<contract.json sha256>","request":"maximize this pane","function_calls":[{"name":"maximize_pane","arguments":{}}]}
+```
+
+The contract contains JSON schemas, normalization defaults, confirmation rules
+and digests of the actual validator and executor. Save it with the training
+manifest and model. The bridge refuses mismatched contracts, malformed calls
+and extra arguments. Validation returns normalized `actions` and `refusals`;
+training must compare the normalized actions with its intended labels, not
+merely check for an empty refusal list. No model, content download or desktop is
+needed for validation.
+
+Execution goes through `run_calls()` in `needle_cli.py`, the same path used by
+Needle 2. The bridge never reads a confirmation answer from its JSONL stream:
+use `--yes` for risky actions, and a partial refusal still prevents execution.
+With `--agent`, closing the caller's own pane or tab remains forbidden. A command
+is only typed when the target is at a shell prompt.
+
+New action details:
+
+- `maximize_pane(pane="current", restore=false)` selects the target and enters
+  stack layout. Repeating it stays maximized. `restore=true` restores the last
+  layout only if currently stacked; otherwise it does nothing.
+- `rename_pane(name, pane="current")` sets the exact requested title.
+- `swap_panes(side)` exchanges the caller with one unambiguous neighbour.
+- `move_tab(direction="left"|"right")` or `move_tab(position=1..9)` moves the
+  caller's tab. Give exactly one argument. Moving past an edge is refused;
+  there is no wrap. Swapping and reordering explicitly focus the caller first.
+
+The validator accepts trailing sentence punctuation on closes, active/focused
+and left-hand/right-hand targets, and `please` or matching quote/backtick wrappers
+around commands. Command contents remain exact and case-sensitive. `close it`
+and attempts to quit a program by closing its containing pane remain refused.
+
+The workspace tuner now reads `kilix-modules/kilix-ml/domains/kilix_panes`.
+Set `KILIX_ML_HOME` to use another kilix-ml source root. An explicit missing pack
+is an error. Standalone installations without a kilix-ml pack retain the pinned
+`third_party/kilix-needle-tuning` fallback. The compatibility recipe counts and
+skips actions its five-tool format cannot express; the 7.2M training recipe must
+use the full exported 14-tool contract.
+
+The owned application source is MIT licensed. Third-party submodules and model
+assets retain their own licences.

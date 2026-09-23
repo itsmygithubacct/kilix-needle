@@ -60,7 +60,7 @@ class Data(unittest.TestCase):
         evals = set()
         for rel in manifest["data"]["exclude"]:
             evals |= {" ".join(json.loads(l)["request"].casefold().split())
-                      for l in open(rel) if l.strip()}
+                      for l in Path(rel).read_text().splitlines() if l.strip()}
         queries = {" ".join(r["query"].casefold().split()) for r in rows}
         self.assertEqual(queries & evals, set())
         self.assertEqual(rows[0]["tools"], toolset.TOOLS)
@@ -84,7 +84,7 @@ class InconsistentExamples(unittest.TestCase):
         manifest = dict(tuning.load_manifest())
         manifest["data"] = dict(manifest["data"], exclude=[])
         with tempfile.TemporaryDirectory(prefix="kn-") as tmp, \
-                mock.patch.dict(sys.modules, {"generate": fake}):
+                mock.patch.object(tuning, "load_generator", return_value=fake):
             out = Path(tmp) / "train.jsonl"
             stats = tuning.build_data(Path(tmp), manifest, out)
             lines = out.read_text().splitlines()
@@ -157,3 +157,31 @@ class FirstUseOffer(unittest.TestCase):
         start, _, out = self.offer([], "n")
         start.assert_not_called()
         self.assertIn("tune --background", out)
+
+
+class DomainPackMigration(unittest.TestCase):
+    def test_explicit_ml_home_never_falls_back_silently(self):
+        with tempfile.TemporaryDirectory(prefix="kn-") as tmp, \
+                mock.patch.dict(os.environ, {"KILIX_ML_HOME": tmp}):
+            expected = Path(tmp) / "domains" / "kilix_panes"
+            self.assertEqual(tuning.library_path(), expected)
+            with self.assertRaises(tuning.TuneError):
+                tuning.load_manifest(expected)
+
+    def test_generators_from_two_packs_do_not_share_import_cache(self):
+        with tempfile.TemporaryDirectory(prefix="kn-") as tmp:
+            roots = [Path(tmp) / "a", Path(tmp) / "b"]
+            for i, root in enumerate(roots):
+                root.mkdir()
+                (root / "generate.py").write_text(f"value = {i}\n")
+            self.assertEqual([tuning.load_generator(p).value for p in roots], [0, 1])
+
+    def test_needle_recipe_counts_actions_it_cannot_express(self):
+        rows = [{"query": "maximize this pane", "actions": [["maximize_pane", {}]]}]
+        fake = mock.Mock(generate=mock.Mock(return_value=(rows, 0)))
+        manifest = tuning.load_manifest()
+        manifest["data"]["exclude"] = []
+        with tempfile.TemporaryDirectory(prefix="kn-") as tmp, \
+                mock.patch.object(tuning, "load_generator", return_value=fake):
+            stats = tuning.build_data(Path(tmp), manifest, Path(tmp) / "train.jsonl")
+        self.assertEqual((stats["kept"], stats["unsupported_dropped"]), (0, 1))

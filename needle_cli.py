@@ -21,7 +21,7 @@ import os
 import sys
 from typing import Callable
 
-from actions import TOOLS, Action, Refusal, interpret
+from actions import LEGACY_TOOLS, Action, Refusal, interpret
 import asset
 from engine import Engine, EngineError, check_prompt
 import kilix
@@ -76,7 +76,7 @@ def open_runtime(args, *, may_install: bool = False) -> Runtime:
             print(f"kilix-needle: the selected tuned model is unavailable ({error}); "
                   "using the base model", file=sys.stderr)
     image = _image(args, may_install=may_install)
-    return Runtime(Engine(image, TOOLS), [image])
+    return Runtime(Engine(image, LEGACY_TOOLS), [image])
 
 
 @dataclass(frozen=True)
@@ -109,19 +109,37 @@ def run_request(engine: Engine, request: str, options: Options,
     status 0 = done or nothing to do, 1 = something was refused, skipped or failed.
     Each item has "outcome": refused | unresolved | would | skipped | done | failed.
     """
-    record = {"request": request, "status": 0, "note": "", "items": []}
-    items = record["items"]
     try:
         request = check_prompt(request)
     except ValueError as error:
-        record.update(status=1, note=str(error))
-        return record
+        return {"request": request, "status": 1, "note": str(error), "items": []}
     engine.reset()
     reply = engine.complete(request)
     translate = getattr(engine, "translate", lambda calls: calls)
-    results = interpret(request, translate(reply.get("function_calls") or []))
+    return run_calls(request, translate(reply.get("function_calls") or []), options, confirm)
+
+
+def run_calls(request: str, calls: list, options: Options,
+              confirm: Callable[[str], bool] = _terminal_confirm) -> dict:
+    """Shared execution path for Needle 2 and external kilix-ml inference.
+
+    Calls are untrusted model proposals. They always pass interpretation,
+    resolution, confirmation and the agent's own-pane protection here.
+    """
+    record = {"request": request, "status": 0, "note": "", "items": []}
+    items = record["items"]
+    try:
+        from domain_bridge import check_request, validate
+        request = check_request(request)
+        validate(request, calls)
+    except ValueError as error:
+        record.update(status=1, note=str(error))
+        return record
+    if options.agent:
+        confirm = _never
+    results = interpret(request, calls)
     if not results:
-        record["note"] = "Needle found no pane or tab action in that request."
+        record["note"] = "There is no pane or tab action in that request."
         return record
 
     refused = [item for item in results if isinstance(item, Refusal)]
@@ -256,6 +274,9 @@ def _image(args, *, may_install: bool = False):
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] in (["contract"], ["bridge"]):
+        import domain_bridge
+        return domain_bridge.main(argv)
     if argv[:1] == ["setup"]:
         import setup_surfaces
         parser = argparse.ArgumentParser(prog="kilix-needle setup",

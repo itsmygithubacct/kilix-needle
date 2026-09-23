@@ -1,4 +1,4 @@
-"""Fine-tune Needle 2 for Kilix panes and tabs from the kilix-needle-tuning library.
+"""Fine-tune Needle 2 using kilix-ml's Kilix domain pack (or the legacy pin).
 
     kilix-needle tune [--base-dir DIR] [--library FILE] [--steps-only] [--background]
     kilix-needle tune --status | --select RUN | --deselect
@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -36,7 +37,19 @@ import sys
 import tomllib
 
 REPO = Path(__file__).resolve().parent
-LIBRARY = REPO / "third_party" / "kilix-needle-tuning"
+LEGACY_LIBRARY = REPO / "third_party" / "kilix-needle-tuning"
+
+
+def library_path() -> Path:
+    """Use the merged Kilix pack; a standalone old installation can still use its pin."""
+    configured = os.environ.get("KILIX_ML_HOME")
+    ml = Path(configured).expanduser() if configured else REPO.parents[1] / "kilix-modules" / "kilix-ml"
+    pack = ml / "domains" / "kilix_panes"
+    # An explicit path must never silently select some other training inputs.
+    return pack if configured or (pack / "manifest.toml").is_file() else LEGACY_LIBRARY
+
+
+LIBRARY = library_path()
 APP_HOME = Path(os.environ.get("GPU_TERMINAL_HOME") or Path.home() / ".local" / "gpu_terminal") \
     / "kilix-apps" / "kilix-needle"
 SELECTION = APP_HOME / "model.json"
@@ -58,8 +71,8 @@ def sha256_file(path: Path) -> str:
 def load_manifest(library: Path = LIBRARY) -> dict:
     path = library / "manifest.toml"
     if not path.exists():
-        raise TuneError(f"no tuning library at {library}; run "
-                        "`git submodule update --init third_party/kilix-needle-tuning`")
+        raise TuneError(f"no tuning domain pack at {library}; set KILIX_ML_HOME to the "
+                        "kilix-ml source root, or initialise the legacy tuning submodule")
     manifest = tomllib.loads(path.read_text(encoding="utf-8"))
     if manifest.get("schema") != "kilix-needle-tuning/v1":
         raise TuneError(f"unsupported tuning manifest {manifest.get('schema')!r}")
@@ -186,13 +199,20 @@ def reasoning_for(calls: list[dict], spans: list) -> str:
     return " ".join(parts)
 
 
+def load_generator(library: Path):
+    # Do not use sys.path + `import generate`: a prior validation run may have
+    # cached a different pack under that generic module name.
+    spec = importlib.util.spec_from_file_location("kilix_needle_corpus", library / "generate.py")
+    if spec is None or spec.loader is None:
+        raise TuneError(f"cannot load the generator at {library}")
+    corpus = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(corpus)
+    return corpus
+
+
 def build_data(library: Path, manifest: dict, out: Path) -> dict:
     """Generate, check against the running tool's rules, write upstream's format."""
-    sys.path.insert(0, str(library))
-    try:
-        import generate as corpus
-    finally:
-        sys.path.remove(str(library))
+    corpus = load_generator(library)
     from actions import Action, interpret
     import toolset
     data = manifest["data"]
@@ -203,7 +223,7 @@ def build_data(library: Path, manifest: dict, out: Path) -> dict:
         with open(REPO / rel, encoding="utf-8") as handle:
             exclude |= {corpus._fold(json.loads(line)["request"]) for line in handle if line.strip()}
     rows, dropped = corpus.generate(data["seed"], data["per_template"], exclude)
-    kept = inconsistent = 0
+    kept = inconsistent = unsupported = 0
     with open(out, "w", encoding="utf-8") as handle:
         for row in rows:
             calls = [{"name": kind, "arguments": args} for kind, args in row["actions"]]
@@ -212,13 +232,19 @@ def build_data(library: Path, manifest: dict, out: Path) -> dict:
             if len(admitted) != len(row["actions"]):
                 inconsistent += 1   # a training answer the tool would refuse teaches nothing
                 continue
-            answers = toolset.from_actions(row["actions"])
+            # The Needle 2 compatibility recipe still has only ten actions.
+            # New kilix-ml-only templates must not crash or silently mislabel it.
+            try:
+                answers = toolset.from_actions(row["actions"])
+            except ValueError:
+                unsupported += 1
+                continue
             handle.write(json.dumps({"query": row["query"], "tools": toolset.TOOLS,
                                      "reasoning": reasoning_for(answers, row.get("spans", [])),
                                      "answers": answers}, ensure_ascii=False) + "\n")
             kept += 1
     return {"generated": len(rows), "kept": kept, "eval_matches_dropped": dropped,
-            "inconsistent_dropped": inconsistent}
+            "inconsistent_dropped": inconsistent, "unsupported_dropped": unsupported}
 
 
 def _offline_prefix() -> list[str]:
@@ -314,7 +340,7 @@ def stage_gates(run: Run, manifest: dict, library_image, cact_sha: str) -> dict:
     # The reference is measured now, with these checks and this held-out set:
     # the untuned model (the library's built-in weights) with the ten-tool
     # schema, which is the configuration used when no tuned model is selected.
-    from actions import TOOLS as TEN
+    from actions import LEGACY_TOOLS as TEN
     with open(REPO / sets["heldout"], encoding="utf-8") as handle:
         heldout_cases = [json.loads(line) for line in handle if line.strip()]
     with LibEngine(library_image, TEN) as base:

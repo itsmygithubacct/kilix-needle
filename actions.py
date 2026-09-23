@@ -96,15 +96,54 @@ TOOLS = [
          "required": ["pane", "command"]}},
 ]
 
+LEGACY_TOOLS = TOOLS.copy()  # Needle 2 checkpoints keep their original ten schemas.
+TOOLS += [{'name': 'maximize_pane',
+  'description': 'Show one pane full-size (zoom or maximize it), or restore the previous '
+                 'layout',
+  'parameters': {'type': 'object',
+                 'properties': {'pane': {'type': 'string',
+                                         'description': 'current, left, right, above, below, '
+                                                        'or the name or program of a pane'},
+                                'restore': {'type': 'boolean',
+                                            'description': 'true to un-maximize and restore '
+                                                           'the layout'}},
+                 'required': []}},
+ {'name': 'rename_pane',
+  'description': 'Rename or title a pane',
+  'parameters': {'type': 'object',
+                 'properties': {'pane': {'type': 'string',
+                                         'description': 'current, left, right, above, below, '
+                                                        'or the name or program of a pane'},
+                                'name': {'type': 'string', 'description': 'the new name'}},
+                 'required': ['name']}},
+ {'name': 'swap_panes',
+  'description': 'Swap the current pane with its neighbour on one side',
+  'parameters': {'type': 'object',
+                 'properties': {'side': {'type': 'string',
+                                         'enum': ['left', 'right', 'above', 'below'],
+                                         'description': 'which neighbour to swap with'}},
+                 'required': ['side']}},
+ {'name': 'move_tab',
+  'description': 'Move the current tab left or right in the tab bar, or to a position',
+  'parameters': {'type': 'object',
+                 'properties': {'direction': {'type': 'string', 'enum': ['left', 'right']},
+                                'position': {'type': 'integer',
+                                             'minimum': 1,
+                                             'maximum': 9,
+                                             'description': 'tab position, only if the user '
+                                                            'gives one'}},
+                 'required': []}}]
+
 TOOL_NAMES = frozenset(tool["name"] for tool in TOOLS)
 _CLOSE_VERB = re.compile(r"\b(close|kill|quit|exit|shut)\b", re.IGNORECASE)
 _RUN_VERB = re.compile(r"\b(run|type|execute|enter)\b", re.IGNORECASE)
-_CURRENT = {"", "current", "this", "here", "it", "active", "focused", "the current one"}
+_CURRENT = {"", "current", "this", "here", "active", "focused", "the current one"}
 _ORDINALS = {"first": "1", "second": "2", "third": "3", "fourth": "4", "fifth": "5",
              "sixth": "6", "seventh": "7", "eighth": "8", "ninth": "9", "last": "last"}
 _RELATIVE = {"next": "next", "previous": "previous", "prev": "previous", "last one": "previous",
              "back": "previous"}
-_SIDE_WORDS = {"left": "left", "right": "right", "above": "above", "up": "above", "top": "above",
+_SIDE_WORDS = {"left": "left", "right": "right", "left-hand": "left", "right-hand": "right",
+               "above": "above", "up": "above", "top": "above",
                "upper": "above", "below": "below", "down": "below", "bottom": "below",
                "under": "below", "underneath": "below", "beneath": "below", "lower": "below"}
 _CARDINALS = {"one": "1", "two": "2", "three": "3", "four": "4", "five": "5", "six": "6",
@@ -153,6 +192,8 @@ def _target_value(raw: str, *, relative: bool) -> str | None:
         # Only filler ("pane", "the tab"): no reference at all. Measured (five-tool
         # schema): pane "pane" with command "below" would otherwise mean "this pane".
         return None
+    if stripped in _CURRENT:
+        return "current"
     if stripped in _SIDE_WORDS:
         return _SIDE_WORDS[stripped]
     if stripped in _RELATIVE:
@@ -174,10 +215,12 @@ def interpret(prompt: str, calls: list) -> list[Action | Refusal]:
     for call in calls if isinstance(calls, list) else []:
         name = call.get("name") if isinstance(call, dict) else None
         args = call.get("arguments") if isinstance(call, dict) else None
-        if name not in TOOL_NAMES or not isinstance(args, dict):
+        if not isinstance(name, str) or name not in TOOL_NAMES or not isinstance(args, dict):
             results.append(Refusal(str(name), "not a kilix-needle action"))
             continue
-        results.append(_admit(name, args, prompt))
+        schema = next(t["parameters"] for t in TOOLS if t["name"] == name)
+        error = _shape_error(args, schema)
+        results.append(Refusal(name, error) if error else _admit(name, args, prompt))
     return results
 
 
@@ -210,15 +253,17 @@ _PANE_WORD = re.compile(r"\b(?:panes?|windows?|splits?)\b", re.IGNORECASE)
 _UNIT_NAMES = {"tab", "new tab", "a new tab", "pane", "new pane", "a new pane", "terminal",
                "new terminal", "window", "new window", "split"}
 _LOCATIVE = re.compile(r"\b(?:in|inside|within|at|from|of)\b", re.IGNORECASE)
-_BARE_OBJECT = {"this", "it", "that", "here", "now", "please", "the", "current", "one",
+_BARE_OBJECT = {"this", "that", "here", "now", "please", "the", "current", "active", "focused", "one",
                 "pane", "tab", "window", "split"}
 
 
 def _mentions(target: str) -> list[str]:
     """Words the request may use for this target."""
     if target == "current":
-        return ["this", "it", "current", "here"]
-    token = target[5:] if target.startswith("name:") else target
+        return ["this", "current", "here", "active", "focused"]
+    if target.startswith("name:"):
+        return [target[5:]]
+    token = target
     return [token,
             *(word for word, side in _SIDE_WORDS.items() if side == token),
             *(word for word, number in _ORDINALS.items() if number == token),
@@ -256,19 +301,48 @@ _LOCATION = re.compile(r"(?:\s+(?:in|into|on|at)\s+(?:the\s+)?(?:[\w.+-]+\s+){0,
                        re.IGNORECASE)
 
 
+def _unquoted(text: str) -> str:
+    return re.sub(r"(?<![\w])(['\"`])(?:\\.|(?!\1).)*?\1",
+                  lambda m: " " * len(m[0]), text)
+
+
+def _clauses(prompt: str) -> list[str]:
+    """Split conjunctions outside quoted commands; apostrophes in words are not quotes."""
+    bounds = list(_CLAUSE.finditer(_unquoted(prompt)))
+    starts = [0] + [m.end() for m in bounds]
+    ends = [m.start() for m in bounds] + [len(prompt)]
+    return [prompt[a:b] for a, b in zip(starts, ends)]
+
+
+def _negated(prefix: str) -> bool:
+    return bool(re.search(r"\b(?:not|never|don't|do not|dont)\b", prefix, re.I))
+
+
 def _command_spans(prompt: str) -> set[str]:
-    """What the request asks to type: the whole text after a run verb, up to the
-    location phrase or the end of its clause ("run make test in the right pane"
-    -> "make test"). A command must equal one of these, not merely occur in the
-    request: measured, the five-tool schema returned command "test" for it.
-    """
+    """Return exact, case-sensitive command spans, retaining punctuation inside quotes."""
     spans = set()
-    for clause in _CLAUSE.split(prompt):
-        for match in _RUN_VERB.finditer(clause):
-            span = _LOCATION.sub("", clause[match.end():]).strip()
-            span = re.sub(r"^(?:the\s+command\s+)", "", span, flags=re.IGNORECASE)
-            if span:
-                spans.add(span.casefold())
+    for clause in _clauses(prompt):
+        # Only the first run verb: `run npm run dev` must not also admit `dev`.
+        match = _RUN_VERB.search(_unquoted(clause))
+        if match is None or _negated(clause[:match.start()]):
+            continue
+        span = clause[match.end():].strip()
+        span = re.sub(r"^(?:the\s+command\s+)", "", span, flags=re.I)
+        if span[:1] in ("'", '"', "`"):
+            quoted = re.fullmatch(r"(['\"`])((?:\\.|(?!\1).)*)\1(.*)", span)
+            if quoted is None:
+                continue
+            suffix = re.sub(r"\s+please[.!?]*$", "", quoted[3], flags=re.I)
+            suffix = _LOCATION.sub("", suffix).strip().strip(".!?")
+            if suffix:
+                continue
+            span = quoted[2]
+        else:
+            span = re.sub(r"\s+please[.!?]*$", "", span, flags=re.I)
+            span = _LOCATION.sub("", span).strip()
+            span = re.sub(r"\s+please[.!?]*$", "", span, flags=re.I)
+        if span:
+            spans.add(span)
     return spans
 
 
@@ -289,7 +363,7 @@ def _clause_supports(verb: re.Pattern, target: str, prompt: str, *, unit: str,
     the command text: "run htop" does not name a pane called htop (measured:
     run_in_pane(pane=htop, command=htop)).
     """
-    for clause in _CLAUSE.split(prompt):
+    for clause in _clauses(prompt):
         if unit == "tab" and not _TAB_WORD.search(clause):
             continue
         if unit == "pane" and _TAB_WORD.search(clause) and not _PANE_WORD.search(clause):
@@ -298,16 +372,27 @@ def _clause_supports(verb: re.Pattern, target: str, prompt: str, *, unit: str,
             index = clause.casefold().find(typed.casefold())
             if index >= 0:
                 clause = clause[:index] + " " + clause[index + len(typed):]
-        match = verb.search(clause)
-        if match is None:
+        match = verb.search(_unquoted(clause))
+        if match is None or _negated(clause[:match.start()]):
             continue
         if typed:
-            if target == "current" or _first(_mentions(target), clause):
+            if target == "current":
+                # A default target must not override an explicit other pane.
+                rest = verb.sub(" ", clause).casefold()
+                words = set(re.findall(r"[\w-]+", rest))
+                if words <= {"the", "a", "pane", "panes", "window", "split", "current",
+                             "this", "here", "active", "focused", "in", "into", "on",
+                             "at", "inside", "within", "please", "command"}:
+                    return True
+            elif _first(_mentions(target), clause):
                 return True
             continue
+        if _RUN_VERB.search(_unquoted(clause[:match.start()])):
+            continue  # a close mentioned inside a command is not a pane instruction
         tail = clause[match.end():]
         if target == "current":
-            if set(tail.casefold().split()) <= _BARE_OBJECT:
+            words = set(tail.casefold().strip().rstrip(".!?").split())
+            if words and words <= _BARE_OBJECT and words - {"please", "now", "the"}:
                 return True
             continue
         # The object is the first pane/tab word or target mention after the
@@ -316,14 +401,108 @@ def _clause_supports(verb: re.Pattern, target: str, prompt: str, *, unit: str,
         first = _first(_mentions(target) + unit_words, tail)
         if first is None or _LOCATIVE.search(tail[:first.start()]):
             continue
+        # A directional alias inside an explicitly named target is not evidence
+        # for a side: `pane running top` must never authorize `pane=above`.
+        evidence = tail if target.startswith("name:") else re.sub(
+            rf"\b{_AS_NAME}[\w.+-]+", "", tail, flags=re.I)
         # Bound to the unit implies the target is named at all.
-        if not _bound_to_unit(_mentions(target), tail, unit_words):
+        if not _bound_to_unit(_mentions(target), evidence, unit_words):
             continue
         return True
     return False
 
 
+def _shape_error(args: dict, schema: dict) -> str:
+    if set(args) - set(schema["properties"]):
+        return "unknown argument"
+    if any(key not in args for key in schema.get("required", [])):
+        return "missing required argument"
+    for key, value in args.items():
+        kind = schema["properties"][key]["type"]
+        if (kind == "string" and not isinstance(value, str)
+                or kind == "integer" and type(value) is not int
+                or kind == "boolean" and type(value) is not bool):
+            return f"{key} must be {kind}"
+        if isinstance(value, str) and any(ord(c) < 32 or ord(c) == 127 for c in value):
+            return f"{key} contains a control character"
+    return ""
+
+
+def _new_action(name: str, args: dict, prompt: str) -> Action | Refusal:
+    if name in ("maximize_pane", "rename_pane"):
+        target = _named_target(name, "pane", {"pane": args.get("pane", "current")}, prompt)
+        if isinstance(target, Refusal):
+            return target
+        if name == "rename_pane":
+            title = _text(args, "name")
+            if not title or title.casefold() in _UNIT_NAMES:
+                return Refusal(name, "the request needs a pane title")
+            for clause in _clauses(prompt):
+                # Strip the new title before looking for the target: a title cannot
+                # double as evidence that the user named a different pane to rename.
+                match = re.search(r"(?:['\"`]?)" + re.escape(title) +
+                                  r"(?:['\"`]?)[.!?]*$", clause)
+                if not match:
+                    continue
+                prefix = re.sub(r"\s+(?:to|as)\s*$", "", clause[:match.start()]).strip()
+                if _clause_supports(re.compile(r"\b(?:rename|title|call|name)\b", re.I),
+                                    target, prefix, unit="pane"):
+                    return Action(name, {"pane": target, "name": title})
+        else:
+            restore = args.get("restore", False)
+            pattern = (r"\b(?:restore|unmaximize|un-maximize|unzoom|un-zoom)\b" if restore
+                       else r"(?<![\w-])(?:maximize|zoom)\b")
+            verb = re.compile(pattern, re.I)
+            for clause in _clauses(prompt):
+                if _clause_supports(verb, target, clause, unit="pane"):
+                    return Action(name, {"pane": target, "restore": restore})
+                if restore and target == "current" and re.fullmatch(
+                        r"(?:please )?restore (?:the )?(?:previous |last )?layout[.!?]*",
+                        clause, re.I):
+                    return Action(name, {"pane": target, "restore": True})
+    elif name == "swap_panes":
+        side = _text(args, "side")
+        if side in SIDES:
+            for clause in _clauses(prompt):
+                verb = re.search(r"\b(?:swap|exchange)\b", _unquoted(clause), re.I)
+                if (verb and not _negated(clause[:verb.start()])
+                        and not _RUN_VERB.search(_unquoted(clause[:verb.start()]))
+                        and _PANE_WORD.search(clause)
+                        and not _TAB_WORD.search(clause) and _first(_mentions(side), clause)):
+                    return Action(name, {"side": side})
+    elif name == "move_tab":
+        if ("direction" in args) == ("position" in args):
+            return Refusal(name, "give exactly one of direction or position")
+        direction, position = args.get("direction"), args.get("position")
+        if direction is not None and direction not in ("left", "right"):
+            return Refusal(name, "tab direction must be left or right")
+        if position is not None and not 1 <= position <= 9:
+            return Refusal(name, "tab position must be 1 to 9")
+        for clause in _clauses(prompt):
+            verb = re.search(r"\b(?:move|shift|reorder)\b", _unquoted(clause), re.I)
+            if (not verb or _negated(clause[:verb.start()]) or not _TAB_WORD.search(clause)
+                    or _RUN_VERB.search(_unquoted(clause[:verb.start()]))):
+                continue
+            # This action moves only the caller's tab. Never reinterpret a named
+            # or numbered source tab as the current one.
+            tail = clause[verb.end():].strip()
+            source = re.match(r"(?:the )?(?:this |current |active |focused )?tab\b", tail, re.I)
+            if not source:
+                continue
+            destination = tail[source.end():].strip()
+            if direction and re.fullmatch(r"(?:to (?:the )?)?" + direction + r"[.!?]*", destination, re.I):
+                return Action(name, {"direction": direction})
+            if position is not None:
+                forms = "|".join(re.escape(x) for x in _mentions(str(position)))
+                if re.fullmatch(r"to (?:the )?(?:(?:position|slot) )?(?:" + forms +
+                                r")(?: (?:position|slot))?[.!?]*", destination, re.I):
+                    return Action(name, {"position": position})
+    return Refusal(name, "no part of the request supports this action and its arguments")
+
+
 def _admit(name: str, args: dict, prompt: str) -> Action | Refusal:
+    if name in ("maximize_pane", "rename_pane", "swap_panes", "move_tab"):
+        return _new_action(name, args, prompt)
     if name in ("close_pane", "close_tab") and not _CLOSE_VERB.search(prompt):
         return Refusal(name, "the request does not ask to close anything")
     if name == "run_in_pane" and not _RUN_VERB.search(prompt):
@@ -358,7 +537,7 @@ def _admit(name: str, args: dict, prompt: str) -> Action | Refusal:
             if _RUN_VERB.fullmatch(command):
                 # measured: "run make test in the left pane" -> command "run"
                 return Refusal(name, f"the command {command!r} is only the verb")
-            if command.casefold() not in _command_spans(prompt):
+            if command not in _command_spans(prompt):
                 return Refusal(name, f"the command {command!r} is not all of what the "
                                      "request asks to type")
         verb = {"close_pane": _CLOSE_VERB, "run_in_pane": _RUN_VERB}.get(name)

@@ -24,13 +24,13 @@ import statistics
 import sys
 import time
 
-from actions import TOOLS, Action, Refusal, interpret
+from actions import LEGACY_TOOLS, TOOLS, Action, Refusal, interpret
 import asset
 from engine import Engine
 from libengine import LibEngine
 import toolset
 
-TOOLSETS = {"ten": (TOOLS, lambda calls: calls), "five": (toolset.TOOLS, toolset.to_actions)}
+TOOLSETS = {"fourteen": (TOOLS, lambda calls: calls), "ten": (LEGACY_TOOLS, lambda calls: calls), "five": (toolset.TOOLS, toolset.to_actions)}
 
 DESTRUCTIVE = {"close_pane", "close_tab", "run_in_pane"}
 _KEYWORDS = ("current", "next", "previous", "last", "left", "right", "above", "below")
@@ -46,9 +46,13 @@ def expected(expect):
         args = dict(args)
         if kind == "resize_pane":
             args.setdefault("amount", 2)
+        if kind in ("maximize_pane", "rename_pane"):
+            args.setdefault("pane", "current")
+        if kind == "maximize_pane":
+            args.setdefault("restore", False)
         for key in ("pane", "tab"):
             value = args.get(key)
-            if isinstance(value, str) and value not in _KEYWORDS and not value.isdigit():
+            if isinstance(value, str) and value not in _KEYWORDS and not value.isdigit() and not value.startswith("name:"):
                 args[key] = "name:" + value
         out.append(_norm(kind, args))
     return out
@@ -89,7 +93,7 @@ def score(engine: Engine, cases: list[dict], runs: int = 1, translate=lambda cal
             want = expected(case["expect"])
             bad = [a for a in admitted if a[0] in DESTRUCTIVE and a not in want]
             row = {"exact": admitted == want, "unsafe": bool(bad), "held": bool(refused),
-                   "tools": [c.get("name") for c in calls] == [k for k, _ in want]}
+                   "tools": [c.get("name") if isinstance(c, dict) else None for c in calls] == [k for k, _ in want]}
             tag = _tag(case)
             totals["cases"] += 1
             tags[tag]["cases"] += 1
@@ -99,7 +103,7 @@ def score(engine: Engine, cases: list[dict], runs: int = 1, translate=lambda cal
             if run == 0 and (not row["exact"] or row["unsafe"]):
                 failures.append({
                     "request": case["request"], "tag": tag, "unsafe": row["unsafe"],
-                    "model": [[c.get("name"), c.get("arguments")] for c in raw],
+                    "model": [[c.get("name"), c.get("arguments")] if isinstance(c, dict) else [None, c] for c in raw],
                     "admitted": admitted, "expected": want,
                     "refused": [f"{r.kind}: {r.reason}" for r in refused]})
     process = getattr(engine, "_process", None)
