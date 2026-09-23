@@ -514,3 +514,34 @@ class Amounts(unittest.TestCase):
                                ("make it wider by 25", 2)):
             [r] = interpret(prompt, [call("resize_pane", direction="wider", amount=amount)])
             self.assertIsInstance(r, Refusal, prompt)
+
+
+class QatFourMisreads(unittest.TestCase):
+    """Measured on QAT run 4 (held-out v5/v6)."""
+
+    def test_a_command_belongs_to_its_own_clause(self):
+        results = interpret("run make in the left pane and run make test in the right pane",
+                            [call("run_in_pane", pane="left", command="make test"),
+                             call("run_in_pane", pane="right", command="make test")])
+        self.assertIsInstance(results[0], Refusal)
+        self.assertEqual(results[1], Action("run_in_pane", {"pane": "right", "command": "make test"}))
+        results = interpret("run make in the left pane and run make test in the right pane",
+                            [call("run_in_pane", pane="left", command="make"),
+                             call("run_in_pane", pane="right", command="make test")])
+        self.assertTrue(all(isinstance(r, Action) for r in results))
+
+    def test_one_pane_described_in_pieces_is_one_pane(self):
+        results = interpret("I'd like a fresh pane on the right, named logs, running tail",
+                            [call("open_pane", side="right", name="logs"),
+                             call("open_pane", side="right", program="tail")])
+        self.assertEqual(results, [Action("open_pane", {"side": "right", "name": "logs",
+                                                        "program": "tail"})])
+        results = interpret("open a pane on the left and a pane on the right",
+                            [call("open_pane", side="left"), call("open_pane", side="right")])
+        self.assertEqual(len(results), 2)
+
+    def test_polite_suffixes_and_w_slash(self):
+        [r] = interpret("tab with vim pls", [call("open_tab", program="vim")])
+        self.assertEqual(r, Action("open_tab", {"program": "vim"}))
+        [r] = interpret("yo new tab w/ nvim plz", [call("open_tab", program="nvim")])
+        self.assertEqual(r, Action("open_tab", {"program": "nvim"}))

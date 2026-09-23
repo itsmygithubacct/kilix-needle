@@ -260,8 +260,17 @@ def _merge_split_then_run(results: list, prompt: str) -> list:
     it asks for another pane ("and open a pane running htop").
     """
     merged = []
+    # One opening noun in the whole request means one new pane or tab: "a fresh
+    # pane on the right, named logs, running tail" came back as two opens, one
+    # with the name and one with the program (measured, tuned model).
+    single = len(re.findall(r"\b(?:splits?|panes?|tabs?|windows?|terminals?)\b", prompt, re.I)) == 1
     for item in results:
         previous = merged[-1] if merged else None
+        if (single and isinstance(item, Action) and isinstance(previous, Action)
+                and previous.kind == item.kind and item.kind in ("open_pane", "open_tab")
+                and all(previous.args.get(k, v) == v for k, v in item.args.items())):
+            merged[-1] = Action(item.kind, {**previous.args, **item.args})
+            continue
         if (isinstance(item, Action) and isinstance(previous, Action)
                 and previous.kind == item.kind == "open_pane"
                 and set(previous.args) == {"side"} and set(item.args) == {"program"}):
@@ -378,7 +387,8 @@ def _in_title(prefix: str) -> bool:
     return bool(re.search(r"\b(?:rename|name|title|call|named|called|titled)\b", prefix, re.I))
 
 
-_START_VERB = re.compile(r"\b(?:run|running|start|starting|launch|launching|with)\b", re.I)
+_START_VERB = re.compile(r"\b(?:run|running|start|starting|launch|launching|with)\b|(?<!\S)w/", re.I)
+_POLITE_SUFFIX = re.compile(r"\s+(?:please|pls|plz|thanks|thank you)[.!?]*$", re.I)
 _OPEN_VERB = re.compile(r"\bopen\b", re.I)
 _NAMED_SUFFIX = re.compile(r"\s+(?:called|named|titled)\s+\S.*$", re.I)
 
@@ -418,7 +428,7 @@ def _program_spans(prompt: str, name: str = "") -> set[str]:
             for match in verb.finditer(plain):
                 if _negated(clause[:match.start()]) or _in_title(clause[:match.start()]):
                     continue
-                rest = _NAMED_SUFFIX.sub("", clause[match.end():]).strip()
+                rest = _POLITE_SUFFIX.sub("", _NAMED_SUFFIX.sub("", clause[match.end():]).strip())
                 where = _LOCATION.search(" " + rest)
                 if where and re.match(r"\s+(?:in|into|on|at)\s+the\s+", where.group(0), re.I):
                     continue    # "run ls -la in the right split": an existing pane, a command
@@ -739,9 +749,17 @@ def _admit(name: str, args: dict, prompt: str) -> Action | Refusal:
             if command not in _command_spans(prompt):
                 return Refusal(name, f"the command {command!r} is not all of what the "
                                      "request asks to type")
-        verb = {"close_pane": _CLOSE_VERB, "run_in_pane": _RUN_VERB}.get(name)
-        if verb is not None and not _clause_supports(verb, target, prompt, unit="pane",
-                                                     typed=command):
+        if name == "run_in_pane":
+            # One clause must hold the verb, this pane and exactly this command.
+            # Measured (tuned model): "run make in the left pane and run make test
+            # in the right pane" -> "make test" in both panes; each half was
+            # supported somewhere, but not together.
+            if not any(command in _command_spans(clause)
+                       and _clause_supports(_RUN_VERB, target, clause, unit="pane", typed=command)
+                       for clause in _clauses(prompt)):
+                return Refusal(name, "no part of the request asks to type that into that pane")
+        elif name == "close_pane" and not _clause_supports(_CLOSE_VERB, target, prompt,
+                                                           unit="pane"):
             return Refusal(name, "no part of the request asks for this on that pane")
         out = {"pane": target}
         if name == "run_in_pane":
