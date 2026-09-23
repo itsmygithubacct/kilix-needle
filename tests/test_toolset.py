@@ -15,7 +15,10 @@ class Translate(unittest.TestCase):
         cases = [
             (call("open", kind="pane", side="right", program="htop", name="x"),
              call("open_pane", side="right", program="htop", name="x")),
-            (call("open", kind="tab", side="right", program="btop"), call("open_tab", program="btop")),
+            # A side on a tab passes through, for the checks to refuse: dropping it
+            # silently hid a pane request misread as a tab (QAT run 3).
+            (call("open", kind="tab", side="right", program="btop"),
+             call("open_tab", side="right", program="btop")),
             (call("close", kind="pane", which="left"), call("close_pane", pane="left")),
             (call("close", kind="tab", which="2"), call("close_tab", tab="2")),
             (call("go_to", kind="pane", which="htop"), call("go_to_pane", pane="htop")),

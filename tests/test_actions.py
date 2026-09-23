@@ -460,3 +460,45 @@ class SupplementPhrasings(unittest.TestCase):
         [result] = interpret("go to the pane running top",
                              [call("run_in_pane", pane="current", command="top")])
         self.assertIsInstance(result, Refusal)
+
+
+class TunedModelMisreads(unittest.TestCase):
+    """Measured on the quantisation-aware tuned model (QAT run 3)."""
+
+    def check(self, prompt, *calls):
+        return interpret(prompt, list(calls))
+
+    def test_a_name_must_be_said_as_a_name(self):
+        [r] = self.check("split the window and start less",
+                         call("open_pane", name="the window", program="less"))
+        self.assertIsInstance(r, Refusal)
+        for prompt, name in (("new tab for logs", "logs"), ("open a pane called notes", "notes"),
+                             ("create a build tab", "build"), ("open a tab and name it api", "api")):
+            [r] = self.check(prompt, call("open_tab" if "tab" in prompt else "open_pane", name=name))
+            self.assertIsInstance(r, Action, prompt)
+
+    def test_a_tab_is_opened_only_when_a_tab_is_asked_for(self):
+        import toolset
+        [r] = interpret("pop open a split above me with less in it", toolset.to_actions(
+            [{"name": "open", "arguments": {"kind": "tab", "side": "above", "program": "less"}}]))
+        self.assertIsInstance(r, Refusal)
+        [r] = self.check("open a new split", call("open_tab"))
+        self.assertIsInstance(r, Refusal)
+        [r] = self.check("open htop in a new tab", call("open_pane", program="htop"))
+        self.assertIsInstance(r, Refusal)
+
+    def test_running_in_an_existing_pane_is_not_a_start(self):
+        [r] = self.check("run ls -la in the right split",
+                         call("open_pane", side="right", program="ls -la"))
+        self.assertIsInstance(r, Refusal)
+        [r] = self.check("open htop in a pane below", call("open_pane", side="below", program="htop"))
+        self.assertIsInstance(r, Action)
+
+    def test_an_implied_typed_command_must_look_like_one(self):
+        [r] = self.check("type faster, I'm bored", call("run_in_pane", pane="current", command="faster"))
+        self.assertIsInstance(r, Refusal)
+        for prompt, command in (("type git status", "git status"), ("type ./build.sh", "./build.sh"),
+                                ("type faster in this pane", "faster"),
+                                ("type `faster` please", "faster")):
+            [r] = self.check(prompt, call("run_in_pane", pane="current", command=command))
+            self.assertIsInstance(r, Action, prompt)

@@ -366,6 +366,18 @@ _OPEN_VERB = re.compile(r"\bopen\b", re.I)
 _NAMED_SUFFIX = re.compile(r"\s+(?:called|named|titled)\s+\S.*$", re.I)
 
 
+def _introduces_name(value: str, prompt: str) -> bool:
+    """A new pane's or tab's name is said as a name: "called logs", "name it
+    logs", "a tab for logs", "a logs tab". Measured (tuned model): "split the
+    window and start less" -> name "the window".
+    """
+    v = re.escape(value)
+    return re.search(rf"\b(?:called|named|titled|labelled|labeled|name it|call it|for)\s+"
+                     rf"['\"`]?{v}['\"`]?(?![\w])"
+                     rf"|\b(?:a|an|new|the)\s+{v}\s+(?:tab|pane|split|window)\b",
+                     prompt, re.I) is not None
+
+
 def _program_spans(prompt: str, name: str = "") -> set[str]:
     """What the request asks to start: the whole text after a start verb, up to a
     location or a name ("split right running htop -d 5 called mon" -> "htop -d 5"),
@@ -390,6 +402,9 @@ def _program_spans(prompt: str, name: str = "") -> set[str]:
                 if _negated(clause[:match.start()]) or _in_title(clause[:match.start()]):
                     continue
                 rest = _NAMED_SUFFIX.sub("", clause[match.end():]).strip()
+                where = _LOCATION.search(" " + rest)
+                if where and re.match(r"\s+(?:in|into|on|at)\s+the\s+", where.group(0), re.I):
+                    continue    # "run ls -la in the right split": an existing pane, a command
                 bare = _LOCATION.sub("", rest).strip().strip(".!?")
                 if needs_location and bare == rest.strip(".!?"):
                     continue    # "open the pod bay doors": nothing says where
@@ -397,6 +412,29 @@ def _program_spans(prompt: str, name: str = "") -> set[str]:
                                          r"(?:pane|tab|window|split|terminal)\b", bare, re.I):
                     spans.add(bare)
     return spans
+
+
+# Common shell commands and builtins. Deterministic on purpose: a PATH lookup
+# would make the same request admissible on one host and not another.
+_KNOWN_COMMANDS = frozenset("""
+    alias apt awk bash bat btop bun cargo cat cd chmod chown clear cmake cp curl cut date
+    deno df diff dig docker du echo emacs env exit export fd find fish free gcc gdb git
+    glances go gradle grep gzip head helix history hostname htop hx ip ipython irb java
+    jobs journalctl jq kill kubectl lazygit less ln ls lsblk lsof make man mc mkdir more
+    mv nano ncdu nc nix node npm npx nvim nvtop pacman perl php pip pip3 ping pip pnpm
+    podman printenv ps psql pwd pytest python python3 ranger rg rm rmdir rsync ruby rustc
+    scp sed sh sleep sort source sqlite3 ssh sudo systemctl tail tar tee tig tmux top
+    touch tree uname uniq unzip uptime uv vi vim watch wc wget which whoami xargs yarn
+    yay zip zsh basename dirname dmesg dd file groups id lscpu lspci lsusb mount nproc
+    printf readlink realpath seq stat sync test true false umount whereis yes
+""".split())
+
+
+def _looks_like_command(command: str, prompt: str = "") -> bool:
+    """A known command, a path, an assignment, or text the user quoted as code."""
+    first = command.split()[0] if command.split() else ""
+    quoted = any(f"{q}{command}{q}" in prompt for q in ("`", "'", '"'))
+    return quoted or first in _KNOWN_COMMANDS or bool(re.match(r"[./~$]|.*[/=]", first))
 
 
 def _command_spans(prompt: str) -> set[str]:
@@ -642,6 +680,13 @@ def _admit(name: str, args: dict, prompt: str) -> Action | Refusal:
                 if not _grounded(value, prompt):
                     return Refusal(name, f"the {key} {value!r} is not in the request")
                 out[key] = value
+        if name == "open_tab" and not _TAB_WORD.search(prompt):
+            return Refusal(name, "the request does not ask for a tab")
+        if name == "open_pane" and _TAB_WORD.search(prompt) and not re.search(
+                r"\b(?:panes?|splits?|splitting|windows?|terminals?)\b", prompt, re.I):
+            return Refusal(name, "the request asks for a tab, not a pane")
+        if "name" in out and not _introduces_name(out["name"], prompt):
+            return Refusal(name, f"nothing in the request names it {out['name']!r}")
         if "program" in out and out["program"] not in _program_spans(prompt, out.get("name", "")):
             return Refusal(name, f"the program {out['program']!r} is not what the request "
                                  "asks to start")
@@ -668,6 +713,12 @@ def _admit(name: str, args: dict, prompt: str) -> Action | Refusal:
             if _RUN_VERB.fullmatch(command):
                 # measured: "run make test in the left pane" -> command "run"
                 return Refusal(name, f"the command {command!r} is only the verb")
+            if (target == "current" and not re.search(
+                    r"\b(?:here|there|this (?:pane|window|split)|current (?:pane|window))\b",
+                    prompt, re.I) and not _looks_like_command(command, prompt)):
+                # Only implied "this pane" and no location: measured (tuned model),
+                # "type faster, I'm bored" -> command "faster".
+                return Refusal(name, f"{command!r} does not look like a command")
             if command not in _command_spans(prompt):
                 return Refusal(name, f"the command {command!r} is not all of what the "
                                      "request asks to type")

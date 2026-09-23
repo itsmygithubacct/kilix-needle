@@ -73,8 +73,11 @@ def to_actions(calls) -> list:
         name, args = call.get("name"), call["arguments"]
         kind = args.get("kind")
         if name == "open" and kind in ("pane", "tab"):
-            keep = ("side", "program", "name") if kind == "pane" else ("program", "name")
-            out.append({"name": f"open_{kind}", "arguments": {k: args[k] for k in keep if k in args}})
+            # Every argument passes through: a side on a tab is the model's error,
+            # and dropping it silently would hide that from the checks (measured:
+            # "pop open a split above me" -> kind tab, side above).
+            out.append({"name": f"open_{kind}",
+                        "arguments": {k: v for k, v in args.items() if k != "kind"}})
         elif name in ("close", "go_to") and kind in ("pane", "tab"):
             out.append({"name": f"{name}_{kind}", "arguments": {kind: args.get("which", "")}})
         elif name == "adjust":
