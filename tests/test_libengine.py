@@ -20,7 +20,11 @@ int needle_load(const char *b, unsigned long long n) {
 }
 int needle_init(const char *s, const char *tools, const char *idx) { return INIT_RESULT; }
 void needle_reset(void) {}
+#include <unistd.h>
 int needle_complete(const char *in, int max, char *out, int cap) {
+#ifdef HANG
+    sleep(30);
+#endif
     return snprintf(out, cap, "{\"type\":\"call\",\"function_calls\":[],\"echo\":\"%s\",\"tuned\":%d}",
                     in, loaded);
 }
@@ -51,6 +55,18 @@ class Worker(unittest.TestCase):
         path = os.path.join(self.dir.name, "w.cact")
         open(path, "wb").write(content)
         return self.image(path)
+
+    def test_a_library_that_never_answers_times_out(self):
+        # Review KN-15: the timeout was never used, so this hung forever.
+        src = os.path.join(self.dir.name, "fake.c")
+        hang = os.path.join(self.dir.name, "libhang.so")
+        subprocess.run(["cc", "-shared", "-fPIC", "-DINIT_RESULT=1", "-DHANG", "-o", hang, src],
+                       check=True)
+        engine = libengine.LibEngine(self.image(hang), [], timeout=1.0)
+        engine.start()
+        self.addCleanup(engine.close)
+        with self.assertRaisesRegex(libengine.LibEngineError, "did not answer"):
+            engine.complete("hello")
 
     def test_base_weights_answer(self):
         with libengine.LibEngine(self.lib, []) as engine:

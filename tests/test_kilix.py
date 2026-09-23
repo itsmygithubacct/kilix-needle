@@ -189,3 +189,42 @@ class Perform(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NameMatching(unittest.TestCase):
+    """Review KN-04: names match exactly, or as a unique whole word of a title."""
+
+    def tree(self):
+        return kilix.Tree([{"id": 1, "is_active": True, "is_focused": True, "tabs": [
+            tab(10, "logs", [window(100, "tail -f", "log", active=True)]),
+            tab(20, "work", [window(200, "pleb@host: ~/src/catalog (vim)", "vim", active=True),
+                             window(201, "make build", "bash")], active=True),
+        ]}])
+
+    def test_a_program_name_wins_over_a_title_substring_in_the_current_tab(self):
+        self.assertEqual(self.tree().pane("name:log")["id"], 100)
+
+    def test_path_and_host_fragments_of_a_title_are_not_names(self):
+        for name in ("src", "host", "cat"):
+            with self.subTest(name=name), self.assertRaises(kilix.KilixError):
+                self.tree().pane(f"name:{name}")
+
+    def test_a_unique_whole_word_of_a_title_still_names_its_pane(self):
+        self.assertEqual(self.tree().pane("name:build")["id"], 201)
+
+    def test_tabs_match_exactly_or_by_whole_word(self):
+        self.assertEqual(self.tree().tab("name:logs")["id"], 10)
+        with self.assertRaises(kilix.KilixError):
+            self.tree().tab("name:log")
+
+
+class TypedLength(unittest.TestCase):
+    """Review KN-11: the MAX_TYPED cap had no test (reachable via `bridge`)."""
+
+    def test_a_command_over_the_cap_is_never_typed(self):
+        with self.assertRaisesRegex(kilix.KilixError, "too long"):
+            resolve(Action("run_in_pane", {"pane": "name:build",
+                                           "command": "x" * (kilix.MAX_TYPED + 1)}))
+        step = resolve(Action("run_in_pane", {"pane": "name:build",
+                                              "command": "x" * kilix.MAX_TYPED}))
+        self.assertEqual(len(step.commands[0][1]), kilix.MAX_TYPED)

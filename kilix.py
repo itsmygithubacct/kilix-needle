@@ -196,12 +196,19 @@ class Tree:
             raise KilixError(f"the pane {ref} of the current one is not listed")
         name = ref[5:].casefold()
 
-        def matches(window):
-            return name == _program(window).casefold() \
-                or name in str(window.get("title") or "").casefold()
+        # Review KN-04: a substring of a title, preferred in the current tab,
+        # chose "pleb@host: ~/src/catalog (vim)" for "the log pane" while `log`
+        # ran in another tab. An exact program or title wins anywhere (the
+        # current tab first); otherwise a whole word of a title, only if unique.
+        def exact(window):
+            return name in (_program(window).casefold(),
+                            str(window.get("title") or "").strip().casefold())
 
-        local = [w for w in self.active_tab.get("windows") or [] if matches(w)]
-        found = local or [w for _tab, w in self._all_panes() if matches(w)]
+        local = [w for w in self.active_tab.get("windows") or [] if exact(w)]
+        found = local or [w for _tab, w in self._all_panes() if exact(w)]
+        if not found:
+            found = [w for _tab, w in self._all_panes()
+                     if _whole_word(name, str(w.get("title") or ""))]
         if len(found) == 1:
             return found[0]
         if not found:
@@ -225,7 +232,8 @@ class Tree:
                 raise KilixError(f"there is no tab {number}; there are {len(self.tabs)}")
             return self.tabs[number - 1]
         name = ref[5:].casefold() if ref.startswith("name:") else ref.casefold()
-        found = [t for t in self.tabs if name in str(t.get("title") or "").casefold()]
+        found = [t for t in self.tabs if str(t.get("title") or "").strip().casefold() == name] \
+            or [t for t in self.tabs if _whole_word(name, str(t.get("title") or ""))]
         if len(found) == 1:
             return found[0]
         if not found:
@@ -238,6 +246,13 @@ class Tree:
         count = len(tab.get("windows") or [])
         return (f"tab {self.tabs.index(tab) + 1} '{tab.get('title')}' "
                 f"({count} pane{'s' if count != 1 else ''})")
+
+
+def _whole_word(name: str, title: str) -> bool:
+    """`name` as whole words of `title`; path characters join a word, so
+    "log" is not in "~/src/catalog" and "host" is not in "pleb@host:"."""
+    edge = r"[\w./~@:-]"
+    return re.search(rf"(?<!{edge}){re.escape(name)}(?!{edge})", title, re.I) is not None
 
 
 def _program_argv(program: str) -> list[str]:

@@ -177,3 +177,23 @@ class InstallCommands(unittest.TestCase):
                     asset._installed_spec(asset_id, None)
             self.assertTrue(str(caught.exception).endswith(f"install it with: {command}"),
                             caught.exception)
+
+
+class EngineLicenceGate(unittest.TestCase):
+    """Review KN-11: the engine never starts without an accepted licence."""
+
+    def test_an_unaccepted_licence_stops_the_engine_at_start(self):
+        from unittest import mock
+        import asset
+
+        class LicenseError(Exception):
+            pass
+        spec = mock.Mock(files=[])
+        content = mock.Mock(CatalogError=LookupError)
+        content.verified_packaged_catalog.return_value.require_asset.return_value = spec
+        first_use = mock.Mock(needs_agreement=mock.Mock(return_value=True))
+        lic = mock.Mock(LicenseError=LicenseError)
+        with mock.patch.object(asset, "_content", return_value=(content, first_use, lic)):
+            with self.assertRaisesRegex(asset.AssetError, "has not been accepted"):
+                asset.from_installed()
+        content.Installer.assert_not_called()

@@ -108,14 +108,14 @@ class ScriptedEngine:
 
 
 class AgentMode(unittest.TestCase):
-    def run_agent(self, prompt, *calls, yes=True, as_json=True, dry_run=False):
+    def run_agent(self, prompt, *calls, yes=True, as_json=True, dry_run=False, caller="300"):
         out = io.StringIO()
         saved = sys.stdin
         # A stdin that fails if read: agent mode must never consume it.
         sys.stdin = type("NoRead", (), {"readline": lambda *a: self.fail("read stdin"),
                                         "isatty": lambda self: True})()
         try:
-            with FakeKilix(desktop()) as fake, Patched(env={"KITTY_WINDOW_ID": "300"}):
+            with FakeKilix(desktop()) as fake, Patched(env={"KITTY_WINDOW_ID": caller}):
                 status = needle_cli.handle(ScriptedEngine(*calls), prompt, assume_yes=yes,
                                            out=out, as_json=as_json, agent=True, dry_run=dry_run)
                 return status, fake.calls(), out.getvalue()
@@ -129,6 +129,23 @@ class AgentMode(unittest.TestCase):
         record = json.loads(out)
         self.assertEqual(record["items"][0]["outcome"], "refused")
         self.assertIn("may not close its own pane", record["items"][0]["reason"])
+
+    def test_with_no_known_caller_an_agent_closes_nothing_and_has_no_this(self):
+        # Review KN-03: without KITTY_WINDOW_ID (and no ancestor match; the
+        # fixture pids are above pid_max) "this pane" was the user's focused
+        # pane, and the own-pane guard was off.
+        for prompt, name, args in (("close this pane", "close_pane", {"pane": "this"}),
+                                   ("close this tab", "close_tab", {"tab": "this tab"}),
+                                   ("close the left pane", "close_pane", {"pane": "left"})):
+            with self.subTest(prompt=prompt):
+                status, calls, out = self.run_agent(prompt, {"name": name, "arguments": args},
+                                                    caller=None)
+                self.assertEqual((status, calls), (1, []))
+                self.assertIn("agent's own", json.loads(out)["items"][0]["reason"])
+        # Moving focus elsewhere is still allowed.
+        status, calls, _ = self.run_agent("next tab", {"name": "go_to_tab",
+                                                       "arguments": {"tab": "next"}}, caller=None)
+        self.assertEqual(status, 0)
 
     def test_an_agent_cannot_close_the_tab_it_is_in(self):
         status, calls, _ = self.run_agent(

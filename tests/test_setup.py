@@ -38,6 +38,19 @@ class Home(unittest.TestCase):
         self.assertEqual(aliases.read_text(), before)
         self.assertIn("unchanged", out)
 
+    def test_a_symlinked_dotfile_stays_a_symlink_and_its_target_is_edited(self):
+        managed = self.home / "dotfiles/bash_aliases"
+        managed.parent.mkdir()
+        managed.write_text("alias ll='ls -l'\n")
+        link = self.home / ".bash_aliases"
+        link.symlink_to(managed)
+        self.run_setup(["alias"])
+        self.assertTrue(link.is_symlink())
+        self.assertIn("alias kn=", managed.read_text())
+        self.run_setup(["alias"], undo=True)
+        self.assertTrue(link.is_symlink())
+        self.assertEqual(managed.read_text(), "alias ll='ls -l'\n")
+
     def test_text_surfaces_are_idempotent_and_reversible(self):
         aliases = self.home / ".bash_aliases"
         aliases.write_text("alias ll='ls -l'\n")

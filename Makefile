@@ -12,5 +12,7 @@ all:
 test:
 	$(PYTHON) -B -m unittest discover -s tests -v
 
+# Needs the installed engine (kilix-needle install); scores dev and test.
 eval:
-	$(PYTHON) -B evaluate.py evals/commands.jsonl
+	$(PYTHON) -B evaluate.py evals/dev.jsonl
+	$(PYTHON) -B evaluate.py evals/test.jsonl

@@ -393,12 +393,23 @@ build_main(argparse.Namespace(checkpoint="checkpoints/needle2.pkl", lora={lora!r
 """
 
 
+def _checkpoint_unchanged(run: Run, manifest: dict) -> None:
+    """The pickle is verified right before each stage that loads it: a resumed
+    run otherwise trusted a check made at `base` (review KN-10)."""
+    _verify(run.root / "src/checkpoints/needle2.pkl", manifest["base"]["checkpoint_sha256"],
+            "checkpoints/needle2.pkl")
+
+
 def _python_stage(run: Run, script: str, what: str) -> None:
     # generate=0 above keeps upstream from sending anything to its data service;
     # the namespace (when available) makes any network use impossible anyway.
     env = {"PATH": "/usr/bin:/bin", "HOME": str(run.root), "LANG": "C.UTF-8",
            "HF_HUB_OFFLINE": "1", "NEEDLE_TELEMETRY": "0", "DO_NOT_TRACK": "1"}
-    argv = [*_offline_prefix(), "nice", "-n", "19", str(run.root / "env/bin/python"), "-c", script]
+    offline = _offline_prefix()
+    if not offline:
+        # Review KN-16: say so, rather than claim a namespace that was not made.
+        run.log(f"{what}: unshare -rn is unavailable here, so this stage has network access")
+    argv = [*offline, "nice", "-n", "19", str(run.root / "env/bin/python"), "-c", script]
     with open(run.log_path, "a", encoding="utf-8") as log:
         done = subprocess.run(argv, cwd=run.root / "src", env=env, stdout=log, stderr=log)
     if done.returncode != 0:
@@ -406,13 +417,15 @@ def _python_stage(run: Run, script: str, what: str) -> None:
 
 
 def stage_train(run: Run, manifest: dict) -> None:
+    _checkpoint_unchanged(run, manifest)
     train = manifest["train"]
     _python_stage(run, _TRAIN.format(data=str(run.root / "train.jsonl"), out_dir=str(run.root),
                                      lora=str(run.root / "lora.pkl"), **train), "training")
     run.log("train: LoRA adapter written")
 
 
-def stage_export(run: Run) -> str:
+def stage_export(run: Run, manifest: dict) -> str:
+    _checkpoint_unchanged(run, manifest)
     _python_stage(run, _EXPORT.format(lora=str(run.root / "lora.pkl"),
                                       out=str(run.root / "tuned.cact")), "export")
     digest = sha256_file(run.root / "tuned.cact")
@@ -482,11 +495,13 @@ def select(run_root: Path, cact_sha: str) -> None:
 
 
 def select_run(source: Path) -> Path:
-    """Select a run tuned elsewhere (e.g. on a rented GPU) whose own gate passed.
+    """Select a run tuned elsewhere (e.g. on a rented GPU) once it passes the gates here.
 
-    The run directory must hold tuned.cact and the gates.json that
-    stage_gates wrote for exactly those bytes, with no failures; both are
-    copied into this installation's tuning directory, then selected.
+    The run directory must hold tuned.cact and a gates.json with no failures
+    for exactly those bytes; both are copied into this installation's tuning
+    directory. The report only screens: the gates are then run again here,
+    on the copied bytes, and only a pass selects (review KN-06: a hand-written
+    report beside random bytes was enough).
     """
     try:
         report = json.loads((source / "gates.json").read_text(encoding="utf-8"))
@@ -503,8 +518,36 @@ def select_run(source: Path) -> Path:
     for name in ("tuned.cact", "gates.json"):
         shutil.copyfile(source / name, target / name)
     _verify(target / "tuned.cact", digest, "the copied tuned.cact")
+    import asset
+    try:
+        library_image = asset.installed_library()
+    except asset.AssetError as error:
+        raise TuneError(f"the gates need the needle2 runtime to run: {error}") from error
+    with library_image:
+        report = stage_gates(Run(target), recipe(load_manifest()), library_image, digest)
+    if report["failures"]:
+        raise TuneError(f"{source.name} failed the gates here: {'; '.join(report['failures'])}")
     select(target, digest)
     return target
+
+
+def in_use() -> str:
+    """What answers requests now: the selected tuned model only if it can load."""
+    choice = selected()
+    if choice is None:
+        return "base"
+    import asset
+    try:
+        development = os.environ.get("KILIX_NEEDLE_LIBRARY")
+        with (asset.library_from_file(development) if development
+              else asset.installed_library()):
+            pass
+        with asset.load_verified(choice["weights"], choice["sha256"],
+                                 os.path.getsize(choice["weights"])):
+            pass
+    except (asset.AssetError, OSError, KeyError) as error:
+        return f"base (the selected tuned model is unavailable: {error})"
+    return f"tuned {choice.get('run', '')}".strip()
 
 
 def selected() -> dict | None:
@@ -535,7 +578,7 @@ def tune(base_dir: Path | None, library_file: str | None, run_name: str | None) 
         if not run.done("train"):
             stage_train(run, manifest); run.mark("train")
         if not run.done("export"):
-            digest = stage_export(run); run.mark("export", {"sha256": digest})
+            digest = stage_export(run, manifest); run.mark("export", {"sha256": digest})
         digest = json.loads((run.root / ".export.done").read_text())["sha256"]
         report = stage_gates(run, manifest, library_image, digest)
         run.mark("gates", report)
@@ -566,7 +609,8 @@ def main(argv: list[str]) -> int:
                         help="go back to the base model")
     args = parser.parse_args(argv)
     if args.status:
-        print(json.dumps({"selected": selected(), "runs": sorted(
+        # "in_use" is what answers; "selected" may be unavailable (review KN-07).
+        print(json.dumps({"in_use": in_use(), "selected": selected(), "runs": sorted(
             p.name for p in (APP_HOME / "tuning").glob("*") if p.is_dir())}, indent=1))
         return 0
     if args.select:

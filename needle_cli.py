@@ -157,6 +157,21 @@ def run_calls(request: str, calls: list, options: Options,
         items.append(entry)
         try:
             tree = kilix.snapshot(under_overlay=options.under_overlay)
+        except kilix.KilixError as error:
+            entry.update(outcome="unresolved", reason=str(error))
+            record["status"] = 1
+            continue
+        # Without a known caller the own-pane guard below cannot work, and
+        # "current" would mean the user's focused pane (review KN-03: an agent
+        # with no KITTY_WINDOW_ID closed the user's vim pane in another tab).
+        if options.agent and tree.caller is None and (
+                action.kind.startswith("close_") or "current" in action.args.values()):
+            entry.update(outcome="refused",
+                         reason="cannot tell which pane is the agent's own, so no close "
+                                "and no 'this pane' from an agent here")
+            record["status"] = 1
+            continue
+        try:
             step = kilix.resolve(action, tree)
         except kilix.KilixError as error:
             entry.update(outcome="unresolved", reason=str(error))

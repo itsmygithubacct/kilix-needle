@@ -58,6 +58,10 @@ def _strip_block(text: str) -> str:
 
 def _edit(path: Path, body: str | None, parse=None, dry_run=False) -> str:
     """Put (or with body None, remove) our marked block in a text file."""
+    # A managed dotfile is often a symlink into a dotfiles repository: edit
+    # the file it points to, never replace the link (review KN-05).
+    if path.is_symlink():
+        path = path.resolve()
     old = path.read_text(encoding="utf-8") if path.exists() else ""
     new = _strip_block(old)
     if body is not None and BEGIN in old:

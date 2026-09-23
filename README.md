@@ -15,7 +15,7 @@ kilix-needle --yes close tab 2  # no question; for scripts and agents
 
 Requires Python 3.11+ on Linux x86-64, run inside Kilix. It has no Python
 dependencies. Fine-tuning, which is optional, builds its own environment.
-Status: a local prototype, not published and not part of a release.
+Status: admitted to Plebian OS 0.2.2 (rc2), offered in the Kilix catalog.
 
 ## Setup
 
@@ -149,15 +149,17 @@ one action, and the newest held-out set as the gate. It verifies the base checkp
 matches) and tokenizer. It fetches Needle's training code at `v2.0.9`
 (`571fcd68`) and builds a hash-locked environment. It generates examples,
 keeping only those that the checks above admit and none that match an eval
-request. It trains LoRA offline in its own network namespace, exports a
-`.cact`, and scores it.
+request. It trains LoRA in its own network namespace where the kernel
+allows one (`unshare -rn`), and the run log says so when it cannot. It
+exports a `.cact` and scores it.
 
 A tuned model is selected only if it passes every gate:
 
 - no unsafe action on any eval set;
-- a gain of at least 5 points over the untuned model on the manifest's held-out set
-  (`evals/heldout-v4.jsonl` today), measured at gate time. A held-out set that has
-  been consulted to change the checks is spent: v2 and v3 are.
+- a gain of at least 5 points over the untuned model on the newest held-out set
+  (`tuning.RECIPE`: `evals/heldout-v8.jsonl` today), measured at gate time. A
+  held-out set that has shaped a decision is spent: v2 to v8 are, so the next
+  model change needs a v9.
 - no tag losing more than 2 cases.
 
 The tuned model uses a five-tool schema (`toolset.py`) that is translated back
@@ -168,13 +170,14 @@ faster.
 ## Measured
 
 `evaluate.py` scores the whole pipeline (model calls, then the checks) on the
-real engine. Nothing touches Kilix. Base model, ten tools:
+real engine. Nothing touches Kilix. With the checks as shipped, generated from
+`evaluate.py`'s JSON:
 
-| Set | Requests | Exact | Unsafe |
-| --- | ---: | ---: | ---: |
-| `evals/dev.jsonl` (iterated on) | 40 | 26 | 0 |
-| `evals/test.jsonl` (measured only; bait extended twice) | 86 | 61 | 0 |
-| `evals/heldout-v2.jsonl` (independent; consulted once) | 100 | 65 | 0 |
+| Set | Requests | Base, ten tools: exact | unsafe | Tuned (QAT run 6), five tools: exact | unsafe |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `evals/dev.jsonl` (iterated on) | 40 | 26 | 0 | 35 | 0 |
+| `evals/test.jsonl` (measured only) | 86 | 63 | 0 | 72 | 0 |
+| `evals/heldout-v8.jsonl` (the gate; written blind) | 150 | 94 | 0 | 118 | 0 |
 
 The engine is deterministic: repeated runs produce byte-identical output.
 Latency on a quiet i7-10700F (dev set, three runs):
@@ -195,11 +198,24 @@ The tests never reach the live desktop. `KITTY_LISTEN_ON` points at a dead
 socket, a recording fake stands in for `kilix`, and the fake `ls` has the
 real shape, including window groups.
 
+## Known issues
+
+- **An agent's "yes" is its own.** Through MCP, `confirm_risky` is the
+  harness's attestation that a person agreed; there is no second channel to
+  the person. What bounds it: every check still applies, an agent never closes
+  its own pane or tab, and without a known caller an agent closes nothing and
+  has no "this pane". `kilix-needle setup` registers the MCP server at user
+  scope only when you run it.
+- **"At a shell prompt" is what the pane says.** Typing waits for the shell's
+  prompt marks (OSC 133), which a program in that pane could also print. It
+  stops the common mistake (typing into vim or htop), not a hostile program
+  already running as you in the target pane.
+
 ## Files
 
 | File | Role |
 | --- | --- |
-| `actions.py` | the ten actions, and the checks between the model's calls and anything that runs |
+| `actions.py` | the fourteen actions, and the checks between the model's calls and anything that runs |
 | `toolset.py` | the five-tool schema the tuned model sees, translated onto those actions |
 | `kilix.py` | resolution against `kilix @ ls`, and the argv that performs each action |
 | `engine.py` | the `needle` binary as a private loopback server |

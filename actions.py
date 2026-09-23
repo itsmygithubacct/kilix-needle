@@ -305,7 +305,13 @@ def interpret(prompt: str, calls: list) -> list[Action | Refusal]:
             continue
         schema = next(t["parameters"] for t in TOOLS if t["name"] == name)
         error = _shape_error(args, schema)
-        results.append(Refusal(name, error) if error else _admit(name, args, prompt))
+        result = Refusal(name, error) if error else _admit(name, args, prompt)
+        # Nothing risky runs from a question, a retraction, reported speech or
+        # a condition: the checks cannot wait, and a yes to the wrong reading
+        # closes or types something.
+        if isinstance(result, Action) and result.risky and (reason := _not_now(prompt)):
+            result = Refusal(name, f"the request is {reason}")
+        results.append(result)
     return _merge_split_then_run(results, prompt)
 
 
@@ -475,8 +481,48 @@ def _resolve_it(verb: re.Pattern, clauses: list[str]) -> list[str]:
     return resolved
 
 
+_NEGATION = re.compile(
+    r"\b(?:not|never|don't|do not|dont|avoid|avoiding|without|stop|cannot|can't|cant|"
+    r"won't|wont|shouldn't|no need to|neither|nor)\b", re.I)
+# Reported or quoted speech before a close: "the error says close the left pane".
+_REPORTED = re.compile(r"\b(?:echo|echoes|print|prints|says|said|say|saying|reads|writes|"
+                       r"wrote|tells|told|note|notes)\b", re.I)
+
+
+_OBJECT_END = re.compile(
+    r"\s*(?:\(|\b(?:but|except|instead|rather|not|so|because|before|after|unless|until|"
+    r"while|since|though|although|keep|keeping|leave|leaving|than|once|if|when|of|next to|"
+    r"beside|besides|near)\b)", re.I)
+
+
 def _negated(prefix: str) -> bool:
-    return bool(re.search(r"\b(?:not|never|don't|do not|dont)\b", prefix, re.I))
+    # Measured (review KN-02): "avoid closing tab 2" and "without closing tab
+    # 2, go to tab 3" closed tab 2; the list knew five words.
+    return bool(_NEGATION.search(prefix))
+
+
+# A request that is not a command now. Measured (review KN-02, pinned engine):
+# each of these closed something.
+_NOT_NOW = (
+    ("a retraction", re.compile(
+        r"\b(?:no wait|wait,? no|never ?mind|scratch that|just kidding|kidding|jk|"
+        r"on second thought|cancel that|forget (?:it|that)|not really|typo)\b", re.I)),
+    # "can you / could you / would you / will you" stay requests.
+    ("a question, not a request", re.compile(
+        r"^\s*(?:should|shall|how|what|why|where|which|who|is|are|am|was|were|does|do|did)\b"
+        r"|\b(?:should|shall) (?:i|we)\b|\bhow (?:do|can|could|would|should|to)\b"
+        r"|\bwhat (?:would|happens|if)\b", re.I)),
+    ("conditional or for later, and nothing here waits", re.compile(
+        r"\b(?:if|when|whenever|once|after|unless|until|later|tomorrow|tonight|"
+        r"in (?:an?|\d+|a few) (?:hours?|minutes?|mins?|seconds?))\b", re.I)),
+)
+
+
+def _not_now(prompt: str) -> str | None:
+    for reason, pattern in _NOT_NOW:
+        if pattern.search(_unquoted(prompt)):
+            return reason
+    return None
 
 
 def _in_title(prefix: str) -> bool:
@@ -620,7 +666,8 @@ def _clause_supports(verb: re.Pattern, target: str, prompt: str, *, unit: str,
                 clause = clause[:index] + " " + clause[index + len(typed):]
         match = verb.search(_unquoted(clause))
         if (match is None or _negated(clause[:match.start()])
-                or _in_title(clause[:match.start()])):
+                or _in_title(clause[:match.start()])
+                or (not typed and _REPORTED.search(clause[:match.start()]))):
             continue
         if typed:
             if target == "current":
@@ -637,6 +684,12 @@ def _clause_supports(verb: re.Pattern, target: str, prompt: str, *, unit: str,
         if _RUN_VERB.search(_unquoted(clause[:match.start()])):
             continue  # a close mentioned inside a command is not a pane instruction
         tail = clause[match.end():]
+        # The verb's object ends where another thought begins. Measured (review
+        # KN-01): "close tab 1 so I can focus on tab 2" closed tab 2, because
+        # the target only had to be named somewhere after the verb.
+        cut = _OBJECT_END.search(tail)
+        if cut:
+            tail = tail[:cut.start()]
         if target == "current":
             words = set(tail.casefold().strip().rstrip(".!?").split())
             if words and words <= _BARE_OBJECT and words - {"please", "now", "the"}:

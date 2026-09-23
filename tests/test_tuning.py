@@ -316,13 +316,39 @@ class SelectRun(unittest.TestCase):
         body.update(fields)
         (self.run_dir / "gates.json").write_text(json.dumps(body))
 
+    def gated(self, failures=()):
+        """The gates run here, on the copied bytes, with the installed runtime."""
+        library = mock.MagicMock()
+        return mock.patch.multiple(
+            tuning, stage_gates=mock.Mock(return_value={"failures": list(failures)})), \
+            mock.patch("asset.installed_library", return_value=library)
+
     def test_a_passing_run_is_copied_and_selected(self):
         self.report()
-        target = tuning.select_run(self.run_dir)
+        gates, library = self.gated()
+        with gates, library:
+            target = tuning.select_run(self.run_dir)
+            self.assertEqual(tuning.stage_gates.call_args.args[3], self.sha)
+            self.assertEqual(tuning.stage_gates.call_args.args[0].root, target)
         choice = tuning.selected()
         self.assertEqual(choice["sha256"], self.sha)
         self.assertEqual(Path(choice["weights"]), target / "tuned.cact")
         self.assertTrue(str(target).startswith(str(tuning.APP_HOME)))
+
+    def test_a_report_that_passes_is_not_enough_the_gates_run_here(self):
+        # Review KN-06: random bytes with a hand-written passing report.
+        self.report()
+        gates, library = self.gated(["held-out exact gain -40.0 points, needs +5"])
+        with gates, library, self.assertRaises(tuning.TuneError):
+            tuning.select_run(self.run_dir)
+        self.assertIsNone(tuning.selected())
+
+    def test_status_says_what_answers_not_only_what_is_selected(self):
+        self.assertEqual(tuning.in_use(), "base")
+        tuning.select(self.run_dir, self.sha)
+        with mock.patch("asset.installed_library",
+                        side_effect=__import__("asset").AssetError("runtime not accepted")):
+            self.assertIn("unavailable", tuning.in_use())
 
     def test_a_failed_gate_is_refused(self):
         self.report(failures=["held-out exact gain +3.0 points, needs +5"])
@@ -341,3 +367,34 @@ class SelectRun(unittest.TestCase):
         with self.assertRaises(tuning.TuneError):
             tuning.select_run(self.run_dir)
         self.assertIsNone(tuning.selected())
+
+
+class CheckpointDigest(unittest.TestCase):
+    """Review KN-10/KN-11: the pickle is never loaded unless its digest matches."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory(prefix="kn-")
+        self.addCleanup(self.dir.cleanup)
+        self.manifest = tuning.recipe(tuning.load_manifest())
+
+    def test_stage_base_refuses_a_checkpoint_that_does_not_match(self):
+        base = Path(self.dir.name) / "base"
+        for rel in ("checkpoints/needle2.pkl", "tokenizer/tokenizer.model",
+                    "tokenizer/tokenizer.vocab"):
+            (base / rel).parent.mkdir(parents=True, exist_ok=True)
+            (base / rel).write_bytes(b"not the pinned bytes")
+        run = tuning.Run(Path(self.dir.name) / "run")
+        with self.assertRaisesRegex(tuning.TuneError, "does not match its pinned digest"):
+            tuning.stage_base(run, self.manifest, base)
+        self.assertFalse((run.root / "base/checkpoints/needle2.pkl").exists())
+
+    def test_a_resumed_run_rechecks_the_checkpoint_before_training(self):
+        run = tuning.Run(Path(self.dir.name) / "run")
+        (run.root / "src/checkpoints").mkdir(parents=True)
+        (run.root / "src/checkpoints/needle2.pkl").write_bytes(b"swapped after base")
+        with mock.patch.object(tuning, "_python_stage") as stage:
+            with self.assertRaises(tuning.TuneError):
+                tuning.stage_train(run, self.manifest)
+            with self.assertRaises(tuning.TuneError):
+                tuning.stage_export(run, self.manifest)
+        stage.assert_not_called()

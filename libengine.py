@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+import select
 import subprocess
 import sys
 
@@ -63,6 +64,14 @@ class LibEngine:
         try:
             process.stdin.write(json.dumps(message, ensure_ascii=False) + "\n")
             process.stdin.flush()
+            # One request, one reply line: nothing is buffered ahead of it, so
+            # select on the pipe bounds the wait (review KN-15: a hung library
+            # hung the CLI and the MCP server; the timeout was never used).
+            ready, _, _ = select.select([process.stdout], [], [], self.timeout)
+            if not ready:
+                process.kill()
+                self._process = None
+                raise LibEngineError(f"the Needle library did not answer in {self.timeout:g} s")
             line = process.stdout.readline()
         except OSError as error:
             raise LibEngineError(f"the Needle library worker failed: {error}") from error

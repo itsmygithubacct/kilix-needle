@@ -668,3 +668,66 @@ class TemplateDropsRefused(unittest.TestCase):
                          Action("go_to_tab", {"tab": "previous"}))
         self.assertIsInstance(self.one("I love the logs tab please", "go_to_tab", tab="logs"),
                               Refusal)
+
+
+class ReviewR1Misreads(unittest.TestCase):
+    """0.2.2 review seat R1 (KN-01, KN-02): each phrasing, with the harmful
+    call the pinned engine or a worse one produced, must be refused."""
+
+    HARMFUL = (
+        ("close tab 1 but keep tab 2", "close_tab", {"tab": "2"}),
+        ("close tab 1 but not tab 2", "close_tab", {"tab": "2"}),
+        ("close tab 1 except tab 2", "close_tab", {"tab": "2"}),
+        ("close tab 1 before you go to tab 2", "close_tab", {"tab": "2"}),
+        ("close tab 1 so I can focus on tab 2", "close_tab", {"tab": "2"}),
+        ("close tab 1 because tab 2 has my work", "close_tab", {"tab": "2"}),
+        ("close tab 1 (just kidding) go to tab 2", "close_tab", {"tab": "2"}),
+        ("close the notes pane but leave the build pane", "close_pane", {"pane": "build"}),
+        ("close the notes pane instead of the build pane", "close_pane", {"pane": "build"}),
+        ("close the notes pane rather than the build pane", "close_pane", {"pane": "build"}),
+        ("close the notes pane (not the build pane)", "close_pane", {"pane": "build"}),
+        ("close the left pane unless the right pane is empty", "close_pane", {"pane": "right"}),
+        ("close the pane next to the build pane", "close_pane", {"pane": "build"}),
+        ("close the pane left of the build pane", "close_pane", {"pane": "build"}),
+        ("without closing tab 2, go to tab 3", "close_tab", {"tab": "2"}),
+        ("avoid closing tab 2", "close_tab", {"tab": "2"}),
+        ("can't close tab 2", "close_tab", {"tab": "2"}),
+        ("close tab 2? no wait", "close_tab", {"tab": "2"}),
+        ("close the build pane later", "close_pane", {"pane": "build"}),
+        ("should I close the build pane?", "close_pane", {"pane": "build"}),
+        ("how do I close the build pane", "close_pane", {"pane": "build"}),
+        ("echo close the left pane", "close_pane", {"pane": "left"}),
+        ("the error says close the left pane", "close_pane", {"pane": "left"}),
+        ("if the build fails, close the left pane", "close_pane", {"pane": "left"}),
+        ("what would happen if I run rm -rf ~ in the build pane", "run_in_pane",
+         {"pane": "build", "command": "rm -rf ~"}),
+    )
+
+    LEGIT = (
+        ("close tab 1 but keep tab 2", "close_tab", {"tab": "1"}, {"tab": "1"}),
+        ("can you close tab 2?", "close_tab", {"tab": "2"}, {"tab": "2"}),
+        ("could you close the left pane please", "close_pane", {"pane": "left"}, {"pane": "left"}),
+        ("close the notes pane but leave the build pane", "close_pane", {"pane": "notes"},
+         {"pane": "name:notes"}),
+        ("run echo hi in the build pane", "run_in_pane", {"pane": "build", "command": "echo hi"},
+         {"pane": "name:build", "command": "echo hi"}),
+    )
+
+    def test_each_harmful_reading_is_refused(self):
+        for prompt, tool, args in self.HARMFUL:
+            with self.subTest(prompt=prompt):
+                [r] = interpret(prompt, [call(tool, **args)])
+                self.assertIsInstance(r, Refusal)
+
+    def test_the_intended_reading_still_runs(self):
+        for prompt, tool, args, admitted in self.LEGIT:
+            with self.subTest(prompt=prompt):
+                self.assertEqual(interpret(prompt, [call(tool, **args)]), [Action(tool, admitted)])
+
+    def test_nothing_risky_runs_from_a_question_or_a_condition(self):
+        # Non-risky actions are unaffected: nothing is lost by moving focus.
+        [r] = interpret("should I go to tab 2?", [call("go_to_tab", tab="2")])
+        self.assertIsInstance(r, Action)
+        [r] = interpret("if it builds, open a pane running htop",
+                        [call("open_pane", program="htop")])
+        self.assertIsInstance(r, Refusal)
