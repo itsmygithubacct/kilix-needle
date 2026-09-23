@@ -286,3 +286,50 @@ class QuantisationAwareTraining(unittest.TestCase):
 
     def test_export_is_never_patched(self):
         self.assertNotIn("cq_ste", tuning._EXPORT)
+
+
+class SelectRun(unittest.TestCase):
+    """A run tuned elsewhere is used only with its own passing gate report."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory(prefix="kn-")
+        self.addCleanup(self.dir.cleanup)
+        home = Path(self.dir.name) / "home"
+        patcher = mock.patch.multiple(tuning, APP_HOME=home, SELECTION=home / "model.json")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.run_dir = Path(self.dir.name) / "qat-6"
+        self.run_dir.mkdir()
+        (self.run_dir / "tuned.cact").write_bytes(b"weights")
+        self.sha = tuning.sha256_file(self.run_dir / "tuned.cact")
+
+    def report(self, **fields):
+        body = {"cact_sha256": self.sha, "failures": []}
+        body.update(fields)
+        (self.run_dir / "gates.json").write_text(json.dumps(body))
+
+    def test_a_passing_run_is_copied_and_selected(self):
+        self.report()
+        target = tuning.select_run(self.run_dir)
+        choice = tuning.selected()
+        self.assertEqual(choice["sha256"], self.sha)
+        self.assertEqual(Path(choice["weights"]), target / "tuned.cact")
+        self.assertTrue(str(target).startswith(str(tuning.APP_HOME)))
+
+    def test_a_failed_gate_is_refused(self):
+        self.report(failures=["held-out exact gain +3.0 points, needs +5"])
+        with self.assertRaises(tuning.TuneError):
+            tuning.select_run(self.run_dir)
+        self.assertIsNone(tuning.selected())
+
+    def test_other_bytes_than_the_gated_ones_are_refused(self):
+        self.report()
+        (self.run_dir / "tuned.cact").write_bytes(b"other weights")
+        with self.assertRaises(tuning.TuneError):
+            tuning.select_run(self.run_dir)
+        self.assertIsNone(tuning.selected())
+
+    def test_no_report_is_refused(self):
+        with self.assertRaises(tuning.TuneError):
+            tuning.select_run(self.run_dir)
+        self.assertIsNone(tuning.selected())

@@ -1,7 +1,7 @@
 """Fine-tune Needle 2 using kilix-ml's Kilix domain pack (or the legacy pin).
 
     kilix-needle tune [--base-dir DIR] [--library FILE] [--steps-only] [--background]
-    kilix-needle tune --status | --select RUN | --deselect
+    kilix-needle tune --status | --select RUN_DIR | --deselect
 
 A run works in its own directory and leaves a marker after each stage, so an
 interrupted run resumes where it stopped:
@@ -479,6 +479,32 @@ def select(run_root: Path, cact_sha: str) -> None:
     os.replace(tmp, SELECTION)
 
 
+def select_run(source: Path) -> Path:
+    """Select a run tuned elsewhere (e.g. on a rented GPU) whose own gate passed.
+
+    The run directory must hold tuned.cact and the gates.json that
+    stage_gates wrote for exactly those bytes, with no failures; both are
+    copied into this installation's tuning directory, then selected.
+    """
+    try:
+        report = json.loads((source / "gates.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise TuneError(f"no readable gate report in {source}: {error}") from error
+    if report.get("failures") != []:
+        raise TuneError(f"{source.name} did not pass its gates: {report.get('failures')}")
+    weights = source / "tuned.cact"
+    digest = sha256_file(weights) if weights.is_file() else None
+    if digest is None or digest != report.get("cact_sha256"):
+        raise TuneError(f"{source.name}: tuned.cact is not the model its gate report scored")
+    target = APP_HOME / "tuning" / source.name
+    target.mkdir(parents=True, exist_ok=True, mode=0o700)
+    for name in ("tuned.cact", "gates.json"):
+        shutil.copyfile(source / name, target / name)
+    _verify(target / "tuned.cact", digest, "the copied tuned.cact")
+    select(target, digest)
+    return target
+
+
 def selected() -> dict | None:
     try:
         return json.loads(SELECTION.read_text(encoding="utf-8"))
@@ -532,12 +558,22 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--background", action="store_true",
                         help="detach and log to the run directory")
     parser.add_argument("--status", action="store_true")
+    parser.add_argument("--select", metavar="RUN_DIR", type=Path,
+                        help="use a run tuned elsewhere whose gate report passed")
     parser.add_argument("--deselect", action="store_true",
                         help="go back to the base model")
     args = parser.parse_args(argv)
     if args.status:
         print(json.dumps({"selected": selected(), "runs": sorted(
             p.name for p in (APP_HOME / "tuning").glob("*") if p.is_dir())}, indent=1))
+        return 0
+    if args.select:
+        try:
+            target = select_run(args.select.expanduser().resolve())
+        except TuneError as error:
+            print(f"kilix-needle tune: {error}", file=sys.stderr)
+            return 1
+        print(f"kilix-needle: the tuned model {target.name} is now used")
         return 0
     if args.deselect:
         SELECTION.unlink(missing_ok=True)
