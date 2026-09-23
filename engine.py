@@ -43,6 +43,19 @@ def check_prompt(text: str) -> str:
     return text
 
 
+def _die_with_parent() -> None:
+    """In the child, before exec: the kernel stops it when its parent dies.
+
+    Measured: a killed evaluate.py left its engine running, reparented to init
+    and listening on loopback. A harness killing `kilix-needle mcp` would do
+    the same. PR_SET_PDEATHSIG is 1; the signal is SIGTERM.
+    """
+    import ctypes
+    import signal
+    libc = ctypes.CDLL(None, use_errno=True)
+    libc.prctl(1, signal.SIGTERM, 0, 0, 0)
+
+
 def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
         probe.bind(("127.0.0.1", 0))
@@ -123,7 +136,7 @@ class Engine:
                 executable=self.image.path,
                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL, env=env, cwd=self._scratch.name,
-                pass_fds=(self.image.fd,))
+                pass_fds=(self.image.fd,), preexec_fn=_die_with_parent)
         except OSError as error:
             self.close()
             raise EngineError(f"cannot start the Needle engine: {error.strerror}") from error

@@ -130,6 +130,39 @@ class EngineClient(unittest.TestCase):
             needle.reset()
 
 
+class Lifetime(unittest.TestCase):
+    def test_the_engine_dies_with_its_parent(self):
+        # A parent holding an engine is SIGKILLed; its engine must not outlive it.
+        import signal, subprocess, sys, textwrap, time
+        with tempfile.TemporaryDirectory(prefix="kn-") as directory:
+            image = FakeImage(directory)
+            self.addCleanup(image.close)
+            script = textwrap.dedent(f"""
+                import os, sys, time
+                sys.path.insert(0, {os.getcwd()!r}); sys.path.insert(0, {os.path.join(os.getcwd(), "tests")!r})
+                from test_engine import FakeImage
+                from engine import Engine
+                image = FakeImage({directory!r})
+                engine = Engine(image, [])
+                engine.start()
+                print(engine._process.pid, flush=True)
+                time.sleep(60)
+            """)
+            parent = subprocess.Popen([sys.executable, "-c", script], stdout=subprocess.PIPE, text=True)
+            child = int(parent.stdout.readline())
+            os.kill(parent.pid, signal.SIGKILL)
+            parent.wait()
+            for _ in range(50):
+                try:
+                    os.kill(child, 0)
+                except ProcessLookupError:
+                    break
+                time.sleep(0.1)
+            else:
+                os.kill(child, signal.SIGKILL)
+                self.fail("the engine outlived its parent")
+
+
 class Prompts(unittest.TestCase):
     def test_accepted(self):
         self.assertEqual(check_prompt("  split right  "), "split right")
