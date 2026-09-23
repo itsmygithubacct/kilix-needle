@@ -26,6 +26,18 @@ class Home(unittest.TestCase):
         status, lines = setup.setup(names, **kw)
         return status, "\n".join(lines)
 
+    def test_a_block_followed_by_user_lines_stays_where_it_is(self):
+        # Measured: rerunning setup moved the block past a later user line and
+        # reported "updated" for an identical file.
+        aliases = self.home / ".bash_aliases"
+        self.run_setup(["alias"])
+        aliases.write_text(aliases.read_text() + "watch(){ true; }\n")
+        before = aliases.read_text()
+        status, out = self.run_setup(["alias"])
+        self.assertEqual(status, 0)
+        self.assertEqual(aliases.read_text(), before)
+        self.assertIn("unchanged", out)
+
     def test_text_surfaces_are_idempotent_and_reversible(self):
         aliases = self.home / ".bash_aliases"
         aliases.write_text("alias ll='ls -l'\n")

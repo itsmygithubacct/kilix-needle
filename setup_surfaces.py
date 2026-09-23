@@ -60,7 +60,12 @@ def _edit(path: Path, body: str | None, parse=None, dry_run=False) -> str:
     """Put (or with body None, remove) our marked block in a text file."""
     old = path.read_text(encoding="utf-8") if path.exists() else ""
     new = _strip_block(old)
-    if body is not None:
+    if body is not None and BEGIN in old:
+        # Replace the block where it stands: re-appending it moved an
+        # identical block past the user's own lines and reported "updated".
+        start = old.find(BEGIN)
+        new = new[:start] + _block(body) + new[start:]
+    elif body is not None:
         new = new + ("" if not new or new.endswith("\n") else "\n") + _block(body)
     if new == old:
         return f"{path}: unchanged"
