@@ -136,10 +136,29 @@ class InstallCommands(unittest.TestCase):
         from unittest import mock
         import asset
         with mock.patch.object(asset, "install", return_value="/x") as install, \
+                mock.patch.object(asset, "_installed_spec",
+                                  side_effect=asset.AssetError("not installed")), \
                 mock.patch("sys.stdout", io.StringIO()):
             self.assertEqual(needle_cli.main(["install", "--runtime"]), 0)
         self.assertEqual([c.kwargs["asset_id"] for c in install.call_args_list],
                          ["needle2", "needle2-runtime"])
+
+    def test_an_installed_asset_is_not_asked_about_again(self):
+        from unittest import mock
+        import asset
+
+        def installed(asset_id, root):
+            if asset_id == "needle2":
+                return None, "/assets/needle2"
+            raise asset.AssetError("the needle2-runtime licence has not been accepted")
+        out = io.StringIO()
+        with mock.patch.object(asset, "_installed_spec", side_effect=installed), \
+                mock.patch.object(asset, "install", return_value="/assets/rt") as install, \
+                mock.patch("sys.stdout", out):
+            self.assertEqual(needle_cli.main(["install", "--runtime"]), 0)
+        self.assertEqual([c.kwargs["asset_id"] for c in install.call_args_list],
+                         ["needle2-runtime"])
+        self.assertIn("already installed: /assets/needle2", out.getvalue())
 
     def test_each_missing_asset_names_a_command_that_installs_it(self):
         from unittest import mock

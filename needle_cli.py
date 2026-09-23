@@ -313,6 +313,16 @@ def main(argv: list[str] | None = None) -> int:
         wanted = [asset.ASSET_ID] + (list(asset.TUNING_ASSETS) if args.tuning
                                      else [asset.RUNTIME_ID] if args.runtime else [])
         for asset_id in wanted:
+            # An asset already accepted and installed is not asked about again:
+            # `install --runtime` after `install` re-showed the needle2 screen,
+            # and declining it stopped before the runtime (measured).
+            try:
+                _spec, where = asset._installed_spec(asset_id, args.root)
+            except asset.AssetError:
+                pass
+            else:
+                print(f"already installed: {where}")
+                continue
             try:
                 where = asset.install(args.root, supplied=args.supplied, asset_id=asset_id)
             except asset.AssetError as error:
