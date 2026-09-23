@@ -592,3 +592,18 @@ class QatFiveMisreads(unittest.TestCase):
                                   ("focus the left pane", "go_to_pane", {"pane": "left"}),
                                   ("switch panes", "go_to_pane", {"pane": "next"})):
             self.assertIsInstance(self.one(prompt, tool, **arg), Action, prompt)
+
+
+class GuardsWithoutOtherCover(unittest.TestCase):
+    """Cases only one guard catches; later rules had made the earlier tests
+    reach them through other refusals."""
+
+    def test_a_name_must_be_whole_words(self):
+        [r] = interpret("rename this tab to logs", [call("rename_tab", name="log")])
+        self.assertIsInstance(r, Refusal)
+
+    def test_open_needs_a_location_to_start_a_program_in_a_pane(self):
+        [r] = interpret("open firefox", [call("open_pane", program="firefox")])
+        self.assertIsInstance(r, Refusal)
+        [r] = interpret("open firefox in a new pane", [call("open_pane", program="firefox")])
+        self.assertIsInstance(r, Action)

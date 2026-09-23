@@ -805,9 +805,6 @@ def _admit(name: str, args: dict, prompt: str) -> Action | Refusal:
                 # Only implied "this pane" and no location: measured (tuned model),
                 # "type faster, I'm bored" -> command "faster".
                 return Refusal(name, f"{command!r} does not look like a command")
-            if command not in _command_spans(prompt):
-                return Refusal(name, f"the command {command!r} is not all of what the "
-                                     "request asks to type")
         if name == "run_in_pane":
             # One clause must hold the verb, this pane and exactly this command.
             # Measured (tuned model): "run make in the left pane and run make test
