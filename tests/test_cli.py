@@ -126,3 +126,35 @@ class Handle(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class InstallCommands(unittest.TestCase):
+    """What the tool tells people to run must exist (measured: `kilix models`
+    is not a command on this Kilix; it fell through to the bonsai store)."""
+
+    def test_runtime_installs_the_engine_and_the_runtime_only(self):
+        from unittest import mock
+        import asset
+        with mock.patch.object(asset, "install", return_value="/x") as install, \
+                mock.patch("sys.stdout", io.StringIO()):
+            self.assertEqual(needle_cli.main(["install", "--runtime"]), 0)
+        self.assertEqual([c.kwargs["asset_id"] for c in install.call_args_list],
+                         ["needle2", "needle2-runtime"])
+
+    def test_each_missing_asset_names_a_command_that_installs_it(self):
+        from unittest import mock
+        import asset
+
+        class LicenseError(Exception):
+            pass
+        lic = mock.Mock(LicenseError=LicenseError)
+        first_use = mock.Mock(needs_agreement=mock.Mock(return_value=True))
+        content = mock.Mock(CatalogError=LookupError)
+        for asset_id, command in (("needle2", "kilix-needle install"),
+                                  ("needle2-runtime", "kilix-needle install --runtime"),
+                                  ("needle2-train", "kilix-needle install --tuning")):
+            with mock.patch.object(asset, "_content", return_value=(content, first_use, lic)):
+                with self.assertRaises(asset.AssetError) as caught:
+                    asset._installed_spec(asset_id, None)
+            self.assertTrue(str(caught.exception).endswith(f"install it with: {command}"),
+                            caught.exception)

@@ -305,9 +305,13 @@ def main(argv: list[str] | None = None) -> int:
                             help="also install what fine-tuning needs: the base checkpoint "
                                  "and tokenizer (needle2-train) and libneedle.so "
                                  "(needle2-runtime), each with its own licence screen")
+        parser.add_argument("--runtime", action="store_true",
+                            help="also install libneedle.so (needle2-runtime), which runs a "
+                                 "tuned model, with its own licence screen")
         parser.add_argument("--root")
         args = parser.parse_args(argv[1:])
-        wanted = [asset.ASSET_ID] + (list(asset.TUNING_ASSETS) if args.tuning else [])
+        wanted = [asset.ASSET_ID] + (list(asset.TUNING_ASSETS) if args.tuning
+                                     else [asset.RUNTIME_ID] if args.runtime else [])
         for asset_id in wanted:
             try:
                 where = asset.install(args.root, supplied=args.supplied, asset_id=asset_id)

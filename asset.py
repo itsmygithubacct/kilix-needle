@@ -1,7 +1,7 @@
 """Find the Needle 2 engine and hold exactly the verified bytes.
 
 kilix-needle never downloads and never accepts a licence. The engine is the
-`needle2` asset in the Content catalog; `kilix models install needle2` shows
+`needle2` asset in the Content catalog; `kilix-needle install` shows
 its licence, takes the typed agreement and installs it. This module only
 admits what is already there: the catalog must verify against its pinned
 digest, a receipt must cover the asset, and the installed engine must match
@@ -148,8 +148,10 @@ def _content():
 def _installed_spec(asset_id: str, root: str | None):
     """The verified catalog spec and install directory of a covered asset."""
     content, first_use, lic = _content()
-    install_hint = f"install it with: kilix-needle install" if asset_id == ASSET_ID \
-        else f"install it with: kilix models install {asset_id}"
+    # `kilix models` is not a command on every Kilix; name the one that is here.
+    install_hint = "install it with: " + {ASSET_ID: "kilix-needle install",
+                                          RUNTIME_ID: "kilix-needle install --runtime"}.get(
+        asset_id, "kilix-needle install --tuning")
     try:
         catalog = content.verified_packaged_catalog()
     except RuntimeError as error:
@@ -333,7 +335,8 @@ def install(root: str | None = None, *, supplied: str | None = None,
         return installer.asset_destination(spec)
 
 
-TUNING_ASSETS = ("needle2-train", "needle2-runtime")
+RUNTIME_ID = "needle2-runtime"
+TUNING_ASSETS = ("needle2-train", RUNTIME_ID)
 
 
 def missing_for_tuning(root: str | None = None) -> list[str]:
