@@ -1,9 +1,0 @@
-{"action": "rename_tab", "templates": [
- {"text": "rename this tab to {name}", "args": {"name": "$name"}},
- {"text": "rename the tab {name}", "args": {"name": "$name"}},
- {"text": "call this tab {name}", "args": {"name": "$name"}},
- {"text": "name this tab {name}", "args": {"name": "$name"}},
- {"text": "set the tab title to {name}", "args": {"name": "$name"}},
- {"text": "change the tab name to {name}", "args": {"name": "$name"}},
- {"text": "title this tab {name}", "args": {"name": "$name"}}
-]}

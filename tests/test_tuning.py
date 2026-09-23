@@ -161,20 +161,21 @@ class FirstUseOffer(unittest.TestCase):
 
 
 class DomainPackMigration(unittest.TestCase):
-    def test_the_library_is_part_of_this_repository(self):
+    def test_the_library_is_kilix_mls_pack_from_the_pinned_submodule(self):
         with mock.patch.dict(os.environ, {}, clear=False):
-            os.environ.pop("KILIX_NEEDLE_TUNING_LIBRARY", None)
-            self.assertEqual(tuning.library_path(), tuning.REPO / "tuning-library")
-        self.assertTrue((tuning.REPO / "tuning-library" / "manifest.toml").is_file())
-        self.assertTrue((tuning.REPO / "tuning-library" / "requirements-train.lock").is_file())
-        self.assertEqual(tuning.SUPPLEMENT.parent, tuning.REPO / "tuning-library")
+            os.environ.pop("KILIX_ML_HOME", None)
+            self.assertEqual(tuning.library_path(),
+                             tuning.REPO / "third_party" / "kilix-ml" / "domains" / "kilix_panes")
+        self.assertFalse((tuning.REPO / "tuning-library").exists())   # one source only
+        self.assertEqual(tuning.SUPPLEMENT, tuning.REPO / "corpus-supplement")
 
-    def test_an_explicit_library_never_falls_back_silently(self):
+    def test_an_explicit_ml_home_never_falls_back_silently(self):
         with tempfile.TemporaryDirectory(prefix="kn-") as tmp, \
-                mock.patch.dict(os.environ, {"KILIX_NEEDLE_TUNING_LIBRARY": tmp}):
-            self.assertEqual(tuning.library_path(), Path(tmp))
+                mock.patch.dict(os.environ, {"KILIX_ML_HOME": tmp}):
+            expected = Path(tmp) / "domains" / "kilix_panes"
+            self.assertEqual(tuning.library_path(), expected)
             with self.assertRaises(tuning.TuneError):
-                tuning.load_manifest(Path(tmp))
+                tuning.load_manifest(expected)
 
     def test_generators_from_two_packs_do_not_share_import_cache(self):
         with tempfile.TemporaryDirectory(prefix="kn-") as tmp:

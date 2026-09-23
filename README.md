@@ -139,8 +139,10 @@ kilix-needle tune --status
 kilix-needle tune --deselect          # back to the base model
 ```
 
-The tuner reads `tuning-library/` in this repository: its corpus, its pins and
-its gates, plus the blind supplement templates in `tuning-library/supplement/`.
+The tuner reads kilix-ml's `kilix_panes` domain pack, the one source of the
+tuning library: its corpus, its pins and its gates. kilix-ml is the pinned
+`third_party/kilix-ml` submodule (`KILIX_ML_HOME` names another checkout). The
+blind supplement templates in `corpus-supplement/` are kilix-needle's own.
 `tuning.RECIPE` applies what was learned about training Needle over the
 library's manifest: quantisation-aware training, 4 epochs, an 18% cap on any
 one action, and the newest held-out set as the gate. It verifies the base checkpoint (a pickle, never read before its digest
@@ -264,10 +266,10 @@ and left-hand/right-hand targets, and `please` or matching quote/backtick wrappe
 around commands. Command contents remain exact and case-sensitive. `close it`
 and attempts to quit a program by closing its containing pane remain refused.
 
-The tuning library is part of this repository (`tuning-library/`). It began as
-kilix-ml's `kilix_panes` domain pack and replaces the old
-`third_party/kilix-needle-tuning` submodule. Set `KILIX_NEEDLE_TUNING_LIBRARY` to
-try another copy; an explicit missing library is an error. The compatibility recipe counts and
+The tuning library is kilix-ml's `kilix_panes` domain pack, required through
+the `third_party/kilix-ml` submodule; the old `third_party/kilix-needle-tuning`
+submodule is gone. Set `KILIX_ML_HOME` to use another kilix-ml checkout; an
+explicit missing pack is an error. The compatibility recipe counts and
 skips actions its five-tool format cannot express; the 7.2M training recipe must
 use the full exported 14-tool contract.
 
