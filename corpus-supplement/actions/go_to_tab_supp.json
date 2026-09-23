@@ -1,0 +1,101 @@
+{
+ "action": "go_to_tab",
+ "templates": [
+  {
+   "text": "go to tab {num}",
+   "args": {
+    "tab": "$num"
+   }
+  },
+  {
+   "text": "flip to the {ordinal} tab",
+   "args": {
+    "tab": "$num"
+   }
+  },
+  {
+   "text": "jump over to the {name} tab",
+   "args": {
+    "tab": "$name"
+   }
+  },
+  {
+   "text": "next tab",
+   "args": {
+    "tab": "next"
+   }
+  },
+  {
+   "text": "previous tab please",
+   "args": {
+    "tab": "previous"
+   }
+  },
+  {
+   "text": "take me to the last tab",
+   "args": {
+    "tab": "last"
+   }
+  },
+  {
+   "text": "could you switch to tab {num}?",
+   "args": {
+    "tab": "$num"
+   }
+  },
+  {
+   "text": "hop over to the {ordinal} tab",
+   "args": {
+    "tab": "$num"
+   }
+  },
+  {
+   "text": "go ahead and switch to the tab called {name}",
+   "args": {
+    "tab": "$name"
+   }
+  },
+  {
+   "text": "tab {num}",
+   "args": {
+    "tab": "$num"
+   }
+  },
+  {
+   "text": "back one tab",
+   "args": {
+    "tab": "previous"
+   }
+  },
+  {
+   "text": "move to the next tab",
+   "args": {
+    "tab": "next"
+   }
+  },
+  {
+   "text": "show me the {name} tab",
+   "args": {
+    "tab": "$name"
+   }
+  },
+  {
+   "text": "would you mind bringing up the {ordinal} tab",
+   "args": {
+    "tab": "$num"
+   }
+  },
+  {
+   "text": "select the last tab",
+   "args": {
+    "tab": "last"
+   }
+  },
+  {
+   "text": "focus tab {num}",
+   "args": {
+    "tab": "$num"
+   }
+  }
+ ]
+}

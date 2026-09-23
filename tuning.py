@@ -10,10 +10,12 @@ interrupted run resumes where it stopped:
            (the checkpoint is a pickle and is never read before that)
   source   Needle's training code at the pinned commit, fetched once
   env      a Python environment from the hash-locked requirements
-  data     examples generated from the library, each checked against the
-           same rules the running tool applies, minus every eval request
-  train    LoRA fine-tuning, offline (its own network namespace when the
-           kernel allows one), at the lowest CPU priority
+  data     examples generated from the library plus kilix-needle's blind
+           supplement, each checked against the same rules the running tool
+           applies, minus every eval request, no action above its share cap
+  train    quantisation-aware LoRA fine-tuning (see RECIPE), offline (its own
+           network namespace when the kernel allows one), at the lowest CPU
+           priority
   export   the tuned .cact
   gates    the benchmarks: no unsafe action on any eval set, and a clear gain
            on the held-out set written without sight of the library
@@ -53,6 +55,23 @@ LIBRARY = library_path()
 APP_HOME = Path(os.environ.get("GPU_TERMINAL_HOME") or Path.home() / ".local" / "gpu_terminal") \
     / "kilix-apps" / "kilix-needle"
 SELECTION = APP_HOME / "model.json"
+SUPPLEMENT = REPO / "corpus-supplement"
+
+# kilix-needle's own recipe, applied over the pack's manifest (kilix-ml owns
+# the pack; what this app learned about training Needle lives here).
+#   qat         train through the checkpoint's own quantiser. Upstream trains
+#               in float and export quantises to 2 bits; measured on run 2, the
+#               quantiser's error was ~50x the adapter's change and the tuned
+#               model lost to the base. QAT runs 3-5 beat it on every set.
+#   epochs      4: the QAT runs reached their best validation loss there.
+#   supplements templates written blind (no sight of any eval set) for the
+#               phrasings the pack lacks; run 4 needed them for resize.
+#   cap_share   no one action above this share of the examples: resize at 24%
+#               cost open_tab 3 cases (run 4); at 12% resize lost 3 (run 5).
+#   heldout     the newest set, which no decision about the model has seen.
+RECIPE = {"train": {"epochs": 4, "qat": True},
+          "data": {"supplements": [SUPPLEMENT], "cap_share": 0.18},
+          "gates": {"heldout": "evals/heldout-v8.jsonl"}}
 STAGES = ("base", "source", "env", "data", "train", "export", "gates", "select")
 
 
@@ -77,6 +96,17 @@ def load_manifest(library: Path = LIBRARY) -> dict:
     if manifest.get("schema") != "kilix-needle-tuning/v1":
         raise TuneError(f"unsupported tuning manifest {manifest.get('schema')!r}")
     return manifest
+
+
+def recipe(manifest: dict) -> dict:
+    """The manifest with kilix-needle's recipe applied, excluding every eval set."""
+    merged = {key: dict(value) if isinstance(value, dict) else value
+              for key, value in manifest.items()}
+    for section, values in RECIPE.items():
+        merged.setdefault(section, {}).update(values)
+    evals = sorted(str(p.relative_to(REPO)) for p in (REPO / "evals").glob("*.jsonl"))
+    merged["data"]["exclude"] = sorted(set(merged["data"].get("exclude", [])) | set(evals))
+    return merged
 
 
 class Run:
@@ -223,12 +253,59 @@ def _typed(kind: str, args: dict) -> dict:
             for key, value in args.items()}
 
 
+def stage_library(library: Path, supplements: list, target: Path) -> list[str]:
+    """A copy of the pack with the supplement templates beside its own."""
+    if target.exists():
+        shutil.rmtree(target)
+    shutil.copytree(library, target, ignore=shutil.ignore_patterns("__pycache__"))
+    added = []
+    for supplement in supplements:
+        for path in sorted((Path(supplement) / "actions").glob("*.json")):
+            destination = target / "corpus" / "actions" / path.name
+            if destination.exists():
+                raise TuneError(f"supplement {path.name} would replace a pack template")
+            shutil.copyfile(path, destination)
+            added.append(path.name)
+    return added
+
+
+def _shape(answers: list[dict]) -> str:
+    import toolset
+    actions = toolset.to_actions(answers)
+    return "none" if not actions else actions[0]["name"] if len(actions) == 1 else "compound"
+
+
+def cap_share(rows: list[dict], share: float, seed: int) -> tuple[list[dict], dict]:
+    """Subsample any single action above `share` of the examples."""
+    import collections
+    import random
+    groups = collections.defaultdict(list)
+    for row in rows:
+        groups[_shape(row["answers"])].append(row)
+    cap = int(share * len(rows))
+    rng = random.Random(seed)
+    kept, capped = [], {}
+    for name in sorted(groups):
+        members = groups[name]
+        if len(members) > cap:
+            capped[name] = [len(members), cap]
+            members = rng.sample(members, cap)
+        kept += members
+    rng.shuffle(kept)
+    return kept, capped
+
+
 def build_data(library: Path, manifest: dict, out: Path) -> dict:
     """Generate, check against the running tool's rules, write upstream's format."""
+    data = manifest["data"]
+    added = []
+    if data.get("supplements"):
+        staged = out.parent / "library"
+        added = stage_library(library, data["supplements"], staged)
+        library = staged
     corpus = load_generator(library)
     from actions import Action, interpret
     import toolset
-    data = manifest["data"]
     if data["toolset"] != "five":
         raise TuneError("only the five-tool schema is trained")
     exclude = set()
@@ -236,29 +313,36 @@ def build_data(library: Path, manifest: dict, out: Path) -> dict:
         with open(REPO / rel, encoding="utf-8") as handle:
             exclude |= {corpus._fold(json.loads(line)["request"]) for line in handle if line.strip()}
     rows, dropped = corpus.generate(data["seed"], data["per_template"], exclude)
-    kept = inconsistent = unsupported = 0
+    examples = []
+    inconsistent = unsupported = 0
+    for row in rows:
+        row["actions"] = [[kind, _typed(kind, args)] for kind, args in row["actions"]]
+        calls = [{"name": kind, "arguments": args} for kind, args in row["actions"]]
+        admitted = [[a.kind, a.args] for a in interpret(row["query"], calls)
+                    if isinstance(a, Action)]
+        if len(admitted) != len(row["actions"]):
+            inconsistent += 1   # a training answer the tool would refuse teaches nothing
+            continue
+        # The Needle 2 compatibility recipe still has only ten actions.
+        # New kilix-ml-only templates must not crash or silently mislabel it.
+        try:
+            answers = toolset.from_actions(row["actions"])
+        except ValueError:
+            unsupported += 1
+            continue
+        examples.append({"query": row["query"], "tools": toolset.TOOLS,
+                         "reasoning": reasoning_for(answers, row.get("spans", [])),
+                         "answers": answers})
+    stats = {"generated": len(rows), "kept": len(examples), "eval_matches_dropped": dropped,
+             "inconsistent_dropped": inconsistent, "unsupported_dropped": unsupported,
+             "supplement_files": added}
+    if data.get("cap_share"):
+        examples, stats["capped"] = cap_share(examples, data["cap_share"], data["seed"])
+        stats["kept"] = len(examples)
     with open(out, "w", encoding="utf-8") as handle:
-        for row in rows:
-            row["actions"] = [[kind, _typed(kind, args)] for kind, args in row["actions"]]
-            calls = [{"name": kind, "arguments": args} for kind, args in row["actions"]]
-            admitted = [[a.kind, a.args] for a in interpret(row["query"], calls)
-                        if isinstance(a, Action)]
-            if len(admitted) != len(row["actions"]):
-                inconsistent += 1   # a training answer the tool would refuse teaches nothing
-                continue
-            # The Needle 2 compatibility recipe still has only ten actions.
-            # New kilix-ml-only templates must not crash or silently mislabel it.
-            try:
-                answers = toolset.from_actions(row["actions"])
-            except ValueError:
-                unsupported += 1
-                continue
-            handle.write(json.dumps({"query": row["query"], "tools": toolset.TOOLS,
-                                     "reasoning": reasoning_for(answers, row.get("spans", [])),
-                                     "answers": answers}, ensure_ascii=False) + "\n")
-            kept += 1
-    return {"generated": len(rows), "kept": kept, "eval_matches_dropped": dropped,
-            "inconsistent_dropped": inconsistent, "unsupported_dropped": unsupported}
+        for example in examples:
+            handle.write(json.dumps(example, ensure_ascii=False) + "\n")
+    return stats
 
 
 def _offline_prefix() -> list[str]:
@@ -269,10 +353,28 @@ def _offline_prefix() -> list[str]:
     return []
 
 
+# With qat, the forward pass (and the validation loss) runs on the weights
+# export will produce: merge_lora is followed by the checkpoint's own CQ
+# quantiser, and gradients pass straight through the rounding. finetune_local
+# looks merge_lora up at call time; export runs in its own process, unpatched,
+# because export quantises by itself.
 _TRAIN = """
 import argparse, sys, time, resource
 sys.path.insert(0, ".")
+from needle.model import finetune
 from needle.model.finetune import finetune_local
+if {qat}:
+    from needle.model.quantize import cq_ste_mixed_params, parse_bits_map
+    from needle.model.run import load_checkpoint
+    _, config = load_checkpoint("checkpoints/needle2.pkl")
+    spec = getattr(config, "weight_bits", "") or ""
+    if not spec:
+        raise SystemExit("qat: the checkpoint names no weight_bits")
+    bits_map, default_bits = parse_bits_map(spec)
+    plain_merge = finetune.merge_lora
+    finetune.merge_lora = lambda params, lora, scale: cq_ste_mixed_params(
+        plain_merge(params, lora, scale), bits_map, default_bits)
+    print(f"qat: weight_bits {{spec}}", flush=True)
 t = time.time()
 finetune_local(argparse.Namespace(jsonl_path={data!r}, checkpoint="checkpoints/needle2.pkl",
     epochs={epochs}, batch_size={batch_size}, lr={learning_rate}, lora_rank={lora_rank},
@@ -386,7 +488,7 @@ def selected() -> dict | None:
 
 def tune(base_dir: Path | None, library_file: str | None, run_name: str | None) -> int:
     import asset
-    manifest = load_manifest()
+    manifest = recipe(load_manifest())
     run = Run(APP_HOME / "tuning" / (run_name or
                                      datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")))
     print(f"kilix-needle tune: {run.root}")

@@ -1,0 +1,395 @@
+{
+ "action": "compound",
+ "templates": [
+  {
+   "text": "open a pane {side} running {program} and then go to tab {num}",
+   "actions": [
+    [
+     "open_pane",
+     {
+      "side": "$side",
+      "program": "$program"
+     }
+    ],
+    [
+     "go_to_tab",
+     {
+      "tab": "$num"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "new tab called {name}, then run {command} in it",
+   "actions": [
+    [
+     "open_tab",
+     {
+      "name": "$name"
+     }
+    ],
+    [
+     "run_in_pane",
+     {
+      "pane": "current",
+      "command": "$command"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "split {side} and type {command} there",
+   "actions": [
+    [
+     "open_pane",
+     {
+      "side": "$side"
+     }
+    ],
+    [
+     "run_in_pane",
+     {
+      "pane": "current",
+      "command": "$command"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "close the {side_adj} pane and arrange the rest {layout}",
+   "actions": [
+    [
+     "close_pane",
+     {
+      "pane": "$side"
+     }
+    ],
+    [
+     "arrange_panes",
+     {
+      "layout": "$layout"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "could you open {program} in a new tab and rename the tab so it's called {name}?",
+   "actions": [
+    [
+     "open_tab",
+     {
+      "program": "$program"
+     }
+    ],
+    [
+     "rename_tab",
+     {
+      "name": "$name"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "hop to the {side_adj} pane and make it {direction}",
+   "actions": [
+    [
+     "go_to_pane",
+     {
+      "pane": "$side"
+     }
+    ],
+    [
+     "resize_pane",
+     {
+      "direction": "$direction"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "kill tab {num} then flip to the next tab",
+   "actions": [
+    [
+     "close_tab",
+     {
+      "tab": "$num"
+     }
+    ],
+    [
+     "go_to_tab",
+     {
+      "tab": "next"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "go ahead and jump to the {ordinal} tab and run {command} here",
+   "actions": [
+    [
+     "go_to_tab",
+     {
+      "tab": "$num"
+     }
+    ],
+    [
+     "run_in_pane",
+     {
+      "pane": "current",
+      "command": "$command"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "gimme a pane {side} called {name} and put everything {layout}",
+   "actions": [
+    [
+     "open_pane",
+     {
+      "side": "$side",
+      "name": "$name"
+     }
+    ],
+    [
+     "arrange_panes",
+     {
+      "layout": "$layout"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "close the {program} pane, then go to the {name} pane",
+   "actions": [
+    [
+     "close_pane",
+     {
+      "pane": "$program"
+     }
+    ],
+    [
+     "go_to_pane",
+     {
+      "pane": "$name"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "open a pane {side} with {program} and make it {direction} by {amount}",
+   "actions": [
+    [
+     "open_pane",
+     {
+      "side": "$side",
+      "program": "$program"
+     }
+    ],
+    [
+     "resize_pane",
+     {
+      "direction": "$direction",
+      "amount": "$amount"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "run {command} in the {side_adj} pane and then close this pane",
+   "actions": [
+    [
+     "run_in_pane",
+     {
+      "pane": "$side",
+      "command": "$command"
+     }
+    ],
+    [
+     "close_pane",
+     {
+      "pane": "current"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "new tab, then split {side} running {program}",
+   "actions": [
+    [
+     "open_tab",
+     {}
+    ],
+    [
+     "open_pane",
+     {
+      "side": "$side",
+      "program": "$program"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "switch to tab {num} and retitle it so it's called {name}",
+   "actions": [
+    [
+     "go_to_tab",
+     {
+      "tab": "$num"
+     }
+    ],
+    [
+     "rename_tab",
+     {
+      "name": "$name"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "would you mind closing the current tab and heading to the last tab",
+   "actions": [
+    [
+     "close_tab",
+     {
+      "tab": "current"
+     }
+    ],
+    [
+     "go_to_tab",
+     {
+      "tab": "last"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "layout {layout}, then focus the {side_adj} pane",
+   "actions": [
+    [
+     "arrange_panes",
+     {
+      "layout": "$layout"
+     }
+    ],
+    [
+     "go_to_pane",
+     {
+      "pane": "$side"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "fire up a tab running {program}, and open a pane {side} in it",
+   "actions": [
+    [
+     "open_tab",
+     {
+      "program": "$program"
+     }
+    ],
+    [
+     "open_pane",
+     {
+      "side": "$side"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "go to the {name} pane and type {command} there",
+   "actions": [
+    [
+     "go_to_pane",
+     {
+      "pane": "$name"
+     }
+    ],
+    [
+     "run_in_pane",
+     {
+      "pane": "current",
+      "command": "$command"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "open a pane {side}, run {command} in it, then arrange the panes {layout}",
+   "actions": [
+    [
+     "open_pane",
+     {
+      "side": "$side"
+     }
+    ],
+    [
+     "run_in_pane",
+     {
+      "pane": "current",
+      "command": "$command"
+     }
+    ],
+    [
+     "arrange_panes",
+     {
+      "layout": "$layout"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "shut the {program} pane and open a new tab called {name}",
+   "actions": [
+    [
+     "close_pane",
+     {
+      "pane": "$program"
+     }
+    ],
+    [
+     "open_tab",
+     {
+      "name": "$name"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "next pane, then make it {direction}",
+   "actions": [
+    [
+     "go_to_pane",
+     {
+      "pane": "next"
+     }
+    ],
+    [
+     "resize_pane",
+     {
+      "direction": "$direction"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "please open {program} in a pane {side} and then go back to the previous tab",
+   "actions": [
+    [
+     "open_pane",
+     {
+      "side": "$side",
+      "program": "$program"
+     }
+    ],
+    [
+     "go_to_tab",
+     {
+      "tab": "previous"
+     }
+    ]
+   ]
+  }
+ ]
+}

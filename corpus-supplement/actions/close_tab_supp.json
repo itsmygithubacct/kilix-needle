@@ -1,0 +1,101 @@
+{
+ "action": "close_tab",
+ "templates": [
+  {
+   "text": "close tab {num}",
+   "args": {
+    "tab": "$num"
+   }
+  },
+  {
+   "text": "kill the {ordinal} tab",
+   "args": {
+    "tab": "$num"
+   }
+  },
+  {
+   "text": "could you please close the {name} tab?",
+   "args": {
+    "tab": "$name"
+   }
+  },
+  {
+   "text": "shut this tab",
+   "args": {
+    "tab": "current"
+   }
+  },
+  {
+   "text": "close the current tab",
+   "args": {
+    "tab": "current"
+   }
+  },
+  {
+   "text": "go ahead and close the last tab",
+   "args": {
+    "tab": "last"
+   }
+  },
+  {
+   "text": "quit tab {num} please",
+   "args": {
+    "tab": "$num"
+   }
+  },
+  {
+   "text": "exit the {ordinal} tab",
+   "args": {
+    "tab": "$num"
+   }
+  },
+  {
+   "text": "close the next tab",
+   "args": {
+    "tab": "next"
+   }
+  },
+  {
+   "text": "kill the previous tab",
+   "args": {
+    "tab": "previous"
+   }
+  },
+  {
+   "text": "close the tab called {name}",
+   "args": {
+    "tab": "$name"
+   }
+  },
+  {
+   "text": "would you mind shutting the {ordinal} tab",
+   "args": {
+    "tab": "$num"
+   }
+  },
+  {
+   "text": "tab {num}, close it",
+   "args": {
+    "tab": "$num"
+   }
+  },
+  {
+   "text": "done with this tab, close it",
+   "args": {
+    "tab": "current"
+   }
+  },
+  {
+   "text": "kill the {name} tab",
+   "args": {
+    "tab": "$name"
+   }
+  },
+  {
+   "text": "shut the {name} tab down",
+   "args": {
+    "tab": "$name"
+   }
+  }
+ ]
+}

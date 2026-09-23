@@ -1,0 +1,117 @@
+{
+ "action": "run_in_pane",
+ "templates": [
+  {
+   "text": "run {command} in the {side_adj} pane",
+   "args": {
+    "pane": "$side",
+    "command": "$command"
+   }
+  },
+  {
+   "text": "type {command} here",
+   "args": {
+    "pane": "current",
+    "command": "$command"
+   }
+  },
+  {
+   "text": "could you please execute {command} in the {program} pane?",
+   "args": {
+    "pane": "$program",
+    "command": "$command"
+   }
+  },
+  {
+   "text": "enter {command} in the {name} pane",
+   "args": {
+    "pane": "$name",
+    "command": "$command"
+   }
+  },
+  {
+   "text": "go ahead and run {command} in this pane",
+   "args": {
+    "pane": "current",
+    "command": "$command"
+   }
+  },
+  {
+   "text": "type {command} into the pane {side}",
+   "args": {
+    "pane": "$side",
+    "command": "$command"
+   }
+  },
+  {
+   "text": "execute {command} in the current pane",
+   "args": {
+    "pane": "current",
+    "command": "$command"
+   }
+  },
+  {
+   "text": "run {command} over in the {name} pane",
+   "args": {
+    "pane": "$name",
+    "command": "$command"
+   }
+  },
+  {
+   "text": "would you mind typing {command} in the {side_adj} pane",
+   "args": {
+    "pane": "$side",
+    "command": "$command"
+   }
+  },
+  {
+   "text": "run {command} here",
+   "args": {
+    "pane": "current",
+    "command": "$command"
+   }
+  },
+  {
+   "text": "in the {program} pane, run {command}",
+   "args": {
+    "pane": "$program",
+    "command": "$command"
+   }
+  },
+  {
+   "text": "enter {command} in the next pane",
+   "args": {
+    "pane": "next",
+    "command": "$command"
+   }
+  },
+  {
+   "text": "execute {command} in the previous pane",
+   "args": {
+    "pane": "previous",
+    "command": "$command"
+   }
+  },
+  {
+   "text": "just type {command} in the pane {side} for me",
+   "args": {
+    "pane": "$side",
+    "command": "$command"
+   }
+  },
+  {
+   "text": "run {command} in the pane called {name}",
+   "args": {
+    "pane": "$name",
+    "command": "$command"
+   }
+  },
+  {
+   "text": "type {command} in the pane running {program}",
+   "args": {
+    "pane": "$program",
+    "command": "$command"
+   }
+  }
+ ]
+}

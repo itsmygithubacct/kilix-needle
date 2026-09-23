@@ -1,0 +1,95 @@
+{
+ "action": "arrange_panes",
+ "templates": [
+  {
+   "text": "arrange the panes {layout}",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "switch the layout to {layout}",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "could you lay out the panes {layout}?",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "layout: {layout}",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "go ahead and rearrange everything {layout}",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "put the panes {layout}",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "I'd like the panes {layout}, please",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "set layout {layout}",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "reorganize my panes {layout}",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "use {layout} for the layout",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "would you mind tiling the panes {layout}",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "change the pane arrangement to {layout}",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "make the layout {layout}",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "panes {layout}",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "let's go with {layout} for these panes",
+   "args": {
+    "layout": "$layout"
+   }
+  }
+ ]
+}

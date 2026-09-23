@@ -1,0 +1,115 @@
+{
+ "action": "open_pane",
+ "templates": [
+  {
+   "text": "gimme a pane {side}",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "could you please open a new pane {side}?",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "split {side}",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "go ahead and spawn a pane {side} running {program}",
+   "args": {
+    "side": "$side",
+    "program": "$program"
+   }
+  },
+  {
+   "text": "open {program} in a pane {side}",
+   "args": {
+    "side": "$side",
+    "program": "$program"
+   }
+  },
+  {
+   "text": "new {side_adj} pane with {program}",
+   "args": {
+    "side": "$side",
+    "program": "$program"
+   }
+  },
+  {
+   "text": "I'd like a fresh pane {side}, and start {program} in it",
+   "args": {
+    "side": "$side",
+    "program": "$program"
+   }
+  },
+  {
+   "text": "fire up a pane {side} called {name}",
+   "args": {
+    "side": "$side",
+    "name": "$name"
+   }
+  },
+  {
+   "text": "pane {side}, named {name}",
+   "args": {
+    "side": "$side",
+    "name": "$name"
+   }
+  },
+  {
+   "text": "would you mind splitting off a pane {side} titled {name} and launching {program} there",
+   "args": {
+    "side": "$side",
+    "name": "$name",
+    "program": "$program"
+   }
+  },
+  {
+   "text": "add a {side_adj} pane",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "can I get another pane {side} please",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "split the window {side} and run {program}",
+   "args": {
+    "side": "$side",
+    "program": "$program"
+   }
+  },
+  {
+   "text": "open a pane",
+   "args": {}
+  },
+  {
+   "text": "new pane running {program}",
+   "args": {
+    "program": "$program"
+   }
+  },
+  {
+   "text": "stick a pane {side} for me",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "let's have a {side_adj} pane called {name}",
+   "args": {
+    "side": "$side",
+    "name": "$name"
+   }
+  }
+ ]
+}

@@ -1,0 +1,173 @@
+{
+ "action": "none",
+ "templates": [
+  {
+   "text": "close {program}",
+   "actions": []
+  },
+  {
+   "text": "kill {program}",
+   "actions": []
+  },
+  {
+   "text": "quit {program}",
+   "actions": []
+  },
+  {
+   "text": "exit {program}",
+   "actions": []
+  },
+  {
+   "text": "can you shut down {program} for me",
+   "actions": []
+  },
+  {
+   "text": "stop {program}",
+   "actions": []
+  },
+  {
+   "text": "kill the {program} process",
+   "actions": []
+  },
+  {
+   "text": "please quit {program}, it's frozen",
+   "actions": []
+  },
+  {
+   "text": "force quit {program}",
+   "actions": []
+  },
+  {
+   "text": "close the file",
+   "actions": []
+  },
+  {
+   "text": "close this file without saving",
+   "actions": []
+  },
+  {
+   "text": "save and quit the file",
+   "actions": []
+  },
+  {
+   "text": "kill process 4242",
+   "actions": []
+  },
+  {
+   "text": "kill all the node processes",
+   "actions": []
+  },
+  {
+   "text": "close the browser",
+   "actions": []
+  },
+  {
+   "text": "shut down the computer",
+   "actions": []
+  },
+  {
+   "text": "reboot the machine",
+   "actions": []
+  },
+  {
+   "text": "log me out",
+   "actions": []
+  },
+  {
+   "text": "what does {command} do?",
+   "actions": []
+  },
+  {
+   "text": "how do I use {command}?",
+   "actions": []
+  },
+  {
+   "text": "is {command} safe to run?",
+   "actions": []
+  },
+  {
+   "text": "explain {command} to me",
+   "actions": []
+  },
+  {
+   "text": "what's the difference between {program} and top?",
+   "actions": []
+  },
+  {
+   "text": "how do I exit {program}?",
+   "actions": []
+  },
+  {
+   "text": "why is {program} so slow",
+   "actions": []
+  },
+  {
+   "text": "what's the weather today",
+   "actions": []
+  },
+  {
+   "text": "tell me a joke",
+   "actions": []
+  },
+  {
+   "text": "who won the game last night",
+   "actions": []
+  },
+  {
+   "text": "write me a poem about terminals",
+   "actions": []
+  },
+  {
+   "text": "what time is it",
+   "actions": []
+  },
+  {
+   "text": "how many tabs do I have open?",
+   "actions": []
+  },
+  {
+   "text": "which pane am I in?",
+   "actions": []
+  },
+  {
+   "text": "what's in the {name} tab?",
+   "actions": []
+  },
+  {
+   "text": "thanks, that's all",
+   "actions": []
+  },
+  {
+   "text": "never mind",
+   "actions": []
+  },
+  {
+   "text": "hmm",
+   "actions": []
+  },
+  {
+   "text": "undo that",
+   "actions": []
+  },
+  {
+   "text": "send an email to my boss",
+   "actions": []
+  },
+  {
+   "text": "delete the {name} folder",
+   "actions": []
+  },
+  {
+   "text": "close the door",
+   "actions": []
+  },
+  {
+   "text": "kill the lights",
+   "actions": []
+  },
+  {
+   "text": "quit smoking tips",
+   "actions": []
+  }
+ ]
+}

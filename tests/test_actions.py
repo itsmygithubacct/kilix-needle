@@ -607,3 +607,64 @@ class GuardsWithoutOtherCover(unittest.TestCase):
         self.assertIsInstance(r, Refusal)
         [r] = interpret("open firefox in a new pane", [call("open_pane", program="firefox")])
         self.assertIsInstance(r, Action)
+
+
+class TemplateDropsRefused(unittest.TestCase):
+    """Legitimate requests the checks refused, found as dropped training examples
+    (blind supplement templates); each is paired with what must stay refused."""
+
+    def one(self, prompt, tool, **arguments):
+        [r] = interpret(prompt, [call(tool, **arguments)])
+        return r
+
+    def test_it_after_a_bare_reference(self):
+        self.assertEqual(self.one("tab five, close it", "close_tab", tab="5"),
+                         Action("close_tab", {"tab": "5"}))
+        self.assertEqual(self.one("done with this tab, close it", "close_tab", tab="current"),
+                         Action("close_tab", {"tab": "current"}))
+        # "it" is vim, not the tab
+        self.assertIsInstance(self.one("tab 2 has vim, close it", "close_tab", tab="2"), Refusal)
+        self.assertIsInstance(self.one("tab five, close it", "close_tab", tab="4"), Refusal)
+
+    def test_upward_is_height(self):
+        self.assertEqual(self.one("extend this pane upward by 22", "resize_pane",
+                                  direction="taller", amount=22),
+                         Action("resize_pane", {"direction": "taller", "amount": 22}))
+        self.assertIsInstance(self.one("extend this pane upward by 22", "resize_pane",
+                                       direction="wider", amount=22), Refusal)
+        self.assertIsInstance(self.one("stretch this pane downwards", "resize_pane",
+                                       direction="wider"), Refusal)
+
+    def test_a_location_said_before_the_command(self):
+        self.assertEqual(self.one("in the vim pane, run uptime", "run_in_pane",
+                                  pane="vim", command="uptime"),
+                         Action("run_in_pane", {"pane": "name:vim", "command": "uptime"}))
+        self.assertIsInstance(self.one("in the vim pane, run uptime", "run_in_pane",
+                                       pane="left", command="uptime"), Refusal)
+        # the location belongs to the clause right after it only
+        self.assertIsInstance(self.one("in the vim pane, go left, then run uptime",
+                                       "run_in_pane", pane="vim", command="uptime"), Refusal)
+
+    def test_over_in_is_a_location(self):
+        self.assertEqual(self.one("run pytest over in the db pane", "run_in_pane",
+                                  pane="db", command="pytest"),
+                         Action("run_in_pane", {"pane": "name:db", "command": "pytest"}))
+        self.assertIsInstance(self.one("run pytest over in the db pane", "run_in_pane",
+                                       pane="db", command="pytest over"), Refusal)
+
+    def test_there_is_the_pane_just_gone_to(self):
+        results = interpret("go to the chat pane and type clear there",
+                            [call("go_to_pane", pane="chat"),
+                             call("run_in_pane", pane="chat", command="clear")])
+        self.assertEqual(results, [Action("go_to_pane", {"pane": "name:chat"}),
+                                   Action("run_in_pane", {"pane": "name:chat", "command": "clear"})])
+        self.assertIsInstance(self.one("go to the chat pane and type clear there", "run_in_pane",
+                                       pane="logs", command="clear"), Refusal)
+
+    def test_movement_gerunds_and_a_polite_bare_reference(self):
+        self.assertEqual(self.one("would you mind bringing up the third tab", "go_to_tab", tab="3"),
+                         Action("go_to_tab", {"tab": "3"}))
+        self.assertEqual(self.one("previous tab please", "go_to_tab", tab="previous"),
+                         Action("go_to_tab", {"tab": "previous"}))
+        self.assertIsInstance(self.one("I love the logs tab please", "go_to_tab", tab="logs"),
+                              Refusal)

@@ -1,0 +1,101 @@
+{
+ "action": "close_pane",
+ "templates": [
+  {
+   "text": "close the {side_adj} pane",
+   "args": {
+    "pane": "$side"
+   }
+  },
+  {
+   "text": "kill the {program} pane",
+   "args": {
+    "pane": "$program"
+   }
+  },
+  {
+   "text": "could you please close the pane {side}?",
+   "args": {
+    "pane": "$side"
+   }
+  },
+  {
+   "text": "shut the {name} pane",
+   "args": {
+    "pane": "$name"
+   }
+  },
+  {
+   "text": "close this pane",
+   "args": {
+    "pane": "current"
+   }
+  },
+  {
+   "text": "kill this pane",
+   "args": {
+    "pane": "current"
+   }
+  },
+  {
+   "text": "go ahead and close the current pane",
+   "args": {
+    "pane": "current"
+   }
+  },
+  {
+   "text": "get rid of... actually just close the {side_adj} pane",
+   "args": {
+    "pane": "$side"
+   }
+  },
+  {
+   "text": "exit the {program} pane",
+   "args": {
+    "pane": "$program"
+   }
+  },
+  {
+   "text": "quit the pane called {name}",
+   "args": {
+    "pane": "$name"
+   }
+  },
+  {
+   "text": "close the next pane",
+   "args": {
+    "pane": "next"
+   }
+  },
+  {
+   "text": "shut the previous pane please",
+   "args": {
+    "pane": "previous"
+   }
+  },
+  {
+   "text": "would you mind closing the pane running {program}",
+   "args": {
+    "pane": "$program"
+   }
+  },
+  {
+   "text": "close pane {side}",
+   "args": {
+    "pane": "$side"
+   }
+  },
+  {
+   "text": "kill off the {name} pane, don't need it",
+   "args": {
+    "pane": "$name"
+   }
+  },
+  {
+   "text": "I'm done here, close this pane",
+   "args": {
+    "pane": "current"
+   }
+  }
+ ]
+}

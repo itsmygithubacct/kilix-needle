@@ -1,0 +1,93 @@
+{
+ "action": "open_tab",
+ "templates": [
+  {
+   "text": "new tab",
+   "args": {}
+  },
+  {
+   "text": "open a new tab please",
+   "args": {}
+  },
+  {
+   "text": "gimme another tab",
+   "args": {}
+  },
+  {
+   "text": "could you open a tab running {program}?",
+   "args": {
+    "program": "$program"
+   }
+  },
+  {
+   "text": "open {program} in a new tab",
+   "args": {
+    "program": "$program"
+   }
+  },
+  {
+   "text": "spawn a tab with {program}",
+   "args": {
+    "program": "$program"
+   }
+  },
+  {
+   "text": "fire up a fresh tab called {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "new tab named {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "go ahead and open a tab titled {name} and launch {program} in it",
+   "args": {
+    "name": "$name",
+    "program": "$program"
+   }
+  },
+  {
+   "text": "I need a new tab to start {program}",
+   "args": {
+    "program": "$program"
+   }
+  },
+  {
+   "text": "tab with {program}",
+   "args": {
+    "program": "$program"
+   }
+  },
+  {
+   "text": "would you mind opening one more tab",
+   "args": {}
+  },
+  {
+   "text": "make a new tab called {name} running {program}",
+   "args": {
+    "name": "$name",
+    "program": "$program"
+   }
+  },
+  {
+   "text": "open {program} in a tab of its own",
+   "args": {
+    "program": "$program"
+   }
+  },
+  {
+   "text": "add a tab",
+   "args": {}
+  },
+  {
+   "text": "pop open a tab for me named {name}",
+   "args": {
+    "name": "$name"
+   }
+  }
+ ]
+}

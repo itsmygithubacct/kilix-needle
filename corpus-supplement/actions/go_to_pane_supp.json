@@ -1,0 +1,101 @@
+{
+ "action": "go_to_pane",
+ "templates": [
+  {
+   "text": "go to the {side_adj} pane",
+   "args": {
+    "pane": "$side"
+   }
+  },
+  {
+   "text": "hop to the pane {side}",
+   "args": {
+    "pane": "$side"
+   }
+  },
+  {
+   "text": "jump over to the {program} pane",
+   "args": {
+    "pane": "$program"
+   }
+  },
+  {
+   "text": "could you switch me to the {name} pane?",
+   "args": {
+    "pane": "$name"
+   }
+  },
+  {
+   "text": "next pane",
+   "args": {
+    "pane": "next"
+   }
+  },
+  {
+   "text": "previous pane",
+   "args": {
+    "pane": "previous"
+   }
+  },
+  {
+   "text": "focus the {side_adj} pane",
+   "args": {
+    "pane": "$side"
+   }
+  },
+  {
+   "text": "flip over to the pane running {program}",
+   "args": {
+    "pane": "$program"
+   }
+  },
+  {
+   "text": "go ahead and move focus to the pane called {name}",
+   "args": {
+    "pane": "$name"
+   }
+  },
+  {
+   "text": "take me to the pane {side}",
+   "args": {
+    "pane": "$side"
+   }
+  },
+  {
+   "text": "switch to the next pane please",
+   "args": {
+    "pane": "next"
+   }
+  },
+  {
+   "text": "back to the previous pane",
+   "args": {
+    "pane": "previous"
+   }
+  },
+  {
+   "text": "select the {program} pane",
+   "args": {
+    "pane": "$program"
+   }
+  },
+  {
+   "text": "would you mind focusing the {side_adj} pane",
+   "args": {
+    "pane": "$side"
+   }
+  },
+  {
+   "text": "over to the {name} pane",
+   "args": {
+    "pane": "$name"
+   }
+  },
+  {
+   "text": "cycle to the next pane",
+   "args": {
+    "pane": "next"
+   }
+  }
+ ]
+}

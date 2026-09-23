@@ -1,0 +1,50 @@
+{
+ "action": "compound",
+ "note": "tall/fat layout versus taller/wider resize.",
+ "templates": [
+  {
+   "text": "use the tall layout",
+   "actions": [
+    [
+     "arrange_panes",
+     {
+      "layout": "tall"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "switch to the tall layout",
+   "actions": [
+    [
+     "arrange_panes",
+     {
+      "layout": "tall"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "make the layout tall",
+   "actions": [
+    [
+     "arrange_panes",
+     {
+      "layout": "tall"
+     }
+    ]
+   ]
+  },
+  {
+   "text": "use the fat layout",
+   "actions": [
+    [
+     "arrange_panes",
+     {
+      "layout": "fat"
+     }
+    ]
+   ]
+  }
+ ]
+}

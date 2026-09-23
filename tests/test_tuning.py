@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -185,3 +186,103 @@ class DomainPackMigration(unittest.TestCase):
                 mock.patch.object(tuning, "load_generator", return_value=fake):
             stats = tuning.build_data(Path(tmp), manifest, Path(tmp) / "train.jsonl")
         self.assertEqual((stats["kept"], stats["unsupported_dropped"]), (0, 1))
+
+
+class Recipe(unittest.TestCase):
+    def test_the_recipe_trains_quantisation_aware_and_excludes_every_eval_set(self):
+        pack = tuning.load_manifest()
+        manifest = tuning.recipe(pack)
+        self.assertIs(manifest["train"]["qat"], True)
+        self.assertEqual(manifest["train"]["epochs"], 4)
+        self.assertEqual(manifest["gates"]["heldout"], "evals/heldout-v8.jsonl")
+        evals = {str(p.relative_to(tuning.REPO)) for p in (tuning.REPO / "evals").glob("*.jsonl")}
+        self.assertIn("evals/heldout-v8.jsonl", evals)
+        self.assertLessEqual(evals, set(manifest["data"]["exclude"]))
+        self.assertIn(manifest["gates"]["heldout"], manifest["data"]["exclude"])
+        # the pack's own manifest is not changed
+        self.assertNotIn("qat", pack["train"])
+
+    def test_a_share_cap_subsamples_only_the_large_action(self):
+        def row(name, i):
+            args = {"direction": "wider"} if name == "resize_pane" else {"layout": "grid"}
+            return {"query": f"{name} {i}", "answers": toolset.from_actions([[name, args]])}
+        rows = [row("resize_pane", i) for i in range(12)] + [row("arrange_panes", i) for i in range(5)]
+        kept, capped = tuning.cap_share(rows, 0.3, 0)
+        self.assertEqual(capped, {"resize_pane": [12, 5]})  # int(0.3 * 17)
+        shapes = [tuning._shape(r["answers"]) for r in kept]
+        self.assertEqual((shapes.count("resize_pane"), shapes.count("arrange_panes")), (5, 5))
+        self.assertEqual(tuning.cap_share(rows, 0.3, 0), (kept, capped))
+
+    def test_a_supplement_never_replaces_a_pack_template(self):
+        with tempfile.TemporaryDirectory(prefix="kn-") as tmp:
+            pack, extra = Path(tmp) / "pack", Path(tmp) / "extra"
+            (pack / "corpus/actions").mkdir(parents=True)
+            (extra / "actions").mkdir(parents=True)
+            (pack / "corpus/actions/open_pane.json").write_text("{}")
+            (extra / "actions/open_pane_supp.json").write_text("{}")
+            added = tuning.stage_library(pack, [extra], Path(tmp) / "staged")
+            self.assertEqual(added, ["open_pane_supp.json"])
+            self.assertTrue((Path(tmp) / "staged/corpus/actions/open_pane.json").exists())
+            (extra / "actions/open_pane.json").write_text("{}")
+            with self.assertRaises(tuning.TuneError):
+                tuning.stage_library(pack, [extra], Path(tmp) / "staged")
+
+    def test_the_recipe_data_uses_the_supplement_and_the_cap(self):
+        manifest = tuning.recipe(tuning.load_manifest())
+        with tempfile.TemporaryDirectory(prefix="kn-") as tmp:
+            stats = tuning.build_data(tuning.LIBRARY, manifest, Path(tmp) / "train.jsonl")
+            rows = [json.loads(line) for line in (Path(tmp) / "train.jsonl").read_text().splitlines()]
+        self.assertIn("resize_supp2.json", stats["supplement_files"])
+        self.assertEqual(stats["kept"], len(rows))
+        self.assertIn("resize_pane", stats["capped"])
+        shares = {}
+        for r in rows:
+            shares[tuning._shape(r["answers"])] = shares.get(tuning._shape(r["answers"]), 0) + 1
+        self.assertLessEqual(max(shares.values()), stats["capped"]["resize_pane"][1])
+
+
+class QuantisationAwareTraining(unittest.TestCase):
+    """The training script, run against a stand-in for upstream's package."""
+
+    FAKE = {
+        "needle/__init__.py": "",
+        "needle/model/__init__.py": "",
+        "needle/model/run.py":
+            "class C: weight_bits = 'embedding=4,default=2'\n"
+            "def load_checkpoint(path): return None, C()\n",
+        "needle/model/quantize.py":
+            "def parse_bits_map(spec): return {'embedding': 4}, 2\n"
+            "def cq_ste_mixed_params(p, bits, default): return ('quantised', p, bits, default)\n",
+        "needle/model/finetune.py":
+            "import json\n"
+            "def merge_lora(params, lora, scale): return ('merged', params)\n"
+            "def finetune_local(a):\n"
+            "    import needle.model.finetune as f\n"
+            "    json.dump({'merged': repr(f.merge_lora('P', 'L', 2.0)), 'epochs': a.epochs},"
+            " open(a.out, 'w'))\n",
+    }
+
+    def run_script(self, qat):
+        manifest = tuning.recipe(tuning.load_manifest())
+        train = dict(manifest["train"], qat=qat)
+        with tempfile.TemporaryDirectory(prefix="kn-") as tmp:
+            for rel, text in self.FAKE.items():
+                (Path(tmp) / rel).parent.mkdir(parents=True, exist_ok=True)
+                (Path(tmp) / rel).write_text(text)
+            out = Path(tmp) / "out.json"
+            script = tuning._TRAIN.format(data="d.jsonl", out_dir=tmp, lora=str(out), **train)
+            done = subprocess.run([sys.executable, "-B", "-c", script], cwd=tmp,
+                                  capture_output=True, text=True)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            return json.loads(out.read_text())
+
+    def test_training_goes_through_the_checkpoints_quantiser(self):
+        result = self.run_script(True)
+        self.assertEqual(result["merged"], "('quantised', ('merged', 'P'), {'embedding': 4}, 2)")
+        self.assertEqual(result["epochs"], 4)
+
+    def test_float_training_is_the_plain_merge(self):
+        self.assertEqual(self.run_script(False)["merged"], "('merged', 'P')")
+
+    def test_export_is_never_patched(self):
+        self.assertNotIn("cq_ste", tuning._EXPORT)

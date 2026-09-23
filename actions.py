@@ -191,6 +191,8 @@ for _n in range(10, 51):
 
 _MOVE = re.compile(r"\b(?:go|goes|going|gone|switch|switching|focus|focusing|jump|move|"
                    r"hop|flip|show|select|head|take|bring|back|return|visit|cycle|"
+                   r"moving|jumping|hopping|flipping|showing|selecting|heading|taking|"
+                   r"bringing|returning|visiting|cycling|"
                    r"activate|change to|over to|into)\b", re.I)
 _BARE_REFERENCE = re.compile(r"^\s*(?:the\s+)?(?:(?:next|previous|prev|last|first|"
                              r"left|right|upper|lower|top|bottom)\s+(?:tab|pane|split|window)|"
@@ -198,13 +200,15 @@ _BARE_REFERENCE = re.compile(r"^\s*(?:the\s+)?(?:(?:next|previous|prev|last|firs
 
 
 _DIRECTION_WORDS = {
-    "wider": r"wider|widen|widens|broaden|broader|bigger|larger|expand|stretch|grow|more width",
+    "wider": r"wider|widen|widens|broaden|broader|bigger|larger|expand|stretch|grow|extend|"
+             r"more width",
     "narrower": r"narrower|narrow|thinner|slimmer|shrink|squeeze|smaller|less width",
-    "taller": r"taller|higher|heighten|bigger|larger|grow|stretch|expand|more height",
+    "taller": r"taller|higher|heighten|bigger|larger|grow|stretch|expand|extend|more height",
     "shorter": r"shorter|lower|flatten|squash|shrink|smaller|less height",
 }
 _WIDTH = re.compile(r"\b(?:width|wide|horizontal\w*|sideways|side to side)\b", re.I)
-_HEIGHT = re.compile(r"\b(?:height|tall|high|vertical\w*|up and down)\b", re.I)
+_HEIGHT = re.compile(r"\b(?:height|tall|high|vertical\w*|up and down|upwards?|downwards?)\b",
+                     re.I)
 
 
 def _says_direction(direction: str, prompt: str) -> bool:
@@ -228,7 +232,8 @@ def _moves(prompt: str) -> bool:
     """A go-to needs a movement verb, or a bare reference such as "next tab".
     Measured (tuned model): "write a haiku about terminals" -> go to the tab
     named terminals."""
-    return bool(_MOVE.search(prompt) or any(_BARE_REFERENCE.match(c) for c in _clauses(prompt)))
+    return bool(_MOVE.search(prompt) or any(_BARE_REFERENCE.match(_POLITE_SUFFIX.sub("", c))
+                                            for c in _clauses(prompt)))
 
 
 def _says_number(n: int, prompt: str) -> bool:
@@ -412,7 +417,7 @@ def _bound_to_unit(mentions: list[str], text: str, unit_words: list[str]) -> boo
     return False
 
 
-_LOCATION = re.compile(r"(?:\s+(?:in|into|on|at)\s+(?:the\s+)?(?:[\w.+-]+\s+){0,2}"
+_LOCATION = re.compile(r"(?:(?:\s+over)?\s+(?:in|into|on|at)\s+(?:the\s+)?(?:[\w.+-]+\s+){0,2}"
                        r"(?:pane|panes|window|split|tab)\b.*"
                        r"|\s+(?:here|there|in\s+here|in\s+there|in\s+it))$",
                        re.IGNORECASE)
@@ -429,6 +434,45 @@ def _clauses(prompt: str) -> list[str]:
     starts = [0] + [m.end() for m in bounds]
     ends = [m.start() for m in bounds] + [len(prompt)]
     return [prompt[a:b] for a, b in zip(starts, ends)]
+
+
+# "in the vim pane, run make": a location said before the command's clause.
+_FRONTED = re.compile(r"^\s*(?:over\s+)?(?:in|into|on|at)\s+(?:the\s+)?(?:[\w.+-]+\s+){0,2}"
+                      r"(?:pane|window|split)\s*$", re.I)
+# "go to the chat pane and type clear there": "there" is the pane just gone to.
+_GONE_TO = re.compile(r"^\s*(?:go|switch|jump|move|head|hop)\s+(?:over\s+)?to\s+"
+                      r"((?:the\s+)?(?:[\w.+-]+\s+){0,2}(?:pane|window|split))\s*$", re.I)
+# "tab five, close it": "it" is a bare reference in the clause before.
+_DONE_WITH = re.compile(r"^\s*(?:i'?m\s+|i am\s+)?(?:done|finished)\s+with\s+", re.I)
+
+
+def _run_units(prompt: str) -> list[str]:
+    """The clauses, plus each run clause with a location its neighbour gives it."""
+    clauses = _clauses(prompt)
+    units = list(clauses)
+    for before, clause in zip(clauses, clauses[1:]):
+        if _FRONTED.match(before):
+            units.append(f"{clause.rstrip(' .!?')} {before.strip()}")
+        gone = _GONE_TO.match(before)
+        if gone:
+            there = re.sub(r"\b(?:in\s+)?there(?=[\s.!?]*$)", f"in {gone[1]}", clause,
+                           count=1, flags=re.I)
+            if there != clause:
+                units.append(there)
+    return units
+
+
+def _resolve_it(verb: re.Pattern, clauses: list[str]) -> list[str]:
+    """ "tab five, close it" -> "close tab five": only when the clause before is
+    a bare reference, so "tab 2 has vim, close it" (vim) stays unsupported."""
+    resolved = list(clauses)
+    for i in range(1, len(clauses)):
+        said = re.fullmatch(rf"\s*({verb.pattern})\s+it[\s.!?]*(?:please[\s.!?]*)?",
+                            clauses[i], re.I)
+        antecedent = _DONE_WITH.sub("", clauses[i - 1]).strip()
+        if said and _BARE_REFERENCE.match(antecedent):
+            resolved[i] = f"{said[1]} {antecedent}"
+    return resolved
 
 
 def _negated(prefix: str) -> bool:
@@ -564,7 +608,8 @@ def _clause_supports(verb: re.Pattern, target: str, prompt: str, *, unit: str,
     the command text: "run htop" does not name a pane called htop (measured:
     run_in_pane(pane=htop, command=htop)).
     """
-    for clause in _clauses(prompt):
+    clauses = _clauses(prompt) if typed else _resolve_it(verb, _clauses(prompt))
+    for clause in clauses:
         if unit == "tab" and not _TAB_WORD.search(clause):
             continue
         if unit == "pane" and _TAB_WORD.search(clause) and not _PANE_WORD.search(clause):
@@ -812,7 +857,7 @@ def _admit(name: str, args: dict, prompt: str) -> Action | Refusal:
             # supported somewhere, but not together.
             if not any(command in _command_spans(clause)
                        and _clause_supports(_RUN_VERB, target, clause, unit="pane", typed=command)
-                       for clause in _clauses(prompt)):
+                       for clause in _run_units(prompt)):
                 return Refusal(name, "no part of the request asks to type that into that pane")
         elif name == "close_pane" and not _clause_supports(_CLOSE_VERB, target, prompt,
                                                            unit="pane"):

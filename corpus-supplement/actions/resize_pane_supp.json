@@ -1,0 +1,101 @@
+{
+ "action": "resize_pane",
+ "templates": [
+  {
+   "text": "make this pane {direction}",
+   "args": {
+    "direction": "$direction"
+   }
+  },
+  {
+   "text": "make the pane {direction} by {amount}",
+   "args": {
+    "direction": "$direction",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "could you make the current pane {direction}?",
+   "args": {
+    "direction": "$direction"
+   }
+  },
+  {
+   "text": "bump the pane {direction} by {amount} cells",
+   "args": {
+    "direction": "$direction",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "{direction} please",
+   "args": {
+    "direction": "$direction"
+   }
+  },
+  {
+   "text": "resize this pane {direction}",
+   "args": {
+    "direction": "$direction"
+   }
+  },
+  {
+   "text": "go ahead and make it {direction} by {amount}",
+   "args": {
+    "direction": "$direction",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "pane {direction}, {amount} cells",
+   "args": {
+    "direction": "$direction",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "I'd like this pane a little {direction}",
+   "args": {
+    "direction": "$direction"
+   }
+  },
+  {
+   "text": "nudge the pane {direction}",
+   "args": {
+    "direction": "$direction"
+   }
+  },
+  {
+   "text": "would you mind resizing the pane {direction} by {amount} cells",
+   "args": {
+    "direction": "$direction",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "stretch this pane {direction}",
+   "args": {
+    "direction": "$direction"
+   }
+  },
+  {
+   "text": "can the pane be {direction}",
+   "args": {
+    "direction": "$direction"
+   }
+  },
+  {
+   "text": "{amount} cells {direction}",
+   "args": {
+    "direction": "$direction",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "resize: {direction}",
+   "args": {
+    "direction": "$direction"
+   }
+  }
+ ]
+}

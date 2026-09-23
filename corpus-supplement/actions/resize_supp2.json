@@ -1,0 +1,616 @@
+{
+ "action": "resize_pane",
+ "note": "Written from resize failures on spent eval sets (dev, test, v2-v4); v5 not read.",
+ "templates": [
+  {
+   "text": "widen this pane",
+   "args": {
+    "direction": "wider"
+   }
+  },
+  {
+   "text": "widen this pane by {amount}",
+   "args": {
+    "direction": "wider",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "widen this pane by {num}",
+   "args": {
+    "direction": "wider",
+    "amount": "$num"
+   }
+  },
+  {
+   "text": "widen the pane",
+   "args": {
+    "direction": "wider"
+   }
+  },
+  {
+   "text": "widen the pane by {amount}",
+   "args": {
+    "direction": "wider",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "widen the pane by {num}",
+   "args": {
+    "direction": "wider",
+    "amount": "$num"
+   }
+  },
+  {
+   "text": "make this pane wider",
+   "args": {
+    "direction": "wider"
+   }
+  },
+  {
+   "text": "make this pane wider by {amount}",
+   "args": {
+    "direction": "wider",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "make this pane wider by {num}",
+   "args": {
+    "direction": "wider",
+    "amount": "$num"
+   }
+  },
+  {
+   "text": "grow the pane wider",
+   "args": {
+    "direction": "wider"
+   }
+  },
+  {
+   "text": "grow the pane wider by {amount}",
+   "args": {
+    "direction": "wider",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "grow the pane wider by {num}",
+   "args": {
+    "direction": "wider",
+    "amount": "$num"
+   }
+  },
+  {
+   "text": "stretch this pane sideways",
+   "args": {
+    "direction": "wider"
+   }
+  },
+  {
+   "text": "stretch this pane sideways by {amount}",
+   "args": {
+    "direction": "wider",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "stretch this pane sideways by {num}",
+   "args": {
+    "direction": "wider",
+    "amount": "$num"
+   }
+  },
+  {
+   "text": "give this pane more width",
+   "args": {
+    "direction": "wider"
+   }
+  },
+  {
+   "text": "give this pane more width by {amount}",
+   "args": {
+    "direction": "wider",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "give this pane more width by {num}",
+   "args": {
+    "direction": "wider",
+    "amount": "$num"
+   }
+  },
+  {
+   "text": "broaden this split",
+   "args": {
+    "direction": "wider"
+   }
+  },
+  {
+   "text": "broaden this split by {amount}",
+   "args": {
+    "direction": "wider",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "broaden this split by {num}",
+   "args": {
+    "direction": "wider",
+    "amount": "$num"
+   }
+  },
+  {
+   "text": "expand this pane horizontally",
+   "args": {
+    "direction": "wider"
+   }
+  },
+  {
+   "text": "expand this pane horizontally by {amount}",
+   "args": {
+    "direction": "wider",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "expand this pane horizontally by {num}",
+   "args": {
+    "direction": "wider",
+    "amount": "$num"
+   }
+  },
+  {
+   "text": "shrink this pane's width",
+   "args": {
+    "direction": "narrower"
+   }
+  },
+  {
+   "text": "shrink this pane's width by {amount}",
+   "args": {
+    "direction": "narrower",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "shrink this pane's width by {num}",
+   "args": {
+    "direction": "narrower",
+    "amount": "$num"
+   }
+  },
+  {
+   "text": "make this pane narrower",
+   "args": {
+    "direction": "narrower"
+   }
+  },
+  {
+   "text": "make this pane narrower by {amount}",
+   "args": {
+    "direction": "narrower",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "make this pane narrower by {num}",
+   "args": {
+    "direction": "narrower",
+    "amount": "$num"
+   }
+  },
+  {
+   "text": "squeeze this pane",
+   "args": {
+    "direction": "narrower"
+   }
+  },
+  {
+   "text": "squeeze this pane by {amount}",
+   "args": {
+    "direction": "narrower",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "squeeze this pane by {num}",
+   "args": {
+    "direction": "narrower",
+    "amount": "$num"
+   }
+  },
+  {
+   "text": "narrow the pane",
+   "args": {
+    "direction": "narrower"
+   }
+  },
+  {
+   "text": "narrow the pane by {amount}",
+   "args": {
+    "direction": "narrower",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "narrow the pane by {num}",
+   "args": {
+    "direction": "narrower",
+    "amount": "$num"
+   }
+  },
+  {
+   "text": "give this pane less width",
+   "args": {
+    "direction": "narrower"
+   }
+  },
+  {
+   "text": "give this pane less width by {amount}",
+   "args": {
+    "direction": "narrower",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "give this pane less width by {num}",
+   "args": {
+    "direction": "narrower",
+    "amount": "$num"
+   }
+  },
+  {
+   "text": "shrink the split width-wise",
+   "args": {
+    "direction": "narrower"
+   }
+  },
+  {
+   "text": "shrink the split width-wise by {amount}",
+   "args": {
+    "direction": "narrower",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "shrink the split width-wise by {num}",
+   "args": {
+    "direction": "narrower",
+    "amount": "$num"
+   }
+  },
+  {
+   "text": "make the pane thinner",
+   "args": {
+    "direction": "narrower"
+   }
+  },
+  {
+   "text": "make the pane thinner by {amount}",
+   "args": {
+    "direction": "narrower",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "make the pane thinner by {num}",
+   "args": {
+    "direction": "narrower",
+    "amount": "$num"
+   }
+  },
+  {
+   "text": "make this pane taller",
+   "args": {
+    "direction": "taller"
+   }
+  },
+  {
+   "text": "make this pane taller by {amount}",
+   "args": {
+    "direction": "taller",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "make this pane taller by {num}",
+   "args": {
+    "direction": "taller",
+    "amount": "$num"
+   }
+  },
+  {
+   "text": "grow the pane taller",
+   "args": {
+    "direction": "taller"
+   }
+  },
+  {
+   "text": "grow the pane taller by {amount}",
+   "args": {
+    "direction": "taller",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "grow the pane taller by {num}",
+   "args": {
+    "direction": "taller",
+    "amount": "$num"
+   }
+  },
+  {
+   "text": "give this pane more height",
+   "args": {
+    "direction": "taller"
+   }
+  },
+  {
+   "text": "give this pane more height by {amount}",
+   "args": {
+    "direction": "taller",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "give this pane more height by {num}",
+   "args": {
+    "direction": "taller",
+    "amount": "$num"
+   }
+  },
+  {
+   "text": "stretch this pane vertically",
+   "args": {
+    "direction": "taller"
+   }
+  },
+  {
+   "text": "stretch this pane vertically by {amount}",
+   "args": {
+    "direction": "taller",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "stretch this pane vertically by {num}",
+   "args": {
+    "direction": "taller",
+    "amount": "$num"
+   }
+  },
+  {
+   "text": "heighten the split",
+   "args": {
+    "direction": "taller"
+   }
+  },
+  {
+   "text": "heighten the split by {amount}",
+   "args": {
+    "direction": "taller",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "heighten the split by {num}",
+   "args": {
+    "direction": "taller",
+    "amount": "$num"
+   }
+  },
+  {
+   "text": "extend this pane upward",
+   "args": {
+    "direction": "taller"
+   }
+  },
+  {
+   "text": "extend this pane upward by {amount}",
+   "args": {
+    "direction": "taller",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "extend this pane upward by {num}",
+   "args": {
+    "direction": "taller",
+    "amount": "$num"
+   }
+  },
+  {
+   "text": "shrink this pane's height",
+   "args": {
+    "direction": "shorter"
+   }
+  },
+  {
+   "text": "shrink this pane's height by {amount}",
+   "args": {
+    "direction": "shorter",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "shrink this pane's height by {num}",
+   "args": {
+    "direction": "shorter",
+    "amount": "$num"
+   }
+  },
+  {
+   "text": "make this pane shorter",
+   "args": {
+    "direction": "shorter"
+   }
+  },
+  {
+   "text": "make this pane shorter by {amount}",
+   "args": {
+    "direction": "shorter",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "make this pane shorter by {num}",
+   "args": {
+    "direction": "shorter",
+    "amount": "$num"
+   }
+  },
+  {
+   "text": "give this pane less height",
+   "args": {
+    "direction": "shorter"
+   }
+  },
+  {
+   "text": "give this pane less height by {amount}",
+   "args": {
+    "direction": "shorter",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "give this pane less height by {num}",
+   "args": {
+    "direction": "shorter",
+    "amount": "$num"
+   }
+  },
+  {
+   "text": "squash the pane vertically",
+   "args": {
+    "direction": "shorter"
+   }
+  },
+  {
+   "text": "squash the pane vertically by {amount}",
+   "args": {
+    "direction": "shorter",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "squash the pane vertically by {num}",
+   "args": {
+    "direction": "shorter",
+    "amount": "$num"
+   }
+  },
+  {
+   "text": "flatten this split",
+   "args": {
+    "direction": "shorter"
+   }
+  },
+  {
+   "text": "flatten this split by {amount}",
+   "args": {
+    "direction": "shorter",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "flatten this split by {num}",
+   "args": {
+    "direction": "shorter",
+    "amount": "$num"
+   }
+  },
+  {
+   "text": "shrink the split's height",
+   "args": {
+    "direction": "shorter"
+   }
+  },
+  {
+   "text": "shrink the split's height by {amount}",
+   "args": {
+    "direction": "shorter",
+    "amount": "$amount"
+   }
+  },
+  {
+   "text": "shrink the split's height by {num}",
+   "args": {
+    "direction": "shorter",
+    "amount": "$num"
+   }
+  },
+  {
+   "text": "make this pane wider by ten",
+   "args": {
+    "direction": "wider",
+    "amount": 10
+   }
+  },
+  {
+   "text": "shrink this pane's height by ten",
+   "args": {
+    "direction": "shorter",
+    "amount": 10
+   }
+  },
+  {
+   "text": "make this pane wider by twenty",
+   "args": {
+    "direction": "wider",
+    "amount": 20
+   }
+  },
+  {
+   "text": "shrink this pane's height by twenty",
+   "args": {
+    "direction": "shorter",
+    "amount": 20
+   }
+  },
+  {
+   "text": "make this pane wider by fifteen",
+   "args": {
+    "direction": "wider",
+    "amount": 15
+   }
+  },
+  {
+   "text": "shrink this pane's height by fifteen",
+   "args": {
+    "direction": "shorter",
+    "amount": 15
+   }
+  },
+  {
+   "text": "make this pane wider by thirty",
+   "args": {
+    "direction": "wider",
+    "amount": 30
+   }
+  },
+  {
+   "text": "shrink this pane's height by thirty",
+   "args": {
+    "direction": "shorter",
+    "amount": 30
+   }
+  },
+  {
+   "text": "make this pane wider by twelve",
+   "args": {
+    "direction": "wider",
+    "amount": 12
+   }
+  },
+  {
+   "text": "shrink this pane's height by twelve",
+   "args": {
+    "direction": "shorter",
+    "amount": 12
+   }
+  }
+ ]
+}
