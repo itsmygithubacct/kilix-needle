@@ -318,13 +318,20 @@ def _negated(prefix: str) -> bool:
     return bool(re.search(r"\b(?:not|never|don't|do not|dont)\b", prefix, re.I))
 
 
+def _in_title(prefix: str) -> bool:
+    # Names are data even without wrappers: renaming a pane to "close the
+    # left pane" must not authorize an additional close proposed by a model.
+    return bool(re.search(r"\b(?:rename|name|title|call|named|called|titled)\b", prefix, re.I))
+
+
 def _command_spans(prompt: str) -> set[str]:
     """Return exact, case-sensitive command spans, retaining punctuation inside quotes."""
     spans = set()
     for clause in _clauses(prompt):
         # Only the first run verb: `run npm run dev` must not also admit `dev`.
         match = _RUN_VERB.search(_unquoted(clause))
-        if match is None or _negated(clause[:match.start()]):
+        if (match is None or _negated(clause[:match.start()])
+                or _in_title(clause[:match.start()])):
             continue
         span = clause[match.end():].strip()
         span = re.sub(r"^(?:the\s+command\s+)", "", span, flags=re.I)
@@ -373,7 +380,8 @@ def _clause_supports(verb: re.Pattern, target: str, prompt: str, *, unit: str,
             if index >= 0:
                 clause = clause[:index] + " " + clause[index + len(typed):]
         match = verb.search(_unquoted(clause))
-        if match is None or _negated(clause[:match.start()]):
+        if (match is None or _negated(clause[:match.start()])
+                or _in_title(clause[:match.start()])):
             continue
         if typed:
             if target == "current":

@@ -45,6 +45,8 @@ class AdmissionV2(unittest.TestCase):
                 self.refuse(text, "close_pane", pane=ref)
         self.refuse("quit vim in the left-hand pane", "close_pane", pane="left")
         self.refuse("close the pane running top", "close_pane", pane="above")
+        self.refuse("rename this pane to close the left pane", "close_pane", pane="left")
+        self.refuse("rename this pane to run ls", "run_in_pane", pane="current", command="ls")
 
     def test_exact_command_wrappers_and_politeness(self):
         for text in ("run make test please", "run `make test`", 'run "make test" please',
