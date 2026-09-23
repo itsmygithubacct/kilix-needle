@@ -152,10 +152,16 @@ class Lifetime(unittest.TestCase):
             child = int(parent.stdout.readline())
             os.kill(parent.pid, signal.SIGKILL)
             parent.wait()
-            for _ in range(50):
+            def running(pid):
+                # A zombie has exited: where the test runner is PID 1 (a container)
+                # nothing reaps the orphan, and kill(pid, 0) would still succeed.
                 try:
-                    os.kill(child, 0)
-                except ProcessLookupError:
+                    with open(f"/proc/{pid}/stat") as stat:
+                        return stat.read().rsplit(")", 1)[1].split()[0] != "Z"
+                except (FileNotFoundError, ProcessLookupError):
+                    return False
+            for _ in range(50):
+                if not running(child):
                     break
                 time.sleep(0.1)
             else:
