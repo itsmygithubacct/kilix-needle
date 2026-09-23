@@ -1,0 +1,150 @@
+{"request": "split the screen and put htop on the right", "expect": [["open_pane", {"side": "right", "program": "htop"}]], "tag": "open_pane"}
+{"request": "gimme a new pane below", "expect": [["open_pane", {"side": "below"}]], "tag": "open_pane"}
+{"request": "Could you please open a pane on the left running vim, and call it editor?", "expect": [["open_pane", {"side": "left", "program": "vim", "name": "editor"}]], "tag": "open_pane"}
+{"request": "new pane", "expect": [["open_pane", {}]], "tag": "open_pane"}
+{"request": "pop open a pane above with python3 in it", "expect": [["open_pane", {"side": "above", "program": "python3"}]], "tag": "open_pane"}
+{"request": "I'd like another pane to the right, named scratch", "expect": [["open_pane", {"side": "right", "name": "scratch"}]], "tag": "open_pane"}
+{"request": "open a pane running tail and name it logs", "expect": [["open_pane", {"program": "tail", "name": "logs"}]], "tag": "open_pane"}
+{"request": "carve out a split underneath for btop", "expect": [["open_pane", {"side": "below", "program": "btop"}]], "tag": "open_pane"}
+{"request": "open up a new pane with lazygit in it please", "expect": [["open_pane", {"program": "lazygit"}]], "tag": "open_pane"}
+{"request": "new tab", "expect": [["open_tab", {}]], "tag": "open_tab"}
+{"request": "open a tab running htop", "expect": [["open_tab", {"program": "htop"}]], "tag": "open_tab"}
+{"request": "Please create a new tab called notes.", "expect": [["open_tab", {"name": "notes"}]], "tag": "open_tab"}
+{"request": "spin up a fresh tab w/ ipython, name it repl", "expect": [["open_tab", {"program": "ipython", "name": "repl"}]], "tag": "open_tab"}
+{"request": "can I get another tab", "expect": [["open_tab", {}]], "tag": "open_tab"}
+{"request": "open a tab for ncdu", "expect": [["open_tab", {"program": "ncdu"}]], "tag": "open_tab"}
+{"request": "throw nvim in a new tab", "expect": [["open_tab", {"program": "nvim"}]], "tag": "open_tab"}
+{"request": "Kindly open a new tab named two", "expect": [["open_tab", {"name": "two"}]], "tag": "open_tab"}
+{"request": "make a tab called server that runs node", "expect": [["open_tab", {"program": "node", "name": "server"}]], "tag": "open_tab"}
+{"request": "close this pane", "expect": [["close_pane", {"pane": "current"}]], "tag": "close_pane"}
+{"request": "kill the pane on the left", "expect": [["close_pane", {"pane": "left"}]], "tag": "close_pane"}
+{"request": "get rid of the pane underneath", "expect": [["close_pane", {"pane": "below"}]], "tag": "close_pane"}
+{"request": "shut the pane running htop", "expect": [["close_pane", {"pane": "htop"}]], "tag": "close_pane"}
+{"request": "close the logs pane", "expect": [["close_pane", {"pane": "logs"}]], "tag": "close_pane"}
+{"request": "Would you mind closing the pane above?", "expect": [["close_pane", {"pane": "above"}]], "tag": "close_pane"}
+{"request": "nuke the right pane", "expect": [["close_pane", {"pane": "right"}]], "tag": "close_pane"}
+{"request": "close the next pane", "expect": [["close_pane", {"pane": "next"}]], "tag": "close_pane"}
+{"request": "x out the pane here", "expect": [["close_pane", {"pane": "current"}]], "tag": "close_pane"}
+{"request": "close this tab", "expect": [["close_tab", {"tab": "current"}]], "tag": "close_tab"}
+{"request": "close tab 3", "expect": [["close_tab", {"tab": "3"}]], "tag": "close_tab"}
+{"request": "shut the third tab", "expect": [["close_tab", {"tab": "3"}]], "tag": "close_tab"}
+{"request": "close the tab named four", "expect": [["close_tab", {"tab": "four"}]], "tag": "close_tab"}
+{"request": "kill the last tab", "expect": [["close_tab", {"tab": "last"}]], "tag": "close_tab"}
+{"request": "please close the next tab", "expect": [["close_tab", {"tab": "next"}]], "tag": "close_tab"}
+{"request": "ditch the previous tab", "expect": [["close_tab", {"tab": "previous"}]], "tag": "close_tab"}
+{"request": "close the notes tab", "expect": [["close_tab", {"tab": "notes"}]], "tag": "close_tab"}
+{"request": "Close tab number twelve.", "expect": [["close_tab", {"tab": "12"}]], "tag": "close_tab"}
+{"request": "switch to the left pane", "expect": [["go_to_pane", {"pane": "left"}]], "tag": "go_to_pane"}
+{"request": "focus the pane below", "expect": [["go_to_pane", {"pane": "below"}]], "tag": "go_to_pane"}
+{"request": "jump to the next pane", "expect": [["go_to_pane", {"pane": "next"}]], "tag": "go_to_pane"}
+{"request": "go back to the previous pane", "expect": [["go_to_pane", {"pane": "previous"}]], "tag": "go_to_pane"}
+{"request": "take me to the editor pane", "expect": [["go_to_pane", {"pane": "editor"}]], "tag": "go_to_pane"}
+{"request": "focus the pane running vim", "expect": [["go_to_pane", {"pane": "vim"}]], "tag": "go_to_pane"}
+{"request": "hop over to the pane on the right", "expect": [["go_to_pane", {"pane": "right"}]], "tag": "go_to_pane"}
+{"request": "Please select the pane above this one.", "expect": [["go_to_pane", {"pane": "above"}]], "tag": "go_to_pane"}
+{"request": "go to the htop pane", "expect": [["go_to_pane", {"pane": "htop"}]], "tag": "go_to_pane"}
+{"request": "go to tab 2", "expect": [["go_to_tab", {"tab": "2"}]], "tag": "go_to_tab"}
+{"request": "switch to the first tab", "expect": [["go_to_tab", {"tab": "1"}]], "tag": "go_to_tab"}
+{"request": "next tab", "expect": [["go_to_tab", {"tab": "next"}]], "tag": "go_to_tab"}
+{"request": "back to the previous tab pls", "expect": [["go_to_tab", {"tab": "previous"}]], "tag": "go_to_tab"}
+{"request": "jump to the last tab", "expect": [["go_to_tab", {"tab": "last"}]], "tag": "go_to_tab"}
+{"request": "show me the logs tab", "expect": [["go_to_tab", {"tab": "logs"}]], "tag": "go_to_tab"}
+{"request": "go to the tab named seven", "expect": [["go_to_tab", {"tab": "seven"}]], "tag": "go_to_tab"}
+{"request": "Could you switch to tab number five?", "expect": [["go_to_tab", {"tab": "5"}]], "tag": "go_to_tab"}
+{"request": "flip over to the server tab", "expect": [["go_to_tab", {"tab": "server"}]], "tag": "go_to_tab"}
+{"request": "put the panes side by side", "expect": [["arrange_panes", {"layout": "vertical"}]], "tag": "arrange_panes"}
+{"request": "arrange the panes one above the other", "expect": [["arrange_panes", {"layout": "horizontal"}]], "tag": "arrange_panes"}
+{"request": "grid layout please", "expect": [["arrange_panes", {"layout": "grid"}]], "tag": "arrange_panes"}
+{"request": "switch to the tall layout", "expect": [["arrange_panes", {"layout": "tall"}]], "tag": "arrange_panes"}
+{"request": "use the fat layout", "expect": [["arrange_panes", {"layout": "fat"}]], "tag": "arrange_panes"}
+{"request": "just show one pane at a time", "expect": [["arrange_panes", {"layout": "stack"}]], "tag": "arrange_panes"}
+{"request": "tile everything in a grid", "expect": [["arrange_panes", {"layout": "grid"}]], "tag": "arrange_panes"}
+{"request": "go back to the splits layout", "expect": [["arrange_panes", {"layout": "splits"}]], "tag": "arrange_panes"}
+{"request": "Lay the panes out side-by-side, please.", "expect": [["arrange_panes", {"layout": "vertical"}]], "tag": "arrange_panes"}
+{"request": "rename this tab to build", "expect": [["rename_tab", {"name": "build"}]], "tag": "rename_tab"}
+{"request": "call this tab logs", "expect": [["rename_tab", {"name": "logs"}]], "tag": "rename_tab"}
+{"request": "name the tab db", "expect": [["rename_tab", {"name": "db"}]], "tag": "rename_tab"}
+{"request": "Please rename the current tab to deploy.", "expect": [["rename_tab", {"name": "deploy"}]], "tag": "rename_tab"}
+{"request": "change the tab title to scratch", "expect": [["rename_tab", {"name": "scratch"}]], "tag": "rename_tab"}
+{"request": "label this tab api", "expect": [["rename_tab", {"name": "api"}]], "tag": "rename_tab"}
+{"request": "rename tab to three", "expect": [["rename_tab", {"name": "three"}]], "tag": "rename_tab"}
+{"request": "let's call this tab frontend", "expect": [["rename_tab", {"name": "frontend"}]], "tag": "rename_tab"}
+{"request": "retitle the tab: monitoring", "expect": [["rename_tab", {"name": "monitoring"}]], "tag": "rename_tab"}
+{"request": "make this pane wider", "expect": [["resize_pane", {"direction": "wider"}]], "tag": "resize_pane"}
+{"request": "make this pane narrower by 5", "expect": [["resize_pane", {"direction": "narrower", "amount": 5}]], "tag": "resize_pane"}
+{"request": "taller by ten please", "expect": [["resize_pane", {"direction": "taller", "amount": 10}]], "tag": "resize_pane"}
+{"request": "make the pane shorter", "expect": [["resize_pane", {"direction": "shorter"}]], "tag": "resize_pane"}
+{"request": "widen this pane by 20", "expect": [["resize_pane", {"direction": "wider", "amount": 20}]], "tag": "resize_pane"}
+{"request": "Could you make the current pane a little taller?", "expect": [["resize_pane", {"direction": "taller"}]], "tag": "resize_pane"}
+{"request": "narrow this pane", "expect": [["resize_pane", {"direction": "narrower"}]], "tag": "resize_pane"}
+{"request": "make this pane shorter by three", "expect": [["resize_pane", {"direction": "shorter", "amount": 3}]], "tag": "resize_pane"}
+{"request": "grow the pane wider by fifteen", "expect": [["resize_pane", {"direction": "wider", "amount": 15}]], "tag": "resize_pane"}
+{"request": "run make test in the right pane", "expect": [["run_in_pane", {"pane": "right", "command": "make test"}]], "tag": "run_in_pane"}
+{"request": "type ls -la into the pane below", "expect": [["run_in_pane", {"pane": "below", "command": "ls -la"}]], "tag": "run_in_pane"}
+{"request": "in the left pane, run git status", "expect": [["run_in_pane", {"pane": "left", "command": "git status"}]], "tag": "run_in_pane"}
+{"request": "run htop here", "expect": [["run_in_pane", {"pane": "current", "command": "htop"}]], "tag": "run_in_pane"}
+{"request": "execute npm start in the server pane", "expect": [["run_in_pane", {"pane": "server", "command": "npm start"}]], "tag": "run_in_pane"}
+{"request": "send cargo build to the pane above", "expect": [["run_in_pane", {"pane": "above", "command": "cargo build"}]], "tag": "run_in_pane"}
+{"request": "run top in this pane", "expect": [["run_in_pane", {"pane": "current", "command": "top"}]], "tag": "run_in_pane"}
+{"request": "please run python3 manage.py migrate in the pane running bash", "expect": [["run_in_pane", {"pane": "bash", "command": "python3 manage.py migrate"}]], "tag": "run_in_pane"}
+{"request": "in the next pane run df -h", "expect": [["run_in_pane", {"pane": "next", "command": "df -h"}]], "tag": "run_in_pane"}
+{"request": "open a pane below running htop, then make the layout a grid", "expect": [["open_pane", {"side": "below", "program": "htop"}], ["arrange_panes", {"layout": "grid"}]], "tag": "compound"}
+{"request": "close this pane and go to the next tab", "expect": [["close_pane", {"pane": "current"}], ["go_to_tab", {"tab": "next"}]], "tag": "compound"}
+{"request": "rename this tab to build and open a pane on the left", "expect": [["rename_tab", {"name": "build"}], ["open_pane", {"side": "left"}]], "tag": "compound"}
+{"request": "go to tab 2 and run make in the left pane", "expect": [["go_to_tab", {"tab": "2"}], ["run_in_pane", {"pane": "left", "command": "make"}]], "tag": "compound"}
+{"request": "make this pane wider by 10, then taller by 5", "expect": [["resize_pane", {"direction": "wider", "amount": 10}], ["resize_pane", {"direction": "taller", "amount": 5}]], "tag": "compound"}
+{"request": "open two new tabs", "expect": [["open_tab", {}], ["open_tab", {}]], "tag": "compound"}
+{"request": "new tab running vim, then another tab running htop", "expect": [["open_tab", {"program": "vim"}], ["open_tab", {"program": "htop"}]], "tag": "compound"}
+{"request": "focus the left pane, then run git pull in the right pane", "expect": [["go_to_pane", {"pane": "left"}], ["run_in_pane", {"pane": "right", "command": "git pull"}]], "tag": "compound"}
+{"request": "close tab 4 and tab 5", "expect": [["close_tab", {"tab": "4"}], ["close_tab", {"tab": "5"}]], "tag": "compound"}
+{"request": "put the panes side by side and make this one narrower", "expect": [["arrange_panes", {"layout": "vertical"}], ["resize_pane", {"direction": "narrower"}]], "tag": "compound"}
+{"request": "open a tab named db running psql, then a pane above running pgcli", "expect": [["open_tab", {"program": "psql", "name": "db"}], ["open_pane", {"side": "above", "program": "pgcli"}]], "tag": "compound"}
+{"request": "go to the previous tab and close the pane below", "expect": [["go_to_tab", {"tab": "previous"}], ["close_pane", {"pane": "below"}]], "tag": "compound"}
+{"request": "split right with lazygit and split below with btm", "expect": [["open_pane", {"side": "right", "program": "lazygit"}], ["open_pane", {"side": "below", "program": "btm"}]], "tag": "compound"}
+{"request": "rename this tab to api then switch to the last tab", "expect": [["rename_tab", {"name": "api"}], ["go_to_tab", {"tab": "last"}]], "tag": "compound"}
+{"request": "run npm test in the right pane and cargo test in the left pane", "expect": [["run_in_pane", {"pane": "right", "command": "npm test"}], ["run_in_pane", {"pane": "left", "command": "cargo test"}]], "tag": "compound"}
+{"request": "close the pane running htop, then use the stack layout", "expect": [["close_pane", {"pane": "htop"}], ["arrange_panes", {"layout": "stack"}]], "tag": "compound"}
+{"request": "go to the pane above and make it taller by 8", "expect": [["go_to_pane", {"pane": "above"}], ["resize_pane", {"direction": "taller", "amount": 8}]], "tag": "compound"}
+{"request": "open a new tab and call it scratch, then open a pane on the right", "expect": [["open_tab", {"name": "scratch"}], ["open_pane", {"side": "right"}]], "tag": "compound"}
+{"request": "hop to tab three and rename it monitoring", "expect": [["go_to_tab", {"tab": "3"}], ["rename_tab", {"name": "monitoring"}]], "tag": "compound"}
+{"request": "close the next pane, then open a pane below named notes", "expect": [["close_pane", {"pane": "next"}], ["open_pane", {"side": "below", "name": "notes"}]], "tag": "compound"}
+{"request": "quit vim", "expect": [], "tag": "bait"}
+{"request": "exit htop in the right pane", "expect": [], "tag": "bait"}
+{"request": "close the file I'm editing", "expect": [], "tag": "bait"}
+{"request": "kill the python process", "expect": [], "tag": "bait"}
+{"request": "stop the server", "expect": [], "tag": "bait"}
+{"request": "close my ssh connection", "expect": [], "tag": "bait"}
+{"request": "kill job 2", "expect": [], "tag": "bait"}
+{"request": "close the document", "expect": [], "tag": "bait"}
+{"request": "end the tmux session", "expect": [], "tag": "bait"}
+{"request": "stop the build running in the left pane", "expect": [], "tag": "bait"}
+{"request": "quit less", "expect": [], "tag": "bait"}
+{"request": "exit the python repl", "expect": [], "tag": "bait"}
+{"request": "kill top", "expect": [], "tag": "bait"}
+{"request": "close the database connection", "expect": [], "tag": "bait"}
+{"request": "stop tail in the logs pane", "expect": [], "tag": "bait"}
+{"request": "terminate the ssh session", "expect": [], "tag": "bait"}
+{"request": "shut down the docker container", "expect": [], "tag": "bait"}
+{"request": "close the README file", "expect": [], "tag": "bait"}
+{"request": "kill the process running in the pane above", "expect": [], "tag": "bait"}
+{"request": "quit nano without saving", "expect": [], "tag": "bait"}
+{"request": "stop npm start", "expect": [], "tag": "bait"}
+{"request": "exit the program in this pane", "expect": [], "tag": "bait"}
+{"request": "close the spreadsheet", "expect": [], "tag": "bait"}
+{"request": "kill the background job", "expect": [], "tag": "bait"}
+{"request": "quit the music player", "expect": [], "tag": "bait"}
+{"request": "close the socket", "expect": [], "tag": "bait"}
+{"request": "stop the job in tab 3", "expect": [], "tag": "bait"}
+{"request": "exit the man page", "expect": [], "tag": "bait"}
+{"request": "kill process 4242", "expect": [], "tag": "bait"}
+{"request": "close the vim session", "expect": [], "tag": "bait"}
+{"request": "what's the weather tomorrow", "expect": [], "tag": "none"}
+{"request": "tell me a joke", "expect": [], "tag": "none"}
+{"request": "how do I undo a git commit", "expect": [], "tag": "none"}
+{"request": "thanks!", "expect": [], "tag": "none"}
+{"request": "what time is it in Tokyo", "expect": [], "tag": "none"}
+{"request": "write a haiku about terminals", "expect": [], "tag": "none"}
+{"request": "set a timer for five minutes", "expect": [], "tag": "none"}
+{"request": "what does grep do", "expect": [], "tag": "none"}
+{"request": "hello there", "expect": [], "tag": "none"}
+{"request": "increase the font size", "expect": [], "tag": "none"}
