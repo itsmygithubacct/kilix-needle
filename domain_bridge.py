@@ -37,6 +37,9 @@ def contract() -> dict:
     tools = deepcopy(TOOLS)
     for tool in tools:
         tool["parameters"]["additionalProperties"] = False
+        for key, spec in tool["parameters"]["properties"].items():
+            if spec.get("type") == "string" and "enum" not in spec:
+                spec["x-source"] = "input" if key in ("program", "name", "command") else "input-or-canonical"
     root = Path(__file__).resolve().parent
     record = {
         "version": VERSION,

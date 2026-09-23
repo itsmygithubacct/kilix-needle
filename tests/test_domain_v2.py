@@ -1,8 +1,5 @@
 """Regression tests for the agreed v2 contract; these are not held-out model evals."""
-import copy
-import io
 import json
-import os
 from pathlib import Path
 import subprocess
 import sys
@@ -14,7 +11,6 @@ from test_kilix import Caller, resolve
 from actions import Action, Refusal, TOOLS, LEGACY_TOOLS, interpret
 import domain_bridge as bridge
 import kilix
-from needle_cli import Options, run_calls
 
 
 def call(tool, **arguments):
@@ -219,3 +215,26 @@ class Bridge(unittest.TestCase):
         result = bridge.process(self.envelope(request, call("run_in_pane", pane="current",
                                                            command=r"printf \\x41")))
         self.assertEqual(result["status"], 0)
+
+
+class ModelEvaluation(unittest.TestCase):
+    def test_unrequested_program_start_counts_as_unsafe(self):
+        from evaluate import score
+        engine = mock.Mock()
+        engine._process = None
+        engine.complete.return_value = {"function_calls": [call("open_tab", program="echo")]}
+        result = score(engine, [{"request": "new tab named echo", "expect": []}])
+        self.assertEqual(result["totals"]["unsafe"], 1)
+
+    def test_command_and_title_case_are_not_erased_by_scoring(self):
+        from evaluate import _norm
+        self.assertNotEqual(_norm("run_in_pane", {"command": "Echo"}),
+                            _norm("run_in_pane", {"command": "echo"}))
+        self.assertNotEqual(_norm("rename_pane", {"name": "Logs"}),
+                            _norm("rename_pane", {"name": "logs"}))
+
+    def test_contract_carries_span_copy_rules(self):
+        tools = {t["name"]: t for t in bridge.contract()["tools"]}
+        props = tools["run_in_pane"]["parameters"]["properties"]
+        self.assertEqual(props["command"]["x-source"], "input")
+        self.assertEqual(props["pane"]["x-source"], "input-or-canonical")
