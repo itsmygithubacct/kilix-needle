@@ -224,8 +224,10 @@ class ModelEvaluation(unittest.TestCase):
         from evaluate import score
         engine = mock.Mock()
         engine._process = None
+        # A start the checks admit, in a case that expects none: the evaluator
+        # must count it. ("new tab named echo" is now refused by the checks.)
         engine.complete.return_value = {"function_calls": [call("open_tab", program="echo")]}
-        result = score(engine, [{"request": "new tab named echo", "expect": []}])
+        result = score(engine, [{"request": "open a tab running echo", "expect": []}])
         self.assertEqual(result["totals"]["unsafe"], 1)
 
     def test_command_and_title_case_are_not_erased_by_scoring(self):

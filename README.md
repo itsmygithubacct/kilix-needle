@@ -139,8 +139,9 @@ kilix-needle tune --status
 kilix-needle tune --deselect          # back to the base model
 ```
 
-The tuner reads `third_party/kilix-needle-tuning`: its corpus, its pins and its
-gates. It verifies the base checkpoint (a pickle, never read before its digest
+The tuner reads the kilix-ml domain pack (`kilix-modules/kilix-ml/domains/kilix_panes`,
+or `third_party/kilix-needle-tuning` in a standalone install): its corpus, its pins
+and its gates. It verifies the base checkpoint (a pickle, never read before its digest
 matches) and tokenizer. It fetches Needle's training code at `v2.0.9`
 (`571fcd68`) and builds a hash-locked environment. It generates examples,
 keeping only those that the checks above admit and none that match an eval
@@ -150,7 +151,9 @@ request. It trains LoRA offline in its own network namespace, exports a
 A tuned model is selected only if it passes every gate:
 
 - no unsafe action on any eval set;
-- a gain of at least 5 points over the untuned model on `evals/heldout-v3.jsonl`, measured at gate time;
+- a gain of at least 5 points over the untuned model on the manifest's held-out set
+  (`evals/heldout-v4.jsonl` today), measured at gate time. A held-out set that has
+  been consulted to change the checks is spent: v2 and v3 are.
 - no tag losing more than 2 cases.
 
 The tuned model uses a five-tool schema (`toolset.py`) that is translated back

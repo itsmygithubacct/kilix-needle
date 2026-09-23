@@ -330,6 +330,44 @@ def _in_title(prefix: str) -> bool:
     return bool(re.search(r"\b(?:rename|name|title|call|named|called|titled)\b", prefix, re.I))
 
 
+_START_VERB = re.compile(r"\b(?:run|running|start|starting|launch|launching|with)\b", re.I)
+_OPEN_VERB = re.compile(r"\bopen\b", re.I)
+_NAMED_SUFFIX = re.compile(r"\s+(?:called|named|titled)\s+\S.*$", re.I)
+
+
+def _program_spans(prompt: str, name: str = "") -> set[str]:
+    """What the request asks to start: the whole text after a start verb, up to a
+    location or a name ("split right running htop -d 5 called mon" -> "htop -d 5"),
+    or what "open" governs when a location follows ("open htop in a pane below").
+
+    A program is started as argv, so it is held to the same standard as a typed
+    command. Measured with the base model: "split the screen" -> program
+    "screen", "open the pod bay doors" -> "bay doors", "type git status in the
+    right pane" -> "type git", "switch to the next tab" -> "next".
+    """
+    spans = set()
+    if name:
+        # The admitted name is data, and nothing inside it is an instruction:
+        # "open a tab called frontend running vim" starts vim, while in "open a
+        # tab called run htop" the whole "run htop" is the name.
+        prompt = re.sub(rf"\b(?:called|named|titled)\s+{re.escape(name)}(?![\w])", " ",
+                        prompt, flags=re.I)
+    for clause in _clauses(prompt):
+        plain = _unquoted(clause)
+        for verb, needs_location in ((_START_VERB, False), (_OPEN_VERB, True)):
+            for match in verb.finditer(plain):
+                if _negated(clause[:match.start()]) or _in_title(clause[:match.start()]):
+                    continue
+                rest = _NAMED_SUFFIX.sub("", clause[match.end():]).strip()
+                bare = _LOCATION.sub("", rest).strip().strip(".!?")
+                if needs_location and bare == rest.strip(".!?"):
+                    continue    # "open the pod bay doors": nothing says where
+                if bare and not re.match(r"(?:a|an|the|another)?\s*(?:new\s+)?"
+                                         r"(?:pane|tab|window|split|terminal)\b", bare, re.I):
+                    spans.add(bare)
+    return spans
+
+
 def _command_spans(prompt: str) -> set[str]:
     """Return exact, case-sensitive command spans, retaining punctuation inside quotes."""
     spans = set()
@@ -573,6 +611,19 @@ def _admit(name: str, args: dict, prompt: str) -> Action | Refusal:
                 if not _grounded(value, prompt):
                     return Refusal(name, f"the {key} {value!r} is not in the request")
                 out[key] = value
+        if "program" in out and out["program"] not in _program_spans(prompt, out.get("name", "")):
+            return Refusal(name, f"the program {out['program']!r} is not what the request "
+                                 "asks to start")
+        if "side" in out:
+            # The side must be said outside the program and the name: in "open a
+            # pane running bottom" the model read "bottom" as below (measured).
+            rest = prompt
+            for key in ("program", "name"):
+                if key in out:
+                    rest = re.sub(rf"(?<![\w]){re.escape(out[key])}(?![\w])", " ", rest,
+                                  flags=re.I)
+            if not _first(_mentions(out["side"]), rest):
+                return Refusal(name, f"the request does not say {out['side']}")
         return Action(name, out)
 
     if name in ("close_pane", "go_to_pane", "run_in_pane"):

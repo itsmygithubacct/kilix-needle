@@ -357,3 +357,52 @@ class NewActionGuards(unittest.TestCase):
         for prompt in ("swap left", "swap the files on the left", "exchange the left ones"):
             [result] = interpret(prompt, [call("swap_panes", side="left")])
             self.assertIsInstance(result, Refusal, prompt)
+
+
+class ProgramStarts(unittest.TestCase):
+    """A program is started as argv: it must be what the request asks to start.
+    Each refused case is a measured base-model output."""
+
+    def check(self, prompt, tool, **arguments):
+        [result] = interpret(prompt, [call(tool, **arguments)])
+        return result
+
+    def test_misread_programs_are_refused(self):
+        for prompt, tool, args in (
+                ("split the screen", "open_tab", {"program": "screen"}),
+                ("open the pod bay doors", "open_tab", {"program": "bay doors"}),
+                ("type git status in the right pane", "open_pane", {"program": "type git"}),
+                ("focus the left pane, then make it taller by 5", "open_pane", {"program": "left"}),
+                ("switch to the next tab", "open_tab", {"program": "next"}),
+                ("open a pane running watch and name it bottom", "open_pane", {"program": "bottom"}),
+                ("run grep -rn pane src in the next pane", "open_pane", {"program": "grep -rn"}),
+                ("new tab named echo", "open_tab", {"program": "echo"}),
+                ("open a tab called run htop", "open_tab", {"program": "htop", "name": "run htop"})):
+            self.assertIsInstance(self.check(prompt, tool, **args), Refusal, prompt)
+
+    def test_open_starts_a_program_only_with_a_location(self):
+        # "open X" alone does not say it is a program: the whole span is refused too.
+        for prompt, program in (("open the pod bay doors", "the pod bay doors"),
+                                ("open firefox", "firefox")):
+            self.assertIsInstance(self.check(prompt, "open_tab", program=program), Refusal, prompt)
+        self.assertIsInstance(self.check("open firefox in a new tab", "open_tab",
+                                         program="firefox"), Action)
+
+    def test_a_side_must_be_said_outside_the_program(self):
+        self.assertIsInstance(self.check("open a pane running bottom", "open_pane",
+                                         program="bottom", side="below"), Refusal)
+        self.assertIsInstance(self.check("split the screen", "open_pane", side="below"), Refusal)
+
+    def test_requested_programs_are_admitted(self):
+        for prompt, tool, args in (
+                ("open htop in a pane below", "open_pane", {"program": "htop", "side": "below"}),
+                ("split right and run htop", "open_pane", {"program": "htop", "side": "right"}),
+                ("open a new tab running btop", "open_tab", {"program": "btop"}),
+                ("start ranger in a new tab", "open_tab", {"program": "ranger"}),
+                ("open a tab with htop", "open_tab", {"program": "htop"}),
+                ("open a pane running bottom", "open_pane", {"program": "bottom"}),
+                ("open a tab called frontend running vim", "open_tab",
+                 {"program": "vim", "name": "frontend"}),
+                ("split right running htop -d 5 called mon", "open_pane",
+                 {"program": "htop -d 5", "side": "right", "name": "mon"})):
+            self.assertIsInstance(self.check(prompt, tool, **args), Action, prompt)
