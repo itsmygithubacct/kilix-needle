@@ -100,6 +100,16 @@ class MeasuredMisreadings(unittest.TestCase):
             self.assertIsInstance(result, Action, prompt)
             self.assertEqual(result.args, want, prompt)
 
+    def test_a_value_must_be_whole_words_of_the_request(self):
+        # tuning run 2: "stack the panes" -> go_to pane "a"
+        [result] = interpret("stack the panes", [call("go_to_pane", pane="a")])
+        self.assertIsInstance(result, Refusal)
+        [result] = interpret("open a tab running top", [call("open_tab", program="to")])
+        self.assertIsInstance(result, Refusal)
+        [result] = interpret("go to tab 2 and run ls -la in the left pane",
+                             [call("run_in_pane", pane="left", command="ls -la")])
+        self.assertIsInstance(result, Action)
+
     def test_a_word_introduced_as_a_name_stays_a_name(self):
         # held-out v3: both were admitted as the wrong target
         [result] = interpret("close the pane running top", [call("close_pane", pane="top")])
@@ -285,3 +295,48 @@ class Risk(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BlindCorpusPhrasings(unittest.TestCase):
+    """Phrasings for the four reversible actions, from kilix-ml's blind-authored
+    corpus, that the checks refused; and the look-alikes that must stay refused."""
+
+    def admit(self, prompt, tool, **arguments):
+        [result] = interpret(prompt, [call(tool, **arguments)])
+        self.assertIsInstance(result, Action, prompt)
+        return result
+
+    def refuse(self, prompt, tool, **arguments):
+        [result] = interpret(prompt, [call(tool, **arguments)])
+        self.assertIsInstance(result, Refusal, prompt)
+
+    def test_rename_pane(self):
+        for prompt in ("set this pane title to backend", "change the pane name to music",
+                       "change this pane label to logs", "make this pane title read deploy",
+                       "label this pane docs", "give the current pane the name api"):
+            self.admit(prompt, "rename_pane", name=prompt.rsplit(" ", 1)[1])
+        self.assertEqual(self.admit("set the title of the pane left to db", "rename_pane",
+                                    pane="left", name="db").args, {"pane": "left", "name": "db"})
+        self.refuse("set the tab title to logs", "rename_pane", name="logs")
+
+    def test_swap_panes(self):
+        for prompt, side in (("exchange this pane and the lower pane", "below"),
+                             ("reverse the positions of this pane and the upper one", "above"),
+                             ("trade places with the pane on the right", "right"),
+                             ("swap with the left neighbor", "left"),
+                             ("switch this pane with its neighbour below", "below")):
+            self.admit(prompt, "swap_panes", side=side)
+        for prompt in ("switch to the left pane", "swap this pane and close the left one",
+                       "run swap in the left pane"):
+            self.refuse(prompt, "swap_panes", side="left")
+
+    def test_maximize_and_restore(self):
+        for prompt in ("make this pane fill the window", "expand this pane to full size",
+                       "show only the current pane"):
+            self.admit(prompt, "maximize_pane")
+        for prompt in ("restore the previous pane layout", "bring back the split view",
+                       "return to the normal pane layout"):
+            self.admit(prompt, "maximize_pane", restore=True)
+        for prompt in ("zoom the tab", "make the tab fill the window",
+                       "type fill the window in this pane"):
+            self.refuse(prompt, "maximize_pane")

@@ -173,7 +173,13 @@ class Refusal:
 
 
 def _grounded(value: str, prompt: str) -> bool:
-    return value.casefold() in prompt.casefold()
+    """The value occurs in the request as whole words, not inside a word.
+
+    Measured (tuning run 2): "stack the panes" -> go_to pane "a", admitted by a
+    substring match on the "a" in "stack".
+    """
+    return re.search(rf"(?<![\w]){re.escape(value.casefold())}(?![\w])",
+                     prompt.casefold()) is not None
 
 
 def _text(args: dict, key: str) -> str:
@@ -452,30 +458,65 @@ def _new_action(name: str, args: dict, prompt: str) -> Action | Refusal:
                                   r"(?:['\"`]?)[.!?]*$", clause)
                 if not match:
                     continue
-                prefix = re.sub(r"\s+(?:to|as)\s*$", "", clause[:match.start()]).strip()
-                if _clause_supports(re.compile(r"\b(?:rename|title|call|name)\b", re.I),
-                                    target, prefix, unit="pane"):
+                prefix = re.sub(r"\s+(?:to|as|read)\s*$", "", clause[:match.start()]).strip()
+                # "set the title of the pane left": the pane after "of" is the object.
+                prefix = re.sub(r"\b(title|name|label) of\b", r"\1", prefix, flags=re.I)
+                if _clause_supports(re.compile(r"\b(?:rename|retitle|title|call|name|label)\b",
+                                               re.I), target, prefix, unit="pane"):
+                    return Action(name, {"pane": target, "name": title})
+                # The pane named before a noun: "set this pane title", "change the
+                # pane name", "give the current pane the name" (blind corpus).
+                if target == "current" and re.fullmatch(
+                        r"(?:please )?(?:set|change|make|give) (?:the )?(?:(?:this|current|"
+                        r"active|focused) )?pane(?:'s)? (?:the )?(?:title|name|label)", prefix, re.I):
                     return Action(name, {"pane": target, "name": title})
         else:
             restore = args.get("restore", False)
             pattern = (r"\b(?:restore|unmaximize|un-maximize|unzoom|un-zoom)\b" if restore
                        else r"(?<![\w-])(?:maximize|zoom)\b")
             verb = re.compile(pattern, re.I)
+            # Phrasings that name no verb from the list but only mean this action.
+            # Blind-authored corpus (kilix-ml): "make this pane fill the window",
+            # "expand this pane to full size", "bring back the split view".
+            whole = (re.compile(r"\b(?:bring back|return to|go back to) (?:the )?"
+                                r"(?:split view|normal (?:pane )?layout|previous (?:pane )?layout)"
+                                r"|\brestore all panes\b", re.I) if restore else
+                     re.compile(r"\b(?:fill(?:s)? the (?:whole )?window|(?:to |at )?full[- ]"
+                                r"(?:size|screen)|show only)\b", re.I))
             for clause in _clauses(prompt):
                 if _clause_supports(verb, target, clause, unit="pane"):
                     return Action(name, {"pane": target, "restore": restore})
+                if (whole.search(_unquoted(clause)) and _PANE_WORD.search(clause)
+                        and not _TAB_WORD.search(clause) and not _negated(clause)
+                        and not _RUN_VERB.search(_unquoted(clause))
+                        and (target == "current" and not any(
+                            _first(_mentions(side), clause) for side in SIDES)
+                             or target != "current" and _first(_mentions(target), clause))):
+                    return Action(name, {"pane": target, "restore": restore})
+                if restore and target == "current" and whole.search(clause) \
+                        and not _TAB_WORD.search(clause) and not _negated(clause):
+                    return Action(name, {"pane": target, "restore": True})
                 if restore and target == "current" and re.fullmatch(
-                        r"(?:please )?restore (?:the )?(?:previous |last )?layout[.!?]*",
+                        r"(?:please )?restore (?:the )?(?:previous |last )?(?:pane )?layout[.!?]*",
                         clause, re.I):
                     return Action(name, {"pane": target, "restore": True})
     elif name == "swap_panes":
         side = _text(args, "side")
         if side in SIDES:
-            for clause in _clauses(prompt):
-                verb = re.search(r"\b(?:swap|exchange)\b", _unquoted(clause), re.I)
+            # A swap names two panes, and clauses split at "and": "exchange this
+            # pane | the lower pane". Adjacent clauses are also tried joined, but
+            # never across a close or run: "swap this pane and close the left one".
+            clauses = _clauses(prompt)
+            joined = [f"{a} and {b}" for a, b in zip(clauses, clauses[1:])
+                      if not _CLOSE_VERB.search(f"{a} {b}") and not _RUN_VERB.search(f"{a} {b}")]
+            for clause in clauses + joined:
+                verb = re.search(r"\b(?:swap|exchange|trade|reverse the positions)\b"
+                                 r"|\bswitch (?:places|positions|this pane with|with)\b"
+                                 r"|\bput this pane where\b", _unquoted(clause), re.I)
                 if (verb and not _negated(clause[:verb.start()])
                         and not _RUN_VERB.search(_unquoted(clause[:verb.start()]))
-                        and _PANE_WORD.search(clause)
+                        and (_PANE_WORD.search(clause)
+                             or re.search(r"\bneighbou?r\b", clause, re.I))
                         and not _TAB_WORD.search(clause) and _first(_mentions(side), clause)):
                     return Action(name, {"side": side})
     elif name == "move_tab":

@@ -210,6 +210,19 @@ def load_generator(library: Path):
     return corpus
 
 
+def _typed(kind: str, args: dict) -> dict:
+    """A library binds numbers as digit strings; give integer parameters integers.
+
+    Measured: the kilix-ml pack's move_tab templates bind position "8", and
+    the check (rightly) refuses a string where the schema says integer.
+    """
+    from actions import TOOLS
+    schema = next((t["parameters"]["properties"] for t in TOOLS if t["name"] == kind), {})
+    return {key: int(value) if schema.get(key, {}).get("type") == "integer"
+            and isinstance(value, str) and value.isdigit() else value
+            for key, value in args.items()}
+
+
 def build_data(library: Path, manifest: dict, out: Path) -> dict:
     """Generate, check against the running tool's rules, write upstream's format."""
     corpus = load_generator(library)
@@ -226,6 +239,7 @@ def build_data(library: Path, manifest: dict, out: Path) -> dict:
     kept = inconsistent = unsupported = 0
     with open(out, "w", encoding="utf-8") as handle:
         for row in rows:
+            row["actions"] = [[kind, _typed(kind, args)] for kind, args in row["actions"]]
             calls = [{"name": kind, "arguments": args} for kind, args in row["actions"]]
             admitted = [[a.kind, a.args] for a in interpret(row["query"], calls)
                         if isinstance(a, Action)]
