@@ -180,6 +180,57 @@ _UNITS = ("zero one two three four five six seven eight nine ten eleven twelve t
 _TENS = {2: "twenty", 3: "thirty", 4: "forty", 5: "fifty"}
 
 
+# Number words up to fifty for tab references ("close tab number twelve":
+# measured, the words stopped at nine and "twelve" became a tab name).
+for _n in range(10, 51):
+    _t, _u = divmod(_n, 10)
+    for _w in ([_UNITS[_n]] if _n < 20 else
+               [_TENS[_t]] if _u == 0 else [f"{_TENS[_t]} {_UNITS[_u]}", f"{_TENS[_t]}-{_UNITS[_u]}"]):
+        _CARDINALS[_w] = str(_n)
+
+
+_MOVE = re.compile(r"\b(?:go|goes|going|gone|switch|switching|focus|focusing|jump|move|"
+                   r"hop|flip|show|select|head|take|bring|back|return|visit|cycle|"
+                   r"activate|change to|over to|into)\b", re.I)
+_BARE_REFERENCE = re.compile(r"^\s*(?:the\s+)?(?:(?:next|previous|prev|last|first|"
+                             r"left|right|upper|lower|top|bottom)\s+(?:tab|pane|split|window)|"
+                             r"(?:tab|pane)\s+(?:\w+)|\w+\s+(?:tab|pane))[\s.!?]*$", re.I)
+
+
+_DIRECTION_WORDS = {
+    "wider": r"wider|widen|widens|broaden|broader|bigger|larger|expand|stretch|grow|more width",
+    "narrower": r"narrower|narrow|thinner|slimmer|shrink|squeeze|smaller|less width",
+    "taller": r"taller|higher|heighten|bigger|larger|grow|stretch|expand|more height",
+    "shorter": r"shorter|lower|flatten|squash|shrink|smaller|less height",
+}
+_WIDTH = re.compile(r"\b(?:width|wide|horizontal\w*|sideways|side to side)\b", re.I)
+_HEIGHT = re.compile(r"\b(?:height|tall|high|vertical\w*|up and down)\b", re.I)
+
+
+def _says_direction(direction: str, prompt: str) -> bool:
+    """The request says this direction; "shrink" or "grow" name the axis only
+    together with width or height words."""
+    if not re.search(rf"\b(?:{_DIRECTION_WORDS[direction]})\b", prompt, re.I):
+        return False
+    horizontal = direction in ("wider", "narrower")
+    if re.search(r"\b(?:wider|widen|broaden|broader|narrower|narrow|thinner|taller|shorter|"
+                 r"heighten)\b", prompt, re.I):
+        exact = {"wider": r"wider|widen|widens|broaden|broader",
+                 "narrower": r"narrower|narrow|thinner|slimmer",
+                 "taller": r"taller|heighten", "shorter": r"shorter"}[direction]
+        return bool(re.search(rf"\b(?:{exact})\b", prompt, re.I))
+    if _WIDTH.search(prompt) and not horizontal or _HEIGHT.search(prompt) and horizontal:
+        return False
+    return True
+
+
+def _moves(prompt: str) -> bool:
+    """A go-to needs a movement verb, or a bare reference such as "next tab".
+    Measured (tuned model): "write a haiku about terminals" -> go to the tab
+    named terminals."""
+    return bool(_MOVE.search(prompt) or any(_BARE_REFERENCE.match(c) for c in _clauses(prompt)))
+
+
 def _says_number(n: int, prompt: str) -> bool:
     """n appears as a whole number or in words ("by twenty-five"), never as part
     of another number: 5 is not said by "15"."""
@@ -213,6 +264,9 @@ def _target_value(raw: str, *, relative: bool) -> str | None:
     if lowered in _CURRENT or lowered in ("this pane", "this tab", "current pane",
                                           "current tab", "this one"):
         return "current"
+    words = re.sub(r"^(?:the\s+)?(?:tab\s+)?(?:number\s+)?", "", lowered).strip()
+    if relative and words in _CARDINALS:
+        return _CARDINALS[words]    # before fillers: "twenty-one" must keep its "one"
     stripped = " ".join(_FILLER.sub(" ", lowered).split())
     if not stripped:
         # Only filler ("pane", "the tab"): no reference at all. Measured (five-tool
@@ -725,6 +779,11 @@ def _admit(name: str, args: dict, prompt: str) -> Action | Refusal:
                 if key in out:
                     rest = re.sub(rf"(?<![\w]){re.escape(out[key])}(?![\w])", " ", rest,
                                   flags=re.I)
+            # "open up a new pane": a phrasal up/down is not a direction (measured,
+            # tuned model: side above from "open up").
+            rest = re.sub(r"\b(?:open|opens|opening|pull|bring|fire|spin|set|boot|start|"
+                          r"call|look|shut|write|slow|calm|pop)\s+(?:up|down)\b", " ", rest,
+                          flags=re.I)
             if not _first(_mentions(out["side"]), rest):
                 return Refusal(name, f"the request does not say {out['side']}")
         return Action(name, out)
@@ -761,6 +820,8 @@ def _admit(name: str, args: dict, prompt: str) -> Action | Refusal:
         elif name == "close_pane" and not _clause_supports(_CLOSE_VERB, target, prompt,
                                                            unit="pane"):
             return Refusal(name, "no part of the request asks for this on that pane")
+        if name == "go_to_pane" and not _moves(prompt):
+            return Refusal(name, "the request does not ask to go anywhere")
         out = {"pane": target}
         if name == "run_in_pane":
             out["command"] = command
@@ -772,6 +833,8 @@ def _admit(name: str, args: dict, prompt: str) -> Action | Refusal:
             return target
         if name == "close_tab" and not _clause_supports(_CLOSE_VERB, target, prompt, unit="tab"):
             return Refusal(name, "no part of the request asks to close that tab")
+        if name == "go_to_tab" and not _moves(prompt):
+            return Refusal(name, "the request does not ask to go anywhere")
         return Action(name, {"tab": target})
 
     if name == "arrange_panes":
@@ -793,6 +856,10 @@ def _admit(name: str, args: dict, prompt: str) -> Action | Refusal:
     direction = _text(args, "direction")
     if direction not in DIRECTIONS:
         return Refusal(name, f"unknown direction {direction!r}")
+    if not _says_direction(direction, prompt):
+        # Measured (tuned model): "increase the font size" -> narrower, and
+        # "widen this pane by 20" -> narrower. The direction was never checked.
+        return Refusal(name, f"the request does not ask for {direction}")
     amount = args.get("amount", 2)
     if isinstance(amount, bool) or not isinstance(amount, int) or not 1 <= amount <= 50:
         return Refusal(name, "the size change must be 1 to 50 cells")

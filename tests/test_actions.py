@@ -506,9 +506,11 @@ class TunedModelMisreads(unittest.TestCase):
 
 class Amounts(unittest.TestCase):
     def test_amounts_in_words_and_never_inside_another_number(self):
-        for prompt, amount in (("make it narrower by five", 5), ("widen this split by twenty", 20),
-                               ("grow it by twenty-five", 25), ("make it wider by 12", 12)):
-            [r] = interpret(prompt, [call("resize_pane", direction="wider", amount=amount)])
+        for prompt, direction, amount in (("make it narrower by five", "narrower", 5),
+                                          ("widen this split by twenty", "wider", 20),
+                                          ("make it wider by twenty-five", "wider", 25),
+                                          ("make it wider by 12", "wider", 12)):
+            [r] = interpret(prompt, [call("resize_pane", direction=direction, amount=amount)])
             self.assertIsInstance(r, Action, prompt)
         for prompt, amount in (("make it wider by 15", 5), ("make it wider by fifteen", 5),
                                ("make it wider by 25", 2)):
@@ -545,3 +547,48 @@ class QatFourMisreads(unittest.TestCase):
         self.assertEqual(r, Action("open_tab", {"program": "vim"}))
         [r] = interpret("yo new tab w/ nvim plz", [call("open_tab", program="nvim")])
         self.assertEqual(r, Action("open_tab", {"program": "nvim"}))
+
+
+class QatFiveMisreads(unittest.TestCase):
+    """Measured on held-out v7 (QAT run 5 and the untuned reference)."""
+
+    def one(self, prompt, tool, **arguments):
+        [r] = interpret(prompt, [call(tool, **arguments)])
+        return r
+
+    def test_tab_numbers_in_words_past_nine(self):
+        self.assertEqual(self.one("Close tab number twelve.", "close_tab", tab="twelve"),
+                         Action("close_tab", {"tab": "12"}))
+        self.assertEqual(self.one("go to tab twenty-one", "go_to_tab", tab="twenty-one"),
+                         Action("go_to_tab", {"tab": "21"}))
+        self.assertEqual(self.one("close the tab named twelve", "close_tab", tab="twelve"),
+                         Action("close_tab", {"tab": "name:twelve"}))
+
+    def test_a_phrasal_up_is_not_a_side(self):
+        self.assertIsInstance(self.one("open up a new pane with lazygit in it please", "open_pane",
+                                       side="above", program="lazygit"), Refusal)
+        self.assertIsInstance(self.one("open up a new pane with lazygit in it please", "open_pane",
+                                       program="lazygit"), Action)
+        self.assertIsInstance(self.one("open a pane up top", "open_pane", side="above"), Action)
+
+    def test_a_resize_direction_must_be_said(self):
+        for prompt, direction in (("increase the font size", "narrower"),
+                                  ("widen this pane by 20", "narrower"),
+                                  ("shrink the pane's height", "narrower"),
+                                  ("make the pane bigger", "shorter")):
+            self.assertIsInstance(self.one(prompt, "resize_pane", direction=direction), Refusal, prompt)
+        for prompt, direction in (("widen this pane", "wider"), ("shrink the pane's height", "shorter"),
+                                  ("make the left pane bigger", "wider"), ("squeeze this pane", "narrower"),
+                                  ("give this pane more height", "taller")):
+            self.assertIsInstance(self.one(prompt, "resize_pane", direction=direction), Action, prompt)
+
+    def test_a_go_to_needs_movement(self):
+        self.assertIsInstance(self.one("write a haiku about terminals", "go_to_tab", tab="terminals"),
+                              Refusal)
+        self.assertIsInstance(self.one("I love the htop pane", "go_to_pane", pane="htop"), Refusal)
+        for prompt, tool, arg in (("next tab", "go_to_tab", {"tab": "next"}),
+                                  ("tab 3", "go_to_tab", {"tab": "3"}),
+                                  ("the logs tab", "go_to_tab", {"tab": "logs"}),
+                                  ("focus the left pane", "go_to_pane", {"pane": "left"}),
+                                  ("switch panes", "go_to_pane", {"pane": "next"})):
+            self.assertIsInstance(self.one(prompt, tool, **arg), Action, prompt)
