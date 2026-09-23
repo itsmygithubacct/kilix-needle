@@ -227,7 +227,31 @@ def interpret(prompt: str, calls: list) -> list[Action | Refusal]:
         schema = next(t["parameters"] for t in TOOLS if t["name"] == name)
         error = _shape_error(args, schema)
         results.append(Refusal(name, error) if error else _admit(name, args, prompt))
-    return results
+    return _merge_split_then_run(results, prompt)
+
+
+def _merge_split_then_run(results: list, prompt: str) -> list:
+    """"split right and run htop" is one pane, even when it arrives as two calls.
+
+    Measured (tuned five-tool model): open_pane(side=right) then
+    open_pane(program=htop) for that request; admitted separately they open two
+    panes, one running a program nobody asked to put there. The pair is merged
+    only when the program's own clause is a bare start ("run htop"), never when
+    it asks for another pane ("and open a pane running htop").
+    """
+    merged = []
+    for item in results:
+        previous = merged[-1] if merged else None
+        if (isinstance(item, Action) and isinstance(previous, Action)
+                and previous.kind == item.kind == "open_pane"
+                and set(previous.args) == {"side"} and set(item.args) == {"program"}):
+            clause = next((c for c in _clauses(prompt) if item.args["program"] in c), "")
+            if clause and not re.search(r"\b(?:open|pane|panes|split|window|tab)\b",
+                                        clause.replace(item.args["program"], " "), re.I):
+                merged[-1] = Action("open_pane", {**previous.args, **item.args})
+                continue
+        merged.append(item)
+    return merged
 
 
 _AS_NAME = r"(?:running|named|called|titled|with)\s+(?:the\s+)?"

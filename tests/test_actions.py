@@ -412,3 +412,19 @@ class ProgramStarts(unittest.TestCase):
                 ("split right running htop -d 5 called mon", "open_pane",
                  {"program": "htop -d 5", "side": "right", "name": "mon"})):
             self.assertIsInstance(self.check(prompt, tool, **args), Action, prompt)
+
+
+class SplitThenRun(unittest.TestCase):
+    def test_split_and_run_is_one_pane(self):
+        # tuned five-tool model: two opens for one request
+        results = interpret("split right and run htop",
+                            [call("open_pane", side="right"), call("open_pane", program="htop")])
+        self.assertEqual(results, [Action("open_pane", {"side": "right", "program": "htop"})])
+
+    def test_an_explicit_second_pane_stays_two(self):
+        results = interpret("split right and open a pane running htop",
+                            [call("open_pane", side="right"), call("open_pane", program="htop")])
+        self.assertEqual(len(results), 2)
+        results = interpret("split right, then split below",
+                            [call("open_pane", side="right"), call("open_pane", side="below")])
+        self.assertEqual(len(results), 2)
