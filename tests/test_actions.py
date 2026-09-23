@@ -340,3 +340,20 @@ class BlindCorpusPhrasings(unittest.TestCase):
         for prompt in ("zoom the tab", "make the tab fill the window",
                        "type fill the window in this pane"):
             self.refuse(prompt, "maximize_pane")
+
+
+class NewActionGuards(unittest.TestCase):
+    """Guards on the four reversible actions that no other test reached."""
+
+    def test_a_tab_position_outside_one_to_nine_is_refused(self):
+        for position in (0, 10, 12):
+            [result] = interpret(f"move this tab to position {position}",
+                                 [call("move_tab", position=position)])
+            self.assertIsInstance(result, Refusal, position)
+        [result] = interpret("move this tab to position 9", [call("move_tab", position=9)])
+        self.assertIsInstance(result, Action)
+
+    def test_a_swap_needs_a_pane(self):
+        for prompt in ("swap left", "swap the files on the left", "exchange the left ones"):
+            [result] = interpret(prompt, [call("swap_panes", side="left")])
+            self.assertIsInstance(result, Refusal, prompt)
