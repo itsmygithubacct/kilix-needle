@@ -135,8 +135,11 @@ TOOLS += [{'name': 'maximize_pane',
                  'required': []}}]
 
 TOOL_NAMES = frozenset(tool["name"] for tool in TOOLS)
-_CLOSE_VERB = re.compile(r"\b(close|kill|quit|exit|shut)\b", re.IGNORECASE)
-_RUN_VERB = re.compile(r"\b(run|type|execute|enter)\b", re.IGNORECASE)
+# Gerunds too ("would you mind closing the current tab", blind supplement). Not
+# "running": it introduces a program name ("the pane running top").
+_CLOSE_VERB = re.compile(r"\b(close|closing|kill|killing|quit|quitting|exit|exiting|shut|shutting)\b",
+                         re.IGNORECASE)
+_RUN_VERB = re.compile(r"\b(run|type|typing|execute|executing|enter|entering)\b", re.IGNORECASE)
 _CURRENT = {"", "current", "this", "here", "active", "focused", "the current one"}
 _ORDINALS = {"first": "1", "second": "2", "third": "3", "fourth": "4", "fifth": "5",
              "sixth": "6", "seventh": "7", "eighth": "8", "ninth": "9", "last": "last"}
@@ -330,7 +333,8 @@ def _bound_to_unit(mentions: list[str], text: str, unit_words: list[str]) -> boo
 
 
 _LOCATION = re.compile(r"(?:\s+(?:in|into|on|at)\s+(?:the\s+)?(?:[\w.+-]+\s+){0,2}"
-                       r"(?:pane|panes|window|split|tab)\b.*|\s+(?:here|in\s+here))$",
+                       r"(?:pane|panes|window|split|tab)\b.*"
+                       r"|\s+(?:here|there|in\s+here|in\s+there|in\s+it))$",
                        re.IGNORECASE)
 
 

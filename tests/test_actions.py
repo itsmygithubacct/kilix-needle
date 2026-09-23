@@ -428,3 +428,35 @@ class SplitThenRun(unittest.TestCase):
         results = interpret("split right, then split below",
                             [call("open_pane", side="right"), call("open_pane", side="below")])
         self.assertEqual(len(results), 2)
+
+
+class SupplementPhrasings(unittest.TestCase):
+    """From the independent supplement corpus: gerunds and "there"/"in it"."""
+
+    def test_gerunds_are_verbs(self):
+        [result] = interpret("would you mind closing the current tab",
+                             [call("close_tab", tab="current")])
+        self.assertEqual(result, Action("close_tab", {"tab": "current"}))
+        [result] = interpret("would you mind typing ls -la in the upper pane",
+                             [call("run_in_pane", pane="upper", command="ls -la")])
+        self.assertEqual(result, Action("run_in_pane", {"pane": "above", "command": "ls -la"}))
+        [result] = interpret("stop closing tabs", [call("close_tab", tab="current")])
+        self.assertIsInstance(result, Refusal)
+
+    def test_there_and_in_it_are_locations(self):
+        # "there" is the new pane, which no action can name: typing into this
+        # pane instead would be wrong, so it stays refused.
+        [result] = interpret("split to the left and type cargo test there",
+                             [call("run_in_pane", pane="current", command="cargo test")])
+        self.assertIsInstance(result, Refusal)
+        [result] = interpret("type cargo test in here",
+                             [call("run_in_pane", pane="current", command="cargo test")])
+        self.assertIsInstance(result, Action)
+        [result] = interpret("open a tab titled logs and launch ranger in it",
+                             [call("open_tab", name="logs", program="ranger")])
+        self.assertEqual(result, Action("open_tab", {"name": "logs", "program": "ranger"}))
+
+    def test_running_is_not_a_run_verb(self):
+        [result] = interpret("go to the pane running top",
+                             [call("run_in_pane", pane="current", command="top")])
+        self.assertIsInstance(result, Refusal)
