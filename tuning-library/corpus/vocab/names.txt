@@ -1,0 +1,16 @@
+logs
+build
+server
+notes
+api
+scratch
+music
+docs
+tests
+deploy
+db
+chat
+monitor
+work
+frontend
+backend

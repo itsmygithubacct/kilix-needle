@@ -1,0 +1,312 @@
+[
+  {
+    "name": "open_pane",
+    "description": "Split the window: open a new pane next to the current one. Use for split, new pane, open X in a pane",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "side": {
+          "type": "string",
+          "enum": [
+            "left",
+            "right",
+            "above",
+            "below"
+          ],
+          "description": "which side of the current pane"
+        },
+        "program": {
+          "type": "string",
+          "description": "program to start in it, only if the user names one",
+          "x-source": "input"
+        },
+        "name": {
+          "type": "string",
+          "description": "what to call the pane, only if the user names it",
+          "x-source": "input"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "open_tab",
+    "description": "Open a new tab. Use for new tab, open X in a tab",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "program": {
+          "type": "string",
+          "description": "program to start in it, only if the user names one",
+          "x-source": "input"
+        },
+        "name": {
+          "type": "string",
+          "description": "what to call the tab, only if the user names it",
+          "x-source": "input"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "close_pane",
+    "description": "Close, kill or quit a pane. Only when the user says close, kill, quit or exit",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "pane": {
+          "type": "string",
+          "description": "current, left, right, above, below, or the name or program of a pane",
+          "x-source": "input-or-canonical"
+        }
+      },
+      "required": [
+        "pane"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "close_tab",
+    "description": "Close, kill or quit a tab. Only when the user says close, kill, quit or exit",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "tab": {
+          "type": "string",
+          "description": "current, a tab number, or the name or program of a tab",
+          "x-source": "input-or-canonical"
+        }
+      },
+      "required": [
+        "tab"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "go_to_pane",
+    "description": "Go to, switch to, move to or focus another pane without changing it",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "pane": {
+          "type": "string",
+          "description": "left, right, above, below, or the name or program of a pane",
+          "x-source": "input-or-canonical"
+        }
+      },
+      "required": [
+        "pane"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "go_to_tab",
+    "description": "Go to or switch to another tab without changing it",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "tab": {
+          "type": "string",
+          "description": "next, previous, a tab number, or the name or program of a tab",
+          "x-source": "input-or-canonical"
+        }
+      },
+      "required": [
+        "tab"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "arrange_panes",
+    "description": "Rearrange the panes in this tab",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "layout": {
+          "type": "string",
+          "enum": [
+            "tall",
+            "fat",
+            "grid",
+            "horizontal",
+            "vertical",
+            "splits",
+            "stack"
+          ],
+          "description": "grid; stack shows one pane at a time; vertical is side by side; horizontal is one above another"
+        }
+      },
+      "required": [
+        "layout"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "rename_tab",
+    "description": "Rename or call the current tab something",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "the new name",
+          "x-source": "input"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "resize_pane",
+    "description": "Make the current pane wider, narrower, taller or shorter",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "direction": {
+          "type": "string",
+          "enum": [
+            "wider",
+            "narrower",
+            "taller",
+            "shorter"
+          ]
+        },
+        "amount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50,
+          "description": "number of cells, only if the user gives one"
+        }
+      },
+      "required": [
+        "direction"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "run_in_pane",
+    "description": "Type a command into an existing pane and press enter. Use for run X in a pane, type X",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "pane": {
+          "type": "string",
+          "description": "current, left, right, above, below, or the name or program of a pane",
+          "x-source": "input-or-canonical"
+        },
+        "command": {
+          "type": "string",
+          "description": "the exact command text",
+          "x-source": "input"
+        }
+      },
+      "required": [
+        "pane",
+        "command"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "maximize_pane",
+    "description": "Show one pane full-size (zoom or maximize it), or restore the previous layout",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "pane": {
+          "type": "string",
+          "description": "current, left, right, above, below, or the name or program of a pane",
+          "x-source": "input-or-canonical"
+        },
+        "restore": {
+          "type": "boolean",
+          "description": "true to un-maximize and restore the layout"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "rename_pane",
+    "description": "Rename or title a pane",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "pane": {
+          "type": "string",
+          "description": "current, left, right, above, below, or the name or program of a pane",
+          "x-source": "input-or-canonical"
+        },
+        "name": {
+          "type": "string",
+          "description": "the new name",
+          "x-source": "input"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "swap_panes",
+    "description": "Swap the current pane with its neighbour on one side",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "side": {
+          "type": "string",
+          "enum": [
+            "left",
+            "right",
+            "above",
+            "below"
+          ],
+          "description": "which neighbour to swap with"
+        }
+      },
+      "required": [
+        "side"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "move_tab",
+    "description": "Move the current tab left or right in the tab bar, or to a position",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "direction": {
+          "type": "string",
+          "enum": [
+            "left",
+            "right"
+          ]
+        },
+        "position": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9,
+          "description": "tab position, only if the user gives one"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  }
+]

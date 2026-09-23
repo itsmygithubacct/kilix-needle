@@ -1,0 +1,14 @@
+{"action": "go_to_tab", "templates": [
+ {"text": "go to tab {num}", "args": {"tab": "$num"}},
+ {"text": "switch to tab {num}", "args": {"tab": "$num"}},
+ {"text": "tab {num}", "args": {"tab": "$num"}},
+ {"text": "go to the {ordinal} tab", "args": {"tab": "$num"}},
+ {"text": "next tab", "args": {"tab": "next"}},
+ {"text": "go to the next tab", "args": {"tab": "next"}},
+ {"text": "previous tab", "args": {"tab": "previous"}},
+ {"text": "go back a tab", "args": {"tab": "previous"}},
+ {"text": "last tab", "args": {"tab": "last"}},
+ {"text": "go to the {name} tab", "args": {"tab": "$name"}},
+ {"text": "switch to {name}", "args": {"tab": "$name"}},
+ {"text": "show me the {name} tab", "args": {"tab": "$name"}}
+]}

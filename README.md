@@ -139,9 +139,11 @@ kilix-needle tune --status
 kilix-needle tune --deselect          # back to the base model
 ```
 
-The tuner reads the kilix-ml domain pack (`kilix-modules/kilix-ml/domains/kilix_panes`,
-or `third_party/kilix-needle-tuning` in a standalone install): its corpus, its pins
-and its gates. It verifies the base checkpoint (a pickle, never read before its digest
+The tuner reads `tuning-library/` in this repository: its corpus, its pins and
+its gates, plus the blind supplement templates in `tuning-library/supplement/`.
+`tuning.RECIPE` applies what was learned about training Needle over the
+library's manifest: quantisation-aware training, 4 epochs, an 18% cap on any
+one action, and the newest held-out set as the gate. It verifies the base checkpoint (a pickle, never read before its digest
 matches) and tokenizer. It fetches Needle's training code at `v2.0.9`
 (`571fcd68`) and builds a hash-locked environment. It generates examples,
 keeping only those that the checks above admit and none that match an eval
@@ -262,10 +264,10 @@ and left-hand/right-hand targets, and `please` or matching quote/backtick wrappe
 around commands. Command contents remain exact and case-sensitive. `close it`
 and attempts to quit a program by closing its containing pane remain refused.
 
-The workspace tuner now reads `kilix-modules/kilix-ml/domains/kilix_panes`.
-Set `KILIX_ML_HOME` to use another kilix-ml source root. An explicit missing pack
-is an error. Standalone installations without a kilix-ml pack retain the pinned
-`third_party/kilix-needle-tuning` fallback. The compatibility recipe counts and
+The tuning library is part of this repository (`tuning-library/`). It began as
+kilix-ml's `kilix_panes` domain pack and replaces the old
+`third_party/kilix-needle-tuning` submodule. Set `KILIX_NEEDLE_TUNING_LIBRARY` to
+try another copy; an explicit missing library is an error. The compatibility recipe counts and
 skips actions its five-tool format cannot express; the 7.2M training recipe must
 use the full exported 14-tool contract.
 

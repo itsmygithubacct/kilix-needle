@@ -1,0 +1,21 @@
+{"action": "open_pane", "templates": [
+ {"text": "split {side}", "args": {"side": "$side"}},
+ {"text": "split the pane {side}", "args": {"side": "$side"}},
+ {"text": "new pane {side}", "args": {"side": "$side"}},
+ {"text": "add a pane {side}", "args": {"side": "$side"}},
+ {"text": "open a pane {side}", "args": {"side": "$side"}},
+ {"text": "put a new terminal {side}", "args": {"side": "$side"}},
+ {"text": "split", "args": {}},
+ {"text": "split this pane", "args": {}},
+ {"text": "open another pane", "args": {}},
+ {"text": "give me a new pane", "args": {}},
+ {"text": "open {program} in a pane {side}", "args": {"side": "$side", "program": "$program"}},
+ {"text": "split {side} and run {program}", "args": {"side": "$side", "program": "$program"}},
+ {"text": "split {side} running {program}", "args": {"side": "$side", "program": "$program"}},
+ {"text": "open a pane with {program}", "args": {"program": "$program"}},
+ {"text": "start {program} in a new pane", "args": {"program": "$program"}},
+ {"text": "open a new pane running {program}", "args": {"program": "$program"}},
+ {"text": "open a pane called {name}", "args": {"name": "$name"}},
+ {"text": "split {side} and call it {name}", "args": {"side": "$side", "name": "$name"}},
+ {"text": "new pane named {name}", "args": {"name": "$name"}}
+]}

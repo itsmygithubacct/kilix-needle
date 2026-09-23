@@ -1,0 +1,94 @@
+{
+  "action": "rename_pane",
+  "templates": [
+    {
+      "text": "rename this pane to {name}",
+      "args": {
+        "name": "$name"
+      }
+    },
+    {
+      "text": "call the current pane {name}",
+      "args": {
+        "name": "$name"
+      }
+    },
+    {
+      "text": "set this pane title to {name}",
+      "args": {
+        "name": "$name"
+      }
+    },
+    {
+      "text": "label this pane {name}",
+      "args": {
+        "name": "$name"
+      }
+    },
+    {
+      "text": "change the pane name to {name}",
+      "args": {
+        "name": "$name"
+      }
+    },
+    {
+      "text": "title the current pane {name}",
+      "args": {
+        "name": "$name"
+      }
+    },
+    {
+      "text": "rename the {side_adj} pane to {name}",
+      "args": {
+        "pane": "$side",
+        "name": "$name"
+      }
+    },
+    {
+      "text": "call the pane {side} {name}",
+      "args": {
+        "pane": "$side",
+        "name": "$name"
+      }
+    },
+    {
+      "text": "label the {side_adj} pane as {name}",
+      "args": {
+        "pane": "$side",
+        "name": "$name"
+      }
+    },
+    {
+      "text": "set the title of the pane {side} to {name}",
+      "args": {
+        "pane": "$side",
+        "name": "$name"
+      }
+    },
+    {
+      "text": "rename the pane {side} {name}",
+      "args": {
+        "pane": "$side",
+        "name": "$name"
+      }
+    },
+    {
+      "text": "give the current pane the name {name}",
+      "args": {
+        "name": "$name"
+      }
+    },
+    {
+      "text": "change this pane label to {name}",
+      "args": {
+        "name": "$name"
+      }
+    },
+    {
+      "text": "make this pane title read {name}",
+      "args": {
+        "name": "$name"
+      }
+    }
+  ]
+}

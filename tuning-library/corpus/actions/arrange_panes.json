@@ -1,0 +1,8 @@
+{"action": "arrange_panes", "templates": [
+ {"text": "make it {layout}", "args": {"layout": "$layout"}},
+ {"text": "arrange the panes {layout}", "args": {"layout": "$layout"}},
+ {"text": "switch to {layout}", "args": {"layout": "$layout"}},
+ {"text": "use {layout}", "args": {"layout": "$layout"}},
+ {"text": "lay the panes out {layout}", "args": {"layout": "$layout"}},
+ {"text": "show the panes {layout}", "args": {"layout": "$layout"}}
+]}

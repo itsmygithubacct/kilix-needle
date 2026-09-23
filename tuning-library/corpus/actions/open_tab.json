@@ -1,0 +1,14 @@
+{"action": "open_tab", "templates": [
+ {"text": "new tab", "args": {}},
+ {"text": "open a tab", "args": {}},
+ {"text": "open a new tab", "args": {}},
+ {"text": "give me another tab", "args": {}},
+ {"text": "new tab called {name}", "args": {"name": "$name"}},
+ {"text": "open a tab named {name}", "args": {"name": "$name"}},
+ {"text": "create a {name} tab", "args": {"name": "$name"}},
+ {"text": "open {program} in a new tab", "args": {"program": "$program"}},
+ {"text": "new tab running {program}", "args": {"program": "$program"}},
+ {"text": "start {program} in a tab", "args": {"program": "$program"}},
+ {"text": "open a tab with {program}", "args": {"program": "$program"}},
+ {"text": "open a tab called {name} running {program}", "args": {"name": "$name", "program": "$program"}}
+]}

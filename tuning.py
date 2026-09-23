@@ -1,4 +1,4 @@
-"""Fine-tune Needle 2 using kilix-ml's Kilix domain pack (or the legacy pin).
+"""Fine-tune Needle 2 from kilix-needle's own tuning library (tuning-library/).
 
     kilix-needle tune [--base-dir DIR] [--library FILE] [--steps-only] [--background]
     kilix-needle tune --status | --select RUN_DIR | --deselect
@@ -39,26 +39,27 @@ import sys
 import tomllib
 
 REPO = Path(__file__).resolve().parent
-LEGACY_LIBRARY = REPO / "third_party" / "kilix-needle-tuning"
 
 
 def library_path() -> Path:
-    """Use the merged Kilix pack; a standalone old installation can still use its pin."""
-    configured = os.environ.get("KILIX_ML_HOME")
-    ml = Path(configured).expanduser() if configured else REPO.parents[1] / "kilix-modules" / "kilix-ml"
-    pack = ml / "domains" / "kilix_panes"
+    """The tuning library in this repository; KILIX_NEEDLE_TUNING_LIBRARY for development.
+
+    It began as kilix-ml's kilix_panes domain pack and is part of this
+    repository, so an installation can tune with nothing else checked out.
+    """
+    configured = os.environ.get("KILIX_NEEDLE_TUNING_LIBRARY")
     # An explicit path must never silently select some other training inputs.
-    return pack if configured or (pack / "manifest.toml").is_file() else LEGACY_LIBRARY
+    return Path(configured).expanduser() if configured else REPO / "tuning-library"
 
 
 LIBRARY = library_path()
 APP_HOME = Path(os.environ.get("GPU_TERMINAL_HOME") or Path.home() / ".local" / "gpu_terminal") \
     / "kilix-apps" / "kilix-needle"
 SELECTION = APP_HOME / "model.json"
-SUPPLEMENT = REPO / "corpus-supplement"
+SUPPLEMENT = REPO / "tuning-library" / "supplement"
 
-# kilix-needle's own recipe, applied over the pack's manifest (kilix-ml owns
-# the pack; what this app learned about training Needle lives here).
+# kilix-needle's recipe, applied over the library's manifest.toml (which is
+# kept as kilix-ml authored it; what was learned about training Needle is here).
 #   qat         train through the checkpoint's own quantiser. Upstream trains
 #               in float and export quantises to 2 bits; measured on run 2, the
 #               quantiser's error was ~50x the adapter's change and the tuned
@@ -90,8 +91,8 @@ def sha256_file(path: Path) -> str:
 def load_manifest(library: Path = LIBRARY) -> dict:
     path = library / "manifest.toml"
     if not path.exists():
-        raise TuneError(f"no tuning domain pack at {library}; set KILIX_ML_HOME to the "
-                        "kilix-ml source root, or initialise the legacy tuning submodule")
+        raise TuneError(f"no tuning library at {library} (a manifest.toml); unset "
+                        "KILIX_NEEDLE_TUNING_LIBRARY to use the one in this repository")
     manifest = tomllib.loads(path.read_text(encoding="utf-8"))
     if manifest.get("schema") != "kilix-needle-tuning/v1":
         raise TuneError(f"unsupported tuning manifest {manifest.get('schema')!r}")

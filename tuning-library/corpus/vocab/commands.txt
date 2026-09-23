@@ -1,0 +1,16 @@
+make
+make test
+git status
+git pull
+git log
+ls -la
+npm test
+npm run dev
+cargo build
+cargo test
+pytest
+go test ./...
+docker ps
+uptime
+df -h
+clear

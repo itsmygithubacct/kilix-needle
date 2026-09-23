@@ -1,0 +1,7 @@
+{"grid": ["a grid", "grid", "the grid layout"],
+ "stack": ["stacked", "one pane at a time", "the stack layout"],
+ "tall": ["tall", "the tall layout"],
+ "fat": ["fat", "the fat layout"],
+ "splits": ["splits", "the splits layout"],
+ "vertical": ["side by side", "vertical", "in columns"],
+ "horizontal": ["one above another", "horizontal", "in rows"]}

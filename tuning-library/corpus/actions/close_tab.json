@@ -1,0 +1,11 @@
+{"action": "close_tab", "templates": [
+ {"text": "close this tab", "args": {"tab": "current"}},
+ {"text": "close the current tab", "args": {"tab": "current"}},
+ {"text": "kill this tab", "args": {"tab": "current"}},
+ {"text": "close tab {num}", "args": {"tab": "$num"}},
+ {"text": "kill tab {num}", "args": {"tab": "$num"}},
+ {"text": "close the {ordinal} tab", "args": {"tab": "$num"}},
+ {"text": "close the {name} tab", "args": {"tab": "$name"}},
+ {"text": "close the tab called {name}", "args": {"tab": "$name"}},
+ {"text": "quit the {name} tab", "args": {"tab": "$name"}}
+]}
