@@ -502,3 +502,15 @@ class TunedModelMisreads(unittest.TestCase):
                                 ("type `faster` please", "faster")):
             [r] = self.check(prompt, call("run_in_pane", pane="current", command=command))
             self.assertIsInstance(r, Action, prompt)
+
+
+class Amounts(unittest.TestCase):
+    def test_amounts_in_words_and_never_inside_another_number(self):
+        for prompt, amount in (("make it narrower by five", 5), ("widen this split by twenty", 20),
+                               ("grow it by twenty-five", 25), ("make it wider by 12", 12)):
+            [r] = interpret(prompt, [call("resize_pane", direction="wider", amount=amount)])
+            self.assertIsInstance(r, Action, prompt)
+        for prompt, amount in (("make it wider by 15", 5), ("make it wider by fifteen", 5),
+                               ("make it wider by 25", 2)):
+            [r] = interpret(prompt, [call("resize_pane", direction="wider", amount=amount)])
+            self.assertIsInstance(r, Refusal, prompt)

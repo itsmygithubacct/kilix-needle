@@ -175,6 +175,23 @@ class Refusal:
     reason: str
 
 
+_UNITS = ("zero one two three four five six seven eight nine ten eleven twelve thirteen "
+          "fourteen fifteen sixteen seventeen eighteen nineteen").split()
+_TENS = {2: "twenty", 3: "thirty", 4: "forty", 5: "fifty"}
+
+
+def _says_number(n: int, prompt: str) -> bool:
+    """n appears as a whole number or in words ("by twenty-five"), never as part
+    of another number: 5 is not said by "15"."""
+    forms = [str(n)]
+    if n < 20:
+        forms.append(_UNITS[n])
+    elif n <= 59:
+        tens, unit = divmod(n, 10)
+        forms += [_TENS[tens]] if unit == 0 else [f"{_TENS[tens]}[ -]{_UNITS[unit]}"]
+    return any(re.search(rf"(?<![\w-]){form}(?![\w-])", prompt, re.I) for form in forms)
+
+
 def _grounded(value: str, prompt: str) -> bool:
     """The value occurs in the request as whole words, not inside a word.
 
@@ -761,6 +778,6 @@ def _admit(name: str, args: dict, prompt: str) -> Action | Refusal:
     amount = args.get("amount", 2)
     if isinstance(amount, bool) or not isinstance(amount, int) or not 1 <= amount <= 50:
         return Refusal(name, "the size change must be 1 to 50 cells")
-    if "amount" in args and str(amount) not in prompt:
+    if "amount" in args and not _says_number(amount, prompt):
         return Refusal(name, f"the amount {amount} is not in the request")
     return Action(name, {"direction": direction, "amount": amount})
