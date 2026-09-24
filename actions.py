@@ -291,7 +291,12 @@ def _target_value(raw: str, *, relative: bool) -> str | None:
     if relative and re.fullmatch(r"(?:number\s+)?[0-9]{1,2}", stripped):
         return stripped.split()[-1]
     if re.fullmatch(r"[\w.+-][\w .+-]{0,62}", stripped):
-        return "name:" + stripped
+        # Keep the name's case as given: every match downstream casefolds, but
+        # a title that matches *with* its case is preferred (review R5, row D:
+        # "close the Build pane" beside a local "build").
+        cased = re.search(r"(?<![\w])" + r"\s+".join(map(re.escape, stripped.split())) + r"(?![\w])",
+                          " ".join(raw.split()), re.IGNORECASE)
+        return "name:" + (cased.group(0) if cased else stripped)
     return None
 
 
@@ -370,20 +375,22 @@ def _pane_phrases(target: str) -> list[str]:
     return [rf"(?:the |that )?{name} {unit}", rf"(?:the )?{unit} (?:called|named|titled|running) {name}"]
 
 
-_CONDITION_IN_COMMAND = re.compile(
-    r"\b(?:if|unless|when|whenever|once|after|before|until|maybe|later|in \d+ ?(?:s|sec|seconds?|"
-    r"m|min|minutes?|h|hours?))\b")
+# A word that is plainly an argument to a shell command, not English.
+_SHELL_ARGUMENT = re.compile(r"-.*|.*[/=.:@~$*].*|[0-9]+|&&|\|\||\||;|>>?|<|2>&1")
 
 
 def _quoted(value: str) -> str:
     """A command or program as the request gives it. Quoted, it is taken
-    verbatim; unquoted, it must not carry a condition or a delay, which would
-    be typed along with it (review KN-R4-05: "run rm -rf build if it is stale
-    in the build pane" typed exactly that)."""
+    verbatim. Unquoted, it is plain only as one word, or when every later word
+    is plainly a shell argument (a flag, a path, a number, `=`, an operator):
+    English after a program may be a condition or a delay that would be typed
+    along with it. Reviews KN-R4-05 and KN-R5-03 each found a list of such
+    words one word short ("if", then "tomorrow"); this needs no list."""
     text = re.escape(value.casefold())
-    if _CONDITION_IN_COMMAND.search(value.casefold()):
-        return rf"(?:`{text}`|\"{text}\"|'{text}')"
-    return rf"(?:{text}|`{text}`|\"{text}\"|'{text}')"
+    words = value.split()
+    if len(words) == 1 or all(_SHELL_ARGUMENT.fullmatch(w) for w in words[1:]):
+        return rf"(?:{text}|`{text}`|\"{text}\"|'{text}')"
+    return rf"(?:`{text}`|\"{text}\"|'{text}')"
 
 
 def _clause_forms(action) -> list[str]:
@@ -440,7 +447,8 @@ def plain(prompt: str, actions: list) -> str | None:
     # A question mark is plain only after "can/could/would/will you": a bare
     # "close tab 2?" asks (review R4, row D).
     asks = re.match(r"(?:please[\s,]+)?(?:can|could|would|will) you\b", text)
-    if text.endswith("?") and not asks:
+    # Anywhere in the closing punctuation (review KN-R5-04: "close tab 2?!").
+    if re.search(r"\?[\s.!?]*$", text) and not asks:
         return "it ends in a question mark"
     text = _POLITE_HEAD.sub("", text)
     text = re.sub(r"[.!?]+$", "", text).strip()

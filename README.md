@@ -58,8 +58,11 @@ whichever tab is on screen. If a harness strips `KITTY_WINDOW_ID`, the pane
 is found through the process ancestry. With `--under-overlay` (the hotkey),
 it means the pane the overlay covers. Side references use Kilix's neighbour
 map, which reports window groups. Names match a pane's title or foreground
-program, preferring the current tab. An ambiguous or missing reference is
-refused with the candidates named.
+program exactly (the current tab first), or else a whole word of exactly one
+title. The pane and tab kilix-needle was started from are never matched by a
+whole word: while it runs, Kilix titles them with the request itself. An
+ambiguous or missing reference is refused with the candidates named. "Next"
+and "previous" tab wrap round for a go-to, never for a close.
 
 ## Why it asks, and what it refuses
 
@@ -96,23 +99,35 @@ that means, exactly:
   right and run htop", "go to tab 1". A safe action beside a risky one is held
   to its canonical wording too; a safe action with none makes the request not
   plain.
-- Politeness only at the edges: "please", "just", "hey", "go ahead and",
-  "can/could/would/will you" before; "please", "thanks", "now", "for me" after.
-  A question mark only after "can you" (and its kin).
+- Politeness only at the edges: "please", "pls", "kindly", "ok", "okay",
+  "alright", "hey", "just", "go ahead and", "can/could/would/will you" before;
+  "please", "pls", "thanks", "thank you", "now", "right now", "for me" after.
+  A request that ends in a question mark (anywhere in its closing punctuation)
+  is plain only after "can/could/would/will you".
 - After any clause that moves focus (a go-to, or opening a pane or tab), no
   risky action is plain.
-- A command or program is taken as given. One that contains a condition or a
-  delay ("if", "unless", "maybe", "in 5 minutes"…) is plain only in quotes.
+- A command or program is plain unquoted only as one word ("make", "htop"),
+  or when every later word is plainly a shell argument: a flag, a path, a
+  number, `=` or an operator ("ls -la ~/src", "make -C src"). Anything else,
+  "make test" included, is plain only in quotes (`run "make test" in the build
+  pane`): English after a program may be a condition or a delay that would be
+  typed along with it, and two reviews found every list of such words short.
 - "top" and "bottom" are never plain: Kilix resolves "above" and "below" to the
   adjacent pane, not the outermost one.
 - Tab numbers are ASCII digits or number words.
 
+Beyond the wording, a yes given in advance never covers a target found only
+by a whole word of a title, nor a close of the pane or tab the request was
+made from.
+
 Anything else waits for a person, who sees the target. Every action in one
 request is resolved against the one desktop the request was made on and
 performed by id, so "close tab 2 and close tab 3" closes the tabs that were
-2 and 3. Once any action is refused, cannot be resolved or fails, nothing
-later in the request runs on a yes given in advance. Four reviews shaped this;
-their records are in the release's research notes.
+2 and 3. Just before a command is typed, its pane is read again: if an earlier
+command in the request started a program there, nothing is typed. Once any
+action is refused, cannot be resolved or fails, nothing later in the request
+runs on a yes given in advance. Five reviews shaped this; their records are
+in the release's research notes.
 
 A pre-answered yes never overrides a refusal: if any part of a request is
 refused, everything else in it waits for a typed `y`, and without a terminal

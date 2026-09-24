@@ -83,9 +83,22 @@ class Handle(unittest.TestCase):
 
     def test_yes_runs_a_risky_action_without_a_terminal(self):
         status, calls, out, _ = self.run_request(
-            "close this pane", call("close_pane", pane="this"), tty=False, yes=True)
-        self.assertEqual((status, calls), (0, [(["close-window", "--match=id:300"], None)]))
+            "close the left pane", call("close_pane", pane="left"), tty=False, yes=True)
+        self.assertEqual((status, calls), (0, [(["close-window", "--match=id:301"], None)]))
         self.assertNotIn("[y/N]", out)
+
+    def test_yes_never_closes_the_requesters_own_pane_or_tab(self):      # KN-R5-01
+        for prompt, args in (("close this pane", ("close_pane", {"pane": "this"})),
+                             ("close this tab", ("close_tab", {"tab": "this tab"}))):
+            with self.subTest(prompt=prompt):
+                status, calls, out, _ = self.run_request(
+                    prompt, call(args[0], **args[1]), tty=False, yes=True)
+                self.assertEqual((status, calls), (1, []))
+                self.assertIn("this request was made from", out)
+        # A person at a terminal may still say yes to it.
+        status, calls, _, _ = self.run_request(
+            "close this pane", call("close_pane", pane="this"), answers=["y"])
+        self.assertEqual(calls, [(["close-window", "--match=id:300"], None)])
 
     def test_yes_covers_only_a_plain_instruction(self):
         # Review R2: "close tab 1 or tab 2" closed tab 2 on --yes. Not plain, so
@@ -257,3 +270,50 @@ class OneSnapshotPerRequest(unittest.TestCase):
             self.assertEqual(fake.calls(), [])
         self.assertEqual([i["outcome"] for i in record["items"]], ["unresolved", "skipped"])
         self.assertIn("earlier action", record["items"][1]["reason"])
+
+
+class ReviewR5Run(unittest.TestCase):
+    """KN-R5-01 (fuzzy never waived), KN-R5-02 (prompt re-read), N04 (own-guard breaks)."""
+
+    def setUp(self):
+        os.environ["KITTY_WINDOW_ID"] = "300"
+        self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
+
+    def test_a_fuzzy_target_waits_for_a_person(self):
+        import copy
+        tree = copy.deepcopy(desktop())
+        tree[0]["tabs"][1]["windows"][1]["title"] = "make build"
+        tree[0]["tabs"][2]["windows"][1]["title"] = "shell"
+        with FakeKilix(tree) as fake:
+            record = needle_cli.run_calls("close the build pane", [call("close_pane", pane="build")],
+                                          needle_cli.Options(assume_yes=True), confirm=lambda _q: False)
+            self.assertEqual(fake.calls(), [])
+        self.assertIn("word of its title", record["items"][0]["reason"])
+
+    def test_a_second_command_after_a_program_started_is_not_typed(self):
+        from unittest import mock
+        import copy, kilix
+        before = desktop()
+        after = copy.deepcopy(before)
+        build = after[0]["tabs"][2]["windows"][1]
+        build.update(at_prompt=False, foreground_processes=[{"cmdline": ["vim", "notes.txt"], "pid": 1}])
+        sent = []
+        with mock.patch.object(kilix, "snapshot",
+                               side_effect=[kilix.Tree(before), kilix.Tree(before), kilix.Tree(after)]), \
+                mock.patch.object(kilix, "perform", side_effect=sent.append):
+            record = needle_cli.run_calls(
+                "run vim notes.txt in the build pane and run make in the build pane",
+                [call("run_in_pane", pane="build", command="vim notes.txt"),
+                 call("run_in_pane", pane="build", command="make")],
+                needle_cli.Options(assume_yes=True))
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(record["items"][1]["outcome"], "unresolved")
+
+    def test_an_own_pane_refusal_holds_the_rest_for_an_agent(self):    # N04
+        with FakeKilix(desktop()) as fake:
+            record = needle_cli.run_calls(
+                "close this tab and close tab 1",
+                [call("close_tab", tab="this tab"), call("close_tab", tab="1")],
+                needle_cli.Options(assume_yes=True, agent=True))
+            self.assertEqual(fake.calls(), [])
+        self.assertEqual(record["items"][0]["outcome"], "refused")

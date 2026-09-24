@@ -193,8 +193,12 @@ def _omp(undo, dry_run):
                     _write(path, pristine)
                     return f"{path}: removed mcpServers.{NAME}"
             except FileNotFoundError:
-                if data == {"mcpServers": {}}:
+                # Only a file setup recorded creating (review KN-R5-08: a
+                # missing .bak alone deleted a user's own "{}").
+                created = path.with_name(path.name + f".{NAME}.created")
+                if created.exists() and data == {"mcpServers": {}}:
                     os.unlink(os.path.realpath(path))
+                    created.unlink()
                     return f"{path}: removed (setup had created it)"
             except (OSError, ValueError):
                 pass
@@ -204,6 +208,8 @@ def _omp(undo, dry_run):
         servers[NAME] = wanted
     if dry_run:
         return f"{path}: would {'remove' if undo else 'set'} mcpServers.{NAME}"
+    if not existed and not undo:
+        path.with_name(path.name + f".{NAME}.created").write_text("", encoding="utf-8")
     _write(path, json.dumps(data, indent=2) + "\n")
     return f"{path}: {'removed' if undo else 'set'} mcpServers.{NAME}"
 

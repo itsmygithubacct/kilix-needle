@@ -44,6 +44,10 @@ class Step:
     summary: str
     commands: tuple[tuple[tuple[str, ...], bytes | None], ...]
     closes: frozenset = frozenset()   # ids of every pane this step would close
+    # The target was found only as a whole word of a title, not by an exact
+    # title or program: never enough for a yes given in advance (KN-R5-01).
+    fuzzy: bool = False
+    types_into: int | None = None     # the pane a command is typed into
 
 
 def _ancestors() -> list[int]:
@@ -156,6 +160,8 @@ class Tree:
                             (not own and window.get("pid") in ancestry):
                         os_window, own_tab, own_pane = candidate, tab, window
         self.caller = own_pane
+        self.fuzzy = False
+        self._own_tab = own_tab
         if own_pane is not None and under_overlay:
             # Opened from a hotkey as an overlay, the overlay is the active
             # window; the pane the user means is the one it covers.
@@ -219,11 +225,22 @@ class Tree:
             return name in (_program(window).casefold(),
                             str(window.get("title") or "").strip().casefold())
 
+        # A title that matches with its case wins first, anywhere: "the Build
+        # pane" is not the local "build" when another pane is titled "Build"
+        # (review R5, row D).
+        typed = ref[5:]
+        cased = [w for _tab, w in self._all_panes()
+                 if str(w.get("title") or "").strip() == typed and typed != typed.casefold()]
         local = [w for w in self.active_tab.get("windows") or [] if exact(w)]
-        found = local or [w for _tab, w in self._all_panes() if exact(w)]
+        found = cased or local or [w for _tab, w in self._all_panes() if exact(w)]
         if not found:
+            # Never the requester's own pane: while kilix-needle runs, Kilix
+            # titles it with the request itself (review KN-R5-01: "close the
+            # webhooks tab" closed its own tab).
+            own = {id(w) for w in (self.caller, self.active_pane) if w is not None}
             found = [w for _tab, w in self._all_panes()
-                     if _whole_word(name, str(w.get("title") or ""))]
+                     if id(w) not in own and _whole_word(name, str(w.get("title") or ""))]
+            self.fuzzy = bool(found)
         if len(found) == 1:
             return found[0]
         if not found:
@@ -231,14 +248,21 @@ class Tree:
         raise KilixError(f"{name!r} matches several panes: "
                          + ", ".join(_describe_pane(w) for w in found))
 
-    def tab(self, ref: str) -> dict:
+    def tab(self, ref: str, *, wrap: bool = True) -> dict:
         index = self.tabs.index(self.active_tab)
         if ref == "current":
             return self.active_tab
-        if ref == "next":
-            return self.tabs[(index + 1) % len(self.tabs)]
-        if ref == "previous":
-            return self.tabs[(index - 1) % len(self.tabs)]
+        if ref in ("next", "previous", "last") and any(
+                str(t.get("title") or "").strip().casefold() == ref for t in self.tabs):
+            # A tab titled "next" makes "the next tab" ambiguous (review R5, row D).
+            raise KilixError(f"'the {ref} tab' is ambiguous: a tab is titled {ref!r}")
+        if ref in ("next", "previous"):
+            step = 1 if ref == "next" else -1
+            if not wrap and not 0 <= index + step < len(self.tabs):
+                # Review KN-R5-05: a close must not wrap round the tab bar.
+                raise KilixError(f"there is no {ref} tab: this is the "
+                                 f"{'last' if ref == 'next' else 'first'} one")
+            return self.tabs[(index + step) % len(self.tabs)]
         if ref == "last":
             return self.tabs[-1]
         if ref.isascii() and ref.isdigit():   # review KN-R4-07: "\u09ea" is not a 4 here
@@ -247,8 +271,11 @@ class Tree:
                 raise KilixError(f"there is no tab {number}; there are {len(self.tabs)}")
             return self.tabs[number - 1]
         name = ref[5:].casefold() if ref.startswith("name:") else ref.casefold()
-        found = [t for t in self.tabs if str(t.get("title") or "").strip().casefold() == name] \
-            or [t for t in self.tabs if _whole_word(name, str(t.get("title") or ""))]
+        found = [t for t in self.tabs if str(t.get("title") or "").strip().casefold() == name]
+        if not found:
+            found = [t for t in self.tabs if t is not self._own_tab
+                     and _whole_word(name, str(t.get("title") or ""))]
+            self.fuzzy = bool(found)
         if len(found) == 1:
             return found[0]
         if not found:
@@ -282,6 +309,13 @@ def _program_argv(program: str) -> list[str]:
 
 def resolve(action: Action, tree: Tree) -> Step:
     """Bind an admitted action to concrete ids and the argv that performs it."""
+    import dataclasses
+    tree.fuzzy = False
+    step = _resolve(action, tree)
+    return dataclasses.replace(step, fuzzy=tree.fuzzy)
+
+
+def _resolve(action: Action, tree: Tree) -> Step:
     kind, args = action.kind, action.args
     if kind == "open_pane":
         # Measured live: without a tab match, launch opens the pane in whichever
@@ -319,7 +353,7 @@ def resolve(action: Action, tree: Tree) -> Step:
                     (((command, f"--match=id:{window['id']}"), None),),
                     frozenset({window["id"]}) if kind == "close_pane" else frozenset())
     if kind in ("close_tab", "go_to_tab"):
-        tab = tree.tab(args["tab"])
+        tab = tree.tab(args["tab"], wrap=kind == "go_to_tab")
         verb = "close" if kind == "close_tab" else "go to"
         command = "close-tab" if kind == "close_tab" else "focus-tab"
         return Step(action, f"{verb} {tree.describe_tab(tab)}",
@@ -400,8 +434,18 @@ def resolve(action: Action, tree: Tree) -> Step:
             else f"--match=id:{window['id']}"
         return Step(action, f"type {args['command']!r} into {_describe_pane(window)} and press Enter",
                     ((("send-text", match, "--stdin"), text),
-                     (("send-text", match, "--stdin"), b"\r")))
+                     (("send-text", match, "--stdin"), b"\r")),
+                    types_into=window["id"])
     raise KilixError(f"no kilix command for {kind}")
+
+
+def still_at_prompt(window_id: int, *, under_overlay: bool = False) -> bool:
+    """Read the desktop again, just before typing: an earlier command in the
+    same request may have started a program in that pane (review KN-R5-02:
+    "run vim notes.txt … and run make …" typed make into vim)."""
+    tree = snapshot(under_overlay=under_overlay)
+    window = next((w for _tab, w in tree._all_panes() if w.get("id") == window_id), None)
+    return window is not None and window.get("at_prompt") is True and _shell_in_front(window)
 
 
 def perform(step: Step) -> None:

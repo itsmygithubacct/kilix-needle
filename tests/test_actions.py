@@ -893,7 +893,7 @@ class ReviewR2Contract(unittest.TestCase):
         for prompt, tool, args in (("close tab 2", "close_tab", {"tab": "2"}),
                                    ("could you close tab 2?", "close_tab", {"tab": "2"}),
                                    ("close the build pane please", "close_pane", {"pane": "build"}),
-                                   ("run make test in the build pane", "run_in_pane",
+                                   ('run "make test" in the build pane', "run_in_pane",
                                     {"pane": "build", "command": "make test"})):
             with self.subTest(prompt=prompt):
                 admitted = [r for r in interpret(prompt, [call(tool, **args)]) if isinstance(r, Action)]
@@ -1075,9 +1075,11 @@ class ReviewR3Contract(unittest.TestCase):
                 refused += 1
             elif plain(prompt, admitted) is None:
                 plain_count += 1
-        # 2026-09-24: 61 plain, 3 held (an explanation attached), 4 refused by
-        # the checks (no close verb in "get rid of"; "and tab 1" has no verb).
-        self.assertGreaterEqual(plain_count, 61)
+        # 2026-09-24, after review R5 (KN-R5-03): an unquoted command of several
+        # words is plain only if its later words are shell arguments, so
+        # "run make test in …" waits unless quoted. 55 plain, 9 held, 4 refused
+        # by the checks ("get rid of" has no close verb; "and tab 1" no verb).
+        self.assertGreaterEqual(plain_count, 55)
         self.assertLessEqual(refused, 4)
 
 
@@ -1160,3 +1162,45 @@ class ReviewR4Plain(unittest.TestCase):
     def test_an_en_dash_in_a_name_is_normalised(self):                 # R3 N04, still alive at R4
         [r] = interpret("close the leave–tracker tab", [call("close_tab", tab="leave-tracker")])
         self.assertEqual(r, Action("close_tab", {"tab": "name:leave-tracker"}))
+
+
+class ReviewR5Plain(ReviewR4Plain):
+    """0.2.2 review R5 at the level of plain() (KN-R5-03, -04; survivors P04, P06, P09)."""
+
+    def test_an_unquoted_command_of_english_words_waits(self):          # KN-R5-03
+        for prompt, command in (("run rm -rf build tomorrow in the build pane", "rm -rf build tomorrow"),
+                                ("run git push --force eventually in the build pane",
+                                 "git push --force eventually"),
+                                ("run rm -rf build in 5 mins in the build pane", "rm -rf build in 5 mins")):
+            with self.subTest(prompt=prompt):
+                self.assert_plain(prompt, call("run_in_pane", pane="build", command=command),
+                                  expected=False)
+        self.assert_plain('run "rm -rf build tomorrow" in the build pane',
+                          call("run_in_pane", pane="build", command="rm -rf build tomorrow"))
+        self.assert_plain("run ls -la ~/src in the build pane",
+                          call("run_in_pane", pane="build", command="ls -la ~/src"))
+
+    def test_a_question_mark_anywhere_at_the_end_waits(self):           # KN-R5-04
+        for prompt in ("close tab 2?!", "close tab 2?.", "kill tab 2??!", "close tab 2?…"):
+            with self.subTest(prompt=prompt):
+                self.assert_plain(prompt, call("close_tab", tab="2"), expected=False)
+
+    def test_survivors(self):
+        # P04: opening a tab moves focus.
+        admitted = self.admitted("open a new tab and close tab 2", call("open_tab"), call("close_tab", tab="2"))
+        self.assertIsNotNone(plain("open a new tab and close tab 2", admitted))
+        # P06: "maybe" is not politeness.
+        self.assert_plain("maybe, close tab 2", call("close_tab", tab="2"), expected=False)
+        # P09: a safe action with no plain wording makes the request not plain.
+        admitted = self.admitted("if the tests pass, close tab 2",
+                                 call("rename_tab", name="if the tests pass"), call("close_tab", tab="2"))
+        if len(admitted) == 2:
+            self.assertIsNotNone(plain("if the tests pass, close tab 2", admitted))
+
+
+class NameCase(unittest.TestCase):
+    def test_a_name_keeps_the_case_it_was_given(self):      # R5 row D, mutant M109
+        [r] = interpret("close the Build pane", [call("close_pane", pane="Build")])
+        self.assertEqual(r, Action("close_pane", {"pane": "name:Build"}))
+        [r] = interpret("close the build pane", [call("close_pane", pane="build")])
+        self.assertEqual(r, Action("close_pane", {"pane": "name:build"}))

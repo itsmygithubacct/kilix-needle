@@ -204,3 +204,34 @@ class OmpUndoResidue(SymlinkedConfigs):
         mcp.write_text(json.dumps(data))
         setup.setup(["omp"], undo=True)
         self.assertIn("mine", json.loads(mcp.read_text())["mcpServers"])
+
+
+class OmpCreationMarker(OmpUndoResidue):
+    """KN-R5-08, survivors O02 and O04."""
+
+    def test_a_users_own_file_is_never_removed_without_the_marker(self):
+        mcp = self.omp()
+        mcp.write_text("{}\n")
+        setup.setup(["omp"])
+        (mcp.parent / "mcp.json.kilix-needle.bak").unlink()
+        setup.setup(["omp"], undo=True)
+        self.assertTrue(mcp.exists())
+
+    def test_a_created_file_with_a_later_user_edit_survives(self):   # O02
+        mcp = self.omp()
+        setup.setup(["omp"])
+        data = json.loads(mcp.read_text()); data["mcpServers"]["mine"] = {"command": "x"}
+        mcp.write_text(json.dumps(data))
+        setup.setup(["omp"], undo=True)
+        self.assertIn("mine", json.loads(mcp.read_text())["mcpServers"])
+
+    def test_a_created_target_is_removed_and_the_link_kept(self):    # O04
+        target = self.home / "dotfiles/mcp.json"
+        (self.home / ".omp/agent").mkdir(parents=True)
+        link = self.home / ".omp/agent/mcp.json"
+        link.symlink_to(target)                                   # dangling until setup
+        setup.setup(["omp"])
+        self.assertTrue(target.exists())
+        setup.setup(["omp"], undo=True)
+        self.assertFalse(target.exists())
+        self.assertTrue(link.is_symlink())

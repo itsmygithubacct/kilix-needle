@@ -197,8 +197,12 @@ class NameMatching(unittest.TestCase):
     def tree(self):
         return kilix.Tree([{"id": 1, "is_active": True, "is_focused": True, "tabs": [
             tab(10, "logs", [window(100, "tail -f", "log", active=True)]),
-            tab(20, "work", [window(200, "pleb@host: ~/src/catalog (vim)", "vim", active=True),
-                             window(201, "make build", "bash")], active=True),
+            # The active pane is a third one: the requester's own pane is left
+            # out of whole-word matching (KN-R5-01), and these cases are about
+            # other panes' titles (mutant M69).
+            tab(20, "work", [window(200, "pleb@host: ~/src/catalog (vim)", "vim"),
+                             window(201, "make build", "bash"),
+                             window(202, "shell", "bash", active=True)], active=True),
         ]}])
 
     def test_a_program_name_wins_over_a_title_substring_in_the_current_tab(self):
@@ -269,3 +273,57 @@ class AsciiTabNumbers(unittest.TestCase):
         self.assertEqual(tree.tab("2")["id"], 20)
         with self.assertRaises(kilix.KilixError):
             tree.tab("٢")        # Arabic-Indic 2
+
+
+class ReviewR5Resolution(unittest.TestCase):
+    """KN-R5-01, -05 in resolution."""
+
+    def self_titled(self):
+        tree = copy.deepcopy(desktop())
+        title = 'kn --yes "close the deploy tab"'
+        tree[0]["tabs"][2]["title"] = title
+        tree[0]["tabs"][2]["windows"][0]["title"] = title
+        return tree
+
+    def test_the_requesters_own_title_never_names_a_target(self):
+        os.environ["KITTY_WINDOW_ID"] = "300"
+        self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
+        tree = kilix.Tree(self.self_titled())
+        with self.assertRaises(kilix.KilixError):
+            tree.tab("name:deploy")
+        with self.assertRaises(kilix.KilixError):
+            tree.pane("name:deploy")
+
+    def test_a_whole_word_match_is_marked_fuzzy(self):
+        tree = copy.deepcopy(desktop())
+        tree[0]["tabs"][1]["windows"][1]["title"] = "make build"
+        tree[0]["tabs"][2]["windows"][1]["title"] = "shell"
+        step = resolve(Action("close_pane", {"pane": "name:build"}), tree=tree)
+        self.assertTrue(step.fuzzy)
+        self.assertFalse(resolve(Action("close_pane", {"pane": "name:notes"})).fuzzy)
+
+    def test_a_close_never_wraps_round_the_tab_bar(self):
+        os.environ["KITTY_WINDOW_ID"] = "300"      # the caller is in the last tab
+        self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
+        with self.assertRaisesRegex(kilix.KilixError, "no next tab"):
+            resolve(Action("close_tab", {"tab": "next"}))
+        self.assertEqual(resolve(Action("go_to_tab", {"tab": "next"})).commands[0][0],
+                         ("focus-tab", "--match=id:10"))
+
+
+class ReviewR5Debatable(unittest.TestCase):
+    def test_a_tab_titled_next_makes_the_keyword_ambiguous(self):
+        tree = copy.deepcopy(desktop())
+        tree[0]["tabs"][0]["title"] = "next"
+        os.environ["KITTY_WINDOW_ID"] = "300"
+        self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
+        with self.assertRaisesRegex(kilix.KilixError, "ambiguous"):
+            kilix.Tree(tree).tab("next")
+
+    def test_a_cased_title_wins_over_a_local_casefold_match(self):
+        tree = copy.deepcopy(desktop())
+        tree[0]["tabs"][1]["windows"][1]["title"] = "Build"
+        os.environ["KITTY_WINDOW_ID"] = "300"
+        self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
+        self.assertEqual(kilix.Tree(tree).pane("name:Build")["id"], 201)
+        self.assertEqual(kilix.Tree(tree).pane("name:build")["id"], 301)

@@ -210,19 +210,39 @@ def run_calls(request: str, calls: list, options: Options,
         # A yes given in advance (--yes, MCP confirm_risky) covers only a plain
         # instruction; anything else waits for a person who sees the target
         # (review R2: word lists of what to refuse were always one word short).
-        waived = options.assume_yes and not hold and not broken and unplain is None
+        # Never on a yes given in advance: a target found only by a whole word
+        # of a title, or a close of the requester's own pane or tab (review
+        # KN-R5-01; an agent is refused that outright, above).
+        own = tree.caller is not None and tree.caller.get("id") in step.closes
+        waived = (options.assume_yes and not hold and not broken and unplain is None
+                  and not step.fuzzy and not own)
         if needs_yes and not waived \
                 and not confirm(f"  {step.summary}? [y/N] "):
             entry["outcome"] = "skipped"
             entry["reason"] = ("declined" if confirm is _terminal_confirm and sys.stdin.isatty()
                                else "needs a person's yes: an earlier action in the request "
                                     "did not go as asked" if broken and options.assume_yes
+                               else "needs a person's yes: the target was found only by a word "
+                                    "of its title" if step.fuzzy and options.assume_yes
+                               else "needs a person's yes: it closes the pane or tab this "
+                                    "request was made from" if own and options.assume_yes
                                else "needs a yes and there is no one to ask" if unplain is None
                                or not options.assume_yes
                                else f"needs a person's yes: the request is not a plain "
                                     f"instruction ({unplain})")
             record["status"] = 1
             continue
+        if step.types_into is not None:
+            try:
+                ready = kilix.still_at_prompt(step.types_into, under_overlay=options.under_overlay)
+            except kilix.KilixError:
+                ready = False
+            if not ready:
+                entry.update(outcome="unresolved",
+                             reason="that pane is no longer at a shell prompt; nothing typed")
+                record["status"] = 1
+                broken = True
+                continue
         try:
             kilix.perform(step)
         except kilix.KilixError as error:
