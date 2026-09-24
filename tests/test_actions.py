@@ -945,3 +945,148 @@ class RefusedNotOnlyHeld(unittest.TestCase):
             with self.subTest(prompt=prompt):
                 [r] = interpret(prompt, [call("close_pane", pane="left")])
                 self.assertIsInstance(r, Refusal)
+
+
+class ReviewR3Survivors(unittest.TestCase):
+    """R3's surviving mutants N01 and N04: normalisation decides these."""
+
+    def test_nfkc_reveals_a_negation(self):                     # N01: fullwidth letters
+        [r] = interpret("ｄｏｎ＇ｔ close tab 2", [call("close_tab", tab="2")])
+        self.assertIsInstance(r, Refusal)
+
+    def test_a_typographic_hyphen_in_a_name_is_the_same_name(self):   # N04
+        [r] = interpret("close the leave‐tracker tab", [call("close_tab", tab="leave-tracker")])
+        self.assertEqual(r, Action("close_tab", {"tab": "name:leave-tracker"}))
+
+
+# ---- 0.2.2 review R3's phrasings (copied from its probes/r3cases.py and
+# probes/utility.py), with its desktops as notes only: plain() needs none.
+class _R3:
+    CT = lambda t: {"name": "close_tab", "arguments": {"tab": t}}
+    CP = lambda p: {"name": "close_pane", "arguments": {"pane": p}}
+    RUN = lambda p, c: {"name": "run_in_pane", "arguments": {"pane": p, "command": c}}
+    GT = lambda t: {"name": "go_to_tab", "arguments": {"tab": t}}
+    GP = lambda p: {"name": "go_to_pane", "arguments": {"pane": p}}
+    RT = lambda n: {"name": "rename_tab", "arguments": {"name": n}}
+    OT = lambda **k: {"name": "open_tab", "arguments": k}
+
+    ROWS = [
+     # Q: a question made only of allowlisted words
+     ("Q", "would that close tab 2?", [CT("2")], "d1", "asks about an effect"),
+     ("Q", "will that close tab 2?", [CT("2")], "d1", "question"),
+     ("Q", "will this close tab 2?", [CT("2")], "d1", "question"),
+     ("Q", "can that close tab 2?", [CT("2")], "d1", "question"),
+     ("Q", "would it kill the build pane?", [CP("build")], "d1", "question"),
+     ("Q", "will that kill the left pane?", [CP("left")], "d1", "question"),
+     ("Q", "could that run make in the build pane?", [RUN("build", "make")], "d1", "question"),
+     # N: a statement against the action, in allowlisted words
+     ("N", "close tab 2 would kill me", [CT("2")], "d1", "don't"),
+     ("N", "to close tab 2 would kill me", [CT("2")], "d1", "don't"),
+     ("N", "you could close tab 2", [CT("2")], "d1", "suggestion, not an instruction (debatable)"),
+     # C: later, in allowlisted words
+     ("C", "close tab 2 in 5", [CT("2")], "d1", "in five minutes"),
+     ("C", "close tab 2 at 5", [CT("2")], "d1", "at five o'clock"),
+     ("C", "close tab 2 in 10 please", [CT("2")], "d1", "later"),
+     ("C", "run make in the build pane in 5", [RUN("build", "make")], "d1", "later"),
+     # A: wrong target, allowlisted words
+     ("A", "close tab 1 with tab 2 open", [CT("2")], "d1", "tab 2 must stay"),
+     ("A", "close tab 1 with tab 2 open", [CT("1"), CT("2")], "d1", "tab 2 must stay"),
+     ("A", "close the build pane with the notes pane open", [CP("notes")], "d1", "notes must stay"),
+     ("A", "close the left pane with the right pane open", [CP("right")], "d2", "right must stay"),
+     ("A", "close tab 1 for tab 2", [CT("2")], "d1", "tab 1 is the object"),
+     ("A", "close tab 1 into tab 2", [CT("2")], "d1", "tab 1 is the object"),
+     ("A", "close tab 1 then tab 2 stays open", [CT("2")], "d1", "hmm: 'stays' is not plain (control)"),
+     ("A", "close the second to last tab", [CT("last")], "d1", "means tab 2 of 3; last = tab 3"),
+     ("A", "close the tab 2 to the right", [CT("2")], "d1", "two to the right of this one"),
+     ("A", "close the tab 1 to the left", [CT("1")], "d1", "the one to the left"),
+     ("A", "close the left pane in tab 2", [CP("left")], "d1", "means 200 vim; left of caller is 301 build"),
+     ("A", "run make in the left pane in tab 2", [RUN("left", "make")], "d1", "means tab 2; types into 301 build"),
+     ("A", "close the right pane in the next tab", [CP("right")], "d2", "another tab"),
+     ("A", "close the pane above the right one", [CP("above")], "d2", "means 303 logs; above caller is 301 build"),
+     ("A", "close the pane above the pane on the right", [CP("right")], "d2", "means 303 logs; right is 302 notes"),
+     ("A", "close the top pane on the right", [CP("above")], "d2", "means 303 logs"),
+     ("A", "close the top pane on the right", [CP("right")], "d2", "means 303 logs"),
+     ("A", "go to tab 1 and close this tab", [GT("1"), CT("current")], "d1", "means tab 1; closes the caller's tab 3"),
+     ("A", "switch to the build pane and close this pane", [GP("build"), CP("current")], "d1", "means build; closes the caller 300"),
+     ("A", "close tab 2 in window 2", [CT("2")], "d1", "another OS window"),
+     # H: a word hidden because an admitted argument contains it (global substring removal)
+     ("H", "close the later tab later", [CT("later")], "d1l", "a tab named 'later', closed now"),
+     ("H", "rename this tab to maybe and close tab 2 maybe", [RT("maybe"), CT("2")], "d1", "'maybe' removed everywhere"),
+     ("H", "open a tab called not now and close tab 2 not now", [OT(name="not now"), CT("2")], "d1", "'not now' removed everywhere"),
+     ("H", "type no in the build pane and close tab 2, no", [RUN("build", "no"), CT("2")], "d1", "'no' removed everywhere"),
+     ("H", "close the pane called notes but keep build", [CP("notes but keep build")], "d1n", "control"),
+     ("H", "run echo don't in the build pane", [RUN("build", "echo don't")], "d1", "legit: user asked"),
+    ]
+    OP = lambda **k: {"name": "open_pane", "arguments": k}
+    OT = lambda **k: {"name": "open_tab", "arguments": k}
+    U = [
+     ("close tab 2", [CT("2")]), ("close tab 1", [CT("1")]), ("close the logs tab", [CT("logs")]),
+     ("close the work tab", [CT("work")]), ("please close tab 2", [CT("2")]), ("can you close tab 2?", [CT("2")]),
+     ("close the second tab", [CT("2")]), ("close tab two", [CT("2")]), ("kill tab 2", [CT("2")]),
+     ("close the first tab", [CT("1")]), ("close tab 1 please", [CT("1")]), ("shut tab 2", [CT("2")]),
+     ("close the tab called logs", [CT("logs")]), ("close the logs tab, I'm done with it", [CT("logs")]),
+     ("close tab 2, thanks", [CT("2")]), ("close tab 2 now", [CT("2")]), ("get rid of tab 2", [CT("2")]),
+     ("close tab 2 and tab 1", [CT("2"), CT("1")]), ("close tabs 1 and 2", [CT("1"), CT("2")]),
+     ("close the last tab", [CT("last")]), ("quit tab 1", [CT("1")]), ("exit the logs tab", [CT("logs")]),
+     ("Close Tab 2.", [CT("2")]), ("close tab 2 pls", [CT("2")]), ("could you close the logs tab for me", [CT("logs")]),
+     ("ok close tab 2", [CT("2")]), ("alright, close tab 1", [CT("1")]), ("close the logs tab, it's finished", [CT("logs")]),
+     ("close the build pane", [CP("build")]), ("close the notes pane", [CP("notes")]), ("close the left pane", [CP("left")]),
+     ("kill the build pane", [CP("build")]), ("close the pane on the left", [CP("left")]),
+     ("close the pane running tail", [CP("tail")]), ("close the notes pane please", [CP("notes")]),
+     ("shut the notes pane", [CP("notes")]), ("close the build pane, it's stuck", [CP("build")]),
+     ("close the left pane and the notes pane", [CP("left"), CP("notes")]), ("quit the notes pane", [CP("notes")]),
+     ("close the pane called notes", [CP("notes")]), ("close that build pane", [CP("build")]),
+     ("close the notes split", [CP("notes")]),
+     ("run make in the build pane", [RUN("build", "make")]), ("run ls in the notes pane", [RUN("notes", "ls")]),
+     ("type git status in the build pane", [RUN("build", "git status")]), ("run npm test in the build pane", [RUN("build", "npm test")]),
+     ("run make test in the left pane", [RUN("left", "make test")]), ("run `cargo build` in the build pane", [RUN("build", "cargo build")]),
+     ("in the build pane, run make", [RUN("build", "make")]), ("run git pull in the notes pane", [RUN("notes", "git pull")]),
+     ("type clear in the notes pane", [RUN("notes", "clear")]), ('run "ls -la" in the build pane', [RUN("build", "ls -la")]),
+     ("run make in the build pane please", [RUN("build", "make")]), ("execute make clean in the build pane", [RUN("build", "make clean")]),
+     ("run pytest -q in the build pane", [RUN("build", "pytest -q")]), ("run htop in the notes pane", [RUN("notes", "htop")]),
+     ("type exit in the notes pane", [RUN("notes", "exit")]), ("run make && make install in the build pane", [RUN("build", "make && make install")]),
+     ("run ./build.sh in the build pane", [RUN("build", "./build.sh")]), ("can you run make in the build pane?", [RUN("build", "make")]),
+     ("open htop in a new tab", [OT(program="htop")]), ("open a new tab running htop", [OT(program="htop")]),
+     ("split right and run htop", [OP(side="right", program="htop")]), ("open a pane below running tail -f log.txt", [OP(side="below", program="tail -f log.txt")]),
+     ("open a new tab with vim", [OT(program="vim")]), ("start btop in a new pane", [OP(program="btop")]),
+     ("open a new pane on the right running python3", [OP(side="right", program="python3")]),
+     ("open a tab called logs running journalctl -f", [OT(name="logs", program="journalctl -f")]),
+    ]
+
+
+class ReviewR3Contract(unittest.TestCase):
+    def admitted(self, prompt, calls):
+        return [r for r in interpret(prompt, calls) if isinstance(r, Action)]
+
+    def test_no_attack_row_is_a_plain_instruction(self):
+        for cat, prompt, calls, _desk, note in _R3.ROWS:
+            if "legit" in note or "control" in note:
+                continue
+            with self.subTest(prompt=prompt):
+                admitted = self.admitted(prompt, calls)
+                if admitted:
+                    self.assertIsNotNone(plain(prompt, admitted), f"{prompt!r} would run on --yes")
+
+    def test_everyday_requests_stay_plain(self):
+        plain_count = refused = 0
+        for prompt, calls in _R3.U:
+            admitted = self.admitted(prompt, calls)
+            if len(admitted) < len(calls):
+                refused += 1
+            elif plain(prompt, admitted) is None:
+                plain_count += 1
+        # 2026-09-24: 61 plain, 3 held (an explanation attached), 4 refused by
+        # the checks (no close verb in "get rid of"; "and tab 1" has no verb).
+        self.assertGreaterEqual(plain_count, 61)
+        self.assertLessEqual(refused, 4)
+
+
+class SafeClauseWording(unittest.TestCase):
+    def test_a_condition_inside_a_safe_clause_is_not_plain(self):     # mutant M77
+        prompt = "if it builds go to tab 1 and close tab 2"
+        admitted = [r for r in interpret(prompt, [call("go_to_tab", tab="1"),
+                                                   call("close_tab", tab="2")])
+                    if isinstance(r, Action)]
+        self.assertEqual(len(admitted), 2)
+        self.assertIsNotNone(plain(prompt, admitted))
+        self.assertIsNone(plain("go to tab 1 and close tab 2", admitted))

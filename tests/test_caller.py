@@ -191,3 +191,11 @@ class AgentWithoutCaller(AgentMode):
                     prompt, {"name": "run_in_pane", "arguments": args}, caller=None)
                 self.assertEqual((status, calls), (1, []))
                 self.assertIn("agent's own", json.loads(out)["items"][0]["reason"])   # M80
+
+
+class AgentWithoutCallerThis(AgentMode):
+    def test_no_this_pane_even_for_a_safe_action(self):         # R3 mutant G02
+        status, calls, out = self.run_agent(
+            "go to this pane", {"name": "go_to_pane", "arguments": {"pane": "this"}}, caller=None)
+        self.assertEqual((status, calls), (1, []))
+        self.assertIn("agent's own", json.loads(out)["items"][0]["reason"])

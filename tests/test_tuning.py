@@ -344,11 +344,14 @@ class SelectRun(unittest.TestCase):
         self.assertIsNone(tuning.selected())
 
     def test_status_says_what_answers_not_only_what_is_selected(self):
-        self.assertEqual(tuning.in_use(), "base")
-        tuning.select(self.run_dir, self.sha)
-        with mock.patch("asset.installed_library",
-                        side_effect=__import__("asset").AssetError("runtime not accepted")):
-            self.assertIn("unavailable", tuning.in_use())
+        # Hermetic (review KN-R3-04): the base engine is a stub here, never the
+        # live store's installed asset.
+        with mock.patch("asset.from_installed", return_value=mock.MagicMock()):
+            self.assertEqual(tuning.in_use(), "base")
+            tuning.select(self.run_dir, self.sha)
+            with mock.patch("asset.installed_library",
+                            side_effect=__import__("asset").AssetError("runtime not accepted")):
+                self.assertIn("unavailable", tuning.in_use())
 
     def test_no_runtime_means_no_select_and_nothing_left_behind(self):      # R22
         import asset

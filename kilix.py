@@ -115,7 +115,8 @@ def _shell_in_front(window: dict) -> bool:
         return False
     processes = window.get("foreground_processes") or []
     names = [os.path.basename(str((p.get("cmdline") or [""])[0])).lstrip("-") for p in processes]
-    return all(name in _SHELLS for name in names)
+    # Nothing reported is not evidence of a shell (review KN-R3-07: fail closed).
+    return bool(names) and all(name in _SHELLS for name in names)
 
 
 def _program(window: dict) -> str:

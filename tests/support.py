@@ -11,6 +11,17 @@ for name in ("KITTY_WINDOW_ID", "KILIX_CONTENT_ROOT"):
 # dead, so a stray real `kilix @` fails instead of reaching the desktop.
 os.environ["KITTY_LISTEN_ON"] = "unix:@kilix-needle-test-no-such-socket"
 
+# No test may reach the live store either: every state and content location
+# is a scratch directory that lives as long as the test process. Review R3
+# (KN-R3-04): in_use() reached the real licence-receipt store through
+# KILIX_DATA_HOME, and passed only where needle2 happened to be accepted.
+_SANDBOX = tempfile.TemporaryDirectory(prefix="kn-state-")
+for _name in ("GPU_TERMINAL_HOME", "KILIX_DATA_HOME", "KILIX_CONFIG_HOME", "KILIX_STORAGE_HOME",
+              "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME"):
+    os.environ[_name] = os.path.join(_SANDBOX.name, _name.lower())
+for _name in ("KILIX_NEEDLE_LIBRARY", "KILIX_NEEDLE_ENGINE", "KILIX_ML_HOME"):
+    os.environ.pop(_name, None)
+
 import kilix  # noqa: E402
 
 RECORDER = """#!/bin/sh

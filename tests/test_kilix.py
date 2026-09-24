@@ -252,3 +252,12 @@ class ShellInFront(unittest.TestCase):
             tab(10, "a", [window(100, "notes", "bash", active=True)], active=True),
             tab(20, "b", [window(200, "old notes", "bash", active=True)])]}])
         self.assertEqual(tree.pane("name:notes")["id"], 100)
+
+
+class ShellInFrontStrict(ShellInFront):
+    def test_a_program_beside_the_shell_or_no_report_refuses(self):   # R3 K02, KN-R3-07
+        with self.assertRaisesRegex(kilix.KilixError, "not at a shell prompt"):
+            self.run_into(foreground_processes=[{"cmdline": ["bash"], "pid": 1},
+                                                {"cmdline": ["python3"], "pid": 2}])
+        with self.assertRaisesRegex(kilix.KilixError, "not at a shell prompt"):
+            self.run_into(foreground_processes=[])

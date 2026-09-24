@@ -70,9 +70,13 @@ added because a measured model output got past the one before:
 
 - A close needs a closing verb (close, kill, quit, exit, shut) in the same
   clause as its target.
-- The pane or tab must be the verb's object, bound to a pane or tab word. So
-  "exit vim in the left pane", "quit vim in the right pane" and "kill top in the
-  left pane" close nothing.
+- The pane or tab must be bound to a pane or tab word between the verb and
+  the first contrastive or subordinating word ("but", "so", "instead of",
+  "next to", "(" …). So "exit vim in the left pane" and "kill top in the left
+  pane" close nothing, and "close tab 1 but keep tab 2" never closes tab 2.
+  These are rules about wording: they narrow what the model may do, but they
+  do not prove what a sentence means. The safeguard that does not depend on
+  wording is the question below.
 - A tab close needs a clause that says *tab*. A pane action is never taken
   from a clause that names only a tab.
 - A typed command must be the whole text after the run verb ("make test", not
@@ -83,14 +87,17 @@ added because a measured model output got past the one before:
 
 Closing, typing and starting a program wait for `y`, and the question names
 the pane or tab it resolved to. `--yes` (and MCP's `confirm_risky`) answers in
-advance, for scripts and agents, but only for a **plain instruction**: after
-the names, commands and programs are set aside, the request holds nothing but
-the words of an instruction ("close", "the", "pane", "left", "please", "can
-you"…) and plain punctuation. "close tab 2 if you can", "should I close the
-build pane?", "close tab 1 or tab 2", a dash, an ampersand or a look-alike
-letter each make it not plain, so it waits for a person, who sees the target.
-The checks were once a list of what to refuse, and a review found a word
-each list lacked every time; this list is of what to allow.
+advance, for scripts and agents, but only for a **plain instruction**: each
+clause of the request is exactly a canonical wording of the action it asks
+for ("close tab 2", "close the build pane", "run make in the left pane",
+"split right and run htop"), with at most politeness around it ("please",
+"can you", "thanks"). Anything else waits for a person, who sees the target:
+"close tab 2 if you can", "would that close tab 2?", "close tab 2 in 5",
+"close tab 1 into tab 2", a dash or a look-alike letter. After a clause that
+moves focus, a "this" or relative target is never plain. Three reviews shaped
+this: lists of words to refuse were always a word short, and a list of words
+to allow still combined into sentences that meant something else. Comparing
+the request with what the actions say does not depend on either list.
 
 A pre-answered yes never overrides a refusal: if any part of a request is
 refused, everything else in it waits for a typed `y`, and without a terminal

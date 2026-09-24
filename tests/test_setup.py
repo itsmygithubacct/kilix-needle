@@ -158,3 +158,21 @@ class SymlinkedConfigs(unittest.TestCase):
         self.assertIn("kilix-needle", json.loads((self.home / "dotfiles/mcp.json").read_text())["mcpServers"])
         setup.setup(["omp"], undo=True)
         self.assertTrue(link.is_symlink())
+
+
+class ConfigFileDetails(SymlinkedConfigs):
+    def test_a_config_keeps_its_mode(self):                     # R3 mutant S04
+        aliases = self.home / ".bash_aliases"
+        aliases.write_text("alias ll='ls -l'\n")
+        os.chmod(aliases, 0o644)
+        setup.setup(["alias"])
+        self.assertEqual(aliases.stat().st_mode & 0o777, 0o644)
+
+    def test_omp_undo_restores_the_users_formatting(self):      # KN-R3-09
+        (self.home / ".omp/agent").mkdir(parents=True)
+        mcp = self.home / ".omp/agent/mcp.json"
+        original = '{"mcpServers": {}}\n'
+        mcp.write_text(original)
+        setup.setup(["omp"])
+        setup.setup(["omp"], undo=True)
+        self.assertEqual(mcp.read_text(), original)

@@ -178,6 +178,16 @@ def _omp(undo, dry_run):
         if NAME not in servers:
             return f"{path}: unchanged"
         del servers[NAME]
+        # Byte-reversible where possible (review KN-R3-09): the backup setup
+        # took before adding the entry holds the user's own formatting.
+        backup = path.with_name(path.name + f".{NAME}.bak")
+        try:
+            pristine = backup.read_text(encoding="utf-8")
+            if json.loads(pristine) == data and not dry_run:
+                _write(path, pristine)
+                return f"{path}: removed mcpServers.{NAME}"
+        except (OSError, ValueError):
+            pass
     elif servers.get(NAME) == wanted:
         return f"{path}: unchanged"
     else:
