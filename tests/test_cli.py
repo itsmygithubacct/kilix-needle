@@ -360,3 +360,21 @@ class FuzzyAtTheGate(unittest.TestCase):
                                           needle_cli.Options(assume_yes=True), confirm=lambda _q: False)
             self.assertEqual(fake.calls(), [])
         self.assertIn("word of its title", record["items"][0]["reason"])
+
+
+class ReviewR8Case(unittest.TestCase):
+    """KN-R8-01's rows, end to end with hand-written calls: the local pane."""
+
+    def test_mixed_case_mentions_act_on_the_local_pane(self):
+        import copy
+        os.environ["KITTY_WINDOW_ID"] = "300"
+        self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
+        tree = copy.deepcopy(desktop())
+        tree[0]["tabs"][1]["windows"][1]["title"] = "Build"          # another tab's Build
+        with FakeKilix(tree) as fake:
+            needle_cli.run_calls("run make in the build pane and close the Build pane",
+                                 [call("run_in_pane", pane="build", command="make"),
+                                  call("close_pane", pane="Build")],
+                                 needle_cli.Options(assume_yes=True), confirm=lambda _q: False)
+            ids = [a for argv, _ in fake.calls() for a in argv if a.startswith("--match")]
+        self.assertNotIn("--match=id:201", ids)

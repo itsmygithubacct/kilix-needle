@@ -1199,11 +1199,16 @@ class ReviewR5Plain(ReviewR4Plain):
 
 
 class NameCase(unittest.TestCase):
-    def test_a_name_keeps_the_case_it_was_given(self):      # R5 row D, mutant M109
-        [r] = interpret("close the Build pane", [call("close_pane", pane="Build")])
-        self.assertEqual(r, Action("close_pane", {"pane": "name:Build"}))
-        [r] = interpret("close the build pane", [call("close_pane", pane="build")])
-        self.assertEqual(r, Action("close_pane", {"pane": "name:build"}))
+    """Names are matched without regard to case (review R8, KN-R8-01: every
+    rule for choosing a case regressed). The admitted name is casefolded."""
+
+    def test_a_name_is_casefolded(self):
+        for prompt, name in (("close the Build pane", "Build"), ("close the build pane", "Build"),
+                             ('run "make Build" in the build pane', "build")):
+            with self.subTest(prompt=prompt):
+                results = interpret(prompt, [call("close_pane", pane=name)]) if "run" not in prompt \
+                    else interpret(prompt, [call("run_in_pane", pane=name, command="make Build")])
+                self.assertEqual(results[0].args["pane"], "name:build")
 
 
 class ReviewR6Plain(ReviewR4Plain):
@@ -1249,10 +1254,13 @@ class ReviewR7Plain(ReviewR4Plain):
                         [call("run_in_pane", pane="Build", command="make Build")])
         self.assertEqual(r.args["pane"], "name:build")
 
-    def test_case_from_the_target_mention_when_it_appears_twice(self):   # N13
-        [r] = interpret("close the Build pane, not the build log",
-                        [call("close_pane", pane="build")])
-        if isinstance(r, Action):
-            self.assertEqual(r.args["pane"], "name:Build")
-        [r] = interpret("close the pane called Build", [call("close_pane", pane="build")])
-        self.assertEqual(r, Action("close_pane", {"pane": "name:Build"}))
+
+class ArgumentEdges(ReviewR4Plain):
+    """Review R8 mutants A21-A23: the edges of "..", "$VAR" and "${VAR}"."""
+
+    def test_near_misses_are_not_arguments(self):
+        for command in ("./deploy.sh ...", "./deploy.sh $", "./deploy.sh $5", "./deploy.sh ${HOME",
+                        "./deploy.sh $HOME-later"):
+            with self.subTest(command=command):
+                self.assert_plain(f"run {command} in the build pane",
+                                  call("run_in_pane", pane="build", command=command), expected=False)

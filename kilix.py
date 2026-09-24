@@ -232,14 +232,11 @@ class Tree:
             return name in (_program(window).casefold(),
                             str(window.get("title") or "").strip().casefold())
 
-        # A title that matches with its case wins first, anywhere: "the Build
-        # pane" is not the local "build" when another pane is titled "Build"
-        # (review R5, row D).
-        typed = ref[5:]
-        cased = [w for _tab, w in self._all_panes()
-                 if str(w.get("title") or "").strip() == typed and typed != typed.casefold()]
+        # Without regard to case, the current tab first. A case-exact
+        # preference was tried (review R5, row D) and regressed in three rounds
+        # (KN-R6-04, KN-R7-03, KN-R8-01); it is gone.
         local = [w for w in self.active_tab.get("windows") or [] if exact(w)]
-        found = cased or local or [w for _tab, w in self._all_panes() if exact(w)]
+        found = local or [w for _tab, w in self._all_panes() if exact(w)]
         if not found:
             # Never the requester's own pane: while kilix-needle runs, Kilix
             # titles it with the request itself (review KN-R5-01: "close the

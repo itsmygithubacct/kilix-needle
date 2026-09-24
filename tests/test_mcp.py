@@ -138,3 +138,24 @@ class Tools(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FuzzyUnderMcp(unittest.TestCase):
+    """Review R8 mutant G01: a whole-word target is never acted on through MCP."""
+
+    def setUp(self):
+        # A known caller, so the guard under test is the fuzzy gate, not the
+        # no-caller rule (which would refuse everything risky by itself).
+        os.environ["KITTY_WINDOW_ID"] = "300"
+        self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
+
+    def test_confirm_risky_does_not_cover_a_whole_word_target(self):
+        import copy
+        tree = copy.deepcopy(desktop())
+        tree[0]["tabs"][2]["windows"][2]["title"] = "api server"
+        for request, calls in (("close the api pane", [{"name": "close_pane", "arguments": {"pane": "api"}}]),
+                               ("run make in the api pane",
+                                [{"name": "run_in_pane", "arguments": {"pane": "api", "command": "make"}}])):
+            with self.subTest(request=request), FakeKilix(tree) as fake:
+                converse([call(1, "kilix_act", request=request, confirm_risky=True)], calls=calls)
+                self.assertEqual(fake.calls(), [])

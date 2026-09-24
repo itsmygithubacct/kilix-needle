@@ -323,13 +323,14 @@ class ReviewR5Debatable(unittest.TestCase):
         with self.assertRaisesRegex(kilix.KilixError, "ambiguous"):
             kilix.Tree(tree).tab("next")
 
-    def test_a_cased_title_wins_over_a_local_casefold_match(self):
+    def test_names_match_without_case_the_current_tab_first(self):   # KN-R8-01
         tree = copy.deepcopy(desktop())
         tree[0]["tabs"][1]["windows"][1]["title"] = "Build"
         os.environ["KITTY_WINDOW_ID"] = "300"
         self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
-        self.assertEqual(kilix.Tree(tree).pane("name:Build")["id"], 201)
-        self.assertEqual(kilix.Tree(tree).pane("name:build")["id"], 301)
+        for ref in ("name:build", "name:Build", "name:BUILD"):
+            with self.subTest(ref=ref):
+                self.assertEqual(kilix.Tree(tree).pane(ref)["id"], 301)
 
 
 class ReviewR6Resolution(unittest.TestCase):

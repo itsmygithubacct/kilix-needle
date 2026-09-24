@@ -58,11 +58,12 @@ whichever tab is on screen. If a harness strips `KITTY_WINDOW_ID`, the pane
 is found through the process ancestry. With `--under-overlay` (the hotkey),
 it means the pane the overlay covers. Side references use Kilix's neighbour
 map, which reports window groups. Names match a pane's title or foreground
-program exactly (the current tab first), or else a whole word of exactly one
-title. The pane and tab kilix-needle was started from are never matched by a
+program exactly, without regard to case (the current tab first), or else a
+whole word of exactly one title. The pane and tab kilix-needle was started from are never matched by a
 whole word: while it runs, Kilix titles them with the request itself. An
 ambiguous or missing reference is refused with the candidates named. "Next"
-and "previous" tab wrap round for a go-to, never for a close.
+and "previous" tab or pane wrap round for a go-to, never for a close or a
+typed command.
 
 ## Why it asks, and what it refuses
 
@@ -134,7 +135,7 @@ first cut to the shell's kill ring (Ctrl-E, Ctrl-U; Ctrl-Y brings it back), so
 it is never run with the command appended; see Known issues for where that
 does not hold. Once any
 action is refused, cannot be resolved or fails, nothing later in the request
-runs on a yes given in advance. Six reviews shaped this; their records are
+runs on a yes given in advance. Eight reviews shaped this; their records are
 in the release's research notes.
 
 A pre-answered yes never overrides a refusal: if any part of a request is
