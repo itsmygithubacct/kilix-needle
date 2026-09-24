@@ -1228,3 +1228,31 @@ class ReviewR6Plain(ReviewR4Plain):
     def test_a_name_takes_its_case_from_the_request(self):
         [r] = interpret("close the build pane", [call("close_pane", pane="Build")])
         self.assertEqual(r, Action("close_pane", {"pane": "name:build"}))
+
+
+class ReviewR7Plain(ReviewR4Plain):
+    """0.2.2 review R7: isolated argument cases (S12-S14), case (KN-R7-03, N13)."""
+
+    def test_each_loosened_argument_shape_alone_waits(self):
+        # One non-argument each, after a program that is otherwise plain.
+        for command in ("./deploy.sh 9/25", "./deploy.sh p.m.", "./deploy.sh 17:00"):
+            with self.subTest(command=command):
+                self.assert_plain(f"run {command} in the build pane",
+                                  call("run_in_pane", pane="build", command=command), expected=False)
+        for command in ("cd ..", "echo $HOME", "echo ${HOME}"):
+            with self.subTest(command=command):
+                self.assert_plain(f"run {command} in the build pane",
+                                  call("run_in_pane", pane="build", command=command))
+
+    def test_case_comes_from_the_target_not_a_quoted_command(self):   # KN-R7-03
+        [r] = interpret('run "make Build" in the build pane',
+                        [call("run_in_pane", pane="Build", command="make Build")])
+        self.assertEqual(r.args["pane"], "name:build")
+
+    def test_case_from_the_target_mention_when_it_appears_twice(self):   # N13
+        [r] = interpret("close the Build pane, not the build log",
+                        [call("close_pane", pane="build")])
+        if isinstance(r, Action):
+            self.assertEqual(r.args["pane"], "name:Build")
+        [r] = interpret("close the pane called Build", [call("close_pane", pane="build")])
+        self.assertEqual(r, Action("close_pane", {"pane": "name:Build"}))

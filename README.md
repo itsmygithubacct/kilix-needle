@@ -128,10 +128,11 @@ Anything else waits for a person, who sees the target. Every action in one
 request is resolved against the one desktop the request was made on and
 performed by id, so "close tab 2 and close tab 3" closes the tabs that were
 2 and 3. Just before a command is typed, its pane is read again: if an earlier
-command in the request started a program there, nothing is typed. Anything
-already half-typed at that prompt is first cut to the shell's kill ring
-(Ctrl-E, Ctrl-U; Ctrl-Y brings it back), so it is never run with the command
-appended. Once any
+command in the request started a program there, nothing is typed. With the
+usual emacs-style line editing, anything half-typed on a one-line prompt is
+first cut to the shell's kill ring (Ctrl-E, Ctrl-U; Ctrl-Y brings it back), so
+it is never run with the command appended; see Known issues for where that
+does not hold. Once any
 action is refused, cannot be resolved or fails, nothing later in the request
 runs on a yes given in advance. Six reviews shaped this; their records are
 in the release's research notes.
@@ -262,6 +263,25 @@ real shape, including window groups.
   closes its own pane or tab, and when its pane cannot be identified nothing
   risky runs. `kilix-needle setup` registers the MCP server at user scope,
   in each harness it finds, only when you run it.
+- **Typing assumes a fresh, one-line, emacs-mode prompt.** Kilix reports a
+  pane "at a shell prompt" in states where the line clear (Ctrl-E Ctrl-U) is
+  not enough:
+  - at a continuation prompt (after a trailing `\` or an open quote), the
+    clear reaches only the new line, so the command completes the earlier one,
+    or lands inside the open quote and runs nothing while the record says
+    `done`;
+  - in vi editing mode (`set -o vi`), in command mode the keys are vi commands
+    (measured: the previous command re-ran), and in insert mode text right of
+    the cursor is kept;
+  - with a reverse history search pending, the command joins the match.
+
+  No key sequence tried is safe in every mode, so these are disclosed rather
+  than papered over. Keep a yes given in advance for panes you know are at a
+  plain prompt. zsh and fish were not measured.
+- **Some notation still passes as a shell argument**: "5 p.m", "now/later"
+  (it has the shape of a relative path), and a leading dash turned into a flag.
+  The models have not produced these, but a hand-written call through the
+  bridge could.
 - **The pane is read again about a second before Enter, not at it.** A
   program started in that pane within that second could receive the command.
 - **"The pane or tab the request was made from" needs the requester to be

@@ -247,3 +247,24 @@ class OmpMarkerNeverStale(OmpUndoResidue):
         mcp.write_text(json.dumps(data))
         setup.setup(["omp"], undo=True)
         self.assertFalse(marker.exists())
+
+
+class OmpMarkerEveryBranch(OmpUndoResidue):
+    """R6 mutant O02 (the "setup created it" branch) and R7's O11 (the pristine
+    branch with a marker)."""
+
+    def test_the_created_branch_removes_the_marker(self):          # O02
+        mcp = self.omp()
+        setup.setup(["omp"])
+        setup.setup(["omp"], undo=True)
+        self.assertFalse(mcp.exists())
+        self.assertFalse((mcp.parent / "mcp.json.kilix-needle.created").exists())
+
+    def test_the_pristine_branch_removes_the_marker(self):         # O11
+        mcp = self.omp()
+        setup.setup(["omp"])                                        # creates, with a marker
+        data = json.loads(mcp.read_text()); del data["mcpServers"]["kilix-needle"]
+        mcp.write_text(json.dumps(data))                            # the entry removed by hand
+        setup.setup(["omp"])                                        # again: now a .bak exists
+        setup.setup(["omp"], undo=True)                             # restores the .bak bytes
+        self.assertFalse((mcp.parent / "mcp.json.kilix-needle.created").exists())

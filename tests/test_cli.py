@@ -342,3 +342,21 @@ class ReviewR6Run(unittest.TestCase):
                 needle_cli.Options(assume_yes=True), confirm=lambda _q: False)
         self.assertEqual(len(sent), 1)
         self.assertEqual([i["outcome"] for i in record["items"]], ["done", "unresolved", "skipped"])
+
+
+class FuzzyAtTheGate(unittest.TestCase):
+    """R6 mutant F03 (still alive at R7): the gate, not resolve(), must hold a
+    whole-word typing target."""
+
+    def test_a_whole_word_typing_target_is_not_waived(self):
+        import copy
+        os.environ["KITTY_WINDOW_ID"] = "300"
+        self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
+        tree = copy.deepcopy(desktop())
+        tree[0]["tabs"][2]["windows"][2]["title"] = "api server"
+        with FakeKilix(tree) as fake:
+            record = needle_cli.run_calls("run make in the api pane",
+                                          [call("run_in_pane", pane="api", command="make")],
+                                          needle_cli.Options(assume_yes=True), confirm=lambda _q: False)
+            self.assertEqual(fake.calls(), [])
+        self.assertIn("word of its title", record["items"][0]["reason"])

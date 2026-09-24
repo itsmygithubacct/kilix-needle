@@ -381,7 +381,7 @@ _SHELL_ARGUMENT = re.compile(
     r"|[\w.-]*[A-Za-z][\w.-]*/[\w./-]*"
     r"|[\w-]+\.[A-Za-z][A-Za-z0-9]{0,7}"
     r"|[A-Za-z_][A-Za-z0-9_]*=\S*"
-    r"|[0-9]+"
+    r"|[0-9]+|\.{1,2}|\$[A-Za-z_]\w*|\$\{\w+\}"      # "cd ..", "echo $HOME" (R7 utility)
     r"|&&|\|\||\||;|>>?|<|2>&1")
 
 
@@ -569,20 +569,29 @@ def _named_target(name: str, key: str, args: dict, prompt: str) -> str | Refusal
         # Introduced as a name, it is a name: measured (held-out v3), "close the
         # pane running top" became the side "above", and "close the tab named
         # two" became tab 2.
-        return "name:" + word
+        return "name:" + _named_as_said(word, prompt)
     value = _target_value(raw, relative=key == "tab")
     if value is None:
         return Refusal(name, f"cannot tell which {key} {raw!r} means")
     if value.startswith("name:") and not _grounded(value[5:], prompt):
         return Refusal(name, f"the {key} {value[5:]!r} is not in the request")
     if value.startswith("name:"):
-        # The case the person typed, not the model's (review KN-R6-04: a call
-        # saying "Build" for "close the build pane" chose another tab's Build).
-        said = re.search(r"(?<![\w])" + r"\s+".join(map(re.escape, value[5:].split())) + r"(?![\w])",
-                         prompt, re.IGNORECASE)
-        if said:
-            value = "name:" + said.group(0)
+        value = "name:" + _named_as_said(value[5:], prompt)
     return value
+
+
+def _named_as_said(word: str, prompt: str) -> str:
+    """The name in the case the request gives it *as the target*: beside a
+    pane/tab word or after called/named/titled/running, outside quotes. Review
+    KN-R6-04 took the model's case; the fix for it (R7, KN-R7-03) took the first
+    occurrence anywhere, which could be inside a quoted command."""
+    name = r"\s+".join(map(re.escape, word.split()))
+    text = _unquoted(prompt)
+    said = re.search(rf"(?<![\w])({name})(?=\s+(?:panes?|tabs?|splits?|windows?)\b)"
+                     rf"|\b(?:called|named|titled|running)\s+({name})(?![\w])", text, re.IGNORECASE)
+    if said:
+        return said.group(1) or said.group(2)
+    return word
 
 
 _CLAUSE = re.compile(r"\s*(?:,|;|\band then\b|\bthen\b|\band\b)\s*", re.IGNORECASE)
