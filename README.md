@@ -107,11 +107,15 @@ that means, exactly:
 - After any clause that moves focus (a go-to, or opening a pane or tab), no
   risky action is plain.
 - A command or program is plain unquoted only as one word ("make", "htop"),
-  or when every later word is plainly a shell argument: a flag, a path, a
-  number, `=` or an operator ("ls -la ~/src", "make -C src"). Anything else,
-  "make test" included, is plain only in quotes (`run "make test" in the build
-  pane`): English after a program may be a condition or a delay that would be
-  typed along with it, and two reviews found every list of such words short.
+  or when every later word is plainly a shell argument: a flag, a path (`/`,
+  `./`, `~/`, or letters and a slash), a file name with an extension,
+  `VAR=value`, a plain integer or an operator ("ls -la ~/src", "make -C
+  ./src", "tail -n 50 app.log"). Times, dates and plain words are not
+  arguments ("17:00", "9/25", "make test"). A typed command with more is plain
+  only in quotes (`run "make test" in the build pane`); a program for a new
+  pane or tab cannot be quoted, so a multi-word one waits for a person. English
+  after a program may be a condition or a delay that would be typed along with
+  it, and two reviews found every list of such words short.
 - "top" and "bottom" are never plain: Kilix resolves "above" and "below" to the
   adjacent pane, not the outermost one.
 - Tab numbers are ASCII digits or number words.
@@ -124,9 +128,12 @@ Anything else waits for a person, who sees the target. Every action in one
 request is resolved against the one desktop the request was made on and
 performed by id, so "close tab 2 and close tab 3" closes the tabs that were
 2 and 3. Just before a command is typed, its pane is read again: if an earlier
-command in the request started a program there, nothing is typed. Once any
+command in the request started a program there, nothing is typed. Anything
+already half-typed at that prompt is first cut to the shell's kill ring
+(Ctrl-E, Ctrl-U; Ctrl-Y brings it back), so it is never run with the command
+appended. Once any
 action is refused, cannot be resolved or fails, nothing later in the request
-runs on a yes given in advance. Five reviews shaped this; their records are
+runs on a yes given in advance. Six reviews shaped this; their records are
 in the release's research notes.
 
 A pre-answered yes never overrides a refusal: if any part of a request is
@@ -255,6 +262,12 @@ real shape, including window groups.
   closes its own pane or tab, and when its pane cannot be identified nothing
   risky runs. `kilix-needle setup` registers the MCP server at user scope,
   in each harness it finds, only when you run it.
+- **The pane is read again about a second before Enter, not at it.** A
+  program started in that pane within that second could receive the command.
+- **"The pane or tab the request was made from" needs the requester to be
+  known**: from `KITTY_WINDOW_ID`, or failing that from process ancestry.
+  When neither identifies it, agent mode runs nothing risky, and the CLI treats
+  the focused pane as "this pane".
 - **Plain is about wording, not meaning.** A canonical wording can still be a
   mistake the request states plainly ("close the left pane" in a row of three
   closes the pane adjacent on the left). Names, commands and programs are

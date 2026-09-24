@@ -235,3 +235,15 @@ class OmpCreationMarker(OmpUndoResidue):
         setup.setup(["omp"], undo=True)
         self.assertFalse(target.exists())
         self.assertTrue(link.is_symlink())
+
+
+class OmpMarkerNeverStale(OmpUndoResidue):
+    def test_undo_always_removes_the_marker(self):                        # O02
+        mcp = self.omp()
+        setup.setup(["omp"])
+        marker = mcp.parent / "mcp.json.kilix-needle.created"
+        self.assertTrue(marker.exists())
+        data = json.loads(mcp.read_text()); data["mcpServers"]["mine"] = {"command": "x"}
+        mcp.write_text(json.dumps(data))
+        setup.setup(["omp"], undo=True)
+        self.assertFalse(marker.exists())

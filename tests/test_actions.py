@@ -1204,3 +1204,27 @@ class NameCase(unittest.TestCase):
         self.assertEqual(r, Action("close_pane", {"pane": "name:Build"}))
         [r] = interpret("close the build pane", [call("close_pane", pane="build")])
         self.assertEqual(r, Action("close_pane", {"pane": "name:build"}))
+
+
+class ReviewR6Plain(ReviewR4Plain):
+    """KN-R6-03 (S02-S04) and KN-R6-04."""
+
+    def test_times_and_dates_are_not_shell_arguments(self):
+        for command in ("./deploy.sh 5pm", "rm -rf ./build tomorrow", "rm -rf ./build now or not",
+                        "make deploy 17:00", "crontab -e @midnight", "sleep ~5min",
+                        "make release 9/25", "make *later*",
+                        # benign, but English words: quote them for --yes (the rule
+                        # is word-blind on purpose)
+                        "make && make install", "grep -rn TODO ."):
+            with self.subTest(command=command):
+                self.assert_plain(f"run {command} in the build pane",
+                                  call("run_in_pane", pane="build", command=command), expected=False)
+        for command in ("ls -la ~/src", "make -C ./src", "cat src/main.c", "make CC=clang",
+                        "tail -n 50 app.log"):
+            with self.subTest(command=command):
+                self.assert_plain(f"run {command} in the build pane",
+                                  call("run_in_pane", pane="build", command=command))
+
+    def test_a_name_takes_its_case_from_the_request(self):
+        [r] = interpret("close the build pane", [call("close_pane", pane="Build")])
+        self.assertEqual(r, Action("close_pane", {"pane": "name:build"}))

@@ -317,3 +317,28 @@ class ReviewR5Run(unittest.TestCase):
                 needle_cli.Options(assume_yes=True, agent=True))
             self.assertEqual(fake.calls(), [])
         self.assertEqual(record["items"][0]["outcome"], "refused")
+
+
+class ReviewR6Run(unittest.TestCase):
+    def setUp(self):
+        os.environ["KITTY_WINDOW_ID"] = "300"
+        self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
+
+    def test_a_pane_no_longer_at_a_prompt_holds_the_rest(self):          # R05
+        from unittest import mock
+        import copy, kilix
+        before = desktop()
+        after = copy.deepcopy(before)
+        after[0]["tabs"][2]["windows"][1].update(
+            at_prompt=False, foreground_processes=[{"cmdline": ["vim"], "pid": 1}])
+        sent = []
+        with mock.patch.object(kilix, "snapshot",
+                               side_effect=[kilix.Tree(before), kilix.Tree(before), kilix.Tree(after)]), \
+                mock.patch.object(kilix, "perform", side_effect=sent.append):
+            record = needle_cli.run_calls(
+                "run vim in the build pane and run make in the build pane and close tab 2",
+                [call("run_in_pane", pane="build", command="vim"),
+                 call("run_in_pane", pane="build", command="make"), call("close_tab", tab="2")],
+                needle_cli.Options(assume_yes=True), confirm=lambda _q: False)
+        self.assertEqual(len(sent), 1)
+        self.assertEqual([i["outcome"] for i in record["items"]], ["done", "unresolved", "skipped"])

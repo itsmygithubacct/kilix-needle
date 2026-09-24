@@ -291,12 +291,7 @@ def _target_value(raw: str, *, relative: bool) -> str | None:
     if relative and re.fullmatch(r"(?:number\s+)?[0-9]{1,2}", stripped):
         return stripped.split()[-1]
     if re.fullmatch(r"[\w.+-][\w .+-]{0,62}", stripped):
-        # Keep the name's case as given: every match downstream casefolds, but
-        # a title that matches *with* its case is preferred (review R5, row D:
-        # "close the Build pane" beside a local "build").
-        cased = re.search(r"(?<![\w])" + r"\s+".join(map(re.escape, stripped.split())) + r"(?![\w])",
-                          " ".join(raw.split()), re.IGNORECASE)
-        return "name:" + (cased.group(0) if cased else stripped)
+        return "name:" + stripped   # _named_target restores the case the request used
     return None
 
 
@@ -376,7 +371,18 @@ def _pane_phrases(target: str) -> list[str]:
 
 
 # A word that is plainly an argument to a shell command, not English.
-_SHELL_ARGUMENT = re.compile(r"-.*|.*[/=.:@~$*].*|[0-9]+|&&|\|\||\||;|>>?|<|2>&1")
+# Review KN-R6-03: "any word with . : @ ~ *" let "17:00", "@midnight",
+# "~5min" and "9/25" through. Now: a flag; a path (/, ./, ../, ~/, or letters
+# and a slash); a file name with an extension; VAR=value; a plain integer; an
+# operator.
+_SHELL_ARGUMENT = re.compile(
+    r"-[\w-]*(?:=\S*)?"
+    r"|(?:\.{1,2}|~)?/\S*"
+    r"|[\w.-]*[A-Za-z][\w.-]*/[\w./-]*"
+    r"|[\w-]+\.[A-Za-z][A-Za-z0-9]{0,7}"
+    r"|[A-Za-z_][A-Za-z0-9_]*=\S*"
+    r"|[0-9]+"
+    r"|&&|\|\||\||;|>>?|<|2>&1")
 
 
 def _quoted(value: str) -> str:
@@ -569,6 +575,13 @@ def _named_target(name: str, key: str, args: dict, prompt: str) -> str | Refusal
         return Refusal(name, f"cannot tell which {key} {raw!r} means")
     if value.startswith("name:") and not _grounded(value[5:], prompt):
         return Refusal(name, f"the {key} {value[5:]!r} is not in the request")
+    if value.startswith("name:"):
+        # The case the person typed, not the model's (review KN-R6-04: a call
+        # saying "Build" for "close the build pane" chose another tab's Build).
+        said = re.search(r"(?<![\w])" + r"\s+".join(map(re.escape, value[5:].split())) + r"(?![\w])",
+                         prompt, re.IGNORECASE)
+        if said:
+            value = "name:" + said.group(0)
     return value
 
 

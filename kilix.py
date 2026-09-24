@@ -25,6 +25,7 @@ from actions import Action
 
 KILIX = os.environ.get("KILIX_NEEDLE_KILIX", "kilix")
 MAX_TYPED = 1024
+CLEAR_LINE = b"\x05\x15"   # Ctrl-E (end of line), Ctrl-U (cut it to the kill ring)
 _BROKER = re.compile(r"[0-9a-f]{16,64}\Z")
 _LOCATION = {"right": "vsplit", "left": "vsplit-before",
              "below": "hsplit", "above": "hsplit-before"}
@@ -191,7 +192,7 @@ class Tree:
             for window in tab.get("windows") or []:
                 yield tab, window
 
-    def pane(self, ref: str) -> dict:
+    def pane(self, ref: str, *, wrap: bool = True) -> dict:
         if ref == "current":
             return self.active_pane
         if ref in ("next", "previous"):
@@ -199,7 +200,13 @@ class Tree:
             if len(windows) < 2:
                 raise KilixError("there is no other pane in this tab")
             index = windows.index(self.active_pane)
-            return windows[(index + (1 if ref == "next" else -1)) % len(windows)]
+            step = 1 if ref == "next" else -1
+            if not wrap and not 0 <= index + step < len(windows):
+                # Review KN-R6-02: as for tabs, a close or a typed command never
+                # wraps round the panes of a tab.
+                raise KilixError(f"there is no {ref} pane: this is the "
+                                 f"{'last' if ref == 'next' else 'first'} one")
+            return windows[(index + step) % len(windows)]
         if ref in _NEIGHBOR:
             # Kitty reports neighbours as window *group* ids (measured: window 31's
             # right neighbour 122 is the group holding window 114). A group's
@@ -346,7 +353,7 @@ def _resolve(action: Action, tree: Tree) -> Step:
             words += f" running {args['program']!r}"
         return Step(action, words, ((tuple(argv), None),))
     if kind in ("close_pane", "go_to_pane"):
-        window = tree.pane(args["pane"])
+        window = tree.pane(args["pane"], wrap=kind == "go_to_pane")
         verb = "close" if kind == "close_pane" else "go to"
         command = "close-window" if kind == "close_pane" else "focus-window"
         return Step(action, f"{verb} {_describe_pane(window)}",
@@ -422,7 +429,7 @@ def _resolve(action: Action, tree: Tree) -> Step:
                     ((("resize-window", f"--match=id:{window['id']}", f"--axis={axis}",
                        f"--increment={sign * args['amount']}"), None),))
     if kind == "run_in_pane":
-        window = tree.pane(args["pane"])
+        window = tree.pane(args["pane"], wrap=False)
         if window.get("at_prompt") is not True or not _shell_in_front(window):
             raise KilixError(f"{_describe_pane(window)} is not at a shell prompt; "
                              "nothing will be typed into it")
@@ -432,8 +439,13 @@ def _resolve(action: Action, tree: Tree) -> Step:
         broker = str((window.get("env") or {}).get("KITTY_PTY_BROKER_SESSION") or "")
         match = f"--match=env:KITTY_PTY_BROKER_SESSION={broker}" if _BROKER.fullmatch(broker) \
             else f"--match=id:{window['id']}"
+        # Ctrl-E Ctrl-U first: a line someone half-typed at that prompt is cut
+        # to the shell's kill ring (Ctrl-Y brings it back) instead of being run
+        # with the command appended (review KN-R6-01: "echo PARTIAL-" + "true"
+        # ran as "echo PARTIAL-true").
         return Step(action, f"type {args['command']!r} into {_describe_pane(window)} and press Enter",
-                    ((("send-text", match, "--stdin"), text),
+                    ((("send-text", match, "--stdin"), CLEAR_LINE),
+                     (("send-text", match, "--stdin"), text),
                      (("send-text", match, "--stdin"), b"\r")),
                     types_into=window["id"])
     raise KilixError(f"no kilix command for {kind}")

@@ -184,6 +184,7 @@ def _omp(undo, dry_run):
         # formatting, compared after the same setdefault ("{}" as well); a file
         # setup created is removed when nothing else was ever in it.
         backup = path.with_name(path.name + f".{NAME}.bak")
+        created = path.with_name(path.name + f".{NAME}.created")
         if not dry_run:
             try:
                 pristine = backup.read_text(encoding="utf-8")
@@ -191,11 +192,11 @@ def _omp(undo, dry_run):
                 earlier.setdefault("mcpServers", {})
                 if earlier == data:
                     _write(path, pristine)
+                    created.unlink(missing_ok=True)   # review R6 mutant O02: no stale marker
                     return f"{path}: removed mcpServers.{NAME}"
             except FileNotFoundError:
                 # Only a file setup recorded creating (review KN-R5-08: a
                 # missing .bak alone deleted a user's own "{}").
-                created = path.with_name(path.name + f".{NAME}.created")
                 if created.exists() and data == {"mcpServers": {}}:
                     os.unlink(os.path.realpath(path))
                     created.unlink()
@@ -208,8 +209,11 @@ def _omp(undo, dry_run):
         servers[NAME] = wanted
     if dry_run:
         return f"{path}: would {'remove' if undo else 'set'} mcpServers.{NAME}"
+    marker = path.with_name(path.name + f".{NAME}.created")
     if not existed and not undo:
-        path.with_name(path.name + f".{NAME}.created").write_text("", encoding="utf-8")
+        marker.write_text("", encoding="utf-8")
+    if undo:
+        marker.unlink(missing_ok=True)   # the file stays with the user's data: not ours now
     _write(path, json.dumps(data, indent=2) + "\n")
     return f"{path}: {'removed' if undo else 'set'} mcpServers.{NAME}"
 

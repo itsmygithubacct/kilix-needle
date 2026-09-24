@@ -142,7 +142,9 @@ class Typing(unittest.TestCase):
     def test_broker_pane_is_matched_by_session_text_then_enter(self):
         step = resolve(Action("run_in_pane", {"pane": "left", "command": "make test"}))
         match = "--match=env:KITTY_PTY_BROKER_SESSION=" + "ab" * 8
-        self.assertEqual(step.commands, ((("send-text", match, "--stdin"), b"make test"),
+        # A half-typed line is cut to the kill ring first (KN-R6-01).
+        self.assertEqual(step.commands, ((("send-text", match, "--stdin"), b"\x05\x15"),
+                                         (("send-text", match, "--stdin"), b"make test"),
                                          (("send-text", match, "--stdin"), b"\r")))
 
     def test_plain_pane_is_matched_by_id(self):
@@ -169,7 +171,8 @@ class Perform(unittest.TestCase):
             kilix.perform(step)
             calls = fake.calls()
         match = "--match=env:KITTY_PTY_BROKER_SESSION=" + "ab" * 8
-        self.assertEqual(calls, [(["send-text", match, "--stdin"], b"make test"),
+        self.assertEqual(calls, [(["send-text", match, "--stdin"], b"\x05\x15"),
+                                 (["send-text", match, "--stdin"], b"make test"),
                                  (["send-text", match, "--stdin"], b"\r")])
 
     def test_a_failing_command_is_reported(self):
@@ -231,7 +234,7 @@ class TypedLength(unittest.TestCase):
                                            "command": "x" * (kilix.MAX_TYPED + 1)}))
         step = resolve(Action("run_in_pane", {"pane": "name:build",
                                               "command": "x" * kilix.MAX_TYPED}))
-        self.assertEqual(len(step.commands[0][1]), kilix.MAX_TYPED)
+        self.assertEqual(len(step.commands[1][1]), kilix.MAX_TYPED)
 
 
 class ShellInFront(unittest.TestCase):
@@ -327,3 +330,84 @@ class ReviewR5Debatable(unittest.TestCase):
         self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
         self.assertEqual(kilix.Tree(tree).pane("name:Build")["id"], 201)
         self.assertEqual(kilix.Tree(tree).pane("name:build")["id"], 301)
+
+
+class ReviewR6Resolution(unittest.TestCase):
+    """0.2.2 review R6's surviving mutants and findings, in resolution."""
+
+    def setUp(self):
+        os.environ["KITTY_WINDOW_ID"] = "300"
+        self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
+
+    def tree(self, change=None):
+        data = copy.deepcopy(desktop())
+        if change:
+            change(data)
+        return kilix.Tree(data)
+
+    def test_a_whole_word_tab_match_is_fuzzy(self):                      # F02
+        def rename(d): d[0]["tabs"][1]["title"] = "deploy prod"
+        step = kilix.resolve(Action("close_tab", {"tab": "name:deploy"}), self.tree(rename))
+        self.assertTrue(step.fuzzy)
+
+    def test_a_whole_word_typing_target_is_fuzzy(self):                   # F03
+        def rename(d): d[0]["tabs"][2]["windows"][2]["title"] = "api server"
+        step = kilix.resolve(Action("run_in_pane", {"pane": "name:api", "command": "make"}),
+                             self.tree(rename))
+        self.assertTrue(step.fuzzy)
+
+    def test_every_keyword_titled_tab_is_ambiguous_in_any_case(self):     # K01, K02
+        for title, ref in (("previous", "previous"), ("Last", "last"), ("NEXT", "next")):
+            with self.subTest(title=title):
+                def rename(d, title=title): d[0]["tabs"][0]["title"] = title
+                with self.assertRaisesRegex(kilix.KilixError, "ambiguous"):
+                    self.tree(rename).tab(ref)
+
+    def test_no_wrap_for_a_close_either_way(self):                        # K03, KN-R6-02
+        os.environ["KITTY_WINDOW_ID"] = "100"                            # tab 1, one pane
+        with self.assertRaisesRegex(kilix.KilixError, "no previous tab"):
+            kilix.resolve(Action("close_tab", {"tab": "previous"}), self.tree())
+        os.environ["KITTY_WINDOW_ID"] = "300"                            # tab 3, first pane
+        with self.assertRaisesRegex(kilix.KilixError, "no previous pane"):
+            kilix.resolve(Action("close_pane", {"pane": "previous"}), self.tree())
+        with self.assertRaisesRegex(kilix.KilixError, "no previous pane"):
+            kilix.resolve(Action("run_in_pane", {"pane": "previous", "command": "ls"}), self.tree())
+        self.assertEqual(kilix.resolve(Action("go_to_pane", {"pane": "previous"}), self.tree())
+                         .commands[0][0], ("focus-window", "--match=id:302"))
+
+    def test_a_lowercase_name_keeps_the_local_pane_first(self):          # N01
+        def twin(d): d[0]["tabs"][1]["windows"][1]["title"] = "build"
+        self.assertEqual(self.tree(twin).pane("name:build")["id"], 301)
+
+
+class StillAtPrompt(unittest.TestCase):
+    """R6 mutants R02-R04: the re-read before typing checks both signals and
+    fails closed."""
+
+    def setUp(self):
+        os.environ["KITTY_WINDOW_ID"] = "300"
+        self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
+
+    def check(self, **changes):
+        from unittest import mock
+        data = copy.deepcopy(desktop())
+        data[0]["tabs"][2]["windows"][1].update(changes)
+        with mock.patch.object(kilix, "snapshot", return_value=kilix.Tree(data)):
+            return kilix.still_at_prompt(301)
+
+    def test_both_signals_are_needed(self):
+        self.assertTrue(self.check())
+        self.assertFalse(self.check(at_prompt=False))                                    # R03
+        self.assertFalse(self.check(foreground_processes=[{"cmdline": ["ssh", "h"], "pid": 1}]))   # R02
+
+    def test_a_failed_read_is_not_ready(self):                                          # R04
+        import needle_cli
+        from unittest import mock
+        with FakeKilix(desktop()) as fake, \
+                mock.patch.object(kilix, "still_at_prompt", side_effect=kilix.KilixError("gone")):
+            record = needle_cli.run_calls("run make in the build pane",
+                                          [{"name": "run_in_pane",
+                                            "arguments": {"pane": "build", "command": "make"}}],
+                                          needle_cli.Options(assume_yes=True))
+            self.assertEqual(fake.calls(), [])
+        self.assertEqual(record["items"][0]["outcome"], "unresolved")
