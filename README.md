@@ -192,6 +192,28 @@ client works around (measured): the request parser reads only compact
 the text. Requests are sent as compact raw UTF-8, and a request containing a
 backslash is refused.
 
+## Needle 3 (development)
+
+Cactus Compute's Needle 3 (`Cactus-Compute/needle3` at `b274efcb`, Apache-2.0)
+runs through the same checks. Kilix doesn't install it yet, so point
+kilix-needle at local copies of its two files:
+
+```sh
+export KILIX_NEEDLE3_LIBRARY=/path/to/libneedle3.so   # from cactus_needle-3.0.1 manylinux2014_x86_64
+export KILIX_NEEDLE3_WEIGHTS=/path/to/needle3.cact
+# a tuned Needle 3 instead: KILIX_NEEDLE3_WEIGHTS=tuned.cact KILIX_NEEDLE3_WEIGHTS_SHA256=<its digest>
+```
+
+- **Pinned files.** Both files are held to pins in `asset.py`, the same as the
+  Needle 2 engine.
+- **Tools.** Needle 3 sees the five-tool schema. Stock Needle 3 does better
+  with five tools than with ten on dev.
+- **Precedence.** `--engine` still wins. The variable takes priority over a
+  selected tuned Needle 2.
+- **No silent fall back.** A missing or mismatched file is an error; it never
+  falls back to Needle 2.
+- **Scoring.** `evaluate.py --generation 3 --library libneedle3.so --weights needle3.cact`.
+
 ## Fine-tuning
 
 ```sh

@@ -19,7 +19,8 @@ _SANDBOX = tempfile.TemporaryDirectory(prefix="kn-state-")
 for _name in ("GPU_TERMINAL_HOME", "KILIX_DATA_HOME", "KILIX_CONFIG_HOME", "KILIX_STORAGE_HOME",
               "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME"):
     os.environ[_name] = os.path.join(_SANDBOX.name, _name.lower())
-for _name in ("KILIX_NEEDLE_LIBRARY", "KILIX_NEEDLE_ENGINE", "KILIX_ML_HOME"):
+for _name in ("KILIX_NEEDLE_LIBRARY", "KILIX_NEEDLE_ENGINE", "KILIX_ML_HOME",
+              "KILIX_NEEDLE3_LIBRARY", "KILIX_NEEDLE3_WEIGHTS", "KILIX_NEEDLE3_WEIGHTS_SHA256"):
     os.environ.pop(_name, None)
 
 import kilix  # noqa: E402

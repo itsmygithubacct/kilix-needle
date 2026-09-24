@@ -125,6 +125,9 @@ def main(argv=None) -> int:
     parser.add_argument("--weights", metavar="FILE",
                         help="with --library: a .cact to load, e.g. a fine-tuned model")
     parser.add_argument("--weights-sha256", help="the .cact's expected digest")
+    parser.add_argument("--generation", type=int, choices=(2, 3), default=2,
+                        help="3: Needle 3 through its pinned libneedle3.so (--library); --weights "
+                             "defaults to needle3.cact at its pin, or a tuned .cact with --weights-sha256")
     parser.add_argument("--runs", type=int, default=1)
     parser.add_argument("--toolset", choices=sorted(TOOLSETS), default="ten",
                         help="the schema the model sees; the checks are the same")
@@ -134,7 +137,14 @@ def main(argv=None) -> int:
     with open(args.cases, encoding="utf-8") as handle:
         cases = [json.loads(line) for line in handle if line.strip()]
     tools, translate = TOOLSETS[args.toolset]
-    if args.library:
+    if args.generation == 3:
+        if not args.library or not args.weights:
+            parser.error("--generation 3 needs --library (libneedle3.so) and --weights (a .cact)")
+        with asset.needle3_library_from_file(args.library) as library, \
+                asset.needle3_weights(args.weights, args.weights_sha256) as weights, \
+                LibEngine(library, tools, weights) as engine:
+            result = score(engine, cases, args.runs, translate)
+    elif args.library:
         library = asset.library_from_file(args.library)
         weights = None
         if args.weights:

@@ -35,6 +35,13 @@ PINNED_BYTES = 14_888_896
 # same revision: the runtime for tuned weights (see libengine.py).
 PINNED_LIB_SHA256 = "9fa5386d3e3a8ee17914fb23643bc5f5c906b683fa33561e79c5445dd78bc389"
 PINNED_LIB_BYTES = 14_315_600
+# Needle 3 (Cactus-Compute/needle3 at b274efcb211a9eef48c9a88da4b43bd569696a39),
+# development only until the catalog carries it. Its library holds no weights:
+# needle3.cact, or a tuned .cact, is always handed to needle_load.
+NEEDLE3_LIB_SHA256 = "978fce130aac08af506b5fe8bb2950da58e9479d0de69d972d9bd69db953568d"
+NEEDLE3_LIB_BYTES = 1_294_696   # needle/libneedle3.so in cactus_needle-3.0.1 manylinux2014_x86_64
+NEEDLE3_WEIGHTS_SHA256 = "c9d915eca282ed42d1a09b143b592adb4cc6744ffe2d294adf5cfc5548170c38"
+NEEDLE3_WEIGHTS_BYTES = 35_335_380   # needle3.cact
 _CONTENT_SRC = Path(__file__).resolve().parent / "third_party" / "kilix-content" / "src"
 
 
@@ -111,6 +118,22 @@ def from_file(path: str) -> EngineImage:
 def library_from_file(path: str) -> EngineImage:
     """A local copy of the pinned libneedle.so, for development and tuning."""
     return load_verified(path, PINNED_LIB_SHA256, PINNED_LIB_BYTES)
+
+
+def needle3_library_from_file(path: str) -> EngineImage:
+    """A local copy of the pinned libneedle3.so."""
+    return load_verified(path, NEEDLE3_LIB_SHA256, NEEDLE3_LIB_BYTES)
+
+
+def needle3_weights(path: str, sha256: str | None = None) -> EngineImage:
+    """needle3.cact at its pin, or a tuned .cact at the digest it was selected with."""
+    if sha256 is None:
+        return load_verified(path, NEEDLE3_WEIGHTS_SHA256, NEEDLE3_WEIGHTS_BYTES)
+    try:
+        size = os.path.getsize(path)
+    except OSError as error:
+        raise AssetError(f"cannot open the weights {os.fspath(path)!r}: {error.strerror}") from error
+    return load_verified(path, sha256, size)
 
 
 def content_root(explicit: str | None = None) -> str:

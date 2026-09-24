@@ -58,6 +58,19 @@ class Runtime:
 def open_runtime(args, *, may_install: bool = False) -> Runtime:
     """The tuned model if one passed its gates and is selected, else the base engine."""
     explicit = getattr(args, "engine", None) or os.environ.get("KILIX_NEEDLE_ENGINE")
+    needle3 = os.environ.get("KILIX_NEEDLE3_LIBRARY")
+    if needle3 and not explicit:
+        # Development only until the catalog carries Needle 3. Asked for by name, so
+        # a missing or mismatched file is an error, never a silent fall back to Needle 2.
+        library = asset.needle3_library_from_file(needle3)
+        try:
+            weights = asset.needle3_weights(os.environ.get("KILIX_NEEDLE3_WEIGHTS", ""),
+                                            os.environ.get("KILIX_NEEDLE3_WEIGHTS_SHA256") or None)
+        except BaseException:
+            library.close()
+            raise
+        return Runtime(LibEngine(library, toolset.TOOLS, weights), [library, weights],
+                       toolset.to_actions, label="needle3")
     choice = None if explicit else tuning.selected()
     if choice is not None:
         library = weights = None
