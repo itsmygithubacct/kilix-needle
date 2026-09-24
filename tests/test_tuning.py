@@ -350,16 +350,53 @@ class SelectRun(unittest.TestCase):
                         side_effect=__import__("asset").AssetError("runtime not accepted")):
             self.assertIn("unavailable", tuning.in_use())
 
+    def test_no_runtime_means_no_select_and_nothing_left_behind(self):      # R22
+        import asset
+        self.report()
+        with mock.patch("asset.installed_library", side_effect=asset.AssetError("not accepted")):
+            with self.assertRaisesRegex(tuning.TuneError, "need the needle2 runtime"):
+                tuning.select_run(self.run_dir)
+        self.assertIsNone(tuning.selected())
+        self.assertFalse((tuning.APP_HOME / "tuning" / self.run_dir.name).exists())
+
+    def test_weights_the_runtime_rejects_are_a_refusal_not_a_traceback(self):   # KN-R2-07
+        from libengine import LibEngineError
+        self.report()
+        with mock.patch.object(tuning, "stage_gates", side_effect=LibEngineError("rejected")), \
+                mock.patch("asset.installed_library", return_value=mock.MagicMock()):
+            with self.assertRaisesRegex(tuning.TuneError, "rejected the weights"):
+                tuning.select_run(self.run_dir)
+        self.assertFalse((tuning.APP_HOME / "tuning" / self.run_dir.name).exists())
+
+    def test_in_use_starts_what_a_request_starts(self):                      # R23, KN-R2-06
+        import asset
+        from libengine import LibEngineError
+        tuning.select(self.run_dir, self.sha)
+        engine_ok = mock.patch("asset.from_installed", return_value=mock.MagicMock())
+        library = mock.patch("asset.installed_library", return_value=mock.MagicMock())
+        with engine_ok, library, mock.patch("asset.load_verified", side_effect=asset.AssetError("digest")):
+            self.assertTrue(tuning.in_use().startswith("base (the selected tuned model is unavailable"))
+        with engine_ok, library, mock.patch("asset.load_verified", return_value=mock.MagicMock()), \
+                mock.patch("libengine.LibEngine.start", side_effect=LibEngineError("bad weights")):
+            self.assertTrue(tuning.in_use().startswith("none (the runtime rejected"))
+        tuning.SELECTION.unlink()
+        with mock.patch("asset.from_installed", side_effect=asset.AssetError("not installed")):
+            self.assertEqual(tuning.in_use(), "none (not installed)")
+
     def test_a_failed_gate_is_refused(self):
+        # The report screens before anything is copied or run (M62).
         self.report(failures=["held-out exact gain +3.0 points, needs +5"])
-        with self.assertRaises(tuning.TuneError):
+        gates, library = self.gated()
+        with gates, library, self.assertRaisesRegex(tuning.TuneError, "did not pass its gates"):
             tuning.select_run(self.run_dir)
+            tuning.stage_gates.assert_not_called()
         self.assertIsNone(tuning.selected())
 
     def test_other_bytes_than_the_gated_ones_are_refused(self):
         self.report()
         (self.run_dir / "tuned.cact").write_bytes(b"other weights")
-        with self.assertRaises(tuning.TuneError):
+        gates, library = self.gated()
+        with gates, library, self.assertRaisesRegex(tuning.TuneError, "not the model"):   # M63
             tuning.select_run(self.run_dir)
         self.assertIsNone(tuning.selected())
 
@@ -398,3 +435,14 @@ class CheckpointDigest(unittest.TestCase):
             with self.assertRaises(tuning.TuneError):
                 tuning.stage_export(run, self.manifest)
         stage.assert_not_called()
+
+
+class NetworkNotice(unittest.TestCase):
+    def test_a_stage_without_a_network_namespace_says_so(self):              # R27, KN-16
+        with tempfile.TemporaryDirectory(prefix="kn-") as tmp:
+            run = tuning.Run(Path(tmp))
+            (run.root / "src").mkdir()
+            with mock.patch.object(tuning, "_offline_prefix", return_value=[]), \
+                    mock.patch("subprocess.run", return_value=mock.Mock(returncode=0)):
+                tuning._python_stage(run, "pass", "training")
+            self.assertIn("has network access", run.log_path.read_text())

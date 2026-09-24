@@ -104,6 +104,20 @@ def snapshot(*, under_overlay: bool = False) -> "Tree":
     return Tree(data, under_overlay=under_overlay)
 
 
+_SHELLS = frozenset("bash zsh fish sh dash ksh mksh tcsh csh nu xonsh elvish".split())
+
+
+def _shell_in_front(window: dict) -> bool:
+    """Beyond the in-band prompt marks (which a program could print): the pane
+    is not in the alternate screen, and what holds its terminal is a shell.
+    Review KN-R2-10: `kilix @ ls` reports both out of band."""
+    if window.get("in_alternate_screen"):
+        return False
+    processes = window.get("foreground_processes") or []
+    names = [os.path.basename(str((p.get("cmdline") or [""])[0])).lstrip("-") for p in processes]
+    return all(name in _SHELLS for name in names)
+
+
 def _program(window: dict) -> str:
     processes = window.get("foreground_processes") or []
     for process in processes:
@@ -374,7 +388,7 @@ def resolve(action: Action, tree: Tree) -> Step:
                        f"--increment={sign * args['amount']}"), None),))
     if kind == "run_in_pane":
         window = tree.pane(args["pane"])
-        if window.get("at_prompt") is not True:
+        if window.get("at_prompt") is not True or not _shell_in_front(window):
             raise KilixError(f"{_describe_pane(window)} is not at a shell prompt; "
                              "nothing will be typed into it")
         text = args["command"].encode("utf-8")

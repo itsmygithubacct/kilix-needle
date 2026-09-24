@@ -21,7 +21,7 @@ import os
 import sys
 from typing import Callable
 
-from actions import LEGACY_TOOLS, Action, Refusal, interpret
+from actions import LEGACY_TOOLS, Action, Refusal, interpret, plain
 import asset
 from engine import Engine, EngineError, check_prompt
 import kilix
@@ -147,6 +147,7 @@ def run_calls(request: str, calls: list, options: Options,
         items.append({"kind": item.kind, "outcome": "refused", "reason": item.reason})
     actions = [item for item in results if isinstance(item, Action)]
     hold = bool(refused)
+    unplain = plain(request, actions)
     if refused:
         record["status"] = 1
     if hold and actions:
@@ -164,11 +165,14 @@ def run_calls(request: str, calls: list, options: Options,
         # Without a known caller the own-pane guard below cannot work, and
         # "current" would mean the user's focused pane (review KN-03: an agent
         # with no KITTY_WINDOW_ID closed the user's vim pane in another tab).
+        # Relative panes too (review KN-R2-04: "run rm -rf build in the right
+        # pane" typed into the user's pane): every reference resolves against
+        # a pane that is not the agent's, so nothing risky runs at all.
         if options.agent and tree.caller is None and (
-                action.kind.startswith("close_") or "current" in action.args.values()):
+                action.risky or "current" in action.args.values()):
             entry.update(outcome="refused",
-                         reason="cannot tell which pane is the agent's own, so no close "
-                                "and no 'this pane' from an agent here")
+                         reason="cannot tell which pane is the agent's own, so nothing "
+                                "risky and no 'this pane' from an agent here")
             record["status"] = 1
             continue
         try:
@@ -189,11 +193,18 @@ def run_calls(request: str, calls: list, options: Options,
         # --yes answers for a risky action; a partly refused request still needs a
         # person, because what survived may be the wrong half of a misreading.
         needs_yes = hold or action.risky
-        if needs_yes and not (options.assume_yes and not hold) \
+        # A yes given in advance (--yes, MCP confirm_risky) covers only a plain
+        # instruction; anything else waits for a person who sees the target
+        # (review R2: word lists of what to refuse were always one word short).
+        waived = options.assume_yes and not hold and unplain is None
+        if needs_yes and not waived \
                 and not confirm(f"  {step.summary}? [y/N] "):
             entry["outcome"] = "skipped"
             entry["reason"] = ("declined" if confirm is _terminal_confirm and sys.stdin.isatty()
-                               else "needs a yes and there is no one to ask")
+                               else "needs a yes and there is no one to ask" if unplain is None
+                               or not options.assume_yes
+                               else f"needs a person's yes: the request is not a plain "
+                                    f"instruction ({unplain})")
             record["status"] = 1
             continue
         try:
@@ -230,6 +241,8 @@ def render(record: dict) -> str:
             lines.append(f"  would {item['summary']}")
         elif outcome == "skipped":
             lines.append("  skipped" if item["reason"] == "declined" else
+                         f"  not run, {item['reason']}: {item['summary']}"
+                         if item["reason"].startswith("needs a person's yes") else
                          f"  not run without a terminal to confirm: {item['summary']}")
         elif outcome == "failed":
             lines.append(f"  failed: {item['reason']}")

@@ -58,10 +58,6 @@ def _strip_block(text: str) -> str:
 
 def _edit(path: Path, body: str | None, parse=None, dry_run=False) -> str:
     """Put (or with body None, remove) our marked block in a text file."""
-    # A managed dotfile is often a symlink into a dotfiles repository: edit
-    # the file it points to, never replace the link (review KN-05).
-    if path.is_symlink():
-        path = path.resolve()
     old = path.read_text(encoding="utf-8") if path.exists() else ""
     new = _strip_block(old)
     if body is not None and BEGIN in old:
@@ -75,21 +71,31 @@ def _edit(path: Path, body: str | None, parse=None, dry_run=False) -> str:
         return f"{path}: unchanged"
     if dry_run:
         return f"{path}: would {'update' if body is not None else 'remove the block from'} it"
-    if path.exists():
-        shutil.copy2(path, path.with_name(path.name + f".{NAME}.bak"))
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + f".{NAME}.tmp")
-    tmp.write_text(new, encoding="utf-8")
-    if path.exists():
-        os.chmod(tmp, path.stat().st_mode & 0o777)
     if parse is not None:
         try:
             parse(new)
         except Exception as error:
-            tmp.unlink()
             raise SetupError(f"{path}: the edit would not parse ({error}); left unchanged")
-    os.replace(tmp, path)
+    _write(path, new)
     return f"{path}: {'updated' if body is not None else 'block removed'}"
+
+
+def _write(path: Path, text: str) -> None:
+    """Replace a config file's text, keeping a symlink a symlink.
+
+    A managed dotfile is often a symlink into a dotfiles repository, so the
+    file it points to is edited (os.path.realpath: relative and chained
+    links too), and the backup lands beside the link the user named, never
+    inside that repository (reviews KN-05, KN-R2-05, KN-R2-11).
+    """
+    target = Path(os.path.realpath(path))
+    if target.exists():
+        shutil.copy2(target, path.with_name(path.name + f".{NAME}.bak"))
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_name(target.name + f".{NAME}.tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.chmod(tmp, target.stat().st_mode & 0o777 if target.exists() else 0o600)
+    os.replace(tmp, target)
 
 
 def _command(undo, dry_run):
@@ -178,12 +184,7 @@ def _omp(undo, dry_run):
         servers[NAME] = wanted
     if dry_run:
         return f"{path}: would {'remove' if undo else 'set'} mcpServers.{NAME}"
-    if path.exists():
-        shutil.copy2(path, path.with_name(path.name + f".{NAME}.bak"))
-    tmp = path.with_name(path.name + f".{NAME}.tmp")
-    tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-    os.chmod(tmp, 0o600)
-    os.replace(tmp, path)
+    _write(path, json.dumps(data, indent=2) + "\n")
     return f"{path}: {'removed' if undo else 'set'} mcpServers.{NAME}"
 
 

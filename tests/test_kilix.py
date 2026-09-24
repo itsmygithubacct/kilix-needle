@@ -228,3 +228,27 @@ class TypedLength(unittest.TestCase):
         step = resolve(Action("run_in_pane", {"pane": "name:build",
                                               "command": "x" * kilix.MAX_TYPED}))
         self.assertEqual(len(step.commands[0][1]), kilix.MAX_TYPED)
+
+
+class ShellInFront(unittest.TestCase):
+    """KN-09 / KN-R2-10: prompt marks are not enough; the state kilix reports
+    out of band must agree."""
+
+    def run_into(self, **changes):
+        tree = copy.deepcopy(desktop())
+        build = tree[0]["tabs"][2]["windows"][1]
+        build.update(changes)
+        return resolve(Action("run_in_pane", {"pane": "name:build", "command": "ls"}), tree=tree)
+
+    def test_the_alternate_screen_or_a_foreground_program_refuses_typing(self):
+        with self.assertRaisesRegex(kilix.KilixError, "not at a shell prompt"):
+            self.run_into(in_alternate_screen=True)
+        with self.assertRaisesRegex(kilix.KilixError, "not at a shell prompt"):
+            self.run_into(foreground_processes=[{"cmdline": ["python3"], "pid": 1}])
+        self.run_into(foreground_processes=[{"cmdline": ["-bash"], "pid": 1}])   # a login shell
+
+    def test_an_exact_title_wins_over_a_whole_word_match(self):           # R17
+        tree = kilix.Tree([{"id": 1, "is_active": True, "is_focused": True, "tabs": [
+            tab(10, "a", [window(100, "notes", "bash", active=True)], active=True),
+            tab(20, "b", [window(200, "old notes", "bash", active=True)])]}])
+        self.assertEqual(tree.pane("name:notes")["id"], 100)

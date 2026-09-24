@@ -177,3 +177,17 @@ class AgentMode(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AgentWithoutCaller(AgentMode):
+    """R2 KN-R2-04 and mutant R12: no known caller, nothing risky at all."""
+
+    def test_no_typing_here_or_into_a_relative_pane(self):
+        for prompt, args in (("run ls here", {"pane": "here", "command": "ls"}),
+                             ("run rm -rf build in the right pane",
+                              {"pane": "right", "command": "rm -rf build"})):
+            with self.subTest(prompt=prompt):
+                status, calls, out = self.run_agent(
+                    prompt, {"name": "run_in_pane", "arguments": args}, caller=None)
+                self.assertEqual((status, calls), (1, []))
+                self.assertIn("agent's own", json.loads(out)["items"][0]["reason"])   # M80

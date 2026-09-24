@@ -87,6 +87,21 @@ class Handle(unittest.TestCase):
         self.assertEqual((status, calls), (0, [(["close-window", "--match=id:300"], None)]))
         self.assertNotIn("[y/N]", out)
 
+    def test_yes_covers_only_a_plain_instruction(self):
+        # Review R2: "close tab 1 or tab 2" closed tab 2 on --yes. Not plain, so
+        # it waits for a person, who sees the target named in the question.
+        status, calls, out, _ = self.run_request(
+            "close tab 1 or tab 2", call("close_tab", tab="2"), tty=False, yes=True)
+        self.assertEqual((status, calls), (1, []))
+        self.assertIn("not a plain instruction", out)
+        status, calls, out, _ = self.run_request(
+            "close tab 1 or tab 2", call("close_tab", tab="2"), answers=["y"])
+        self.assertEqual(calls, [(["close-tab", "--match=id:20"], None)])
+        self.assertIn("close tab 2 'work'", out)
+        status, calls, _, _ = self.run_request(
+            "close tab 2", call("close_tab", tab="2"), tty=False, yes=True)
+        self.assertEqual((status, calls), (0, [(["close-tab", "--match=id:20"], None)]))
+
     def test_yes_never_overrides_a_refusal(self):
         # The refused call stays refused, and what survived still needs a person.
         status, calls, out, _ = self.run_request(

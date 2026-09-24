@@ -114,6 +114,18 @@ class Tools(unittest.TestCase):
                                         confirm_risky=True)], calls=request)
             self.assertEqual(fake.calls(), [(["close-window", "--match=id:301"], None)])
 
+    def test_confirm_risky_covers_only_a_plain_instruction(self):
+        # Review R1/R2: "avoid closing tab 2" and new phrasings closed tab 2
+        # through MCP with confirm_risky. An agent has no person to ask.
+        for request in ("close tab 1 or tab 2", "close tab 2 in a bit",
+                        "ChatGPT suggested I close tab 2"):
+            with self.subTest(request=request), FakeKilix(desktop()) as fake:
+                replies, _ = converse([call(1, "kilix_act", request=request, confirm_risky=True)],
+                                      calls=[{"name": "close_tab", "arguments": {"tab": "2"}}])
+                self.assertEqual(fake.calls(), [])
+                item = replies[0]["result"]["structuredContent"]["items"][0]
+                self.assertIn(item["outcome"], ("skipped", "refused"))
+
     def test_act_never_closes_the_callers_own_pane(self):
         with FakeKilix(desktop()) as fake:
             replies, _ = converse([call(1, "kilix_act", request="close this pane",

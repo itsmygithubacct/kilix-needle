@@ -81,11 +81,22 @@ added because a measured model output got past the one before:
 - Every program, name and command must appear in the request. A target made
   only of filler words is no reference.
 
-Closing, typing and starting a program wait for `y`. `--yes` answers that
-for scripts and agents. It never overrides a refusal: if any part of a request
-is refused, everything else in it waits for a typed `y`, even with `--yes`, and
-without a terminal nothing runs. With `--agent` (and in the MCP server), the
-caller's own pane and tab are never closed.
+Closing, typing and starting a program wait for `y`, and the question names
+the pane or tab it resolved to. `--yes` (and MCP's `confirm_risky`) answers in
+advance, for scripts and agents, but only for a **plain instruction**: after
+the names, commands and programs are set aside, the request holds nothing but
+the words of an instruction ("close", "the", "pane", "left", "please", "can
+you"…) and plain punctuation. "close tab 2 if you can", "should I close the
+build pane?", "close tab 1 or tab 2", a dash, an ampersand or a look-alike
+letter each make it not plain, so it waits for a person, who sees the target.
+The checks were once a list of what to refuse, and a review found a word
+each list lacked every time; this list is of what to allow.
+
+A pre-answered yes never overrides a refusal: if any part of a request is
+refused, everything else in it waits for a typed `y`, and without a terminal
+nothing runs. With `--agent` (and in the MCP server), the caller's own pane and
+tab are never closed, and when the caller's pane cannot be identified, nothing
+risky runs at all.
 
 Everything runs as `kilix @ ...` argv over the instance socket, never through a
 shell. Programs are split with `shlex` and executed directly.
@@ -201,15 +212,17 @@ real shape, including window groups.
 ## Known issues
 
 - **An agent's "yes" is its own.** Through MCP, `confirm_risky` is the
-  harness's attestation that a person agreed; there is no second channel to
-  the person. What bounds it: every check still applies, an agent never closes
-  its own pane or tab, and without a known caller an agent closes nothing and
-  has no "this pane". `kilix-needle setup` registers the MCP server at user
-  scope only when you run it.
-- **"At a shell prompt" is what the pane says.** Typing waits for the shell's
-  prompt marks (OSC 133), which a program in that pane could also print. It
-  stops the common mistake (typing into vim or htop), not a hostile program
-  already running as you in the target pane.
+  harness's claim that a person agreed; there is no second channel to the
+  person. It covers only plain instructions (above); the checks still run,
+  but they are rules about wording, not a proof of intent. An agent never
+  closes its own pane or tab, and when its pane cannot be identified nothing
+  risky runs. `kilix-needle setup` registers the MCP server at user scope,
+  in each harness it finds, only when you run it.
+- **"At a shell prompt" is checked twice, not proven.** Typing needs the
+  shell's prompt marks (OSC 133), and, from what Kilix reports out of band,
+  that the pane is not in the alternate screen and that what holds its
+  terminal is a shell. A program that launches a shell to trick this, in a
+  pane you already run it in, is outside what it can see.
 
 ## Files
 

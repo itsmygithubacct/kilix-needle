@@ -122,3 +122,39 @@ class Home(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SymlinkedConfigs(unittest.TestCase):
+    """R2 KN-R2-05, KN-R2-11 and mutant R20."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory(prefix="kn-")
+        self.addCleanup(self.dir.cleanup)
+        self.home = Path(self.dir.name)
+        saved = setup.HOME, setup.BIN
+        setup.HOME, setup.BIN = self.home, self.home / ".local/bin/kilix-needle"
+        self.addCleanup(lambda: (setattr(setup, "HOME", saved[0]), setattr(setup, "BIN", saved[1])))
+        (self.home / "dotfiles").mkdir()
+
+    def test_a_relative_link_is_followed_and_the_backup_stays_out_of_the_repo(self):
+        (self.home / "dotfiles/bash_aliases").write_text("alias ll='ls -l'\n")
+        link = self.home / ".bash_aliases"
+        link.symlink_to("dotfiles/bash_aliases")          # relative, as stow makes them
+        cwd = os.getcwd()
+        os.chdir("/")                                       # a relative link must not resolve here
+        self.addCleanup(os.chdir, cwd)
+        setup.setup(["alias"])
+        self.assertTrue(link.is_symlink())
+        self.assertIn("alias kn=", (self.home / "dotfiles/bash_aliases").read_text())
+        self.assertEqual(sorted(p.name for p in (self.home / "dotfiles").iterdir()), ["bash_aliases"])
+
+    def test_the_omp_config_link_is_kept(self):
+        (self.home / "dotfiles/mcp.json").write_text('{"mcpServers": {}}\n')
+        (self.home / ".omp/agent").mkdir(parents=True)
+        link = self.home / ".omp/agent/mcp.json"
+        link.symlink_to(self.home / "dotfiles/mcp.json")
+        setup.setup(["omp"])
+        self.assertTrue(link.is_symlink())
+        self.assertIn("kilix-needle", json.loads((self.home / "dotfiles/mcp.json").read_text())["mcpServers"])
+        setup.setup(["omp"], undo=True)
+        self.assertTrue(link.is_symlink())

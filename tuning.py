@@ -519,35 +519,64 @@ def select_run(source: Path) -> Path:
         shutil.copyfile(source / name, target / name)
     _verify(target / "tuned.cact", digest, "the copied tuned.cact")
     import asset
+    from libengine import LibEngineError
     try:
-        library_image = asset.installed_library()
-    except asset.AssetError as error:
-        raise TuneError(f"the gates need the needle2 runtime to run: {error}") from error
-    with library_image:
-        report = stage_gates(Run(target), recipe(load_manifest()), library_image, digest)
-    if report["failures"]:
-        raise TuneError(f"{source.name} failed the gates here: {'; '.join(report['failures'])}")
+        try:
+            library_image = asset.installed_library()
+        except asset.AssetError as error:
+            raise TuneError(f"the gates need the needle2 runtime to run: {error}") from error
+        with library_image:
+            try:
+                report = stage_gates(Run(target), recipe(load_manifest()), library_image, digest)
+            except LibEngineError as error:
+                # Review KN-R2-07: rejected bytes were a traceback, not a refusal.
+                raise TuneError(f"{source.name}: the runtime rejected the weights ({error})") \
+                    from error
+        if report["failures"]:
+            raise TuneError(f"{source.name} failed the gates here: "
+                            f"{'; '.join(report['failures'])}")
+    except TuneError:
+        shutil.rmtree(target, ignore_errors=True)   # a refused run is not left listed
+        raise
     select(target, digest)
     return target
 
 
 def in_use() -> str:
-    """What answers requests now: the selected tuned model only if it can load."""
-    choice = selected()
-    if choice is None:
-        return "base"
+    """What answers requests now: whatever starts the way a request starts it.
+
+    Review KN-R2-06: checking digests said "tuned" while the runtime refused
+    the weights, and "base" when nothing was installed at all.
+    """
     import asset
+    from libengine import LibEngine, LibEngineError
+    import toolset
+    choice = selected()
+    if choice is not None:
+        try:
+            development = os.environ.get("KILIX_NEEDLE_LIBRARY")
+            with (asset.library_from_file(development) if development
+                  else asset.installed_library()) as library, \
+                    asset.load_verified(choice["weights"], choice["sha256"],
+                                        os.path.getsize(choice["weights"])) as weights, \
+                    LibEngine(library, toolset.TOOLS, weights):
+                pass
+            return f"tuned {choice.get('run', '')}".strip()
+        except LibEngineError as error:
+            # as a request does: rejected weights are refused, never replaced
+            return f"none (the runtime rejected the selected weights: {error})"
+        except (asset.AssetError, OSError, KeyError) as error:
+            fallback = f" (the selected tuned model is unavailable: {error})"
+        else:
+            fallback = ""
+    else:
+        fallback = ""
     try:
-        development = os.environ.get("KILIX_NEEDLE_LIBRARY")
-        with (asset.library_from_file(development) if development
-              else asset.installed_library()):
+        with asset.from_installed():
             pass
-        with asset.load_verified(choice["weights"], choice["sha256"],
-                                 os.path.getsize(choice["weights"])):
-            pass
-    except (asset.AssetError, OSError, KeyError) as error:
-        return f"base (the selected tuned model is unavailable: {error})"
-    return f"tuned {choice.get('run', '')}".strip()
+    except asset.AssetError as error:
+        return f"none ({error})"
+    return "base" + fallback
 
 
 def selected() -> dict | None:

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import re
+import unicodedata
 
 SIDES = ("left", "right", "above", "below")
 LAYOUTS = ("tall", "fat", "grid", "horizontal", "vertical", "splits", "stack")
@@ -294,8 +295,62 @@ def _target_value(raw: str, *, relative: bool) -> str | None:
     return None
 
 
+_TYPOGRAPHY = str.maketrans({"\u2018": "'", "\u2019": "'", "\u201b": "'", "\u2032": "'",
+                             "\u201c": '"', "\u201d": '"', "\u2033": '"',
+                             "\u2010": "-", "\u2011": "-", "\u2012": "-", "\u2013": "-",
+                             "\u2014": "-", "\u2015": "-", "\u2212": "-", "\u00a0": " "})
+
+
+def normalize(prompt: str) -> str:
+    """Typography as phones and word processors insert it, made plain: measured
+    (review R2), "don\u2019t close tab 2" closed tab 2 because the checks
+    knew only an ASCII apostrophe."""
+    return unicodedata.normalize("NFKC", str(prompt)).translate(_TYPOGRAPHY)
+
+
+# The words of a plain instruction. A request made only of these (plus the
+# admitted arguments: names, commands, programs) says what it means; anything
+# else (a condition, a question, a retraction, "or", "sparing", "&", a dash,
+# a look-alike letter) may mean something the checks cannot see. Review R2:
+# every word list of what to refuse was bypassed by a word it lacked. So the
+# list here is of what to *allow*, and it decides only whether a risky action
+# may run on a yes given in advance (--yes, MCP confirm_risky). Everything
+# else still runs if a person answers the question, which names the target.
+_PLAIN_WORDS = frozenset("""
+the a an this that my current active focused please pls kindly now for me can could would will
+you just and then also it there here new another
+close kill shut down quit exit go switch focus jump move open split run type enter execute
+rename resize make arrange start launch
+pane panes tab tabs window windows splits terminal layout
+to in into on at called named titled running with number
+left right above below top bottom next previous prev last one
+wider narrower taller shorter bigger smaller by cells
+""".split()) | frozenset(LAYOUTS) | frozenset(SIDES) | frozenset(DIRECTIONS)
+
+
+def plain(prompt: str, actions: list) -> str | None:
+    """None when the request is a plain instruction; otherwise the first thing
+    that makes it not one, for the note that asks for a person's yes."""
+    text = normalize(prompt)
+    for action in actions:
+        for value in getattr(action, "args", {}).values():
+            if isinstance(value, str) and value:
+                raw = value[5:] if value.startswith("name:") else value
+                text = re.sub(re.escape(raw), " ", text, flags=re.I)
+    odd = re.sub(r"[A-Za-z0-9\s.,!?'\"`]", "", text)   # quotes around a command are plain
+    if odd:
+        return f"{odd[0]!r}"
+    words = set(_ORDINALS) | set(_CARDINALS) | _PLAIN_WORDS
+    for token in re.findall(r"[a-z0-9']+", text.casefold()):
+        if token.isdigit() or token in words:
+            continue
+        return f"the word {token!r}"
+    return None
+
+
 def interpret(prompt: str, calls: list) -> list[Action | Refusal]:
     """Turn the engine's calls into admitted actions or named refusals."""
+    prompt = normalize(prompt)
     results: list[Action | Refusal] = []
     for call in calls if isinstance(calls, list) else []:
         name = call.get("name") if isinstance(call, dict) else None
@@ -305,13 +360,7 @@ def interpret(prompt: str, calls: list) -> list[Action | Refusal]:
             continue
         schema = next(t["parameters"] for t in TOOLS if t["name"] == name)
         error = _shape_error(args, schema)
-        result = Refusal(name, error) if error else _admit(name, args, prompt)
-        # Nothing risky runs from a question, a retraction, reported speech or
-        # a condition: the checks cannot wait, and a yes to the wrong reading
-        # closes or types something.
-        if isinstance(result, Action) and result.risky and (reason := _not_now(prompt)):
-            result = Refusal(name, f"the request is {reason}")
-        results.append(result)
+        results.append(Refusal(name, error) if error else _admit(name, args, prompt))
     return _merge_split_then_run(results, prompt)
 
 
@@ -490,39 +539,15 @@ _REPORTED = re.compile(r"\b(?:echo|echoes|print|prints|says|said|say|saying|read
 
 
 _OBJECT_END = re.compile(
-    r"\s*(?:\(|\b(?:but|except|instead|rather|not|so|because|before|after|unless|until|"
-    r"while|since|though|although|keep|keeping|leave|leaving|than|once|if|when|of|next to|"
-    r"beside|besides|near)\b)", re.I)
+    r"\s*(?:\(|(?<![\w-])(?:but|except|instead|rather|not|so|because|before|after|unless|"
+    r"until|while|since|though|although|keep|keeping|leave|leaving|than|once|if|when|of|"
+    r"next to|beside|besides|near)(?![\w-]))", re.I)   # "the leave-tracker tab" is a name
 
 
 def _negated(prefix: str) -> bool:
     # Measured (review KN-02): "avoid closing tab 2" and "without closing tab
     # 2, go to tab 3" closed tab 2; the list knew five words.
     return bool(_NEGATION.search(prefix))
-
-
-# A request that is not a command now. Measured (review KN-02, pinned engine):
-# each of these closed something.
-_NOT_NOW = (
-    ("a retraction", re.compile(
-        r"\b(?:no wait|wait,? no|never ?mind|scratch that|just kidding|kidding|jk|"
-        r"on second thought|cancel that|forget (?:it|that)|not really|typo)\b", re.I)),
-    # "can you / could you / would you / will you" stay requests.
-    ("a question, not a request", re.compile(
-        r"^\s*(?:should|shall|how|what|why|where|which|who|is|are|am|was|were|does|do|did)\b"
-        r"|\b(?:should|shall) (?:i|we)\b|\bhow (?:do|can|could|would|should|to)\b"
-        r"|\bwhat (?:would|happens|if)\b", re.I)),
-    ("conditional or for later, and nothing here waits", re.compile(
-        r"\b(?:if|when|whenever|once|after|unless|until|later|tomorrow|tonight|"
-        r"in (?:an?|\d+|a few) (?:hours?|minutes?|mins?|seconds?))\b", re.I)),
-)
-
-
-def _not_now(prompt: str) -> str | None:
-    for reason, pattern in _NOT_NOW:
-        if pattern.search(_unquoted(prompt)):
-            return reason
-    return None
 
 
 def _in_title(prefix: str) -> bool:

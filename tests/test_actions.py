@@ -6,11 +6,19 @@ wrong in a way that would have closed, typed or started something unasked.
 import unittest
 
 import support  # noqa: F401
-from actions import TOOLS, Action, Refusal, interpret
+from actions import TOOLS, Action, Refusal, interpret, plain
 
 
 def call(tool, **arguments):
     return {"name": tool, "arguments": arguments}
+
+
+def assert_never_waived(test, prompt, tool, args):
+    """Refused, or admitted only as something a yes given in advance cannot run."""
+    results = interpret(prompt, [call(tool, **args)])
+    admitted = [r for r in results if isinstance(r, Action)]
+    if admitted:
+        test.assertIsNotNone(plain(prompt, admitted), f"{prompt!r} would run on --yes")
 
 
 class MeasuredMisreadings(unittest.TestCase):
@@ -713,21 +721,227 @@ class ReviewR1Misreads(unittest.TestCase):
          {"pane": "name:build", "command": "echo hi"}),
     )
 
-    def test_each_harmful_reading_is_refused(self):
+    def test_each_harmful_reading_is_refused_or_waits_for_a_person(self):
         for prompt, tool, args in self.HARMFUL:
             with self.subTest(prompt=prompt):
-                [r] = interpret(prompt, [call(tool, **args)])
-                self.assertIsInstance(r, Refusal)
+                assert_never_waived(self, prompt, tool, args)
 
     def test_the_intended_reading_still_runs(self):
         for prompt, tool, args, admitted in self.LEGIT:
             with self.subTest(prompt=prompt):
                 self.assertEqual(interpret(prompt, [call(tool, **args)]), [Action(tool, admitted)])
 
-    def test_nothing_risky_runs_from_a_question_or_a_condition(self):
+    def test_nothing_risky_runs_from_a_question_or_a_condition_without_a_person(self):
         # Non-risky actions are unaffected: nothing is lost by moving focus.
         [r] = interpret("should I go to tab 2?", [call("go_to_tab", tab="2")])
         self.assertIsInstance(r, Action)
-        [r] = interpret("if it builds, open a pane running htop",
-                        [call("open_pane", program="htop")])
+        assert_never_waived(self, "if it builds, open a pane running htop", "open_pane",
+                            {"program": "htop"})
+
+
+class ReviewR2Phrasings(unittest.TestCase):
+    """0.2.2 review seat R2's phrasings (copied from its probes/cases.py).
+    UNSAFE and HELD: never runnable on a yes given in advance. LEGIT: still
+    possible, with a person's yes where the request is not plain."""
+
+CT = lambda t: ("close_tab", {"tab": t})
+CP = lambda p: ("close_pane", {"pane": p})
+RUN = lambda p, c: ("run_in_pane", {"pane": p, "command": c})
+
+UNSAFE = [
+ # (a1) wrong target: the target is named after the object, before any cut word
+ ("A", "close tab 1 or tab 2", CT("2")),
+ ("A", "close tab 1 to make room for tab 2", CT("2")),
+ ("A", "close tab 1 in order to focus on tab 2", CT("2")),
+ ("A", "close tab 1 aside from tab 2", CT("2")),
+ ("A", "close tab 1 save for tab 2", CT("2")),
+ ("A", "close tab 1 excluding tab 2", CT("2")),
+ ("A", "close tab 1 sparing tab 2", CT("2")),
+ ("A", "close tab 1 — tab 2 stays", CT("2")),
+ ("A", "close tab 1 – tab 2 is my work", CT("2")),
+ ("A", "close tab 1 yet tab 2 remains", CT("2")),
+ ("A", "close tab 1 whereas tab 2 stays open", CT("2")),
+ ("A", "close tab 1 as tab 2 has my work", CT("2")),
+ ("A", "close tab 1 cuz tab 2 has my work", CT("2")),
+ ("A", "close tab 1 bc tab 2 has my work", CT("2")),
+ ("A", "close tab 1 & focus tab 2", CT("2")),
+ ("A", "close tab 1 + go to tab 2", CT("2")),
+ ("A", "close tab 1 w/o touching tab 2", CT("2")),
+ ("A", "close tab 1 with tab 2 left alone", CT("2")),
+ ("A", "close the notes pane apart from the build pane", CP("build")),
+ ("A", "close the notes pane above the build pane", CP("build")),
+ ("A", "close the notes pane below the build pane", CP("build")),
+ ("A", "close the notes pane beneath the build pane", CP("build")),
+ ("A", "close the notes pane — the build pane has my work", CP("build")),
+ ("A", "close the pane to the left of the build pane", CP("left")),
+ ("A", "close the pane on the right of the notes pane", CP("right")),
+ ("A", "close tab 1 еxсept tab 2", CT("2")),          # Cyrillic e, s in "except"
+ # (a2) negation, retraction, question, reported speech, condition
+ ("N", "don’t close tab 2", CT("2")),                       # U+2019, what phones type
+ ("N", "don’t run rm -rf ~ in the build pane", RUN("build", "rm -rf ~")),
+ ("N", "dоn't close tab 2", CT("2")),                       # Cyrillic o
+ ("N", "do n't close tab 2", CT("2")),
+ ("N", "you mustn't close tab 2", CT("2")),
+ ("N", "you needn't close tab 2", CT("2")),
+ ("N", "under no circumstances close tab 2", CT("2")),
+ ("N", "please refrain from closing tab 2", CT("2")),
+ ("N", "skip closing tab 2", CT("2")),
+ ("N", "hold off on closing tab 2", CT("2")),
+ ("N", "it'd be a mistake to close tab 2", CT("2")),
+ ("N", "I'd hate to close tab 2", CT("2")),
+ ("N", "close tab 2 is forbidden", CT("2")),
+ ("N", "close tab 2 — DON'T", CT("2")),
+ ("R", "close tab 2? nope", CT("2")),
+ ("R", "close tab 2. actually, no", CT("2")),
+ ("R", "close tab 2. no!", CT("2")),
+ ("R", "close tab 2 -- oops, ignore that", CT("2")),
+ ("Q", "would closing tab 2 help?", CT("2")),
+ ("Q", "wondering whether to close tab 2", CT("2")),
+ ("Q", "closing tab 2 is safe, right?", CT("2")),
+ ("Q", "close tab 2, yes or no?", CT("2")),
+ ("Q", "would running rm -rf ~ in the build pane be bad?", RUN("build", "rm -rf ~")),
+ ("S", "the ticket asks to close tab 2", CT("2")),
+ ("S", "the popup shows close tab 2", CT("2")),
+ ("S", "ChatGPT suggested I close tab 2", CT("2")),
+ ("S", "the log line: close the left pane", CP("left")),
+ ("C", "close tab 2 as soon as the build finishes", CT("2")),
+ ("C", "close tab 2 in ten minutes", CT("2")),
+ ("C", "close tab 2 at 5pm", CT("2")),
+ ("C", "close tab 2 next week", CT("2")),
+ ("C", "close tab 2 eventually", CT("2")),
+ ("C", "close tab 2 in a bit", CT("2")),
+ ("C", "close tab 2 should the build fail", CT("2")),
+ ("C", "close tab 2 provided the tests pass", CT("2")),
+ ("C", "close tab 2 assuming it is idle", CT("2")),
+ ("C", "run rm -rf build in the build pane as soon as tests pass", RUN("build", "rm -rf build")),
+]
+
+# Held by the new guards (control rows: they should be refused, and are listed
+# so a reader sees what the fix does catch).
+HELD = [
+ ("h", "never mind closing tab 2", CT("2")),
+ ("h", "pls dont close tab 2", CT("2")),
+ ("h", "do NOT close tab 2", CT("2")),
+ ("h", "DON'T you dare close tab 2", CT("2")),
+ ("h", "close tab 2 (jk)", CT("2")),
+ ("h", "close tab 2 — scratch that", CT("2")),
+ ("h", "close tab 2... wait, no", CT("2")),
+ ("h", "close tab 1 other than tab 2", CT("2")),
+ ("h", "close the notes pane rather than the build pane please", CP("build")),
+ ("h", "close tab 1, not tab 2", CT("2")),
+ ("h", "no, close tab 2", CT("2")),   # arguably legit: listed to show which way it falls
+]
+
+LEGIT = [
+ ("L", "close tab 2", CT("2")),
+ ("L", "close the build pane", CP("build")),
+ ("L", "could you close tab 2?", CT("2")),
+ ("L", "can you close the build pane please", CP("build")),
+ ("L", "close tab 2 if you can", CT("2")),
+ ("L", "close tab 2 when you're done", CT("2")),
+ ("L", "close the build pane when you're finished", CP("build")),
+ ("L", "close tab 2 and after that go to tab 1", CT("2")),
+ ("L", "close the notes pane, then after that split right", CP("notes")),
+ ("L", "close tab 2 if that's ok", CT("2")),
+ ("L", "if you would, close tab 2", CT("2")),
+ ("L", "close the tab of my build", CT("build")),
+ ("L", "close the left pane of this tab", CP("left")),
+ ("L", "close the pane on the left of this tab", CP("left")),
+ ("L", "close the notes pane to the right of this one", CP("notes")),
+ ("L", "close the build tab since it's done", CT("build")),
+ ("L", "close tab 2 because it's finished", CT("2")),
+ ("L", "close tab 2 so I can focus", CT("2")),
+ ("L", "close tab 2 which has the old logs", CT("2")),
+ ("L", "kill the build pane, it's stuck", CP("build")),
+ ("L", "do me a favour and close tab 2", CT("2")),
+ ("L", "Do close tab 2", CT("2")),
+ ("L", "how about you close tab 2", CT("2")),
+ ("L", "what a mess, close tab 2", CT("2")),
+ ("L", "which reminds me, close tab 2", CT("2")),
+ ("L", "is tab 2 done? close it", CT("2")),
+ ("L", "close tab 2 now that the build is over", CT("2")),
+ ("L", "shut the notes pane", CP("notes")),
+ ("L", "close the pane running htop", CP("htop")),
+ ("L", "close the leave-tracker tab", CT("leave-tracker")),
+ ("L", "close the typo-fix pane", CP("typo-fix")),
+ ("L", "close the build pane once and for all", CP("build")),
+ ("L", "run make in the build pane", RUN("build", "make")),
+ ("L", "run make in the build pane if it's idle", RUN("build", "make")),
+ ("L", "when you get a chance, run make in the build pane", RUN("build", "make")),
+ ("L", "run make in the build pane after you open htop", RUN("build", "make")),
+ ("L", "type git status in the notes pane", RUN("notes", "git status")),
+ ("L", "run make in the build pane and close the notes pane", CP("notes")),
+ ("L", "close the logs tab until I need it again", CT("logs")),
+ ("L", "close the right pane", CP("right")),
+]
+
+
+class ReviewR2Contract(unittest.TestCase):
+    def test_unsafe_and_held_rows_never_run_on_a_yes_given_in_advance(self):
+        for _tag, prompt, (tool, args) in UNSAFE + HELD:
+            with self.subTest(prompt=prompt):
+                assert_never_waived(self, prompt, tool, args)
+
+    def test_legitimate_rows_stay_possible(self):
+        refused = [prompt for _tag, prompt, (tool, args) in LEGIT
+                   if not any(isinstance(r, Action) for r in interpret(prompt, [call(tool, **args)]))]
+        # A few stay refused by the negation or object rules; the count is
+        # pinned so a new rule that refuses more of these fails here.
+        self.assertLessEqual(len(refused), LEGIT_REFUSED_MAX, refused)
+
+    def test_plain_instructions_can_still_be_waived(self):
+        for prompt, tool, args in (("close tab 2", "close_tab", {"tab": "2"}),
+                                   ("could you close tab 2?", "close_tab", {"tab": "2"}),
+                                   ("close the build pane please", "close_pane", {"pane": "build"}),
+                                   ("run make test in the build pane", "run_in_pane",
+                                    {"pane": "build", "command": "make test"})):
+            with self.subTest(prompt=prompt):
+                admitted = [r for r in interpret(prompt, [call(tool, **args)]) if isinstance(r, Action)]
+                self.assertTrue(admitted)
+                self.assertIsNone(plain(prompt, admitted))
+
+    def test_typography_is_normalized_before_the_checks(self):
+        [r] = interpret("don\u2019t close tab 2", [call("close_tab", tab="2")])
         self.assertIsInstance(r, Refusal)
+
+
+# 2026-09-24: 'close the tab of my build' (object ends at 'of') and
+# 'is tab 2 done? close it' ("it" after a question). Was 21 at acaf84f.
+LEGIT_REFUSED_MAX = 2
+
+
+class ReviewR2Survivors(unittest.TestCase):
+    """R2's surviving mutants R04, R11, R30: a test for each."""
+
+    def test_a_parenthesis_ends_the_object(self):          # R04
+        [r] = interpret("close tab 1 (tab 2 stays)", [call("close_tab", tab="2")])
+        self.assertIsInstance(r, Refusal)
+
+    def test_a_quoted_if_inside_a_command_is_data(self):    # R11
+        prompt = 'run "if true; then ls; fi" in the build pane'
+        admitted = [r for r in interpret(prompt, [call("run_in_pane", pane="build",
+                                                       command="if true; then ls; fi")])
+                    if isinstance(r, Action)]
+        self.assertTrue(admitted)
+        self.assertIsNone(plain(prompt, admitted))
+
+    def test_should_i_anywhere_waits_for_a_person(self):    # R30
+        assert_never_waived(self, "can you close tab 2, or should I wait", "close_tab", {"tab": "2"})
+
+
+class RefusedNotOnlyHeld(unittest.TestCase):
+    """Negation and reported speech are refused outright, not just held for a
+    person (mutants M65, M67 survived while only the hold was tested)."""
+
+    def test_negated_closes_are_refused(self):
+        for prompt in ("avoid closing tab 2", "without closing tab 2, go to tab 3",
+                       "can't close tab 2", "don\u2019t close tab 2"):
+            with self.subTest(prompt=prompt):
+                [r] = interpret(prompt, [call("close_tab", tab="2")])
+                self.assertIsInstance(r, Refusal)
+
+    def test_reported_closes_are_refused(self):
+        for prompt in ("echo close the left pane", "the error says close the left pane"):
+            with self.subTest(prompt=prompt):
+                [r] = interpret(prompt, [call("close_pane", pane="left")])
+                self.assertIsInstance(r, Refusal)
