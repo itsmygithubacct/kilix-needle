@@ -128,10 +128,6 @@ class Selection(unittest.TestCase):
         self.assertEqual(runtime.label, "base")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class FirstUseOffer(unittest.TestCase):
     def offer(self, missing, answer):
         args = type("A", (), {"root": None})()
@@ -449,3 +445,7 @@ class NetworkNotice(unittest.TestCase):
                     mock.patch("subprocess.run", return_value=mock.Mock(returncode=0)):
                 tuning._python_stage(run, "pass", "training")
             self.assertIn("has network access", run.log_path.read_text())
+
+
+if __name__ == "__main__":
+    unittest.main()

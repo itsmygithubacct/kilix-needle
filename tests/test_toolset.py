@@ -48,10 +48,6 @@ class Translate(unittest.TestCase):
         self.assertLessEqual(len(toolset.TOOLS), 5)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class Inverse(unittest.TestCase):
     def test_round_trip_for_every_action(self):
         actions = [["open_pane", {"side": "left", "program": "htop", "name": "x"}],
@@ -63,3 +59,7 @@ class Inverse(unittest.TestCase):
                    ["run_in_pane", {"pane": "left", "command": "ls"}]]
         back = toolset.to_actions(toolset.from_actions(actions))
         self.assertEqual([[c["name"], c["arguments"]] for c in back], actions)
+
+
+if __name__ == "__main__":
+    unittest.main()

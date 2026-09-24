@@ -175,10 +175,6 @@ class AgentMode(unittest.TestCase):
         self.assertEqual(record["items"][0]["args"], {"tab": "next"})
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class AgentWithoutCaller(AgentMode):
     """R2 KN-R2-04 and mutant R12: no known caller, nothing risky at all."""
 
@@ -199,3 +195,7 @@ class AgentWithoutCallerThis(AgentMode):
             "go to this pane", {"name": "go_to_pane", "arguments": {"pane": "this"}}, caller=None)
         self.assertEqual((status, calls), (1, []))
         self.assertIn("agent's own", json.loads(out)["items"][0]["reason"])
+
+
+if __name__ == "__main__":
+    unittest.main()

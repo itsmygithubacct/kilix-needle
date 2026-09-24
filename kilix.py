@@ -48,6 +48,9 @@ class Step:
     # The target was found only as a whole word of a title, not by an exact
     # title or program: never enough for a yes given in advance (KN-R5-01).
     fuzzy: bool = False
+    # The name also fits a pane in another tab; the current tab's was chosen.
+    # A person must see which one (review KN-R9-01).
+    elsewhere: bool = False
     types_into: int | None = None     # the pane a command is typed into
 
 
@@ -162,6 +165,7 @@ class Tree:
                         os_window, own_tab, own_pane = candidate, tab, window
         self.caller = own_pane
         self.fuzzy = False
+        self.elsewhere = False
         self._own_tab = own_tab
         if own_pane is not None and under_overlay:
             # Opened from a hotkey as an overlay, the overlay is the active
@@ -195,6 +199,12 @@ class Tree:
     def pane(self, ref: str, *, wrap: bool = True) -> dict:
         if ref == "current":
             return self.active_pane
+        if (ref in ("next", "previous") or ref in _NEIGHBOR) and any(
+                ref in (_program(w).casefold(), str(w.get("title") or "").strip().casefold())
+                for _tab, w in self._all_panes()):
+            # As for tabs: a pane titled or running "next" makes "the next pane"
+            # ambiguous (review KN-R9-02).
+            raise KilixError(f"'the {ref} pane' is ambiguous: a pane is called {ref!r}")
         if ref in ("next", "previous"):
             windows = self.active_tab.get("windows") or []
             if len(windows) < 2:
@@ -237,6 +247,11 @@ class Tree:
         # (KN-R6-04, KN-R7-03, KN-R8-01); it is gone.
         local = [w for w in self.active_tab.get("windows") or [] if exact(w)]
         found = local or [w for _tab, w in self._all_panes() if exact(w)]
+        # The current tab's pane wins, but not silently: when the name also
+        # fits a pane in another tab ("build" here, "Build" there), a yes given
+        # in advance does not cover the choice (review KN-R9-01).
+        self.elsewhere = bool(local) and any(
+            exact(w) for tab, w in self._all_panes() if tab is not self.active_tab)
         if not found:
             # Never the requester's own pane: while kilix-needle runs, Kilix
             # titles it with the request itself (review KN-R5-01: "close the
@@ -314,9 +329,9 @@ def _program_argv(program: str) -> list[str]:
 def resolve(action: Action, tree: Tree) -> Step:
     """Bind an admitted action to concrete ids and the argv that performs it."""
     import dataclasses
-    tree.fuzzy = False
+    tree.fuzzy = tree.elsewhere = False
     step = _resolve(action, tree)
-    return dataclasses.replace(step, fuzzy=tree.fuzzy)
+    return dataclasses.replace(step, fuzzy=tree.fuzzy, elsewhere=tree.elsewhere)
 
 
 def _resolve(action: Action, tree: Tree) -> Step:

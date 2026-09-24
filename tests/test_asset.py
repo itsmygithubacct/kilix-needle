@@ -99,10 +99,6 @@ class ContentRoot(unittest.TestCase):
             asset.content_root("relative/root")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class CatalogAgreement(unittest.TestCase):
     """The pinned Content component lists needle2, and --engine's pin is its pin."""
 
@@ -159,3 +155,7 @@ class Wheel(unittest.TestCase):
     def test_a_substituted_library_is_refused(self):
         with self.assertRaisesRegex(asset.AssetError, "pinned"):
             asset.library_from_wheel(self.image_of(self.zipped({"needle/libneedle.so": b"x"})))
+
+
+if __name__ == "__main__":
+    unittest.main()

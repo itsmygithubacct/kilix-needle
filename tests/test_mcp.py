@@ -136,10 +136,6 @@ class Tools(unittest.TestCase):
         self.assertEqual(item["outcome"], "refused")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class FuzzyUnderMcp(unittest.TestCase):
     """Review R8 mutant G01: a whole-word target is never acted on through MCP."""
 
@@ -159,3 +155,27 @@ class FuzzyUnderMcp(unittest.TestCase):
             with self.subTest(request=request), FakeKilix(tree) as fake:
                 converse([call(1, "kilix_act", request=request, confirm_risky=True)], calls=calls)
                 self.assertEqual(fake.calls(), [])
+
+
+class ElsewhereUnderMcp(unittest.TestCase):
+    """KN-R9-01 through MCP: confirm_risky does not choose between two tabs' panes."""
+
+    def setUp(self):
+        os.environ["KITTY_WINDOW_ID"] = "300"
+        self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
+
+    def test_confirm_risky_does_not_cover_a_name_in_two_tabs(self):
+        import copy
+        tree = copy.deepcopy(desktop())
+        tree[0]["tabs"][1]["windows"][1]["title"] = "Build"
+        with FakeKilix(tree) as fake:
+            replies, _ = converse([call(1, "kilix_act", request="close the Build pane",
+                                        confirm_risky=True)],
+                                  calls=[{"name": "close_pane", "arguments": {"pane": "Build"}}])
+            self.assertEqual(fake.calls(), [])
+        item = replies[0]["result"]["structuredContent"]["items"][0]
+        self.assertEqual(item["outcome"], "skipped")
+
+
+if __name__ == "__main__":
+    unittest.main()

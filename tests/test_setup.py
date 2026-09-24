@@ -120,10 +120,6 @@ class Home(unittest.TestCase):
         self.assertFalse(setup.BIN.exists())
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class SymlinkedConfigs(unittest.TestCase):
     """R2 KN-R2-05, KN-R2-11 and mutant R20."""
 
@@ -268,3 +264,7 @@ class OmpMarkerEveryBranch(OmpUndoResidue):
         setup.setup(["omp"])                                        # again: now a .bak exists
         setup.setup(["omp"], undo=True)                             # restores the .bak bytes
         self.assertFalse((mcp.parent / "mcp.json.kilix-needle.created").exists())
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -215,7 +215,7 @@ def run_calls(request: str, calls: list, options: Options,
         # KN-R5-01; an agent is refused that outright, above).
         own = tree.caller is not None and tree.caller.get("id") in step.closes
         waived = (options.assume_yes and not hold and not broken and unplain is None
-                  and not step.fuzzy and not own)
+                  and not step.fuzzy and not step.elsewhere and not own)
         if needs_yes and not waived \
                 and not confirm(f"  {step.summary}? [y/N] "):
             entry["outcome"] = "skipped"
@@ -224,6 +224,8 @@ def run_calls(request: str, calls: list, options: Options,
                                     "did not go as asked" if broken and options.assume_yes
                                else "needs a person's yes: the target was found only by a word "
                                     "of its title" if step.fuzzy and options.assume_yes
+                               else "needs a person's yes: another tab has a pane by that "
+                                    "name too" if step.elsewhere and options.assume_yes
                                else "needs a person's yes: it closes the pane or tab this "
                                     "request was made from" if own and options.assume_yes
                                else "needs a yes and there is no one to ask" if unplain is None

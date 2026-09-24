@@ -152,10 +152,6 @@ class Handle(unittest.TestCase):
         self.assertEqual((status, calls, engine.prompts), (1, [], []))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class InstallCommands(unittest.TestCase):
     """What the tool tells people to run must exist (measured: `kilix models`
     is not a command on this Kilix; it fell through to the bonsai store)."""
@@ -363,18 +359,61 @@ class FuzzyAtTheGate(unittest.TestCase):
 
 
 class ReviewR8Case(unittest.TestCase):
-    """KN-R8-01's rows, end to end with hand-written calls: the local pane."""
+    """KN-R8-01's rows, end to end with hand-written calls. Since KN-R9-01 a
+    name that also fits a pane in another tab waits for a person."""
 
-    def test_mixed_case_mentions_act_on_the_local_pane(self):
+    def setUp(self):
+        os.environ["KITTY_WINDOW_ID"] = "300"
+        self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
+
+    def request(self, tree, text, calls, **options):
+        with FakeKilix(tree) as fake:
+            record = needle_cli.run_calls(text, calls, needle_cli.Options(**options),
+                                          confirm=self.answer)
+            return record, fake.calls()
+
+    def test_mixed_case_mentions_wait_for_a_person(self):
+        import copy
+        tree = copy.deepcopy(desktop())
+        tree[0]["tabs"][1]["windows"][1]["title"] = "Build"          # another tab's Build
+        calls = [call("run_in_pane", pane="build", command="make"), call("close_pane", pane="Build")]
+        text = "run make in the build pane and close the Build pane"
+        self.answer = lambda _q: False
+        record, sent = self.request(tree, text, calls, assume_yes=True)
+        self.assertEqual(sent, [])
+        self.assertEqual([i["outcome"] for i in record["items"]], ["skipped", "skipped"])
+        for item in record["items"]:
+            self.assertIn("another tab has a pane by that name", item["reason"])
+        # A person who sees the target and says yes gets the current tab's pane.
+        questions = []
+        self.answer = lambda q: questions.append(q) or True
+        record, sent = self.request(tree, text, calls)
+        self.assertEqual([i["outcome"] for i in record["items"]], ["done", "done"])
+        self.assertTrue(all("301" in q or "build" in q for q in questions), questions)
+        ids = [a for argv, _ in sent for a in argv if a.startswith("--match")]
+        broker = "--match=env:KITTY_PTY_BROKER_SESSION=" + "ab" * 8    # pane 301's
+        self.assertEqual(ids, [broker, broker, broker, "--match=id:301"])
+
+
+class ReviewR9KeywordPane(unittest.TestCase):
+    """KN-R9-02 end to end: a pane titled next never lets "the next pane" act."""
+
+    def test_the_next_pane_is_refused_when_a_pane_is_called_next(self):
         import copy
         os.environ["KITTY_WINDOW_ID"] = "300"
         self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
         tree = copy.deepcopy(desktop())
-        tree[0]["tabs"][1]["windows"][1]["title"] = "Build"          # another tab's Build
-        with FakeKilix(tree) as fake:
-            needle_cli.run_calls("run make in the build pane and close the Build pane",
-                                 [call("run_in_pane", pane="build", command="make"),
-                                  call("close_pane", pane="Build")],
-                                 needle_cli.Options(assume_yes=True), confirm=lambda _q: False)
-            ids = [a for argv, _ in fake.calls() for a in argv if a.startswith("--match")]
-        self.assertNotIn("--match=id:201", ids)
+        tree[0]["tabs"][2]["windows"][2]["title"] = "next"
+        for text, calls in (("close the next pane", [call("close_pane", pane="next")]),
+                            ("run make in the next pane",
+                             [call("run_in_pane", pane="next", command="make")])):
+            with self.subTest(text=text), FakeKilix(tree) as fake:
+                record = needle_cli.run_calls(text, calls, needle_cli.Options(assume_yes=True),
+                                              confirm=lambda _q: True)
+                self.assertEqual(fake.calls(), [])
+                self.assertEqual(record["items"][0]["outcome"], "unresolved")
+                self.assertIn("ambiguous", record["items"][0]["reason"])
+
+
+if __name__ == "__main__":
+    unittest.main()

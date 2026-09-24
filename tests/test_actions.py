@@ -307,10 +307,6 @@ class Risk(unittest.TestCase):
             self.assertEqual(tool["parameters"]["type"], "object")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class BlindCorpusPhrasings(unittest.TestCase):
     """Phrasings for the four reversible actions, from kilix-ml's blind-authored
     corpus, that the checks refused; and the look-alikes that must stay refused."""
@@ -1264,3 +1260,7 @@ class ArgumentEdges(ReviewR4Plain):
             with self.subTest(command=command):
                 self.assert_plain(f"run {command} in the build pane",
                                   call("run_in_pane", pane="build", command=command), expected=False)
+
+
+if __name__ == "__main__":
+    unittest.main()

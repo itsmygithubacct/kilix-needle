@@ -190,10 +190,6 @@ class Perform(unittest.TestCase):
             kilix.Tree([{"id": 1, "tabs": [tab(1, "x", [])]}])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class NameMatching(unittest.TestCase):
     """Review KN-04: names match exactly, or as a unique whole word of a title."""
 
@@ -412,3 +408,71 @@ class StillAtPrompt(unittest.TestCase):
                                           needle_cli.Options(assume_yes=True))
             self.assertEqual(fake.calls(), [])
         self.assertEqual(record["items"][0]["outcome"], "unresolved")
+
+
+class ReviewR9Resolution(unittest.TestCase):
+    """0.2.2 review R9: KN-R9-01, KN-R9-02 and the case mutants K03, K04, K06."""
+
+    def setUp(self):
+        os.environ["KITTY_WINDOW_ID"] = "300"
+        self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
+
+    def tree(self, change=None):
+        data = copy.deepcopy(desktop())
+        if change:
+            change(data)
+        return kilix.Tree(data)
+
+    def test_a_pane_called_by_a_keyword_makes_it_ambiguous(self):       # KN-R9-02
+        for where, field, value, ref in (
+                ((2, 1), "title", "next", "next"),         # this tab
+                ((1, 1), "title", "Previous", "previous"),  # another tab, any case
+                ((2, 2), "program", "next", "next"),        # a program called next
+                ((2, 2), "title", "left", "left")):         # a neighbour word too
+            with self.subTest(where=where, field=field, value=value):
+                def rename(d, where=where, field=field, value=value):
+                    w = d[0]["tabs"][where[0]]["windows"][where[1]]
+                    if field == "title":
+                        w["title"] = value
+                    else:
+                        w["foreground_processes"][0]["cmdline"] = [value]
+                with self.assertRaisesRegex(kilix.KilixError, "ambiguous"):
+                    self.tree(rename).pane(ref)
+        self.assertEqual(self.tree().pane("previous")["id"], 302)   # control: no such pane
+
+    def test_a_name_also_in_another_tab_is_marked(self):                 # KN-R9-01
+        def twin(d): d[0]["tabs"][1]["windows"][1]["title"] = "Build"
+        for ref in ("name:build", "name:Build"):
+            with self.subTest(ref=ref):
+                step = kilix.resolve(Action("close_pane", {"pane": ref}), self.tree(twin))
+                self.assertEqual(step.closes, frozenset({301}))
+                self.assertTrue(step.elsewhere)
+                self.assertFalse(step.fuzzy)
+        # Controls: a name only here, and a name only in another tab.
+        self.assertFalse(kilix.resolve(Action("close_pane", {"pane": "name:build"}),
+                                       self.tree()).elsewhere)
+        step = kilix.resolve(Action("close_pane", {"pane": "name:htop"}), self.tree())
+        self.assertEqual((step.closes, step.elsewhere), (frozenset({201}), False))
+
+    def test_a_pane_title_matches_without_case(self):                    # K03
+        def cap(d): d[0]["tabs"][2]["windows"][1]["title"] = "Build"
+        step = kilix.resolve(Action("close_pane", {"pane": "name:build"}), self.tree(cap))
+        self.assertEqual((step.closes, step.fuzzy, step.elsewhere), (frozenset({301}), False, False))
+
+    def test_a_program_matches_without_case(self):                       # K04
+        def cap(d): d[0]["tabs"][2]["windows"][2]["foreground_processes"][0]["cmdline"] = ["/usr/bin/Rsync"]
+        step = kilix.resolve(Action("close_pane", {"pane": "name:rsync"}), self.tree(cap))
+        self.assertEqual((step.closes, step.fuzzy), (frozenset({302}), False))
+
+    def test_tab_titles_match_without_case(self):                        # K06
+        def twins(d): d[0]["tabs"][0]["title"], d[0]["tabs"][1]["title"] = "build", "Build"
+        with self.assertRaisesRegex(kilix.KilixError, "matches several tabs"):
+            self.tree(twins).tab("name:build")
+        def cap(d): d[0]["tabs"][0]["title"] = "Logs"
+        tree = self.tree(cap)
+        self.assertEqual(tree.tab("name:logs")["id"], 10)
+        self.assertFalse(tree.fuzzy)
+
+
+if __name__ == "__main__":
+    unittest.main()
