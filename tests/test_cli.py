@@ -212,3 +212,48 @@ class EngineLicenceGate(unittest.TestCase):
             with self.assertRaisesRegex(asset.AssetError, "has not been accepted"):
                 asset.from_installed()
         content.Installer.assert_not_called()
+
+
+class OneSnapshotPerRequest(unittest.TestCase):
+    """Review KN-R4-01: Kilix renumbers tabs at once, so "close tab 2 and close
+    tab 3" must close the tabs that were 2 and 3 when the request was made."""
+
+    def test_later_numbers_mean_the_desktop_the_request_was_made_on(self):
+        from unittest import mock
+        import kilix
+        from support import tab, window
+        tabs = [tab(10 * n, name, [window(100 * n, name, "bash", active=(n == 1))], active=(n == 1))
+                for n, name in ((1, "shell"), (2, "logs"), (3, "work"), (4, "docs"))]
+        before = [{"id": 1, "is_active": True, "is_focused": True, "tabs": tabs}]
+        after = [{"id": 1, "is_active": True, "is_focused": True,
+                  "tabs": [t for t in tabs if t["title"] != "logs"]}]
+        os.environ["KITTY_WINDOW_ID"] = "100"
+        self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
+        performed = []
+        with mock.patch.object(kilix, "snapshot",
+                               side_effect=[kilix.Tree(before), kilix.Tree(after)] * 2), \
+                mock.patch.object(kilix, "perform", side_effect=performed.append):
+            record = needle_cli.run_calls(
+                "close tab 2 and close tab 3",
+                [call("close_tab", tab="2"), call("close_tab", tab="3")],
+                needle_cli.Options(assume_yes=True))
+        closed = [s.commands[0][0] for s in performed]
+        self.assertEqual(closed, [("close-tab", "--match=id:20"), ("close-tab", "--match=id:30")],
+                         record)
+
+    def test_an_action_that_did_not_resolve_holds_the_rest(self):
+        # Review KN-R4-04: go_to_tab(5) did not resolve and the close ran anyway.
+        from unittest import mock
+        import kilix
+        os.environ["KITTY_WINDOW_ID"] = "300"
+        self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
+        # Both clauses are plain, so only the failed first action can hold the
+        # second (mutant M91: without that, the close ran on --yes).
+        with FakeKilix(desktop()) as fake:
+            record = needle_cli.run_calls(
+                "close tab 9 and close tab 2",
+                [call("close_tab", tab="9"), call("close_tab", tab="2")],
+                needle_cli.Options(assume_yes=True), confirm=lambda _q: False)
+            self.assertEqual(fake.calls(), [])
+        self.assertEqual([i["outcome"] for i in record["items"]], ["unresolved", "skipped"])
+        self.assertIn("earlier action", record["items"][1]["reason"])

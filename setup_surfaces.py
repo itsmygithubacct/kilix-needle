@@ -171,23 +171,33 @@ def _omp(undo, dry_run):
     path = HOME / ".omp" / "agent" / "mcp.json"
     if not path.parent.is_dir():
         return f"{path.parent}: omp not set up, skipped"
-    data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    existed = path.exists()
+    data = json.loads(path.read_text(encoding="utf-8")) if existed else {}
     servers = data.setdefault("mcpServers", {})
     wanted = {"command": str(BIN), "args": ["mcp"]}
     if undo:
         if NAME not in servers:
             return f"{path}: unchanged"
         del servers[NAME]
-        # Byte-reversible where possible (review KN-R3-09): the backup setup
-        # took before adding the entry holds the user's own formatting.
+        # Byte-reversible where possible (reviews KN-R3-09, KN-R4-10): the
+        # backup setup took before adding the entry holds the user's own
+        # formatting, compared after the same setdefault ("{}" as well); a file
+        # setup created is removed when nothing else was ever in it.
         backup = path.with_name(path.name + f".{NAME}.bak")
-        try:
-            pristine = backup.read_text(encoding="utf-8")
-            if json.loads(pristine) == data and not dry_run:
-                _write(path, pristine)
-                return f"{path}: removed mcpServers.{NAME}"
-        except (OSError, ValueError):
-            pass
+        if not dry_run:
+            try:
+                pristine = backup.read_text(encoding="utf-8")
+                earlier = json.loads(pristine)
+                earlier.setdefault("mcpServers", {})
+                if earlier == data:
+                    _write(path, pristine)
+                    return f"{path}: removed mcpServers.{NAME}"
+            except FileNotFoundError:
+                if data == {"mcpServers": {}}:
+                    os.unlink(os.path.realpath(path))
+                    return f"{path}: removed (setup had created it)"
+            except (OSError, ValueError):
+                pass
     elif servers.get(NAME) == wanted:
         return f"{path}: unchanged"
     else:

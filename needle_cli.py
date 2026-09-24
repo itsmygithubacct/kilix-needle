@@ -153,14 +153,25 @@ def run_calls(request: str, calls: list, options: Options,
     if hold and actions:
         record["note"] = "part of the request was refused, so nothing runs without a yes"
 
+    # One snapshot per request: every action is resolved against the desktop
+    # the person was looking at, and performed by id. Review KN-R4-01: with a
+    # snapshot per action, "close tab 2 and close tab 3" closed tab 2 and then
+    # the tab that had been tab 4, because Kilix renumbers at once.
+    try:
+        tree = kilix.snapshot(under_overlay=options.under_overlay) if actions else None
+    except kilix.KilixError as error:
+        tree, snapshot_error = None, str(error)
+    # Once any action is refused, unresolved or fails, nothing later runs on a
+    # yes given in advance (review KN-R4-04: an unresolved go-to was skipped
+    # and the close after it ran).
+    broken = False
     for action in actions:
         entry = {"kind": action.kind, "args": dict(action.args)}
         items.append(entry)
-        try:
-            tree = kilix.snapshot(under_overlay=options.under_overlay)
-        except kilix.KilixError as error:
-            entry.update(outcome="unresolved", reason=str(error))
+        if tree is None:
+            entry.update(outcome="unresolved", reason=snapshot_error)
             record["status"] = 1
+            broken = True
             continue
         # Without a known caller the own-pane guard below cannot work, and
         # "current" would mean the user's focused pane (review KN-03: an agent
@@ -174,18 +185,21 @@ def run_calls(request: str, calls: list, options: Options,
                          reason="cannot tell which pane is the agent's own, so nothing "
                                 "risky and no 'this pane' from an agent here")
             record["status"] = 1
+            broken = True
             continue
         try:
             step = kilix.resolve(action, tree)
         except kilix.KilixError as error:
             entry.update(outcome="unresolved", reason=str(error))
             record["status"] = 1
+            broken = True
             continue
         entry["summary"] = step.summary
         if options.agent and tree.caller is not None and tree.caller.get("id") in step.closes:
             entry.update(outcome="refused",
                          reason="an agent may not close its own pane or the tab it is in")
             record["status"] = 1
+            broken = True
             continue
         if options.dry_run:
             entry["outcome"] = "would"
@@ -196,11 +210,13 @@ def run_calls(request: str, calls: list, options: Options,
         # A yes given in advance (--yes, MCP confirm_risky) covers only a plain
         # instruction; anything else waits for a person who sees the target
         # (review R2: word lists of what to refuse were always one word short).
-        waived = options.assume_yes and not hold and unplain is None
+        waived = options.assume_yes and not hold and not broken and unplain is None
         if needs_yes and not waived \
                 and not confirm(f"  {step.summary}? [y/N] "):
             entry["outcome"] = "skipped"
             entry["reason"] = ("declined" if confirm is _terminal_confirm and sys.stdin.isatty()
+                               else "needs a person's yes: an earlier action in the request "
+                                    "did not go as asked" if broken and options.assume_yes
                                else "needs a yes and there is no one to ask" if unplain is None
                                or not options.assume_yes
                                else f"needs a person's yes: the request is not a plain "
@@ -213,6 +229,8 @@ def run_calls(request: str, calls: list, options: Options,
             entry.update(outcome="failed", reason=str(error))
             record["status"] = 1
             return record
+        # A later numbered tab still means the tab it was when the request was
+        # made: its step was resolved above to an id, never to a position.
         entry["outcome"] = "done"
     return record
 

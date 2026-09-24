@@ -176,3 +176,31 @@ class ConfigFileDetails(SymlinkedConfigs):
         setup.setup(["omp"])
         setup.setup(["omp"], undo=True)
         self.assertEqual(mcp.read_text(), original)
+
+
+class OmpUndoResidue(SymlinkedConfigs):
+    """Review KN-R4-10 and its mutant M19."""
+
+    def omp(self):
+        (self.home / ".omp/agent").mkdir(parents=True, exist_ok=True)
+        return self.home / ".omp/agent/mcp.json"
+
+    def test_an_empty_object_comes_back_as_it_was(self):
+        mcp = self.omp()
+        mcp.write_text("{}\n")
+        setup.setup(["omp"]); setup.setup(["omp"], undo=True)
+        self.assertEqual(mcp.read_text(), "{}\n")
+
+    def test_a_file_setup_created_is_removed(self):
+        mcp = self.omp()
+        setup.setup(["omp"]); setup.setup(["omp"], undo=True)
+        self.assertFalse(mcp.exists())
+
+    def test_a_later_user_edit_survives_undo(self):                    # M19
+        mcp = self.omp()
+        mcp.write_text('{"mcpServers": {}}\n')
+        setup.setup(["omp"])
+        data = json.loads(mcp.read_text()); data["mcpServers"]["mine"] = {"command": "x"}
+        mcp.write_text(json.dumps(data))
+        setup.setup(["omp"], undo=True)
+        self.assertIn("mine", json.loads(mcp.read_text())["mcpServers"])

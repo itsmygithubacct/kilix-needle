@@ -261,3 +261,11 @@ class ShellInFrontStrict(ShellInFront):
                                                 {"cmdline": ["python3"], "pid": 2}])
         with self.assertRaisesRegex(kilix.KilixError, "not at a shell prompt"):
             self.run_into(foreground_processes=[])
+
+
+class AsciiTabNumbers(unittest.TestCase):
+    def test_a_non_ascii_digit_is_not_a_tab_number(self):           # KN-R4-07, mutant M95
+        tree = kilix.Tree(desktop())
+        self.assertEqual(tree.tab("2")["id"], 20)
+        with self.assertRaises(kilix.KilixError):
+            tree.tab("٢")        # Arabic-Indic 2

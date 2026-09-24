@@ -241,7 +241,7 @@ class Tree:
             return self.tabs[(index - 1) % len(self.tabs)]
         if ref == "last":
             return self.tabs[-1]
-        if ref.isdigit():
+        if ref.isascii() and ref.isdigit():   # review KN-R4-07: "\u09ea" is not a 4 here
             number = int(ref)
             if not 1 <= number <= len(self.tabs):
                 raise KilixError(f"there is no tab {number}; there are {len(self.tabs)}")

@@ -1082,11 +1082,81 @@ class ReviewR3Contract(unittest.TestCase):
 
 
 class SafeClauseWording(unittest.TestCase):
-    def test_a_condition_inside_a_safe_clause_is_not_plain(self):     # mutant M77
-        prompt = "if it builds go to tab 1 and close tab 2"
-        admitted = [r for r in interpret(prompt, [call("go_to_tab", tab="1"),
-                                                   call("close_tab", tab="2")])
-                    if isinstance(r, Action)]
-        self.assertEqual(len(admitted), 2)
-        self.assertIsNotNone(plain(prompt, admitted))
-        self.assertIsNone(plain("go to tab 1 and close tab 2", admitted))
+    def test_a_safe_clause_is_held_to_its_canonical_wording(self):   # M77, KN-R4-04
+        calls = [call("close_tab", tab="2"), call("go_to_tab", tab="1")]
+        for prompt, expected_plain in (("close tab 2 and go to tab 1", True),
+                                       ("close tab 2 and at 5 go to tab 1", False),
+                                       ("close tab 2 and go to tab 1 in 10", False),
+                                       ("close tab 2 and (on the left) go to tab 1", False)):
+            with self.subTest(prompt=prompt):
+                admitted = [r for r in interpret(prompt, calls) if isinstance(r, Action)]
+                self.assertEqual(len(admitted), 2)
+                self.assertEqual(plain(prompt, admitted) is None, expected_plain)
+
+    def test_any_risky_action_after_a_focus_move_waits(self):   # KN-R4-03, M03, M04
+        for prompt, calls in (
+                ("go to tab 2 and close the htop pane",
+                 [call("go_to_tab", tab="2"), call("close_pane", pane="htop")]),
+                ("go to tab 1 and close the left pane",
+                 [call("go_to_tab", tab="1"), call("close_pane", pane="left")]),
+                ("split right and close this pane",
+                 [call("open_pane", side="right"), call("close_pane", pane="this")])):
+            with self.subTest(prompt=prompt):
+                admitted = [r for r in interpret(prompt, calls) if isinstance(r, Action)]
+                self.assertEqual(len(admitted), 2)
+                self.assertIsNotNone(plain(prompt, admitted))
+
+
+class ReviewR4Plain(unittest.TestCase):
+    """0.2.2 review R4 (KN-R4-02, -05, -07, -08, -09) at the level of plain()."""
+
+    def admitted(self, prompt, *calls):
+        return [r for r in interpret(prompt, list(calls)) if isinstance(r, Action)]
+
+    def assert_plain(self, prompt, *calls, expected=True):
+        admitted = self.admitted(prompt, *calls)
+        self.assertEqual(len(admitted), len(calls), prompt)
+        self.assertEqual(plain(prompt, admitted) is None, expected, (prompt, plain(prompt, admitted)))
+
+    def test_plain_binds_its_own_target_and_command(self):          # M11-M13
+        close2 = [Action("close_tab", {"tab": "2"})]
+        self.assertIsNone(plain("close tab 2", close2))
+        self.assertIsNotNone(plain("close tab 3", close2))
+        self.assertIsNotNone(plain("close the notes pane", [Action("close_pane", {"pane": "name:build"})]))
+        run = [Action("run_in_pane", {"pane": "name:build", "command": "make"})]
+        self.assertIsNone(plain("run make in the build pane", run))
+        self.assertIsNotNone(plain("run make test in the build pane", run))
+        self.assertIsNotNone(plain("close the left pane", [Action("close_pane", {"pane": "right"})]))
+
+    def test_top_and_bottom_wait_for_a_person(self):                  # KN-R4-02
+        self.assert_plain("close the top pane", call("close_pane", pane="above"), expected=False)
+        self.assert_plain("close the pane above", call("close_pane", pane="above"))
+
+    def test_a_command_carrying_a_condition_is_plain_only_quoted(self):   # KN-R4-05
+        self.assert_plain("run rm -rf build if it is stale in the build pane",
+                          call("run_in_pane", pane="build", command="rm -rf build if it is stale"),
+                          expected=False)
+        self.assert_plain('run "rm -rf build if it is stale" in the build pane',
+                          call("run_in_pane", pane="build", command="rm -rf build if it is stale"))
+
+    def test_only_ascii_digits_name_a_tab(self):                        # KN-R4-07
+        [r] = interpret("close tab ৪", [call("close_tab", tab="৪")])
+        self.assertNotEqual(r, Action("close_tab", {"tab": "4"}))
+        if isinstance(r, Action):
+            self.assertIsNotNone(plain("close tab ৪", [r]))
+
+    def test_case_and_everyday_politeness_stay_plain(self):             # KN-R4-08
+        self.assert_plain("run make TEST=1 in the build pane",
+                          call("run_in_pane", pane="build", command="make TEST=1"))
+        for prompt in ("close tab number 2", "just close tab 2", "go ahead and close tab 2",
+                       "hey, close tab 2", "close tab 2 right now"):
+            with self.subTest(prompt=prompt):
+                self.assert_plain(prompt, call("close_tab", tab="2"))
+
+    def test_a_bare_question_mark_waits(self):                          # R4 row D
+        self.assert_plain("close tab 2?", call("close_tab", tab="2"), expected=False)
+        self.assert_plain("can you close tab 2?", call("close_tab", tab="2"))
+
+    def test_an_en_dash_in_a_name_is_normalised(self):                 # R3 N04, still alive at R4
+        [r] = interpret("close the leave–tracker tab", [call("close_tab", tab="leave-tracker")])
+        self.assertEqual(r, Action("close_tab", {"tab": "name:leave-tracker"}))

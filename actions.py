@@ -288,7 +288,7 @@ def _target_value(raw: str, *, relative: bool) -> str | None:
         return _ORDINALS[stripped]
     if relative and stripped in _CARDINALS:
         return _CARDINALS[stripped]
-    if relative and re.fullmatch(r"(?:number\s+)?\d{1,2}", stripped):
+    if relative and re.fullmatch(r"(?:number\s+)?[0-9]{1,2}", stripped):
         return stripped.split()[-1]
     if re.fullmatch(r"[\w.+-][\w .+-]{0,62}", stripped):
         return "name:" + stripped
@@ -320,14 +320,16 @@ def normalize(prompt: str) -> str:
 # allowlist of words still composes wrong meanings from allowed words alone
 # ("would that close tab 2?", "close tab 2 in 5", "close tab 1 into tab 2").
 # So the request is compared with what the actions say, not scanned for words.
-_POLITE_HEAD = re.compile(r"^(?:(?:please|pls|kindly|ok|okay|alright|can you|could you|"
-                          r"would you|will you)[\s,]+)+")
-_POLITE_TAIL = re.compile(r"(?:[\s,]+(?:please|pls|thanks|thank you|now|for me))+$")
+_POLITE_HEAD = re.compile(r"^(?:(?:please|pls|kindly|ok|okay|alright|hey|just|can you|could you|"
+                          r"would you|will you|go ahead and)[\s,]+)+")
+_POLITE_TAIL = re.compile(r"(?:[\s,]+(?:please|pls|thanks|thank you|now|right now|for me))+$")
 _CLAUSE_SPLIT = re.compile(r"\s*(?:,\s*and then|,\s*then|,\s*and|\s+and then|\s+then|\s+and|,|;)\s+")
 _CLOSE_WORDS = r"(?:close|kill|shut|quit|exit)"
 _RUN_WORDS = r"(?:run|type|execute|enter)"
-_SIDE_ALIAS = {"left": ("left",), "right": ("right",), "above": ("top", "upper"),
-               "below": ("bottom", "lower")}
+# "top"/"bottom" are not canonical: Kilix resolves "above" to the adjacent
+# pane, so in a stack of three "the top pane" would close the middle one
+# (review KN-R4-02). Those requests wait for a person.
+_SIDE_ALIAS = {"left": (), "right": (), "above": (), "below": ()}
 
 
 def _alt(options) -> str:
@@ -339,14 +341,14 @@ def _tab_phrases(target: str) -> list[str]:
         return [r"(?:this|the current|current) tab"]
     if target in ("next", "previous", "last"):
         return [rf"(?:the )?{target} tab"]
-    if target.isdigit():
+    if target.isascii() and target.isdigit():
         words = [w for w, n in _CARDINALS.items() if n == target]
         ordinals = [w for w, n in _ORDINALS.items() if n == target]
-        out = [rf"tab {_alt([re.escape(target), *map(re.escape, words)])}"]
+        out = [rf"tab (?:number )?{_alt([re.escape(target), *map(re.escape, words)])}"]
         if ordinals:
             out.append(rf"(?:the )?{_alt(ordinals)} tab")
         return out
-    name = re.escape(target[5:] if target.startswith("name:") else target)
+    name = re.escape((target[5:] if target.startswith("name:") else target).casefold())
     return [rf"(?:the |that )?{name} tab", rf"(?:the )?tab (?:called|named|titled) {name}"]
 
 
@@ -364,12 +366,23 @@ def _pane_phrases(target: str) -> list[str]:
         else:
             out.append(rf"(?:the )?{unit} {target}")
         return out
-    name = re.escape(target[5:] if target.startswith("name:") else target)
+    name = re.escape((target[5:] if target.startswith("name:") else target).casefold())
     return [rf"(?:the |that )?{name} {unit}", rf"(?:the )?{unit} (?:called|named|titled|running) {name}"]
 
 
+_CONDITION_IN_COMMAND = re.compile(
+    r"\b(?:if|unless|when|whenever|once|after|before|until|maybe|later|in \d+ ?(?:s|sec|seconds?|"
+    r"m|min|minutes?|h|hours?))\b")
+
+
 def _quoted(value: str) -> str:
-    text = re.escape(value)
+    """A command or program as the request gives it. Quoted, it is taken
+    verbatim; unquoted, it must not carry a condition or a delay, which would
+    be typed along with it (review KN-R4-05: "run rm -rf build if it is stale
+    in the build pane" typed exactly that)."""
+    text = re.escape(value.casefold())
+    if _CONDITION_IN_COMMAND.search(value.casefold()):
+        return rf"(?:`{text}`|\"{text}\"|'{text}')"
     return rf"(?:{text}|`{text}`|\"{text}\"|'{text}')"
 
 
@@ -391,7 +404,7 @@ def _clause_forms(action) -> list[str]:
     if kind in ("open_pane", "open_tab"):
         unit = "tab" if kind == "open_tab" else r"(?:pane|split)"
         program = _quoted(args["program"]) if args.get("program") else None
-        name = re.escape(args["name"]) if args.get("name") else None
+        name = re.escape(args["name"].casefold()) if args.get("name") else None
         side = args.get("side")
         where = ""
         if side:
@@ -410,23 +423,25 @@ def _clause_forms(action) -> list[str]:
             if kind == "open_pane" and side:
                 forms.append(rf"split {_alt([side, *_SIDE_ALIAS[side]])}")
         return forms
-    return []   # non-risky kinds: judged by _plain_other below
+    if kind == "go_to_tab":
+        return [rf"(?:(?:go|switch|jump|move) to|focus) {p}" for p in _tab_phrases(args["tab"])]
+    if kind == "go_to_pane":
+        return [rf"(?:(?:go|switch|jump|move) to|focus) {p}" for p in _pane_phrases(args["pane"])]
+    return []   # no plain wording: beside a risky action, the request is not plain
 
 
-_SAFE_WORDS = frozenset("""
-the a an this that my current go to switch focus jump move open new another split pane panes tab
-tabs window splits terminal on in into at called named titled rename it resize make arrange
-layout left right above below top bottom next previous prev last first one wider narrower
-taller shorter bigger smaller by cells with running
-""".split()) | frozenset(LAYOUTS) | frozenset(_CARDINALS) | frozenset(_ORDINALS)
 _MOVES_FOCUS = ("go_to_tab", "go_to_pane", "open_pane", "open_tab")
-_RELATIVE_TARGETS = ("current", "next", "previous", *SIDES)
 
 
 def plain(prompt: str, actions: list) -> str | None:
     """None when the request is a plain instruction; otherwise why it is not,
     for the note that asks for a person's yes."""
     text = normalize(prompt).casefold().strip()
+    # A question mark is plain only after "can/could/would/will you": a bare
+    # "close tab 2?" asks (review R4, row D).
+    asks = re.match(r"(?:please[\s,]+)?(?:can|could|would|will) you\b", text)
+    if text.endswith("?") and not asks:
+        return "it ends in a question mark"
     text = _POLITE_HEAD.sub("", text)
     text = re.sub(r"[.!?]+$", "", text).strip()
     text = _POLITE_TAIL.sub("", text).strip()
@@ -436,8 +451,10 @@ def plain(prompt: str, actions: list) -> str | None:
     moved = False
     for action in actions:
         target = action.args.get("tab") or action.args.get("pane")
-        if action.risky and moved and target in _RELATIVE_TARGETS:
-            return "a 'this' or relative target after focus has moved"
+        if action.risky and moved:
+            # Named targets too (review KN-R4-03): a name resolves in the
+            # caller's tab first, not in the tab the request just moved to.
+            return "a risky action after focus has moved"
         if action.kind in _MOVES_FOCUS:
             moved = True
     # Split outside quotes: 'run "if true; then ls; fi" in the build pane' is one clause.
@@ -459,20 +476,13 @@ def plain(prompt: str, actions: list) -> str | None:
             clause = text[starts[i]:ends[i + span - 1]]
             head = re.match(r"(close|kill|shut|quit|exit|run|type|execute|enter)\b", clause)
             candidate = clause if head or not (verb and action.risky) else f"{verb} {clause}"
-            if not forms or any(re.fullmatch(form, candidate) for form in forms):
+            # A safe clause beside a risky one is held to its canonical
+            # wording too (review KN-R4-04: its words alone let "at 5 go to
+            # tab 1 and close tab 2" through, and let rename_tab's own value
+            # carry "if the tests pass").
+            if any(re.fullmatch(form, candidate) for form in forms):
                 taken, verb = span, (head.group(1) if head else verb)
                 break
-        if not forms and not action.risky:
-            # A safe clause beside a risky one may carry the condition or the
-            # doubt ("if the build is done, go to tab 1 and close tab 2"): it
-            # must use only instruction words and the action's own values.
-            taken = 1
-            clause = text[starts[i]:ends[i]]
-            own = " ".join(str(v) for v in action.args.values()).casefold().replace("name:", "")
-            allowed = _SAFE_WORDS | set(re.findall(r"[a-z0-9']+", own))
-            odd = [w for w in re.findall(r"[a-z0-9']+", clause) if not w.isdigit() and w not in allowed]
-            if odd or re.search(r"[^a-z0-9\s'\"`.-]", clause):
-                return f"{clause!r} carries more than an instruction"
         if taken is None:
             if not forms:
                 return f"no plain wording is known for {action.kind}"

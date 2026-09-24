@@ -87,17 +87,32 @@ added because a measured model output got past the one before:
 
 Closing, typing and starting a program wait for `y`, and the question names
 the pane or tab it resolved to. `--yes` (and MCP's `confirm_risky`) answers in
-advance, for scripts and agents, but only for a **plain instruction**: each
-clause of the request is exactly a canonical wording of the action it asks
-for ("close tab 2", "close the build pane", "run make in the left pane",
-"split right and run htop"), with at most politeness around it ("please",
-"can you", "thanks"). Anything else waits for a person, who sees the target:
-"close tab 2 if you can", "would that close tab 2?", "close tab 2 in 5",
-"close tab 1 into tab 2", a dash or a look-alike letter. After a clause that
-moves focus, a "this" or relative target is never plain. Three reviews shaped
-this: lists of words to refuse were always a word short, and a list of words
-to allow still combined into sentences that meant something else. Comparing
-the request with what the actions say does not depend on either list.
+advance, for scripts and agents, but only for a **plain instruction**. What
+that means, exactly:
+
+- Each clause is a canonical wording of one admitted action, built from that
+  action's own values: "close tab 2", "close the second tab", "close the build
+  pane", "close the pane on the left", "run make in the build pane", "split
+  right and run htop", "go to tab 1". A safe action beside a risky one is held
+  to its canonical wording too; a safe action with none makes the request not
+  plain.
+- Politeness only at the edges: "please", "just", "hey", "go ahead and",
+  "can/could/would/will you" before; "please", "thanks", "now", "for me" after.
+  A question mark only after "can you" (and its kin).
+- After any clause that moves focus (a go-to, or opening a pane or tab), no
+  risky action is plain.
+- A command or program is taken as given. One that contains a condition or a
+  delay ("if", "unless", "maybe", "in 5 minutes"…) is plain only in quotes.
+- "top" and "bottom" are never plain: Kilix resolves "above" and "below" to the
+  adjacent pane, not the outermost one.
+- Tab numbers are ASCII digits or number words.
+
+Anything else waits for a person, who sees the target. Every action in one
+request is resolved against the one desktop the request was made on and
+performed by id, so "close tab 2 and close tab 3" closes the tabs that were
+2 and 3. Once any action is refused, cannot be resolved or fails, nothing
+later in the request runs on a yes given in advance. Four reviews shaped this;
+their records are in the release's research notes.
 
 A pre-answered yes never overrides a refusal: if any part of a request is
 refused, everything else in it waits for a typed `y`, and without a terminal
@@ -225,6 +240,10 @@ real shape, including window groups.
   closes its own pane or tab, and when its pane cannot be identified nothing
   risky runs. `kilix-needle setup` registers the MCP server at user scope,
   in each harness it finds, only when you run it.
+- **Plain is about wording, not meaning.** A canonical wording can still be a
+  mistake the request states plainly ("close the left pane" in a row of three
+  closes the pane adjacent on the left). Names, commands and programs are
+  taken as given once the checks have found them verbatim in the request.
 - **"At a shell prompt" is checked twice, not proven.** Typing needs the
   shell's prompt marks (OSC 133), and, from what Kilix reports out of band,
   that the pane is not in the alternate screen and that what holds its
