@@ -1,0 +1,178 @@
+{
+ "sets": {
+  "dev": {
+   "reference": {
+    "cases": 40,
+    "exact": 26,
+    "median_ms": 962.8,
+    "p95_ms": 1236.2,
+    "unsafe": 0
+   },
+   "stock_five": {
+    "cases": 40,
+    "exact": 17,
+    "unsafe": 0
+   },
+   "tuned": {
+    "cases": 40,
+    "exact": 35,
+    "median_ms": 245.2,
+    "p95_ms": 423.8,
+    "unsafe": 0
+   }
+  },
+  "heldout-v8": {
+   "reference": {
+    "cases": 150,
+    "exact": 94,
+    "median_ms": 1054.7,
+    "p95_ms": 1533.0,
+    "unsafe": 0
+   },
+   "stock_five": {
+    "cases": 150,
+    "exact": 75,
+    "unsafe": 0
+   },
+   "tuned": {
+    "cases": 150,
+    "exact": 118,
+    "median_ms": 286.6,
+    "p95_ms": 583.1,
+    "unsafe": 0
+   }
+  },
+  "test": {
+   "reference": {
+    "cases": 86,
+    "exact": 63,
+    "median_ms": 980.0,
+    "p95_ms": 1292.3,
+    "unsafe": 0
+   },
+   "stock_five": {
+    "cases": 86,
+    "exact": 50,
+    "unsafe": 0
+   },
+   "tuned": {
+    "cases": 86,
+    "exact": 72,
+    "median_ms": 240.4,
+    "p95_ms": 364.6,
+    "unsafe": 0
+   }
+  }
+ },
+ "tags": {
+  "reference": {
+   "arrange_panes": {
+    "cases": 9,
+    "exact": 5
+   },
+   "bait": {
+    "cases": 30,
+    "exact": 30
+   },
+   "close_pane": {
+    "cases": 9,
+    "exact": 7
+   },
+   "close_tab": {
+    "cases": 9,
+    "exact": 6
+   },
+   "compound": {
+    "cases": 20,
+    "exact": 8
+   },
+   "go_to_pane": {
+    "cases": 9,
+    "exact": 5
+   },
+   "go_to_tab": {
+    "cases": 9,
+    "exact": 6
+   },
+   "none": {
+    "cases": 10,
+    "exact": 10
+   },
+   "open_pane": {
+    "cases": 9,
+    "exact": 3
+   },
+   "open_tab": {
+    "cases": 9,
+    "exact": 3
+   },
+   "rename_tab": {
+    "cases": 9,
+    "exact": 3
+   },
+   "resize_pane": {
+    "cases": 9,
+    "exact": 8
+   },
+   "run_in_pane": {
+    "cases": 9,
+    "exact": 0
+   }
+  },
+  "tuned": {
+   "arrange_panes": {
+    "cases": 9,
+    "exact": 7
+   },
+   "bait": {
+    "cases": 30,
+    "exact": 30
+   },
+   "close_pane": {
+    "cases": 9,
+    "exact": 7
+   },
+   "close_tab": {
+    "cases": 9,
+    "exact": 6
+   },
+   "compound": {
+    "cases": 20,
+    "exact": 12
+   },
+   "go_to_pane": {
+    "cases": 9,
+    "exact": 8
+   },
+   "go_to_tab": {
+    "cases": 9,
+    "exact": 8
+   },
+   "none": {
+    "cases": 10,
+    "exact": 9
+   },
+   "open_pane": {
+    "cases": 9,
+    "exact": 4
+   },
+   "open_tab": {
+    "cases": 9,
+    "exact": 6
+   },
+   "rename_tab": {
+    "cases": 9,
+    "exact": 8
+   },
+   "resize_pane": {
+    "cases": 9,
+    "exact": 7
+   },
+   "run_in_pane": {
+    "cases": 9,
+    "exact": 6
+   }
+  }
+ },
+ "weights_sha256": "37446bbe6129a7e1f0635b06b9a2999b0fa681b6ea536080ea1c62820f27a482"
+}

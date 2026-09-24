@@ -231,15 +231,75 @@ faster.
 
 ## Measured
 
-`evaluate.py` scores the whole pipeline (model calls, then the checks) on the
-real engine. Nothing touches Kilix. With the checks as shipped, generated from
-`evaluate.py`'s JSON:
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/bench-dark.svg">
+  <img alt="Benchmark chart: stock Needle 2 against kilix-needle's tuned model. Exact on the held-out set: 63% stock with ten tools, 50% stock with five, 79% tuned. Median time per request about 1,055 ms stock against 287 ms tuned." src="docs/bench-light.svg">
+</picture>
 
-| Set | Requests | Base, ten tools: exact | unsafe | Tuned (QAT run 6), five tools: exact | unsafe |
+`evaluate.py` scores the whole pipeline (model calls, then the checks) on the
+real engine. Nothing touches Kilix. "Exact" means the request produced exactly
+the intended actions, or, for a request that must do nothing, nothing ran.
+"Unsafe" means a risky action that was not asked for got through the checks.
+The chart and this table come from `evaluate.py`'s JSON
+(`tools/bench_chart.py`, data in `docs/bench.json`):
+
+| Set | Requests | Needle 2, ten tools | Needle 2, five tools | kilix-needle tuned (QAT run 6), five tools | Unsafe, any |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `evals/dev.jsonl` (iterated on) | 40 | 26 | 0 | 35 | 0 |
-| `evals/test.jsonl` (measured only) | 86 | 63 | 0 | 72 | 0 |
-| `evals/heldout-v8.jsonl` (the gate; written blind) | 150 | 94 | 0 | 118 | 0 |
+| `evals/dev.jsonl` (iterated on) | 40 | 26 | 17 | 35 | 0 |
+| `evals/test.jsonl` (measured only) | 86 | 63 | 50 | 72 | 0 |
+| `evals/heldout-v8.jsonl` (the gate; written blind) | 150 | 94 | 75 | 118 | 0 |
+
+The two columns show different gains. Five tools make the engine about four
+times faster but lose accuracy on their own (94 → 75 on the held-out set).
+Tuning more than wins it back (75 → 118). By kind of request (the chart's
+middle panel), the tuned model gains most where stock Needle 2 was weakest:
+- typing a command into a pane: 0 of 9 → 6 of 9;
+- renaming a tab: 3 → 8;
+- requests with two or more actions: 8 of 20 → 12.
+
+It gives up one case each on resizing a pane and on requests that ask for
+nothing.
+
+### How the tuned model was made
+
+1. **Why tune.** Stock Needle 2 got 63% of the held-out requests exactly
+   right and took about a second per request with kilix-needle's ten tools.
+   Needle shows the model only its top five declared tools, so the schema was
+   folded to five (`toolset.py`, translated back onto the same actions before
+   the checks). That was four times faster, but stock accuracy fell to 50%.
+2. **Data.** The tuner generates training requests from kilix-ml's
+   `kilix_panes` pack, plus kilix-needle's own blind templates in
+   `corpus-supplement/`. It then filters them through the same checks that
+   guard the live tool.
+   - Run 6 generated 4,288 requests and kept 3,391.
+   - 650 were dropped because the checks would refuse them, 49 because they
+     were inconsistent, and 109 because they matched an evaluation request.
+   - No action may exceed 18% of the data (resize was capped from 844 to 646).
+3. **Training.** LoRA on the `needle2-train` base checkpoint, with Needle's
+   own training code at `v2.0.9`, for 4 epochs. It had to be
+   *quantisation-aware*:
+   - Needle ships 2-bit weights (4-bit embeddings), and plain float training
+     did not survive export. The 2-bit rounding error was a median 50 times
+     the adapter's change, so the deployed weights moved in a direction
+     unrelated to training (cosine 0.09), and two float runs scored below the
+     stock model.
+   - Training through Needle's own deployment quantiser (a straight-through
+     estimator) measures the loss on the weights that ship.
+   - Run 6 trained in 24 minutes on one rented RTX A4000 (6.4 GB peak). It
+     produced a 13.7 MB `.cact` (sha256 `37446bbe…`).
+4. **Gates, measured by the tuner itself (`tuning.stage_gates`).** Six
+   quantisation-aware runs were made; run 6 was the first to pass all three:
+   - no unsafe action on any set;
+   - at least 5 points over the stock model on the newest held-out set, written
+     without sight of the training data: +16.0;
+   - no kind of request losing more than 2 cases: worst −1.
+
+   Each held-out set is used for one decision and then retired (v2 to v8 so
+   far), so a good score cannot be the product of tuning against it.
+5. **Selection.** `kilix-needle tune --select` installs the model only after
+   re-running those gates on this machine. `--deselect` returns to the stock
+   engine. The weights and the runtime are verified by digest every time they
+   load.
 
 The engine is deterministic: repeated runs produce byte-identical output.
 Latency on a quiet i7-10700F (dev set, three runs):
