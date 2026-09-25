@@ -459,10 +459,9 @@ def gate(manifest: dict, results: dict, reference: dict) -> list[str]:
 def stage_gates(run: Run, manifest: dict, library_image, cact_sha: str,
                 job: str = jobs.DEFAULT) -> dict:
     spec = jobs.get(job)
-    if job != "panes":
-        # The reference arm and the gate rule are the panes job's; another job
-        # needs its own before anything can be gated for it (review R11).
-        raise TuneError(f"the gates for the {job} job are not built yet")
+    # The reference arm and the gate rule are the panes job's; another job
+    # needs its own before anything can be gated for it (review R11).
+    _check_gated_job(job)
     import asset
     from evaluate import score
     from libengine import LibEngine
@@ -549,7 +548,9 @@ def _update_selections(change) -> None:
             return
         # Only panes selected: the version-1 form, which older kilix-needle reads
         # too, so a rollback keeps the tuned model (review R11).
-        only_panes = set(stored) == {"panes"} and isinstance(stored["panes"], dict)
+        panes = stored.get("panes")
+        only_panes = (set(stored) == {"panes"} and isinstance(panes, dict)
+                      and "weights" in panes and "schema" not in panes)
         payload = stored["panes"] if only_panes else {"schema": SELECTION_SCHEMA, "jobs": stored}
         handle, tmp = tempfile.mkstemp(dir=APP_HOME, prefix=".model.", suffix=".tmp")
         try:
@@ -571,6 +572,8 @@ def select(run_root: Path, cact_sha: str, job: str = jobs.DEFAULT) -> None:
 def deselect(job: str = jobs.DEFAULT) -> None:
     """Back to the base model for this job only."""
     jobs.get(job)
+    if not SELECTION.exists():
+        return   # nothing selected: nothing to write, no directory to make
     _update_selections(lambda stored: stored.pop(job, None))
 
 
@@ -581,8 +584,19 @@ def runs_dir(job: str = jobs.DEFAULT) -> Path:
     return APP_HOME / "tuning" if job == "panes" else APP_HOME / "tuning" / "jobs" / job
 
 
-def _selected_weights() -> set[str]:
-    return {entry.get("weights") for entry in _selections().values()}
+RESERVED_RUN_NAMES = frozenset({"jobs"})   # tuning/jobs holds the other jobs' runs
+
+
+def _check_run_name(name: str) -> None:
+    if name in RESERVED_RUN_NAMES or name.startswith(".") or "/" in name or not name:
+        raise TuneError(f"{name!r} can't name a run; choose another name")
+
+
+def _check_gated_job(job: str) -> None:
+    """Refuse a job whose gates are not built, before anything is created."""
+    jobs.get(job)
+    if job != "panes":
+        raise TuneError(f"the gates for the {job} job are not built yet")
 
 
 def select_run(source: Path, job: str = jobs.DEFAULT) -> Path:
@@ -609,12 +623,16 @@ def select_run(source: Path, job: str = jobs.DEFAULT) -> Path:
     digest = sha256_file(weights) if weights.is_file() else None
     if digest is None or digest != report.get("cact_sha256"):
         raise TuneError(f"{source.name}: tuned.cact is not the model its gate report scored")
+    _check_run_name(source.name)
+    _check_gated_job(job)
     target = runs_dir(job) / source.name
-    if str(target / "tuned.cact") in _selected_weights() and \
-            sha256_file(target / "tuned.cact") != digest:
-        # Review R11: a same-named run replaced, and on a refusal deleted, a
-        # model that a job had selected.
-        raise TuneError(f"a run named {source.name} is selected already; rename the new one")
+    # A directory that was there before this call is never replaced or deleted
+    # (review R11: a same-named run, selected or not, was overwritten and, on a
+    # refusal, removed with its logs). Re-selecting the same bytes is allowed.
+    existed = target.exists()
+    if existed and not ((target / "tuned.cact").is_file()
+                        and sha256_file(target / "tuned.cact") == digest):
+        raise TuneError(f"a run named {source.name} exists already; rename the new one")
     target.mkdir(parents=True, exist_ok=True, mode=0o700)
     for name in ("tuned.cact", "gates.json"):
         shutil.copyfile(source / name, target / name)
@@ -638,7 +656,7 @@ def select_run(source: Path, job: str = jobs.DEFAULT) -> Path:
             raise TuneError(f"{source.name} failed the gates here: "
                             f"{'; '.join(report['failures'])}")
     except TuneError:
-        if str(target / "tuned.cact") not in _selected_weights():
+        if not existed:
             shutil.rmtree(target, ignore_errors=True)   # a refused run is not left listed
         raise
     select(target, digest, job)
@@ -692,6 +710,8 @@ def tune(base_dir: Path | None, library_file: str | None, run_name: str | None,
     if job != "panes":
         # Review R11: --job was accepted and the panes model trained and selected.
         raise TuneError(f"tuning for the {job} job is not built yet")
+    if run_name:
+        _check_run_name(run_name)
     manifest = recipe(load_manifest())
     run = Run(APP_HOME / "tuning" / (run_name or
                                      datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")))
@@ -780,6 +800,17 @@ def main(argv: list[str]) -> int:
         print(f"kilix-needle: the base model is used for {args.job}")
         return 0
     if args.background:
+        # Refused here, not in the detached child (review R11).
+        if args.job != "panes":
+            print(f"kilix-needle tune: tuning for the {args.job} job is not built yet",
+                  file=sys.stderr)
+            return 1
+        try:
+            if args.run:
+                _check_run_name(args.run)
+        except TuneError as error:
+            print(f"kilix-needle tune: {error}", file=sys.stderr)
+            return 1
         name = args.run or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         root = APP_HOME / "tuning" / name
         root.mkdir(parents=True, exist_ok=True, mode=0o700)

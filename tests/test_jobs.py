@@ -228,6 +228,7 @@ class ReviewR11(unittest.TestCase):
         run, digest = self._incoming("a1", b"apps weights")
         tuning.select(self.home / "tuning" / "qat-6", "ab" * 32, "panes")
         with mock.patch("asset.installed_library", return_value=mock.MagicMock()), \
+                mock.patch.object(tuning, "_check_gated_job"), \
                 mock.patch.object(tuning, "stage_gates", return_value={"failures": []}) as gates:
             target = tuning.select_run(run, "apps")
         self.assertEqual(gates.call_args.args[-1], "apps")
@@ -235,21 +236,99 @@ class ReviewR11(unittest.TestCase):
         self.assertEqual(tuning.selected("apps")["sha256"], digest)
         self.assertEqual(tuning.selected("panes")["run"], "qat-6")
 
-    def test_a_selected_run_is_never_replaced_or_deleted(self):             # KN-R11-03
-        first, digest = self._incoming("same", b"first")
+    def _select(self, run, job="panes", failures=()):
         with mock.patch("asset.installed_library", return_value=mock.MagicMock()), \
-                mock.patch.object(tuning, "stage_gates", return_value={"failures": []}):
-            target = tuning.select_run(first, "apps")
-        second, _ = self._incoming("same-2", b"second")
-        (self.home / "incoming2").mkdir()
-        moved = self.home / "incoming2" / "same"
-        second.rename(moved)
-        with mock.patch("asset.installed_library", return_value=mock.MagicMock()), \
-                mock.patch.object(tuning, "stage_gates", return_value={"failures": ["no"]}):
-            with self.assertRaisesRegex(tuning.TuneError, "selected already"):
-                tuning.select_run(moved, "apps")
+                mock.patch.object(tuning, "_check_gated_job"), \
+                mock.patch.object(tuning, "stage_gates", return_value={"failures": list(failures)}):
+            return tuning.select_run(run, job)
+
+    def _panes_incoming(self, where, name, data):
+        run = self.home / where / name
+        run.mkdir(parents=True)
+        (run / "tuned.cact").write_bytes(data)
+        (run / "gates.json").write_text(json.dumps({
+            "job": "panes", "cact_sha256": tuning.sha256_file(run / "tuned.cact"), "failures": []}))
+        return run
+
+    def test_a_run_that_exists_is_never_replaced_or_deleted(self):         # KN-R11-03, -13, -14
+        first = self._panes_incoming("in1", "same", b"first")
+        target = self._select(first)
+        (target / "train.log").write_text("log")
+        second = self._panes_incoming("in2", "same", b"second")
+        with self.assertRaisesRegex(tuning.TuneError, "exists already"):
+            self._select(second)
         self.assertEqual((target / "tuned.cact").read_bytes(), b"first")
-        self.assertEqual(tuning.selected("apps")["sha256"], digest)
+        self.assertTrue((target / "train.log").exists())
+        # the same bytes again: allowed, and a refusal then leaves the directory
+        again = self._panes_incoming("in3", "same", b"first")
+        with self.assertRaises(tuning.TuneError):
+            self._select(again, failures=["no"])
+        self.assertTrue((target / "train.log").exists())
+        # and with the selection file corrupt, still nothing is deleted
+        self.file.write_text("{broken")
+        with self.assertRaises(tuning.TuneError):
+            self._select(self._panes_incoming("in4", "same", b"other"))
+        self.assertEqual((target / "tuned.cact").read_bytes(), b"first")
+
+    def test_jobs_is_not_a_run_name(self):                                  # KN-R11-12
+        for name in ("jobs", ".hidden"):
+            run = self._panes_incoming("in", name, b"w")
+            with self.assertRaisesRegex(tuning.TuneError, "can't name a run"):
+                self._select(run)
+        with self.assertRaisesRegex(tuning.TuneError, "can't name a run"):
+            tuning.tune(None, None, "jobs")
+        err = io.StringIO()
+        with mock.patch.object(sys, "stderr", err):
+            self.assertEqual(tuning.main(["--background", "--run", "jobs"]), 1)
+        self.assertFalse((self.home / "tuning" / "jobs").exists())
+
+    def test_a_status_never_lists_the_jobs_directory_as_a_run(self):          # R11-M25
+        (self.home / "tuning" / "jobs" / "apps").mkdir(parents=True)
+        (self.home / "tuning" / "qat-6").mkdir()
+        out = io.StringIO()
+        with mock.patch.object(tuning, "in_use", return_value="x"), mock.patch.object(sys, "stdout", out):
+            tuning.main(["--status"])
+        self.assertEqual(json.loads(out.getvalue())["runs"], ["qat-6"])
+
+    def test_nothing_is_created_for_a_job_not_built(self):                  # KN-R11-15
+        err = io.StringIO()
+        with mock.patch.object(sys, "stderr", err):
+            self.assertEqual(tuning.main(["--job", "apps", "--background"]), 1)
+        run, _ = self._incoming("a2", b"w")
+        with self.assertRaisesRegex(tuning.TuneError, "not built"):
+            tuning.select_run(run, "apps")
+        self.assertFalse((self.home / "tuning").exists())
+        tuning.deselect("apps")
+        self.assertFalse(self.file.exists())
+        self.assertFalse((self.home / "model.json.lock").exists())
+
+    def test_a_panes_entry_not_in_the_old_form_is_kept_in_the_new(self):      # KN-R11-11
+        self.file.write_text(json.dumps({"schema": tuning.SELECTION_SCHEMA, "jobs": {
+            "panes": {"run": "no-weights"}, "apps": {"weights": "/w", "sha256": "ab" * 32}}}))
+        tuning.deselect("apps")
+        self.assertEqual(json.loads(self.file.read_text())["schema"], tuning.SELECTION_SCHEMA)
+        tuning.select(self.home / "a3", "cd" * 32, "apps")   # still readable, still writable
+
+    def test_a_malformed_entry_never_reaches_the_runtime(self):              # R11-M12
+        self.file.write_text(json.dumps({"schema": tuning.SELECTION_SCHEMA,
+                                         "jobs": {"panes": {"run": "no-weights"}}}))
+        self.assertIsNone(tuning.selected("panes"))
+        args = type("A", (), {"engine": None, "root": None})()
+        with mock.patch.object(needle_cli, "_image", return_value=mock.Mock()):
+            self.assertEqual(needle_cli.open_runtime(args).label, "base")
+
+    def test_an_unreadable_file_is_not_read_as_empty(self):                  # R11-M26
+        self.file.write_text(json.dumps({"weights": "/w", "sha256": "ab" * 32}))
+        with mock.patch.object(Path, "read_text", side_effect=PermissionError("denied")):
+            with self.assertRaisesRegex(tuning.TuneError, "cannot read"):
+                tuning.select(self.home / "a4", "cd" * 32, "apps")
+        self.assertIn("/w", self.file.read_text())
+
+    def test_a_failed_write_leaves_no_temp_file(self):                       # R11-M27
+        with mock.patch("json.dump", side_effect=OSError("disk full")):
+            with self.assertRaises(OSError):
+                tuning.select(self.home / "a5", "cd" * 32, "apps")
+        self.assertEqual([p.name for p in self.home.glob(".model.*")], [])
 
     def test_the_refusal_names_the_job_a_report_without_one_was_gated_for(self):   # KN-R11-08
         run, _ = self._incoming("old", b"w")
