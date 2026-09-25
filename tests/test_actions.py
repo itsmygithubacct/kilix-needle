@@ -1568,6 +1568,14 @@ class ReviewR10Round4(unittest.TestCase):
                             [call("open_pane", side="right", program="python3"), call("open_tab")])
         self.assertNotIn(Action("open_pane", {"side": "right", "program": "python3"}), got)
 
+    def test_new_and_numbered_units(self):                                  # KN-R10-16
+        got = self.admitted("new tab, then open a new pane below this pane and run htop",      # Y03
+                            [call("open_tab"), call("open_pane", side="below", program="htop")])
+        self.assertIn(Action("open_pane", {"side": "below", "program": "htop"}), got)
+        got = self.admitted("split right, tab two as before, and run python3",                 # Y06
+                            [call("open_pane", side="right"), call("open_tab", program="python3")])
+        self.assertNotIn(Action("open_tab", {"program": "python3"}), got)
+
     def test_no_opener_leaves_the_clause_alone(self):                       # X07
         got = self.admitted("go to the left pane, rename this tab to dev and start htop",
                             [call("rename_tab", name="dev"), call("open_pane", program="htop")])
