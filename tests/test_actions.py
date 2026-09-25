@@ -1397,6 +1397,13 @@ class ReviewR10Rows(unittest.TestCase):
         [r] = interpret("go to the tab labelled other", [call("go_to_tab", tab="other")])
         self.assertEqual(r, Action("go_to_tab", {"tab": "name:other"}))
 
+    def test_a_target_ending_a_sentence_keeps_its_number(self):           # KN-R10-04
+        # The model copies the full stop; the reference is still tab 3 (mutant M140).
+        [r] = interpret("close tab 3.", [call("close_tab", tab="3.")])
+        self.assertEqual(r, Action("close_tab", {"tab": "3"}))
+        [r] = interpret("go to the second tab.", [call("go_to_tab", tab="second.")])
+        self.assertEqual(r, Action("go_to_tab", {"tab": "2"}))
+
     def test_bound_programs_that_were_asked_for_stay(self):               # KN-R10-05
         got = self.admitted("open a tab running htop and split below with top",       # R02
                             [call("open_tab", program="htop"),
