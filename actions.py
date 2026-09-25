@@ -520,7 +520,45 @@ def interpret(prompt: str, calls: list) -> list[Action | Refusal]:
         schema = next(t["parameters"] for t in TOOLS if t["name"] == name)
         error = _shape_error(args, schema)
         results.append(Refusal(name, error) if error else _admit(name, args, prompt))
-    return _merge_split_then_run(results, prompt)
+    return _merge_split_then_run(_bind_programs(results, prompt), prompt)
+
+
+_OPEN_PANE_WORD = re.compile(r"\b(?:panes?|splits?|splitting|windows?)\b", re.IGNORECASE)
+
+
+def _bind_programs(results: list, prompt: str) -> list:
+    """A program starts only in the kind of open, and on the side, its clause asks for.
+
+    Measured (Needle 3, held-out v6): "new tab, then split right with python3"
+    -> open_tab, open_pane(right), open_tab(program=python3). Each call passed on
+    its own, since python3 is in the request, so an extra tab started it. And
+    (tuned Needle 3, v4) "split left with less and split right with watch" ->
+    open_pane(left, program=watch): the program of the right split on the left.
+    """
+    clauses = _clauses(prompt)
+    if len(clauses) < 2:
+        return results
+    out = []
+    for item in results:
+        program = item.args.get("program") if isinstance(item, Action) else None
+        if program and item.kind in ("open_pane", "open_tab"):
+            said = re.compile(rf"(?<![\w]){re.escape(program)}(?![\w])", re.IGNORECASE)
+            homes = [c.replace(program, " ") for c in clauses if said.search(c)]
+            own, other = ((_TAB_WORD, _OPEN_PANE_WORD) if item.kind == "open_tab"
+                          else (_OPEN_PANE_WORD, _TAB_WORD))
+            if homes and all(other.search(h) and not own.search(h) for h in homes):
+                unit = "tab" if item.kind == "open_tab" else "pane"
+                out.append(Refusal(item.kind, f"{program!r} is asked for somewhere other than "
+                                              f"a new {unit}"))
+                continue
+            side = item.args.get("side")
+            if side and homes and all(
+                    not _first(_mentions(side), h)
+                    and any(_first(_mentions(s), h) for s in SIDES if s != side) for h in homes):
+                out.append(Refusal(item.kind, f"{program!r} is asked for on another side"))
+                continue
+        out.append(item)
+    return out
 
 
 def _merge_split_then_run(results: list, prompt: str) -> list:
@@ -548,8 +586,14 @@ def _merge_split_then_run(results: list, prompt: str) -> list:
                 and previous.kind == item.kind == "open_pane"
                 and set(previous.args) == {"side"} and set(item.args) == {"program"}):
             clause = next((c for c in _clauses(prompt) if item.args["program"] in c), "")
-            if clause and not re.search(r"\b(?:open|pane|panes|split|window|tab)\b",
-                                        clause.replace(item.args["program"], " "), re.I):
+            rest = clause.replace(item.args["program"], " ")
+            bare = clause and not re.search(r"\b(?:open|pane|panes|split|window|tab)\b", rest, re.I)
+            # "open a pane below running tail" in two calls, open_pane(below) then
+            # open_pane(program=tail) (measured, tuned Needle 3): the program's own
+            # clause places that one pane.
+            placed = (clause and _first(_mentions(previous.args["side"]), rest)
+                      and len(_OPEN_PANE_WORD.findall(rest)) == 1 and not _TAB_WORD.search(rest))
+            if bare or placed:
                 merged[-1] = Action("open_pane", {**previous.args, **item.args})
                 continue
         merged.append(item)
@@ -557,6 +601,11 @@ def _merge_split_then_run(results: list, prompt: str) -> list:
 
 
 _AS_NAME = r"(?:running|named|called|titled|with)\s+(?:the\s+)?"
+# Words that place or repeat, never name: a pane or tab called one of these
+# must be introduced as a name ("the tab named over").
+_NOT_A_NAME = frozenset({"over", "other", "another", "back", "again", "up", "down", "all", "both",
+                         "it", "them", "there", "here", "now", "then", "too", "also", "instead",
+                         "away", "off", "out", "over there", "over here", "ones", "same"})
 
 
 def _named_target(name: str, key: str, args: dict, prompt: str) -> str | Refusal:
@@ -573,6 +622,10 @@ def _named_target(name: str, key: str, args: dict, prompt: str) -> str | Refusal
     value = _target_value(raw, relative=key == "tab")
     if value is None:
         return Refusal(name, f"cannot tell which {key} {raw!r} means")
+    if value.startswith("name:") and value[5:] in _NOT_A_NAME:
+        # Measured (tuned Needle 3, held-out v8): "close the next tab over" ->
+        # close_tab("over"), grounded because the word is in the request.
+        return Refusal(name, f"{value[5:]!r} does not name a {key} here")
     if value.startswith("name:") and not _grounded(value[5:], prompt):
         return Refusal(name, f"the {key} {value[5:]!r} is not in the request")
     # Names are matched without regard to case (kilix.Tree), so their case is
