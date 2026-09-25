@@ -545,15 +545,18 @@ def _says_whole(value: str) -> re.Pattern:
     return re.compile(rf"(?<![\w]){re.escape(value)}(?![\w])", re.IGNORECASE)
 
 
-_OPENS_UNIT = re.compile(
-    r"\b(?:open|opens|opening|split|splits|splitting|spawn|spin|launch|create|pop)\b"
-    r"(?:\s+(?:up|down|me|us|a|an|the|one|new|fresh|another|extra|second|more))*"
-    r"\s*(?:\b(?:tabs?|panes?|splits?|windows?|terminals?)\b|(?:\s*(?:on|to)\s+the)?\s*"
-    r"\b(?:left|right|above|below|up|down|under(?:neath)?|beneath)\b)"
-    r"|\b(?:new|fresh|another|extra|second)\s+(?:tabs?|panes?|splits?|windows?|terminals?)\b"
-    r"|^\s*split\b", re.IGNORECASE)
-_LISTED_UNIT = re.compile(r"(?:and\s+)?(?:a|an|one|another|one more)?\s*(?:new\s+|fresh\s+)?"
-                          r"(?:tab|pane|split|window|terminal)\b.*", re.IGNORECASE)
+# Verbs that act on a pane or tab already there.
+_NOT_OPENING = re.compile(r"\b(?:go|goes|going|switch|switching|jump|move|focus|focusing|head|hop|"
+                          r"rename|retitle|title|label|resize|shrink|grow|widen|narrow|enlarge|"
+                          r"maximi[sz]e|zoom|close|kill|quit|exit|swap|select|type|run|stays?|"
+                          r"keeps?|leave|leaves|wait|waits)\b",
+                          re.IGNORECASE)
+_EXISTING_UNIT = re.compile(r"\b(?:the|this|that|my|current|active|focused|same)\s+(?:\w+\s+)?"
+                            r"(?:tabs?|panes?|splits?|windows?)\b"
+                            r"|\b(?:tabs?|panes?)\s+(?:number\s+)?(?:\d+|one|two|three|four|five|six|"
+                            r"seven|eight|nine|ten)\b", re.IGNORECASE)
+_NEW_UNIT = re.compile(r"\b(?:new|fresh|another|extra)\s+(?:\w+\s+)?(?:tabs?|panes?|splits?|windows?)\b",
+                       re.IGNORECASE)
 
 
 def _bind_programs(results: list, prompt: str) -> list:
@@ -574,10 +577,16 @@ def _bind_programs(results: list, prompt: str) -> list:
         return any(_first(_mentions(s), text) for s in SIDES)
 
     def opens(text: str) -> bool:
-        # An opening word and what it opens: "split right", "open a tab", "new
-        # tab", or a bare "a pane" continuing a list; not "focus the left pane",
-        # "give the tab a new name" or "make the left pane smaller" (review R10).
-        return bool(_OPENS_UNIT.search(text) or _LISTED_UNIT.fullmatch(text.strip()))
+        # A clause naming a unit or a side opens it, whatever the verb ("add a
+        # pane on the right", "give me a tab"), unless it acts on one that exists:
+        # "focus the left pane", "give the tab a new name", "make the left pane
+        # smaller" (review R10, rounds 2-4).
+        has_unit = bool(units.search(text))
+        if not has_unit and not places(text):
+            return False
+        if _NOT_OPENING.search(text):
+            return False
+        return not (has_unit and _EXISTING_UNIT.search(text) and not _NEW_UNIT.search(text))
 
     def home(i: int, said: re.Pattern) -> str:
         text = _without_phrasals(said.sub(" ", clauses[i]))
