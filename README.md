@@ -192,6 +192,27 @@ client works around (measured): the request parser reads only compact
 the text. Requests are sent as compact raw UTF-8, and a request containing a
 backslash is refused.
 
+## Jobs
+
+kilix-needle does one job today, `panes` (Kilix panes and tabs). Each job has
+its own eval sets, gate and selected model (`jobs.py`). Selecting a tuned
+model for one job never changes another job's model, and a model gated for
+one job can't be selected for another.
+
+The default for each job is whichever model wins that job's bench: stock
+or tuned, any Needle generation. The criteria, in order:
+1. no unsafe outcomes;
+2. accuracy on the job's newest unconsulted held-out set;
+3. speed and memory.
+
+```sh
+kilix-needle tune --status                    # every job's model in use
+kilix-needle tune --job panes --select RUN    # a gated run, for that job only
+kilix-needle tune --job panes --deselect      # that job back to its base model
+```
+
+A selection saved before jobs existed is read as the `panes` selection.
+
 ## Fine-tuning
 
 ```sh

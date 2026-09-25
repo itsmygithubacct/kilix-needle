@@ -38,6 +38,8 @@ import subprocess
 import sys
 import tomllib
 
+import jobs
+
 REPO = Path(__file__).resolve().parent
 
 
@@ -72,7 +74,7 @@ SUPPLEMENT = REPO / "corpus-supplement"
 #   heldout     the newest set, which no decision about the model has seen.
 RECIPE = {"train": {"epochs": 4, "qat": True},
           "data": {"supplements": [SUPPLEMENT], "cap_share": 0.18},
-          "gates": {"heldout": "evals/heldout-v8.jsonl"}}
+          "gates": {"heldout": jobs.JOBS["panes"].heldout}}
 STAGES = ("base", "source", "env", "data", "train", "export", "gates", "select")
 
 
@@ -106,7 +108,8 @@ def recipe(manifest: dict) -> dict:
               for key, value in manifest.items()}
     for section, values in RECIPE.items():
         merged.setdefault(section, {}).update(values)
-    evals = sorted(str(p.relative_to(REPO)) for p in (REPO / "evals").glob("*.jsonl"))
+    # Every job's sets, not only this job's: evals/<job>/ as well as evals/.
+    evals = sorted(str(p.relative_to(REPO)) for p in (REPO / "evals").rglob("*.jsonl"))
     merged["data"]["exclude"] = sorted(set(merged["data"].get("exclude", [])) | set(evals))
     return merged
 
@@ -453,15 +456,16 @@ def gate(manifest: dict, results: dict, reference: dict) -> list[str]:
     return failures
 
 
-def stage_gates(run: Run, manifest: dict, library_image, cact_sha: str) -> dict:
+def stage_gates(run: Run, manifest: dict, library_image, cact_sha: str,
+                job: str = jobs.DEFAULT) -> dict:
     import asset
     from evaluate import score
     from libengine import LibEngine
     import toolset
     weights = asset.load_verified(run.root / "tuned.cact", cact_sha,
                                   (run.root / "tuned.cact").stat().st_size)
-    sets = {"dev": "evals/dev.jsonl", "test": "evals/test.jsonl",
-            "heldout": manifest["gates"]["heldout"]}
+    spec = jobs.get(job)
+    sets = {"dev": spec.dev, "test": spec.test, "heldout": manifest["gates"]["heldout"]}
     results = {}
     with weights, LibEngine(library_image, toolset.TOOLS, weights) as engine:
         for name, rel in sets.items():
@@ -477,7 +481,7 @@ def stage_gates(run: Run, manifest: dict, library_image, cact_sha: str) -> dict:
     with LibEngine(library_image, TEN) as base:
         reference = score(base, heldout_cases, 1)
     failures = gate(manifest, results, reference)
-    report = {"cact_sha256": cact_sha, "failures": failures,
+    report = {"job": job, "cact_sha256": cact_sha, "failures": failures,
               "totals": {name: r["totals"] for name, r in results.items()},
               "reference_totals": reference["totals"],
               "tags": {"tuned": results["heldout"]["tags"], "reference": reference["tags"]}}
@@ -486,15 +490,52 @@ def stage_gates(run: Run, manifest: dict, library_image, cact_sha: str) -> dict:
     return report
 
 
-def select(run_root: Path, cact_sha: str) -> None:
+SELECTION_SCHEMA = "kilix-needle.selection/v2"
+
+
+def _selections() -> dict:
+    """Every job's selected model. A version-1 file (one flat selection, from
+    before jobs) is the panes job's selection."""
+    try:
+        data = json.loads(SELECTION.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    if data.get("schema") == SELECTION_SCHEMA:
+        chosen = data.get("jobs")
+        return {k: v for k, v in chosen.items() if isinstance(v, dict)} \
+            if isinstance(chosen, dict) else {}
+    return {"panes": data} if "weights" in data else {}
+
+
+def _write_selections(chosen: dict) -> None:
+    if not chosen:
+        SELECTION.unlink(missing_ok=True)
+        return
     APP_HOME.mkdir(parents=True, exist_ok=True, mode=0o700)
     tmp = SELECTION.with_suffix(".tmp")
-    tmp.write_text(json.dumps({"weights": str(run_root / "tuned.cact"), "sha256": cact_sha,
-                               "toolset": "five", "run": run_root.name}), encoding="utf-8")
+    tmp.write_text(json.dumps({"schema": SELECTION_SCHEMA, "jobs": chosen}), encoding="utf-8")
     os.replace(tmp, SELECTION)
 
 
-def select_run(source: Path) -> Path:
+def select(run_root: Path, cact_sha: str, job: str = jobs.DEFAULT) -> None:
+    jobs.get(job)
+    chosen = _selections()
+    chosen[job] = {"weights": str(run_root / "tuned.cact"), "sha256": cact_sha,
+                   "toolset": "five", "run": run_root.name}
+    _write_selections(chosen)
+
+
+def deselect(job: str = jobs.DEFAULT) -> None:
+    """Back to the base model for this job only."""
+    jobs.get(job)
+    chosen = _selections()
+    chosen.pop(job, None)
+    _write_selections(chosen)
+
+
+def select_run(source: Path, job: str = jobs.DEFAULT) -> Path:
     """Select a run tuned elsewhere (e.g. on a rented GPU) once it passes the gates here.
 
     The run directory must hold tuned.cact and a gates.json with no failures
@@ -509,6 +550,10 @@ def select_run(source: Path) -> Path:
         raise TuneError(f"no readable gate report in {source}: {error}") from error
     if report.get("failures") != []:
         raise TuneError(f"{source.name} did not pass its gates: {report.get('failures')}")
+    # A model gated for one job is never selected for another; reports from
+    # before jobs were panes reports.
+    if report.get("job", "panes") != job:
+        raise TuneError(f"{source.name} was gated for the {report.get('job')!r} job, not {job!r}")
     weights = source / "tuned.cact"
     digest = sha256_file(weights) if weights.is_file() else None
     if digest is None or digest != report.get("cact_sha256"):
@@ -527,7 +572,8 @@ def select_run(source: Path) -> Path:
             raise TuneError(f"the gates need the needle2 runtime to run: {error}") from error
         with library_image:
             try:
-                report = stage_gates(Run(target), recipe(load_manifest()), library_image, digest)
+                report = stage_gates(Run(target), recipe(load_manifest()), library_image, digest,
+                                     job)
             except LibEngineError as error:
                 # Review KN-R2-07: rejected bytes were a traceback, not a refusal.
                 raise TuneError(f"{source.name}: the runtime rejected the weights ({error})") \
@@ -538,11 +584,11 @@ def select_run(source: Path) -> Path:
     except TuneError:
         shutil.rmtree(target, ignore_errors=True)   # a refused run is not left listed
         raise
-    select(target, digest)
+    select(target, digest, job)
     return target
 
 
-def in_use() -> str:
+def in_use(job: str = jobs.DEFAULT) -> str:
     """What answers requests now: whatever starts the way a request starts it.
 
     Review KN-R2-06: checking digests said "tuned" while the runtime refused
@@ -551,7 +597,7 @@ def in_use() -> str:
     import asset
     from libengine import LibEngine, LibEngineError
     import toolset
-    choice = selected()
+    choice = selected(job)
     if choice is not None:
         try:
             development = os.environ.get("KILIX_NEEDLE_LIBRARY")
@@ -579,11 +625,8 @@ def in_use() -> str:
     return "base" + fallback
 
 
-def selected() -> dict | None:
-    try:
-        return json.loads(SELECTION.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
+def selected(job: str = jobs.DEFAULT) -> dict | None:
+    return _selections().get(jobs.get(job).name)
 
 
 def tune(base_dir: Path | None, library_file: str | None, run_name: str | None) -> int:
@@ -631,6 +674,9 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--run", help="resume or name a run")
     parser.add_argument("--background", action="store_true",
                         help="detach and log to the run directory")
+    parser.add_argument("--job", default=jobs.DEFAULT, choices=sorted(jobs.JOBS),
+                        help="the job whose model --select and --deselect change "
+                             f"(default {jobs.DEFAULT})")
     parser.add_argument("--status", action="store_true")
     parser.add_argument("--select", metavar="RUN_DIR", type=Path,
                         help="use a run tuned elsewhere whose gate report passed")
@@ -639,20 +685,24 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
     if args.status:
         # "in_use" is what answers; "selected" may be unavailable (review KN-07).
-        print(json.dumps({"in_use": in_use(), "selected": selected(), "runs": sorted(
-            p.name for p in (APP_HOME / "tuning").glob("*") if p.is_dir())}, indent=1))
+        # The chosen job at the top, as before jobs; every job under "jobs".
+        print(json.dumps({"job": args.job, "in_use": in_use(args.job), "selected": selected(args.job),
+                          "jobs": {name: {"in_use": in_use(name), "selected": selected(name)}
+                                   for name in sorted(jobs.JOBS)},
+                          "runs": sorted(p.name for p in (APP_HOME / "tuning").glob("*")
+                                         if p.is_dir())}, indent=1))
         return 0
     if args.select:
         try:
-            target = select_run(args.select.expanduser().resolve())
+            target = select_run(args.select.expanduser().resolve(), args.job)
         except TuneError as error:
             print(f"kilix-needle tune: {error}", file=sys.stderr)
             return 1
-        print(f"kilix-needle: the tuned model {target.name} is now used")
+        print(f"kilix-needle: the tuned model {target.name} is now used for {args.job}")
         return 0
     if args.deselect:
-        SELECTION.unlink(missing_ok=True)
-        print("kilix-needle: the base model is used")
+        deselect(args.job)
+        print(f"kilix-needle: the base model is used for {args.job}")
         return 0
     if args.background:
         name = args.run or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")

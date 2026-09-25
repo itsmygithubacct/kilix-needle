@@ -23,6 +23,7 @@ from typing import Callable
 
 from actions import LEGACY_TOOLS, Action, Refusal, interpret, plain
 import asset
+import jobs
 from engine import Engine, EngineError, check_prompt
 import kilix
 from libengine import LibEngine, LibEngineError
@@ -55,10 +56,10 @@ class Runtime:
         return self.engine.complete(text)
 
 
-def open_runtime(args, *, may_install: bool = False) -> Runtime:
+def open_runtime(args, *, may_install: bool = False, job: str = jobs.DEFAULT) -> Runtime:
     """The tuned model if one passed its gates and is selected, else the base engine."""
     explicit = getattr(args, "engine", None) or os.environ.get("KILIX_NEEDLE_ENGINE")
-    choice = None if explicit else tuning.selected()
+    choice = None if explicit else tuning.selected(job)
     if choice is not None:
         library = weights = None
         try:

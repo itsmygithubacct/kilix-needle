@@ -26,6 +26,7 @@ import time
 
 from actions import LEGACY_TOOLS, TOOLS, Action, Refusal, interpret
 import asset
+import jobs
 from engine import Engine
 from libengine import LibEngine
 import toolset
@@ -125,6 +126,9 @@ def main(argv=None) -> int:
     parser.add_argument("--weights", metavar="FILE",
                         help="with --library: a .cact to load, e.g. a fine-tuned model")
     parser.add_argument("--weights-sha256", help="the .cact's expected digest")
+    parser.add_argument("--job", default=jobs.DEFAULT, choices=sorted(jobs.JOBS),
+                        help=f"the job the cases belong to (default {jobs.DEFAULT}); "
+                             "its checks score them")
     parser.add_argument("--runs", type=int, default=1)
     parser.add_argument("--toolset", choices=sorted(TOOLSETS), default="ten",
                         help="the schema the model sees; the checks are the same")
