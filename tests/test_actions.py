@@ -1429,5 +1429,60 @@ class ReviewR10Rows(unittest.TestCase):
         self.assertEqual(got, [])
 
 
+class ReviewR10Round2(unittest.TestCase):
+    """Review R10, round 2: KN-R10-06..08 and the rows around them."""
+
+    def admitted(self, prompt, calls):
+        return [r for r in interpret(prompt, calls) if isinstance(r, Action)]
+
+    def test_tab_x_still_names_a_tab(self):                                # KN-R10-06
+        for prompt, tool, args, want in (
+                ("close tab logs", "close_tab", {"tab": "logs"}, {"tab": "name:logs"}),
+                ("go to tab api", "go_to_tab", {"tab": "api"}, {"tab": "name:api"}),
+                ("switch to pane editor", "go_to_pane", {"pane": "editor"}, {"pane": "name:editor"}),
+                ("run make in pane build", "run_in_pane", {"pane": "build", "command": "make"},
+                 {"pane": "name:build", "command": "make"}),
+                ("tab logs, close it", "close_tab", {"tab": "logs"}, {"tab": "name:logs"}),
+                ("tab logs", "go_to_tab", {"tab": "logs"}, {"tab": "name:logs"})):
+            self.assertEqual(self.admitted(prompt, [call(tool, **args)]), [Action(tool, want)], prompt)
+
+    def test_still_not_names(self):                                        # KN-R10-06
+        for prompt, tool, key, word in (("close the tab with everything", "close_tab", "tab", "everything"),
+                                        ("close the tab over-there", "close_tab", "tab", "over-there"),
+                                        ("close the next pane over", "close_pane", "pane", "over"),
+                                        ("close the next tab quick", "close_tab", "tab", "quick"),
+                                        ("close the tab swiftly", "close_tab", "tab", "swiftly")):
+            self.assertEqual(self.admitted(prompt, [call(tool, **{key: word})]), [], prompt)
+
+    def test_another_counts_only_in_this_panes_clauses(self):              # KN-R10-07
+        got = self.admitted("split right and run htop, then go to the second tab",
+                            [call("open_pane", side="right"), call("open_pane", program="htop"),
+                             call("go_to_tab", tab="2")])
+        self.assertEqual(got[0], Action("open_pane", {"side": "right", "program": "htop"}))
+        for prompt in ("split below, and also split below running tail",
+                       "split below, and add one more pane below running tail",
+                       "open a pane below, and an extra pane below running tail",
+                       "open a pane below, plus a new pane below running tail"):
+            got = self.admitted(prompt, [call("open_pane", side="below"), call("open_pane", program="tail")])
+            self.assertNotIn(Action("open_pane", {"side": "below", "program": "tail"}), got, prompt)
+
+    def test_a_bare_run_looks_back_to_what_opened(self):                   # KN-R10-08
+        got = self.admitted("new tab, then split right and name it py and run python3",
+                            [call("open_tab"), call("open_pane", side="right"),
+                             call("open_tab", program="python3")])
+        self.assertNotIn(Action("open_tab", {"program": "python3"}), got)
+        for prompt, args in (("open a new pane, then rename this tab to dev and start htop",
+                              {"program": "htop"}),
+                             ("open a pane below, retitle this tab logs, and run tail",
+                              {"side": "below", "program": "tail"}),
+                             ("split below, focus the left pane, and start htop",
+                              {"side": "below", "program": "htop"})):
+            self.assertIn(Action("open_pane", args), self.admitted(prompt, [call("open_pane", **args)]),
+                          prompt)
+        got = self.admitted("open a tab, switch to the pane on the right, and launch htop",
+                            [call("open_tab", program="htop")])
+        self.assertEqual(got, [Action("open_tab", {"program": "htop"})])
+
+
 if __name__ == "__main__":
     unittest.main()

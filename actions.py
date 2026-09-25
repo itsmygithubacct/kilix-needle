@@ -545,6 +545,10 @@ def _says_whole(value: str) -> re.Pattern:
     return re.compile(rf"(?<![\w]){re.escape(value)}(?![\w])", re.IGNORECASE)
 
 
+_OPENING = re.compile(r"\b(?:open|opens|opening|new|fresh|split|splits|splitting|spawn|spin|"
+                      r"launch|create|add|make|pop|start|another|extra|second)\b", re.IGNORECASE)
+
+
 def _bind_programs(results: list, prompt: str) -> list:
     """A program starts only in the kind of open, and on the side, its clause asks for.
 
@@ -559,12 +563,23 @@ def _bind_programs(results: list, prompt: str) -> list:
         return results
     units = re.compile(rf"{_TAB_WORD.pattern}|{_OPEN_PANE_WORD.pattern}", re.IGNORECASE)
 
+    def places(text: str) -> bool:
+        return any(_first(_mentions(s), text) for s in SIDES)
+
+    def opens(text: str) -> bool:
+        # An opening word and what it opens: "split right", "open a tab", not
+        # "focus the left pane" (review R10, round 2).
+        return bool(_OPENING.search(text)) and (places(text) or bool(units.search(text)))
+
     def home(i: int, said: re.Pattern) -> str:
         text = _without_phrasals(said.sub(" ", clauses[i]))
         # "split right and run python3": a clause that names neither a unit nor a
-        # side is read with the clause before it (review R10, KN-R10-01).
-        if i and not units.search(text) and not any(_first(_mentions(s), text) for s in SIDES):
-            text = _without_phrasals(said.sub(" ", clauses[i - 1])) + " " + text
+        # side is read with the nearest clause before it that opens something
+        # (review R10, KN-R10-01 and -08: not "name it py", not "rename this tab").
+        if not units.search(text) and not places(text):
+            before = [_without_phrasals(said.sub(" ", c)) for c in clauses[:i]]
+            opener = next((c for c in reversed(before) if opens(c)), "")
+            text = opener + " " + text
         return text
 
     out = []
@@ -592,6 +607,7 @@ def _bind_programs(results: list, prompt: str) -> list:
 
 # A second pane asked for: never merged into the first (review R10, KN-R10-03).
 _ANOTHER = re.compile(r"\b(?:another|again|second|too)\b", re.IGNORECASE)
+_MORE = re.compile(r"\b(?:also|extra|plus|one more|additional)\b", re.IGNORECASE)
 
 
 def _merge_split_then_run(results: list, prompt: str) -> list:
@@ -622,7 +638,7 @@ def _merge_split_then_run(results: list, prompt: str) -> list:
             said = _says_whole(item.args["program"])
             # The program's clause, by whole word: "top" is not in "htop" (review R10).
             k = next((i for i, c in enumerate(clauses) if said.search(c)), None)
-            if k is not None and not _ANOTHER.search(prompt):
+            if k is not None:
                 rest = [_without_phrasals(said.sub(" ", c)) for c in clauses[:k + 1]]
                 placing = [i for i, text in enumerate(rest)
                            if _first(_mentions(previous.args["side"]), text)]
@@ -634,6 +650,12 @@ def _merge_split_then_run(results: list, prompt: str) -> list:
                 placed = (placing and placing[-1] == k
                           and len(_OPEN_PANE_WORD.findall(rest[k])) == 1
                           and not _TAB_WORD.search(rest[k]))
+                # A second pane asked for in these clauses is never merged into
+                # the first (review R10, KN-R10-03 and -07); only the clauses that
+                # describe this pane count, not the rest of the request.
+                span = " ".join(clauses[placing[-1]:k + 1]) if placing else ""
+                bare = bare and not _ANOTHER.search(clauses[k])
+                placed = placed and not _ANOTHER.search(span) and not _MORE.search(span)
                 if (bare and placing and placing[-1] == k - 1) or placed:
                     merged[-1] = Action("open_pane", {**previous.args, **item.args})
                     continue
@@ -648,9 +670,18 @@ _NOT_A_NAME = frozenset({"over", "other", "another", "back", "again", "up", "dow
                          "it", "them", "there", "here", "now", "then", "too", "also", "instead",
                          "away", "off", "out", "over there", "over here", "ones", "same",
                          "please", "anyway", "afterwards", "yonder", "as well", "well", "behind",
-                         "next door", "quickly", "now please"})
+                         "next door", "quickly", "now please", "everything", "anything",
+                         "nothing", "something", "everyone", "others", "the others"})
 
 
+# Before the unit noun, these already say which one: a word after it is not its name.
+_POINTING = frozenset({"next", "previous", "prev", "last", "that", "this", "other", "first",
+                       "second", "third", "current", "same", "active", "focused"})
+# First words of a place, a manner or a courtesy, never of a name.
+_PLACING = frozenset({"over", "down", "up", "back", "there", "here", "yonder", "behind", "next",
+                      "away", "off", "out", "please", "now", "anyway", "afterwards", "too", "again",
+                      "as", "right", "left", "below", "above", "also", "instead", "then", "too",
+                      "for", "to", "on", "in", "at", "by", "from", "with", "and", "or", "so"})
 # Determiners, not names, in any position: "the other tab", "the same pane".
 _NEVER_A_NAME = frozenset({"other", "another", "same", "both", "all", "ones", "it", "them"})
 
@@ -662,14 +693,23 @@ def _names_a_target(word: str, key: str, prompt: str) -> bool:
     "the next tab over", "that tab quickly", "the tab please" (review R10). A
     placing word is a name only in the "the X tab" form.
     """
+    word = word.replace("-", " ")    # "over-there" is "over there"
     if word in _NEVER_A_NAME:
         return False
     units = r"tabs?" if key == "tab" else r"panes?|windows?|splits?"
     before = re.search(rf"(?<![\w]){re.escape(word)}\s+(?:{units})\b", prompt, re.IGNORECASE)
     if before:
         return True
-    after = re.search(rf"\b(?:{units})\s+{re.escape(word.split()[0])}(?![\w])", prompt, re.IGNORECASE)
-    return not after and word not in _NOT_A_NAME
+    first = word.split()[0]
+    after = re.search(rf"(?:\b(\w+)\s+)?\b(?:{units})\s+{re.escape(first)}(?![\w])", prompt,
+                      re.IGNORECASE)
+    if after:
+        # "tab logs" names a tab (review R10, KN-R10-06); "the next tab over",
+        # "that tab quickly" and "the tab please" do not.
+        pointed = (after[1] or "").casefold() in _POINTING
+        return not (pointed or first in _NOT_A_NAME or word in _NOT_A_NAME
+                    or first in _PLACING or re.fullmatch(r"\w+ly", first))
+    return word not in _NOT_A_NAME
 
 
 def _named_target(name: str, key: str, args: dict, prompt: str) -> str | Refusal:
