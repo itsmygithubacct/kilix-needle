@@ -1529,5 +1529,50 @@ class ReviewR10Round3(unittest.TestCase):
         self.assertIn(Action("open_pane", {"side": "below", "program": "tail"}), got)
 
 
+class ReviewR10Round4(unittest.TestCase):
+    """Review R10, round 4: KN-R10-13 and -14."""
+
+    def admitted(self, prompt, calls):
+        return [r for r in interpret(prompt, calls) if isinstance(r, Action)]
+
+    def test_any_verb_can_open_a_pane(self):                                # KN-R10-13
+        for prompt, args in (("new tab, then add a pane on the right and run python3",
+                              {"side": "right", "program": "python3"}),
+                             ("split below, then add a pane on the left and run htop",
+                              {"side": "left", "program": "htop"}),
+                             ("new tab, then give me a pane below and start htop",
+                              {"side": "below", "program": "htop"}),
+                             ("new tab, then make a pane on the right and run htop",
+                              {"side": "right", "program": "htop"}),
+                             ("new tab, then I want a pane on the right, and run htop",
+                              {"side": "right", "program": "htop"}),
+                             ("split below, tab stays as is, then run htop",
+                              {"side": "below", "program": "htop"})):
+            self.assertIn(Action("open_pane", args), self.admitted(prompt, [call("open_pane", **args)]),
+                          prompt)
+
+    def test_an_existing_tab_is_not_the_opener(self):                       # KN-R10-13
+        for prompt, calls in (("new tab, then add a pane on the right and run python3",
+                               [call("open_tab"), call("open_pane", side="right"),
+                                call("open_tab", program="python3")]),
+                              ("split right, tab two can wait, and run python3",
+                               [call("open_pane", side="right"), call("open_tab", program="python3")]),
+                              ("new tab, please split right, and run python3",                  # X05
+                               [call("open_tab"), call("open_pane", side="right"),
+                                call("open_tab", program="python3")])):
+            got = self.admitted(prompt, calls)
+            self.assertNotIn(Action("open_tab", {"program": "python3"}), got, prompt)
+
+    def test_a_new_tab_clause_is_an_opener(self):                           # X03
+        got = self.admitted("split right, then new tab, and run python3",
+                            [call("open_pane", side="right", program="python3"), call("open_tab")])
+        self.assertNotIn(Action("open_pane", {"side": "right", "program": "python3"}), got)
+
+    def test_no_opener_leaves_the_clause_alone(self):                       # X07
+        got = self.admitted("go to the left pane, rename this tab to dev and start htop",
+                            [call("rename_tab", name="dev"), call("open_pane", program="htop")])
+        self.assertIn(Action("open_pane", {"program": "htop"}), got)
+
+
 if __name__ == "__main__":
     unittest.main()
