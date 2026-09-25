@@ -446,6 +446,19 @@ class NetworkNotice(unittest.TestCase):
                 tuning._python_stage(run, "pass", "training")
             self.assertIn("has network access", run.log_path.read_text())
 
+    def test_upstream_python_runs_with_telemetry_off(self):
+        # Upstream's package reports usage unless told not to; every stage says no.
+        with tempfile.TemporaryDirectory(prefix="kn-") as tmp:
+            run = tuning.Run(Path(tmp))
+            (run.root / "src").mkdir()
+            with mock.patch.object(tuning, "_offline_prefix", return_value=[]), \
+                    mock.patch("subprocess.run", return_value=mock.Mock(returncode=0)) as ran:
+                tuning._python_stage(run, "pass", "training")
+            env = ran.call_args.kwargs["env"]
+            self.assertEqual(env["NEEDLE_TELEMETRY"], "0")
+            self.assertEqual(env["DO_NOT_TRACK"], "1")
+            self.assertEqual(env["HF_HUB_OFFLINE"], "1")
+
 
 if __name__ == "__main__":
     unittest.main()
