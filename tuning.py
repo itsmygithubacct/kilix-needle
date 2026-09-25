@@ -587,15 +587,23 @@ def runs_dir(job: str = jobs.DEFAULT) -> Path:
 RESERVED_RUN_NAMES = frozenset({"jobs"})   # tuning/jobs holds the other jobs' runs
 
 
-def _is_selected(weights: Path) -> bool:
-    """Whether a job has these weights selected, compared as files, not as text."""
-    for entry in _selections().values():
-        try:
-            if weights.exists() and os.path.samefile(weights, entry.get("weights", "")):
-                return True
-        except OSError:
-            continue
-    return False
+def _check_resumable(root: Path) -> None:
+    """tune --run may only resume a run that tune started and has not finished.
+
+    Review R11 rounds 3-4: training into an existing directory replaced a
+    selected model, or an imported one that was the only copy, and a check
+    through the selection file failed open when the file was unreadable.
+    This one needs no selection file: an imported run (no stage markers), a
+    finished run (exported) and a symlink are all refused.
+    """
+    if root.is_symlink():
+        raise TuneError(f"{root} is a symbolic link; it is not used as a run")
+    if not root.exists():
+        return
+    if not (root / ".base.done").exists():
+        raise TuneError(f"{root.name} is not an unfinished tuning run; name a new run")
+    if (root / ".export.done").exists():
+        raise TuneError(f"{root.name} has finished; re-gate it with --select, or name a new run")
 
 
 def _check_run_name(name: str) -> None:
@@ -651,6 +659,8 @@ def select_run(source: Path, job: str = jobs.DEFAULT) -> Path:
     # refused re-gate never touches its report (review R11 round 3).
     gate_dir = target.parent / f".regate-{source.name}" if existed else target
     if existed:
+        if gate_dir.is_symlink():
+            gate_dir.unlink()   # never follow a link planted in the copy's place
         shutil.rmtree(gate_dir, ignore_errors=True)
     gate_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     for name in ("tuned.cact", "gates.json"):
@@ -736,9 +746,7 @@ def tune(base_dir: Path | None, library_file: str | None, run_name: str | None,
         _check_run_name(run_name)
     manifest = recipe(load_manifest())
     root = APP_HOME / "tuning" / (run_name or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"))
-    if _is_selected(root / "tuned.cact"):
-        # Review R11 round 3: training into a selected run replaced its model.
-        raise TuneError(f"the run {root.name} holds a selected model; name a new run")
+    _check_resumable(root)
     run = Run(root)
     print(f"kilix-needle tune: {run.root}")
     library_image = asset.library_from_file(library_file) if library_file \
@@ -834,6 +842,7 @@ def main(argv: list[str]) -> int:
         try:
             if args.run:
                 _check_run_name(args.run)
+                _check_resumable(APP_HOME / "tuning" / args.run)
         except TuneError as error:
             print(f"kilix-needle tune: {error}", file=sys.stderr)
             return 1
