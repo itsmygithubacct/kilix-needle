@@ -270,6 +270,35 @@ class ReviewR11(unittest.TestCase):
             self._select(self._panes_incoming("in4", "same", b"other"))
         self.assertEqual((target / "tuned.cact").read_bytes(), b"first")
 
+    def test_a_run_is_reselected_from_its_own_directory(self):            # KN-R11-18
+        target = self._select(self._panes_incoming("in", "r1", b"w"))
+        tuning.deselect("panes")
+        self.assertEqual(self._select(target), target)
+        self.assertEqual(tuning.selected("panes")["run"], "r1")
+        (self.home / "tuning" / "link").symlink_to(self.home / "nowhere")
+        with self.assertRaisesRegex(tuning.TuneError, "symbolic link"):
+            self._select(self._panes_incoming("in5", "link", b"x"))
+
+    def test_a_refused_regate_leaves_the_runs_report(self):                   # KN-R11-19
+        target = self._select(self._panes_incoming("in", "r2", b"w"))
+        before = (target / "gates.json").read_text()
+        again = self._panes_incoming("in6", "r2", b"w")
+        def failing_gates(run, *args):
+            (run.root / "gates.json").write_text("FAIL")
+            return {"failures": ["no"]}
+        with mock.patch("asset.installed_library", return_value=mock.MagicMock()), \
+                mock.patch.object(tuning, "stage_gates", side_effect=failing_gates):
+            with self.assertRaises(tuning.TuneError):
+                tuning.select_run(again)
+        self.assertEqual((target / "gates.json").read_text(), before)
+        self.assertEqual([p.name for p in target.parent.glob(".regate-*")], [])
+
+    def test_tune_never_trains_into_a_selected_run(self):                    # KN-R11-20
+        target = self._select(self._panes_incoming("in", "r3", b"w"))
+        with self.assertRaisesRegex(tuning.TuneError, "holds a selected model"):
+            tuning.tune(None, None, "r3")
+        self.assertEqual((target / "tuned.cact").read_bytes(), b"w")
+
     def test_jobs_is_not_a_run_name(self):                                  # KN-R11-12
         for name in ("jobs", ".hidden"):
             run = self._panes_incoming("in", name, b"w")

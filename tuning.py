@@ -587,6 +587,17 @@ def runs_dir(job: str = jobs.DEFAULT) -> Path:
 RESERVED_RUN_NAMES = frozenset({"jobs"})   # tuning/jobs holds the other jobs' runs
 
 
+def _is_selected(weights: Path) -> bool:
+    """Whether a job has these weights selected, compared as files, not as text."""
+    for entry in _selections().values():
+        try:
+            if weights.exists() and os.path.samefile(weights, entry.get("weights", "")):
+                return True
+        except OSError:
+            continue
+    return False
+
+
 def _check_run_name(name: str) -> None:
     if name in RESERVED_RUN_NAMES or name.startswith(".") or "/" in name or not name:
         raise TuneError(f"{name!r} can't name a run; choose another name")
@@ -629,14 +640,22 @@ def select_run(source: Path, job: str = jobs.DEFAULT) -> Path:
     # A directory that was there before this call is never replaced or deleted
     # (review R11: a same-named run, selected or not, was overwritten and, on a
     # refusal, removed with its logs). Re-selecting the same bytes is allowed.
+    if target.is_symlink():
+        raise TuneError(f"{target} is a symbolic link; it is not used as a run")
     existed = target.exists()
     if existed and not ((target / "tuned.cact").is_file()
                         and sha256_file(target / "tuned.cact") == digest):
         raise TuneError(f"a run named {source.name} exists already; rename the new one")
-    target.mkdir(parents=True, exist_ok=True, mode=0o700)
+    # A new run is gated in its final place; a run that exists (the same bytes
+    # again, possibly selected from its own directory) in a copy beside it, so a
+    # refused re-gate never touches its report (review R11 round 3).
+    gate_dir = target.parent / f".regate-{source.name}" if existed else target
+    if existed:
+        shutil.rmtree(gate_dir, ignore_errors=True)
+    gate_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     for name in ("tuned.cact", "gates.json"):
-        shutil.copyfile(source / name, target / name)
-    _verify(target / "tuned.cact", digest, "the copied tuned.cact")
+        shutil.copyfile(source / name, gate_dir / name)
+    _verify(gate_dir / "tuned.cact", digest, "the copied tuned.cact")
     import asset
     from libengine import LibEngineError
     try:
@@ -646,8 +665,8 @@ def select_run(source: Path, job: str = jobs.DEFAULT) -> Path:
             raise TuneError(f"the gates need the needle2 runtime to run: {error}") from error
         with library_image:
             try:
-                report = stage_gates(Run(target), recipe(load_manifest()), library_image, digest,
-                                     job)
+                report = stage_gates(Run(gate_dir), recipe(load_manifest()), library_image,
+                                     digest, job)
             except LibEngineError as error:
                 # Review KN-R2-07: rejected bytes were a traceback, not a refusal.
                 raise TuneError(f"{source.name}: the runtime rejected the weights ({error})") \
@@ -656,9 +675,12 @@ def select_run(source: Path, job: str = jobs.DEFAULT) -> Path:
             raise TuneError(f"{source.name} failed the gates here: "
                             f"{'; '.join(report['failures'])}")
     except TuneError:
-        if not existed:
-            shutil.rmtree(target, ignore_errors=True)   # a refused run is not left listed
+        # A refused new run is not left listed; a run that existed is left as it was.
+        shutil.rmtree(gate_dir, ignore_errors=True)
         raise
+    if existed:
+        shutil.copyfile(gate_dir / "gates.json", target / "gates.json")
+        shutil.rmtree(gate_dir, ignore_errors=True)
     select(target, digest, job)
     return target
 
@@ -713,8 +735,11 @@ def tune(base_dir: Path | None, library_file: str | None, run_name: str | None,
     if run_name:
         _check_run_name(run_name)
     manifest = recipe(load_manifest())
-    run = Run(APP_HOME / "tuning" / (run_name or
-                                     datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")))
+    root = APP_HOME / "tuning" / (run_name or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"))
+    if _is_selected(root / "tuned.cact"):
+        # Review R11 round 3: training into a selected run replaced its model.
+        raise TuneError(f"the run {root.name} holds a selected model; name a new run")
+    run = Run(root)
     print(f"kilix-needle tune: {run.root}")
     library_image = asset.library_from_file(library_file) if library_file \
         else asset.installed_library()
@@ -770,7 +795,8 @@ def main(argv: list[str]) -> int:
         # each runtime opened once (review R11).
         per_job = {name: {"in_use": in_use(name), "selected": selected(name),
                           "runs": sorted(p.name for p in runs_dir(name).glob("*")
-                                         if p.is_dir() and p.name != "jobs")}
+                                         if p.is_dir() and p.name != "jobs"
+                                         and not p.name.startswith("."))}
                    for name in sorted(jobs.JOBS)}
         try:
             unknown = sorted(set(_read_selections()) - set(jobs.JOBS))
