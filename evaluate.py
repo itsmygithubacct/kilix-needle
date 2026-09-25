@@ -135,6 +135,9 @@ def main(argv=None) -> int:
     parser.add_argument("--json", metavar="OUT", help="also write the full result as JSON")
     parser.add_argument("--quiet", action="store_true", help="totals only")
     args = parser.parse_args(argv)
+    if args.job != "panes":
+        # Review R11: the flag was parsed and ignored; the panes checks scored.
+        parser.error(f"the checks for the {args.job} job are not built yet")
     with open(args.cases, encoding="utf-8") as handle:
         cases = [json.loads(line) for line in handle if line.strip()]
     tools, translate = TOOLSETS[args.toolset]

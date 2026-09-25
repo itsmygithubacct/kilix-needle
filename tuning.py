@@ -458,13 +458,17 @@ def gate(manifest: dict, results: dict, reference: dict) -> list[str]:
 
 def stage_gates(run: Run, manifest: dict, library_image, cact_sha: str,
                 job: str = jobs.DEFAULT) -> dict:
+    spec = jobs.get(job)
+    if job != "panes":
+        # The reference arm and the gate rule are the panes job's; another job
+        # needs its own before anything can be gated for it (review R11).
+        raise TuneError(f"the gates for the {job} job are not built yet")
     import asset
     from evaluate import score
     from libengine import LibEngine
     import toolset
     weights = asset.load_verified(run.root / "tuned.cact", cact_sha,
                                   (run.root / "tuned.cact").stat().st_size)
-    spec = jobs.get(job)
     sets = {"dev": spec.dev, "test": spec.test, "heldout": manifest["gates"]["heldout"]}
     results = {}
     with weights, LibEngine(library_image, toolset.TOOLS, weights) as engine:
@@ -493,46 +497,92 @@ def stage_gates(run: Run, manifest: dict, library_image, cact_sha: str,
 SELECTION_SCHEMA = "kilix-needle.selection/v2"
 
 
-def _selections() -> dict:
-    """Every job's selected model. A version-1 file (one flat selection, from
-    before jobs) is the panes job's selection."""
+def _read_selections() -> dict:
+    """The selection file's jobs, exactly as stored: {} when there is none.
+
+    A version-1 file (one flat selection, from before jobs) is the panes job's
+    selection. A file that can't be read or has an unknown format raises
+    TuneError, so a write never replaces what it could not read (review R11).
+    """
     try:
-        data = json.loads(SELECTION.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        text = SELECTION.read_text(encoding="utf-8")
+    except FileNotFoundError:
         return {}
-    if not isinstance(data, dict):
-        return {}
-    if data.get("schema") == SELECTION_SCHEMA:
-        chosen = data.get("jobs")
-        return {k: v for k, v in chosen.items() if isinstance(v, dict)} \
-            if isinstance(chosen, dict) else {}
-    return {"panes": data} if "weights" in data else {}
+    except OSError as error:
+        raise TuneError(f"cannot read {SELECTION}: {error}") from error
+    try:
+        data = json.loads(text)
+    except ValueError as error:
+        raise TuneError(f"{SELECTION} is not valid JSON; fix or remove it") from error
+    if isinstance(data, dict) and data.get("schema") == SELECTION_SCHEMA \
+            and isinstance(data.get("jobs"), dict):
+        return dict(data["jobs"])
+    if isinstance(data, dict) and "schema" not in data and "weights" in data:
+        return {"panes": data}
+    raise TuneError(f"{SELECTION} has a format this kilix-needle does not know; "
+                    "it was left as it is")
 
 
-def _write_selections(chosen: dict) -> None:
-    if not chosen:
-        SELECTION.unlink(missing_ok=True)
-        return
+def _selections() -> dict:
+    """Usable selections, for answering requests: an unreadable file means the
+    base models, as before jobs."""
+    try:
+        stored = _read_selections()
+    except TuneError:
+        return {}
+    return {job: entry for job, entry in stored.items()
+            if isinstance(entry, dict) and "weights" in entry}
+
+
+def _update_selections(change) -> None:
+    """Read, change and write the file under a lock, through a unique temp file
+    (review R11: two writers lost each other's jobs and crashed)."""
+    import fcntl
+    import tempfile
     APP_HOME.mkdir(parents=True, exist_ok=True, mode=0o700)
-    tmp = SELECTION.with_suffix(".tmp")
-    tmp.write_text(json.dumps({"schema": SELECTION_SCHEMA, "jobs": chosen}), encoding="utf-8")
-    os.replace(tmp, SELECTION)
+    with open(APP_HOME / "model.json.lock", "a", encoding="utf-8") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        stored = _read_selections()
+        change(stored)
+        if not stored:
+            SELECTION.unlink(missing_ok=True)
+            return
+        # Only panes selected: the version-1 form, which older kilix-needle reads
+        # too, so a rollback keeps the tuned model (review R11).
+        only_panes = set(stored) == {"panes"} and isinstance(stored["panes"], dict)
+        payload = stored["panes"] if only_panes else {"schema": SELECTION_SCHEMA, "jobs": stored}
+        handle, tmp = tempfile.mkstemp(dir=APP_HOME, prefix=".model.", suffix=".tmp")
+        try:
+            with os.fdopen(handle, "w", encoding="utf-8") as out:
+                json.dump(payload, out)
+            os.replace(tmp, SELECTION)
+        except BaseException:
+            Path(tmp).unlink(missing_ok=True)
+            raise
 
 
 def select(run_root: Path, cact_sha: str, job: str = jobs.DEFAULT) -> None:
     jobs.get(job)
-    chosen = _selections()
-    chosen[job] = {"weights": str(run_root / "tuned.cact"), "sha256": cact_sha,
-                   "toolset": "five", "run": run_root.name}
-    _write_selections(chosen)
+    entry = {"weights": str(run_root / "tuned.cact"), "sha256": cact_sha,
+             "toolset": "five", "run": run_root.name}
+    _update_selections(lambda stored: stored.__setitem__(job, entry))
 
 
 def deselect(job: str = jobs.DEFAULT) -> None:
     """Back to the base model for this job only."""
     jobs.get(job)
-    chosen = _selections()
-    chosen.pop(job, None)
-    _write_selections(chosen)
+    _update_selections(lambda stored: stored.pop(job, None))
+
+
+def runs_dir(job: str = jobs.DEFAULT) -> Path:
+    """Where a job's tuning runs live: panes keeps the directory it had before
+    jobs; every other job has its own, so run names never collide (review R11)."""
+    jobs.get(job)
+    return APP_HOME / "tuning" if job == "panes" else APP_HOME / "tuning" / "jobs" / job
+
+
+def _selected_weights() -> set[str]:
+    return {entry.get("weights") for entry in _selections().values()}
 
 
 def select_run(source: Path, job: str = jobs.DEFAULT) -> Path:
@@ -552,13 +602,19 @@ def select_run(source: Path, job: str = jobs.DEFAULT) -> Path:
         raise TuneError(f"{source.name} did not pass its gates: {report.get('failures')}")
     # A model gated for one job is never selected for another; reports from
     # before jobs were panes reports.
-    if report.get("job", "panes") != job:
-        raise TuneError(f"{source.name} was gated for the {report.get('job')!r} job, not {job!r}")
+    gated_for = report.get("job", "panes")
+    if gated_for != job:
+        raise TuneError(f"{source.name} was gated for the {gated_for!r} job, not {job!r}")
     weights = source / "tuned.cact"
     digest = sha256_file(weights) if weights.is_file() else None
     if digest is None or digest != report.get("cact_sha256"):
         raise TuneError(f"{source.name}: tuned.cact is not the model its gate report scored")
-    target = APP_HOME / "tuning" / source.name
+    target = runs_dir(job) / source.name
+    if str(target / "tuned.cact") in _selected_weights() and \
+            sha256_file(target / "tuned.cact") != digest:
+        # Review R11: a same-named run replaced, and on a refusal deleted, a
+        # model that a job had selected.
+        raise TuneError(f"a run named {source.name} is selected already; rename the new one")
     target.mkdir(parents=True, exist_ok=True, mode=0o700)
     for name in ("tuned.cact", "gates.json"):
         shutil.copyfile(source / name, target / name)
@@ -582,7 +638,8 @@ def select_run(source: Path, job: str = jobs.DEFAULT) -> Path:
             raise TuneError(f"{source.name} failed the gates here: "
                             f"{'; '.join(report['failures'])}")
     except TuneError:
-        shutil.rmtree(target, ignore_errors=True)   # a refused run is not left listed
+        if str(target / "tuned.cact") not in _selected_weights():
+            shutil.rmtree(target, ignore_errors=True)   # a refused run is not left listed
         raise
     select(target, digest, job)
     return target
@@ -629,8 +686,12 @@ def selected(job: str = jobs.DEFAULT) -> dict | None:
     return _selections().get(jobs.get(job).name)
 
 
-def tune(base_dir: Path | None, library_file: str | None, run_name: str | None) -> int:
+def tune(base_dir: Path | None, library_file: str | None, run_name: str | None,
+         job: str = jobs.DEFAULT) -> int:
     import asset
+    if job != "panes":
+        # Review R11: --job was accepted and the panes model trained and selected.
+        raise TuneError(f"tuning for the {job} job is not built yet")
     manifest = recipe(load_manifest())
     run = Run(APP_HOME / "tuning" / (run_name or
                                      datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")))
@@ -685,12 +746,22 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
     if args.status:
         # "in_use" is what answers; "selected" may be unavailable (review KN-07).
-        # The chosen job at the top, as before jobs; every job under "jobs".
-        print(json.dumps({"job": args.job, "in_use": in_use(args.job), "selected": selected(args.job),
-                          "jobs": {name: {"in_use": in_use(name), "selected": selected(name)}
-                                   for name in sorted(jobs.JOBS)},
-                          "runs": sorted(p.name for p in (APP_HOME / "tuning").glob("*")
-                                         if p.is_dir())}, indent=1))
+        # The chosen job at the top, as before jobs; every job under "jobs",
+        # each runtime opened once (review R11).
+        per_job = {name: {"in_use": in_use(name), "selected": selected(name),
+                          "runs": sorted(p.name for p in runs_dir(name).glob("*")
+                                         if p.is_dir() and p.name != "jobs")}
+                   for name in sorted(jobs.JOBS)}
+        try:
+            unknown = sorted(set(_read_selections()) - set(jobs.JOBS))
+        except TuneError as error:
+            unknown = [f"(unreadable: {error})"]
+        status = {"job": args.job, "in_use": per_job[args.job]["in_use"],
+                  "selected": per_job[args.job]["selected"], "jobs": per_job,
+                  "runs": per_job["panes"]["runs"]}
+        if unknown:
+            status["unknown_jobs_in_selection"] = unknown
+        print(json.dumps(status, indent=1))
         return 0
     if args.select:
         try:
@@ -701,7 +772,11 @@ def main(argv: list[str]) -> int:
         print(f"kilix-needle: the tuned model {target.name} is now used for {args.job}")
         return 0
     if args.deselect:
-        deselect(args.job)
+        try:
+            deselect(args.job)
+        except TuneError as error:
+            print(f"kilix-needle tune: {error}", file=sys.stderr)
+            return 1
         print(f"kilix-needle: the base model is used for {args.job}")
         return 0
     if args.background:
@@ -718,7 +793,7 @@ def main(argv: list[str]) -> int:
         print(f"kilix-needle: tuning in the background; progress in {root}/tune.log")
         return 0
     try:
-        return tune(args.base_dir, args.library, args.run)
+        return tune(args.base_dir, args.library, args.run, args.job)
     except TuneError as error:
         print(f"kilix-needle tune: {error}", file=sys.stderr)
         return 1
