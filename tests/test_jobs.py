@@ -295,9 +295,63 @@ class ReviewR11(unittest.TestCase):
 
     def test_tune_never_trains_into_a_selected_run(self):                    # KN-R11-20
         target = self._select(self._panes_incoming("in", "r3", b"w"))
-        with self.assertRaisesRegex(tuning.TuneError, "holds a selected model"):
+        with self.assertRaisesRegex(tuning.TuneError, "not an unfinished tuning run"):
             tuning.tune(None, None, "r3")
         self.assertEqual((target / "tuned.cact").read_bytes(), b"w")
+
+    def test_tune_resumes_only_its_own_unfinished_runs(self):              # KN-R11-21..24
+        imported = self._select(self._panes_incoming("in", "r4", b"only copy"))
+        tuning.deselect("panes")
+        self.file.write_text("{corrupt")                                   # -22: no file needed
+        for name in ("r4",):
+            with self.assertRaisesRegex(tuning.TuneError, "not an unfinished"):
+                tuning.tune(None, None, name)
+        self.assertEqual((imported / "tuned.cact").read_bytes(), b"only copy")
+        finished = self.home / "tuning" / "r5"
+        finished.mkdir(parents=True)
+        for stage in ("base", "export"):
+            (finished / f".{stage}.done").write_text("{}")
+        with self.assertRaisesRegex(tuning.TuneError, "has finished"):
+            tuning._check_resumable(finished)
+        partial = self.home / "tuning" / "r6"
+        partial.mkdir()
+        (partial / ".base.done").write_text("{}")
+        tuning._check_resumable(partial)                                   # resuming is allowed
+        tuning._check_resumable(self.home / "tuning" / "new")              # a new run too
+        err = io.StringIO()
+        with mock.patch.object(sys, "stderr", err):                         # -21: before the child
+            self.assertEqual(tuning.main(["--background", "--run", "r4"]), 1)
+        self.assertFalse((imported / "background.log").exists())
+
+    def test_a_passing_regate_replaces_the_report_and_cleans_up(self):       # R11 M44, M45, M48, KN-R11-26
+        target = self._select(self._panes_incoming("in", "r7", b"w"))
+        stale = target.parent / ".regate-r7"
+        stale.mkdir()
+        (stale / "leftover").write_text("x")
+        def passing_gates(run, *args):
+            (run.root / "gates.json").write_text("NEW PASS")
+            return {"failures": []}
+        with mock.patch("asset.installed_library", return_value=mock.MagicMock()), \
+                mock.patch.object(tuning, "stage_gates", side_effect=passing_gates) as gates:
+            tuning.select_run(self._panes_incoming("in8", "r7", b"w"))
+        self.assertNotIn("leftover", [p.name for p in Path(gates.call_args.args[0].root).glob("*")])
+        self.assertEqual((target / "gates.json").read_text(), "NEW PASS")
+        self.assertFalse(stale.exists())
+        elsewhere = self.home / "elsewhere"
+        elsewhere.mkdir()
+        stale.symlink_to(elsewhere)
+        with mock.patch("asset.installed_library", return_value=mock.MagicMock()), \
+                mock.patch.object(tuning, "stage_gates", side_effect=passing_gates):
+            tuning.select_run(self._panes_incoming("in9", "r7", b"w"))
+        self.assertEqual(list(elsewhere.iterdir()), [])
+
+    def test_a_status_never_lists_a_dot_directory(self):                      # R11 M47
+        (self.home / "tuning" / ".regate-x").mkdir(parents=True)
+        (self.home / "tuning" / "qat-6").mkdir()
+        out = io.StringIO()
+        with mock.patch.object(tuning, "in_use", return_value="x"), mock.patch.object(sys, "stdout", out):
+            tuning.main(["--status"])
+        self.assertEqual(json.loads(out.getvalue())["runs"], ["qat-6"])
 
     def test_jobs_is_not_a_run_name(self):                                  # KN-R11-12
         for name in ("jobs", ".hidden"):
