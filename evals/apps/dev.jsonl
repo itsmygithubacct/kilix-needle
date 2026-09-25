@@ -1,0 +1,40 @@
+{"request": "I'm bored, fire up the lunar lander game", "expect": [["launch", {"app": "terminal-lander"}]], "tag": "launch"}
+{"request": "could you open the pdf viewer for me please", "expect": [["launch", {"app": "kilix-pdf"}]], "tag": "launch"}
+{"request": "need to find a unicode arrow symbol, bring up the character map", "expect": [["launch", {"app": "kilix-character-map"}]], "tag": "launch"}
+{"request": "what's it like outside? pull up the weather app", "expect": [["launch", {"app": "kilix-weather"}]], "tag": "launch"}
+{"request": "show me how hot the machine is running, open temps", "expect": [["launch", {"app": "temps"}]], "tag": "launch"}
+{"request": "get rid of the battery thing up top", "expect": [["show", {"item": "battery", "on": false}]], "tag": "show"}
+{"request": "put the clock back in the top bar", "expect": [["show", {"item": "clock", "on": true}]], "tag": "show"}
+{"request": "I want a dictation microphone button on my panes", "expect": [["show", {"item": "dictate", "on": true}]], "tag": "show"}
+{"request": "remove the maximize button from panes", "expect": [["show", {"item": "maximize", "on": false}]], "tag": "show"}
+{"request": "turn on the synchronize input button", "expect": [["show", {"item": "synchronize_input", "on": true}]], "tag": "show"}
+{"request": "show memory on panes always", "expect": [["pane_stat", {"stat": "memory", "mode": "always"}]], "tag": "pane_stat"}
+{"request": "turn off the per-pane cpu readout", "expect": [["pane_stat", {"stat": "cpu", "mode": "off"}]], "tag": "pane_stat"}
+{"request": "set the pane cpu indicator to automatic", "expect": [["pane_stat", {"stat": "cpu", "mode": "auto"}]], "tag": "pane_stat"}
+{"request": "I don't need the memory number on each pane anymore, switch it off", "expect": [["pane_stat", {"stat": "memory", "mode": "off"}]], "tag": "pane_stat"}
+{"request": "keep the cpu usage visible on every pane all the time", "expect": [["pane_stat", {"stat": "cpu", "mode": "always"}]], "tag": "pane_stat"}
+{"request": "hide doom from the games list", "expect": [["game", {"game": "doom", "available": false}]], "tag": "game"}
+{"request": "make chess bash available in my games", "expect": [["game", {"game": "chess-bash", "available": true}]], "tag": "game"}
+{"request": "disable solitaire in the game list, the kids play it too much", "expect": [["game", {"game": "solitaire", "available": false}]], "tag": "game"}
+{"request": "enable the fishtank game", "expect": [["game", {"game": "kilix-fishtank", "available": true}]], "tag": "game"}
+{"request": "please add dosbox back to the games list", "expect": [["game", {"game": "dosbox", "available": true}]], "tag": "game"}
+{"request": "open the voice settings", "expect": [["settings", {"section": "voice"}]], "tag": "settings"}
+{"request": "take me to the games section of settings", "expect": [["settings", {"section": "games"}]], "tag": "settings"}
+{"request": "jump to the pane buttons page in kilix settings", "expect": [["settings", {"section": "pane-buttons"}]], "tag": "settings"}
+{"request": "where do I configure the top bar? open that settings screen", "expect": [["settings", {"section": "top-bar"}]], "tag": "settings"}
+{"request": "go to the tools section of settings", "expect": [["settings", {"section": "tools"}]], "tag": "settings"}
+{"request": "open the music player and then the calculator", "expect": [["launch", {"app": "kilix-amp"}], ["launch", {"app": "kilix-calculator"}]], "tag": "compound"}
+{"request": "hide the calendar and show the temperature in the top bar", "expect": [["show", {"item": "calendar", "on": false}], ["show", {"item": "temperature", "on": true}]], "tag": "compound"}
+{"request": "enable joustix in the games list and then launch it", "expect": [["game", {"game": "joustix", "available": true}], ["launch", {"app": "joustix"}]], "tag": "compound"}
+{"request": "set pane memory to auto, turn cpu off, and open the system center", "expect": [["pane_stat", {"stat": "memory", "mode": "auto"}], ["pane_stat", {"stat": "cpu", "mode": "off"}], ["launch", {"app": "kilix-system-center"}]], "tag": "compound"}
+{"request": "open the text editor and the file browser", "expect": [["launch", {"app": "kilix-notepad"}], ["launch", {"app": "kilix-file"}]], "tag": "compound"}
+{"request": "shut down the computer", "expect": [], "tag": "bait"}
+{"request": "set the volume to 30%", "expect": [], "tag": "bait"}
+{"request": "quit doom", "expect": [], "tag": "bait"}
+{"request": "open firefox", "expect": [], "tag": "bait"}
+{"request": "don't open solitaire", "expect": [], "tag": "bait"}
+{"request": "split the pane to the right", "expect": [], "tag": "bait"}
+{"request": "switch kilix to a dark theme", "expect": [], "tag": "bait"}
+{"request": "what's the capital of Portugal?", "expect": [], "tag": "none"}
+{"request": "thanks, that's all for now", "expect": [], "tag": "none"}
+{"request": "tell me a joke about penguins", "expect": [], "tag": "none"}
