@@ -1262,5 +1262,80 @@ class ArgumentEdges(ReviewR4Plain):
                                   call("run_in_pane", pane="build", command=command), expected=False)
 
 
+class Needle3Misreads(unittest.TestCase):
+    """Calls Needle 3 made on the held-out sets (runs/vast-timing-0924) that the
+    checks admitted: a program moved onto an extra open, and a filler word read
+    as a tab's name."""
+
+    def admitted(self, prompt, calls):
+        return [r for r in interpret(prompt, calls) if isinstance(r, Action)]
+
+    def test_a_program_asked_for_in_a_split_does_not_open_a_tab(self):
+        # stock Needle 3, ten tools, held-out v6
+        got = self.admitted("new tab, then split right with python3",
+                            [call("open_tab"), call("open_pane", side="right"),
+                             call("open_tab", program="python3")])
+        self.assertEqual(got, [Action("open_tab", {}), Action("open_pane", {"side": "right"})])
+
+    def test_a_program_asked_for_in_a_tab_does_not_open_a_pane(self):
+        got = self.admitted("open a tab running htop and split below",
+                            [call("open_tab"), call("open_pane", side="below", program="htop")])
+        self.assertNotIn(Action("open_pane", {"side": "below", "program": "htop"}), got)
+
+    def test_a_program_is_not_moved_to_the_other_side(self):
+        # tuned Needle 3, held-out v4
+        got = self.admitted("split left with less and split right with watch",
+                            [call("open_pane", side="left"),
+                             call("open_pane", side="left", program="watch")])
+        self.assertEqual(got, [Action("open_pane", {"side": "left"})])
+
+    def test_one_open_in_two_calls_is_one_open(self):
+        # tuned Needle 3, held-out v4, v6 and v8
+        for prompt, first in (
+                ("retitle this tab logs and open a pane below running tail",
+                 [call("rename_tab", name="logs")]),
+                ("open a new tab named api and open a pane below running top",
+                 [call("open_tab", name="api")]),
+                ("open a tab running htop, then open a pane below with btm", [])):
+            program = prompt.split()[-1]
+            got = self.admitted(prompt, [*first, call("open_pane", side="below"),
+                                         call("open_pane", program=program)])
+            self.assertEqual(got[-1], Action("open_pane", {"side": "below", "program": program}),
+                             prompt)
+            self.assertEqual(sum(a.kind == "open_pane" for a in got), 1, prompt)
+
+    def test_two_opens_asked_for_stay_two(self):
+        got = self.admitted("open a pane on the right running htop and open a tab running btop",
+                            [call("open_pane", side="right", program="htop"),
+                             call("open_tab", program="btop")])
+        self.assertEqual(got, [Action("open_pane", {"side": "right", "program": "htop"}),
+                               Action("open_tab", {"program": "btop"})])
+        got = self.admitted("split left with less and split right with watch",
+                            [call("open_pane", side="left", program="less"),
+                             call("open_pane", side="right", program="watch")])
+        self.assertEqual(len(got), 2)
+        got = self.admitted("open a pane on the left, running vim",
+                            [call("open_pane", side="left", program="vim")])
+        self.assertEqual(got, [Action("open_pane", {"side": "left", "program": "vim"})])
+
+    def test_a_filler_word_is_not_a_tab_name(self):
+        # tuned Needle 3, held-out v8: "close the next tab over" -> close_tab(name:over)
+        results = interpret("close the next tab over", [call("close_tab", tab="over")])
+        self.assertEqual([r for r in results if isinstance(r, Action)], [])
+        for prompt, tool, key, word in (
+                ("close the pane over there", "close_pane", "pane", "there"),
+                ("close the pane over there", "close_pane", "pane", "over"),
+                ("go to the other tab", "go_to_tab", "tab", "other"),
+                ("close that tab again", "close_tab", "tab", "again")):
+            results = interpret(prompt, [call(tool, **{key: word})])
+            self.assertEqual([r for r in results if isinstance(r, Action)], [], prompt)
+
+    def test_a_filler_word_introduced_as_a_name_is_a_name(self):
+        [r] = interpret("close the tab named over", [call("close_tab", tab="over")])
+        self.assertEqual(r, Action("close_tab", {"tab": "name:over"}))
+        [r] = interpret("close the next tab", [call("close_tab", tab="next")])
+        self.assertEqual(r, Action("close_tab", {"tab": "next"}))
+
+
 if __name__ == "__main__":
     unittest.main()
