@@ -273,7 +273,7 @@ def _target_value(raw: str, *, relative: bool) -> str | None:
     words = re.sub(r"^(?:the\s+)?(?:tab\s+)?(?:number\s+)?", "", lowered).strip()
     if relative and words in _CARDINALS:
         return _CARDINALS[words]    # before fillers: "twenty-one" must keep its "one"
-    stripped = " ".join(_FILLER.sub(" ", lowered).split())
+    stripped = " ".join(_FILLER.sub(" ", lowered).split()).rstrip(".,!?;:")
     if not stripped:
         # Only filler ("pane", "the tab"): no reference at all. Measured (five-tool
         # schema): pane "pane" with command "below" would otherwise mean "this pane".
@@ -524,6 +524,25 @@ def interpret(prompt: str, calls: list) -> list[Action | Refusal]:
 
 
 _OPEN_PANE_WORD = re.compile(r"\b(?:panes?|splits?|splitting|windows?)\b", re.IGNORECASE)
+# A phrasal up/down is not a direction: "open up a new pane" is not above
+# (measured, tuned model), nor is "spin up", "fire up" or "pull up" (review R10).
+_PHRASAL_UP_DOWN = re.compile(
+    r"\b(?:open|opens|opening|pull|pulls|pulling|bring|brings|fire|fires|firing|spin|spins|"
+    r"spinning|set|sets|setting|boot|boots|booting|start|starts|call|calls|look|looks|shut|"
+    r"shuts|write|slow|calm|pop|pops|power|powers|light|lights|queue|queues|whip|rustle|"
+    r"crank|cranks|throw|throws|put|puts)\s+(?:up|down)\b", re.IGNORECASE)
+
+
+def _without_phrasals(text: str) -> str:
+    return _PHRASAL_UP_DOWN.sub(" ", text)
+
+
+def _real_clauses(prompt: str) -> list[str]:
+    return [c for c in _clauses(prompt) if c.strip()]
+
+
+def _says_whole(value: str) -> re.Pattern:
+    return re.compile(rf"(?<![\w]){re.escape(value)}(?![\w])", re.IGNORECASE)
 
 
 def _bind_programs(results: list, prompt: str) -> list:
@@ -535,15 +554,25 @@ def _bind_programs(results: list, prompt: str) -> list:
     (tuned Needle 3, v4) "split left with less and split right with watch" ->
     open_pane(left, program=watch): the program of the right split on the left.
     """
-    clauses = _clauses(prompt)
+    clauses = _real_clauses(prompt)
     if len(clauses) < 2:
         return results
+    units = re.compile(rf"{_TAB_WORD.pattern}|{_OPEN_PANE_WORD.pattern}", re.IGNORECASE)
+
+    def home(i: int, said: re.Pattern) -> str:
+        text = _without_phrasals(said.sub(" ", clauses[i]))
+        # "split right and run python3": a clause that names neither a unit nor a
+        # side is read with the clause before it (review R10, KN-R10-01).
+        if i and not units.search(text) and not any(_first(_mentions(s), text) for s in SIDES):
+            text = _without_phrasals(said.sub(" ", clauses[i - 1])) + " " + text
+        return text
+
     out = []
     for item in results:
         program = item.args.get("program") if isinstance(item, Action) else None
         if program and item.kind in ("open_pane", "open_tab"):
-            said = re.compile(rf"(?<![\w]){re.escape(program)}(?![\w])", re.IGNORECASE)
-            homes = [c.replace(program, " ") for c in clauses if said.search(c)]
+            said = _says_whole(program)
+            homes = [home(i, said) for i, c in enumerate(clauses) if said.search(c)]
             own, other = ((_TAB_WORD, _OPEN_PANE_WORD) if item.kind == "open_tab"
                           else (_OPEN_PANE_WORD, _TAB_WORD))
             if homes and all(other.search(h) and not own.search(h) for h in homes):
@@ -559,6 +588,10 @@ def _bind_programs(results: list, prompt: str) -> list:
                 continue
         out.append(item)
     return out
+
+
+# A second pane asked for: never merged into the first (review R10, KN-R10-03).
+_ANOTHER = re.compile(r"\b(?:another|again|second|too)\b", re.IGNORECASE)
 
 
 def _merge_split_then_run(results: list, prompt: str) -> list:
@@ -585,27 +618,58 @@ def _merge_split_then_run(results: list, prompt: str) -> list:
         if (isinstance(item, Action) and isinstance(previous, Action)
                 and previous.kind == item.kind == "open_pane"
                 and set(previous.args) == {"side"} and set(item.args) == {"program"}):
-            clause = next((c for c in _clauses(prompt) if item.args["program"] in c), "")
-            rest = clause.replace(item.args["program"], " ")
-            bare = clause and not re.search(r"\b(?:open|pane|panes|split|window|tab)\b", rest, re.I)
-            # "open a pane below running tail" in two calls, open_pane(below) then
-            # open_pane(program=tail) (measured, tuned Needle 3): the program's own
-            # clause places that one pane.
-            placed = (clause and _first(_mentions(previous.args["side"]), rest)
-                      and len(_OPEN_PANE_WORD.findall(rest)) == 1 and not _TAB_WORD.search(rest))
-            if bare or placed:
-                merged[-1] = Action("open_pane", {**previous.args, **item.args})
-                continue
+            clauses = _real_clauses(prompt)
+            said = _says_whole(item.args["program"])
+            # The program's clause, by whole word: "top" is not in "htop" (review R10).
+            k = next((i for i, c in enumerate(clauses) if said.search(c)), None)
+            if k is not None and not _ANOTHER.search(prompt):
+                rest = [_without_phrasals(said.sub(" ", c)) for c in clauses[:k + 1]]
+                placing = [i for i, text in enumerate(rest)
+                           if _first(_mentions(previous.args["side"]), text)]
+                bare = not re.search(r"\b(?:open|pane|panes|split|window|tab)\b", rest[k], re.I)
+                # "open a pane below running tail" in two calls, open_pane(below) then
+                # open_pane(program=tail) (measured, tuned Needle 3): the program's own
+                # clause places that one pane. A bare "run htop" belongs to the open
+                # placed by the clause just before it, and to no other.
+                placed = (placing and placing[-1] == k
+                          and len(_OPEN_PANE_WORD.findall(rest[k])) == 1
+                          and not _TAB_WORD.search(rest[k]))
+                if (bare and placing and placing[-1] == k - 1) or placed:
+                    merged[-1] = Action("open_pane", {**previous.args, **item.args})
+                    continue
         merged.append(item)
     return merged
 
 
-_AS_NAME = r"(?:running|named|called|titled|with)\s+(?:the\s+)?"
+_AS_NAME = r"(?:running|named|called|titled|labell?ed|with)\s+(?:the\s+)?"
 # Words that place or repeat, never name: a pane or tab called one of these
 # must be introduced as a name ("the tab named over").
 _NOT_A_NAME = frozenset({"over", "other", "another", "back", "again", "up", "down", "all", "both",
                          "it", "them", "there", "here", "now", "then", "too", "also", "instead",
-                         "away", "off", "out", "over there", "over here", "ones", "same"})
+                         "away", "off", "out", "over there", "over here", "ones", "same",
+                         "please", "anyway", "afterwards", "yonder", "as well", "well", "behind",
+                         "next door", "quickly", "now please"})
+
+
+# Determiners, not names, in any position: "the other tab", "the same pane".
+_NEVER_A_NAME = frozenset({"other", "another", "same", "both", "all", "ones", "it", "them"})
+
+
+def _names_a_target(word: str, key: str, prompt: str) -> bool:
+    """A name not introduced as one ("named X") is said as "the X tab", or bare.
+
+    The word right after the unit noun is a place or a manner, never a name:
+    "the next tab over", "that tab quickly", "the tab please" (review R10). A
+    placing word is a name only in the "the X tab" form.
+    """
+    if word in _NEVER_A_NAME:
+        return False
+    units = r"tabs?" if key == "tab" else r"panes?|windows?|splits?"
+    before = re.search(rf"(?<![\w]){re.escape(word)}\s+(?:{units})\b", prompt, re.IGNORECASE)
+    if before:
+        return True
+    after = re.search(rf"\b(?:{units})\s+{re.escape(word.split()[0])}(?![\w])", prompt, re.IGNORECASE)
+    return not after and word not in _NOT_A_NAME
 
 
 def _named_target(name: str, key: str, args: dict, prompt: str) -> str | Refusal:
@@ -614,7 +678,12 @@ def _named_target(name: str, key: str, args: dict, prompt: str) -> str | Refusal
     # "close the pane running top" -> pane "running top", which names no pane.
     raw = re.sub(rf"^{_AS_NAME}", "", raw.strip(), flags=re.IGNORECASE)
     word = " ".join(raw.casefold().split())
-    if word and re.search(rf"\b{_AS_NAME}{re.escape(word)}(?![\w])", prompt, re.IGNORECASE):
+    introduced = re.search(rf"\b({_AS_NAME}){re.escape(word)}(?![\w])", prompt, re.IGNORECASE) \
+        if word else None
+    # "with" and "running" introduce programs, never a filler: "close the tab with
+    # all of them" is not a tab named all (review R10, KN-R10-04).
+    if introduced and (word not in _NOT_A_NAME
+                       or not re.match(r"(?:with|running)\b", introduced[1], re.IGNORECASE)):
         # Introduced as a name, it is a name: measured (held-out v3), "close the
         # pane running top" became the side "above", and "close the tab named
         # two" became tab 2.
@@ -622,7 +691,7 @@ def _named_target(name: str, key: str, args: dict, prompt: str) -> str | Refusal
     value = _target_value(raw, relative=key == "tab")
     if value is None:
         return Refusal(name, f"cannot tell which {key} {raw!r} means")
-    if value.startswith("name:") and value[5:] in _NOT_A_NAME:
+    if value.startswith("name:") and not _names_a_target(value[5:], key, prompt):
         # Measured (tuned Needle 3, held-out v8): "close the next tab over" ->
         # close_tab("over"), grounded because the word is in the request.
         return Refusal(name, f"{value[5:]!r} does not name a {key} here")
@@ -1119,9 +1188,7 @@ def _admit(name: str, args: dict, prompt: str) -> Action | Refusal:
                                   flags=re.I)
             # "open up a new pane": a phrasal up/down is not a direction (measured,
             # tuned model: side above from "open up").
-            rest = re.sub(r"\b(?:open|opens|opening|pull|bring|fire|spin|set|boot|start|"
-                          r"call|look|shut|write|slow|calm|pop)\s+(?:up|down)\b", " ", rest,
-                          flags=re.I)
+            rest = _without_phrasals(rest)
             if not _first(_mentions(out["side"]), rest):
                 return Refusal(name, f"the request does not say {out['side']}")
         return Action(name, out)
