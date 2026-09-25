@@ -180,14 +180,14 @@ class ReviewR11(unittest.TestCase):
             for i in range(n):
                 tuning.select(self.home / f"{job}-{i}", f"{i:064x}", job)
         context = multiprocessing.get_context("fork")
-        workers = [context.Process(target=write, args=(job, 60)) for job in ("panes", "apps")]
+        workers = [context.Process(target=write, args=(job, 150)) for job in ("panes", "apps")]
         for worker in workers:
             worker.start()
         for worker in workers:
             worker.join(60)
         self.assertEqual([w.exitcode for w in workers], [0, 0])
-        self.assertEqual(tuning.selected("panes")["run"], "panes-59")
-        self.assertEqual(tuning.selected("apps")["run"], "apps-59")
+        self.assertEqual(tuning.selected("panes")["run"], "panes-149")
+        self.assertEqual(tuning.selected("apps")["run"], "apps-149")
 
     def test_in_use_and_status_ask_about_each_job(self):                   # R11-M7, R11-M8
         with mock.patch.object(tuning, "selected", return_value=None) as chosen, \
@@ -309,10 +309,12 @@ class ReviewR11(unittest.TestCase):
         self.assertEqual((imported / "tuned.cact").read_bytes(), b"only copy")
         finished = self.home / "tuning" / "r5"
         finished.mkdir(parents=True)
-        for stage in ("base", "export"):
+        for stage in ("base", "export", "select"):
             (finished / f".{stage}.done").write_text("{}")
-        with self.assertRaisesRegex(tuning.TuneError, "has finished"):
+        with self.assertRaisesRegex(tuning.TuneError, "selected already"):
             tuning._check_resumable(finished)
+        (finished / ".select.done").unlink()
+        tuning._check_resumable(finished)             # exported, not selected: re-gates (-28)
         partial = self.home / "tuning" / "r6"
         partial.mkdir()
         (partial / ".base.done").write_text("{}")
@@ -322,6 +324,27 @@ class ReviewR11(unittest.TestCase):
         with mock.patch.object(sys, "stderr", err):                         # -21: before the child
             self.assertEqual(tuning.main(["--background", "--run", "r4"]), 1)
         self.assertFalse((imported / "background.log").exists())
+
+    def test_a_background_run_starts(self):                                   # KN-R11-27
+        with mock.patch("subprocess.Popen") as child, mock.patch.object(sys, "stdout", io.StringIO()):
+            self.assertEqual(tuning.main(["--background", "--run", "fresh"]), 0)
+        child.assert_called_once()
+        root = self.home / "tuning" / "fresh"
+        self.assertTrue((root / "background.log").exists())
+        tuning._check_resumable(root)        # what the child checks first: accepted
+        with mock.patch("subprocess.Popen"), mock.patch.object(sys, "stdout", io.StringIO()):
+            self.assertEqual(tuning.main(["--background"]), 0)
+        named = [p for p in (self.home / "tuning").iterdir() if p.name != "fresh"]
+        tuning._check_resumable(named[0])
+
+    def test_a_link_to_an_unfinished_run_is_not_resumed(self):               # KN-R11-29 (M49)
+        elsewhere = self.home / "elsewhere-run"
+        elsewhere.mkdir()
+        (elsewhere / ".base.done").write_text("{}")
+        (self.home / "tuning").mkdir(exist_ok=True)
+        (self.home / "tuning" / "linked").symlink_to(elsewhere)
+        with self.assertRaisesRegex(tuning.TuneError, "symbolic link"):
+            tuning._check_resumable(self.home / "tuning" / "linked")
 
     def test_a_passing_regate_replaces_the_report_and_cleans_up(self):       # R11 M44, M45, M48, KN-R11-26
         target = self._select(self._panes_incoming("in", "r7", b"w"))

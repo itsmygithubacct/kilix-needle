@@ -588,22 +588,27 @@ RESERVED_RUN_NAMES = frozenset({"jobs"})   # tuning/jobs holds the other jobs' r
 
 
 def _check_resumable(root: Path) -> None:
-    """tune --run may only resume a run that tune started and has not finished.
+    """tune --run may only resume a run that tune started and has not selected.
 
     Review R11 rounds 3-4: training into an existing directory replaced a
     selected model, or an imported one that was the only copy, and a check
     through the selection file failed open when the file was unreadable.
     This one needs no selection file: an imported run (no stage markers), a
-    finished run (exported) and a symlink are all refused.
+    run tune has selected and a symlink are all refused. A run that exported
+    but was not selected resumes into its gates; its stages are done, so no
+    model bytes are written again (review R11 round 5).
     """
     if root.is_symlink():
         raise TuneError(f"{root} is a symbolic link; it is not used as a run")
     if not root.exists():
         return
+    # --background makes the directory and its log before the child starts.
+    if {p.name for p in root.iterdir()} <= {"background.log"}:
+        return
     if not (root / ".base.done").exists():
         raise TuneError(f"{root.name} is not an unfinished tuning run; name a new run")
-    if (root / ".export.done").exists():
-        raise TuneError(f"{root.name} has finished; re-gate it with --select, or name a new run")
+    if (root / ".select.done").exists():
+        raise TuneError(f"{root.name} was tuned and selected already; name a new run")
 
 
 def _check_run_name(name: str) -> None:
