@@ -545,8 +545,15 @@ def _says_whole(value: str) -> re.Pattern:
     return re.compile(rf"(?<![\w]){re.escape(value)}(?![\w])", re.IGNORECASE)
 
 
-_OPENING = re.compile(r"\b(?:open|opens|opening|new|fresh|split|splits|splitting|spawn|spin|"
-                      r"launch|create|add|make|pop|start|another|extra|second)\b", re.IGNORECASE)
+_OPENS_UNIT = re.compile(
+    r"\b(?:open|opens|opening|split|splits|splitting|spawn|spin|launch|create|pop)\b"
+    r"(?:\s+(?:up|down|me|us|a|an|the|one|new|fresh|another|extra|second|more))*"
+    r"\s*(?:\b(?:tabs?|panes?|splits?|windows?|terminals?)\b|(?:\s*(?:on|to)\s+the)?\s*"
+    r"\b(?:left|right|above|below|up|down|under(?:neath)?|beneath)\b)"
+    r"|\b(?:new|fresh|another|extra|second)\s+(?:tabs?|panes?|splits?|windows?|terminals?)\b"
+    r"|^\s*split\b", re.IGNORECASE)
+_LISTED_UNIT = re.compile(r"(?:and\s+)?(?:a|an|one|another|one more)?\s*(?:new\s+|fresh\s+)?"
+                          r"(?:tab|pane|split|window|terminal)\b.*", re.IGNORECASE)
 
 
 def _bind_programs(results: list, prompt: str) -> list:
@@ -567,9 +574,10 @@ def _bind_programs(results: list, prompt: str) -> list:
         return any(_first(_mentions(s), text) for s in SIDES)
 
     def opens(text: str) -> bool:
-        # An opening word and what it opens: "split right", "open a tab", not
-        # "focus the left pane" (review R10, round 2).
-        return bool(_OPENING.search(text)) and (places(text) or bool(units.search(text)))
+        # An opening word and what it opens: "split right", "open a tab", "new
+        # tab", or a bare "a pane" continuing a list; not "focus the left pane",
+        # "give the tab a new name" or "make the left pane smaller" (review R10).
+        return bool(_OPENS_UNIT.search(text) or _LISTED_UNIT.fullmatch(text.strip()))
 
     def home(i: int, said: re.Pattern) -> str:
         text = _without_phrasals(said.sub(" ", clauses[i]))
@@ -647,7 +655,7 @@ def _merge_split_then_run(results: list, prompt: str) -> list:
                 # open_pane(program=tail) (measured, tuned Needle 3): the program's own
                 # clause places that one pane. A bare "run htop" belongs to the open
                 # placed by the clause just before it, and to no other.
-                placed = (placing and placing[-1] == k
+                placed = (placing == [k]
                           and len(_OPEN_PANE_WORD.findall(rest[k])) == 1
                           and not _TAB_WORD.search(rest[k]))
                 # A second pane asked for in these clauses is never merged into
@@ -693,7 +701,6 @@ def _names_a_target(word: str, key: str, prompt: str) -> bool:
     "the next tab over", "that tab quickly", "the tab please" (review R10). A
     placing word is a name only in the "the X tab" form.
     """
-    word = word.replace("-", " ")    # "over-there" is "over there"
     if word in _NEVER_A_NAME:
         return False
     units = r"tabs?" if key == "tab" else r"panes?|windows?|splits?"
@@ -708,7 +715,7 @@ def _names_a_target(word: str, key: str, prompt: str) -> bool:
         # "that tab quickly" and "the tab please" do not.
         pointed = (after[1] or "").casefold() in _POINTING
         return not (pointed or first in _NOT_A_NAME or word in _NOT_A_NAME
-                    or first in _PLACING or re.fullmatch(r"\w+ly", first))
+                    or first in _PLACING)
     return word not in _NOT_A_NAME
 
 
