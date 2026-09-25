@@ -1337,5 +1337,90 @@ class Needle3Misreads(unittest.TestCase):
         self.assertEqual(r, Action("close_tab", {"tab": "next"}))
 
 
+class ReviewR10Rows(unittest.TestCase):
+    """Review R10's rows (0.2.2-REVIEW-REPO-kilix-needle-R10.md) and the tests its
+    surviving mutants asked for."""
+
+    def admitted(self, prompt, calls):
+        return [r for r in interpret(prompt, calls) if isinstance(r, Action)]
+
+    def test_a_bare_run_clause_belongs_to_the_open_before_it(self):       # KN-R10-01
+        for prompt in ("new tab, then split right and run python3",
+                       "new tab, then split right, running python3"):
+            got = self.admitted(prompt, [call("open_tab"), call("open_pane", side="right"),
+                                         call("open_tab", program="python3")])
+            self.assertEqual(got, [Action("open_tab", {}), Action("open_pane", {"side": "right"})],
+                             prompt)
+        got = self.admitted("split left and run less, then split right and run watch",
+                            [call("open_pane", side="left", program="watch"),
+                             call("open_pane", side="right", program="less")])
+        self.assertEqual(got, [])
+
+    def test_a_phrasal_up_is_not_another_side(self):                      # KN-R10-02
+        for prompt, side, program in (("spin up a pane with htop, on the right", "right", "htop"),
+                                      ("open up a pane with htop, below this one", "below", "htop"),
+                                      ("fire up a pane with htop, below this one", "below", "htop"),
+                                      ("split below, then pull up the logs with tail", "below", "tail")):
+            got = self.admitted(prompt, [call("open_pane", side=side, program=program)])
+            self.assertEqual(got, [Action("open_pane", {"side": side, "program": program})], prompt)
+
+    def test_the_merge_needs_the_programs_own_clause(self):               # KN-R10-03
+        for prompt, side, program in (
+                ("split right with htop, and open a pane below running top", "right", "top"),
+                ("split right to stop the noise, then open a pane running top", "right", "top"),
+                ("open a pane below, then open another pane below running tail", "below", "tail"),
+                ("split below, and split below again running tail", "below", "tail"),
+                ("split above, and open up a pane running btop", "above", "btop"),
+                ("split right and run htop, then split below and run top", "right", "top"),
+                ("split below, then open a pane below that pane running tail", "below", "tail"),
+                ("split below, then open a pane below in a new tab running tail", "below", "tail")):
+            got = self.admitted(prompt, [call("open_pane", side=side),
+                                         call("open_pane", program=program)])
+            self.assertNotIn(Action("open_pane", {"side": side, "program": program}), got, prompt)
+
+    def test_a_word_after_the_unit_or_a_filler_after_with_is_not_a_name(self):   # KN-R10-04
+        for prompt, tool, key, word in (
+                ("close the next tab over.", "close_tab", "tab", "over."),
+                ("close the next tab over please", "close_tab", "tab", "over please"),
+                ("close the tab please", "close_tab", "tab", "please"),
+                ("close that tab quickly", "close_tab", "tab", "quickly"),
+                ("close the pane as well", "close_pane", "pane", "as well"),
+                ("close the tab with all of them", "close_tab", "tab", "all"),
+                ("close the pane with it", "close_pane", "pane", "it"),
+                ("close the tab running away", "close_tab", "tab", "away"),
+                ("close the tab over there", "close_tab", "tab", "over there")):        # R11
+            self.assertEqual(self.admitted(prompt, [call(tool, **{key: word})]), [], prompt)
+
+    def test_the_x_tab_and_labelled_still_name(self):                     # KN-R10-04
+        [r] = interpret("close the over tab", [call("close_tab", tab="over")])
+        self.assertEqual(r, Action("close_tab", {"tab": "name:over"}))
+        [r] = interpret("go to the tab labelled other", [call("go_to_tab", tab="other")])
+        self.assertEqual(r, Action("go_to_tab", {"tab": "name:other"}))
+
+    def test_bound_programs_that_were_asked_for_stay(self):               # KN-R10-05
+        got = self.admitted("open a tab running htop and split below with top",       # R02
+                            [call("open_tab", program="htop"),
+                             call("open_pane", side="below", program="top"),
+                             call("open_tab", program="top")])
+        self.assertNotIn(Action("open_tab", {"program": "top"}), got)
+        self.assertIn(Action("open_tab", {"program": "htop"}), got)
+        got = self.admitted("open a pane running htop in this tab, and go to tab 2",  # R03
+                            [call("open_pane", program="htop"), call("go_to_tab", tab="2")])
+        self.assertIn(Action("open_pane", {"program": "htop"}), got)
+        got = self.admitted("open a tab running htop and a pane running htop",        # R04
+                            [call("open_tab", program="htop"), call("open_pane", program="htop")])
+        self.assertEqual(len(got), 2)
+        got = self.admitted("split left with htop and split right with htop",         # R06
+                            [call("open_pane", side="left", program="htop"),
+                             call("open_pane", side="right", program="htop")])
+        self.assertEqual(len(got), 2)
+        got = self.admitted("split right, then run tail -f left.log",                 # R10
+                            [call("open_pane", side="right", program="tail -f left.log")])
+        self.assertEqual(got, [Action("open_pane", {"side": "right", "program": "tail -f left.log"})])
+        got = self.admitted("split left with less and split right named mon with watch",   # R14
+                            [call("open_pane", side="left", name="mon", program="watch")])
+        self.assertEqual(got, [])
+
+
 if __name__ == "__main__":
     unittest.main()
