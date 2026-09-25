@@ -1576,6 +1576,12 @@ class ReviewR10Round4(unittest.TestCase):
                             [call("open_pane", side="right"), call("open_tab", program="python3")])
         self.assertNotIn(Action("open_tab", {"program": "python3"}), got)
 
+    def test_another_pane_in_its_own_clause_is_not_merged(self):            # M136, M146
+        for prompt in ("split, and another pane below running tail",
+                       "split, and an extra pane below running tail"):
+            got = self.admitted(prompt, [call("open_pane", side="below"), call("open_pane", program="tail")])
+            self.assertNotIn(Action("open_pane", {"side": "below", "program": "tail"}), got, prompt)
+
     def test_no_opener_leaves_the_clause_alone(self):                       # X07
         got = self.admitted("go to the left pane, rename this tab to dev and start htop",
                             [call("rename_tab", name="dev"), call("open_pane", program="htop")])
