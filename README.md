@@ -358,6 +358,22 @@ real shape, including window groups.
   mistake the request states plainly ("close the left pane" in a row of three
   closes the pane adjacent on the left). Names, commands and programs are
   taken as given once the checks have found them verbatim in the request.
+- **A word after "tab" or "pane" is a name unless it is known not to be.**
+  "close tab logs" names a tab, and "the next tab over", "the tab please" and
+  "that tab quickly" do not, but the lists of placing and courtesy words are
+  not complete: "close the tab thanks" (asap, pls, already, ...) is read as a
+  tab named "thanks". Such a close only ever waits for a person's yes, and it
+  can only reach a tab with exactly that title. Refusing every unknown word
+  would refuse real short names ("tab nightly", "tab back-end").
+- **A program is bound to the clause that asks for it, by wording.** In a
+  request with several clauses, a program starts only in the kind of open,
+  and on the side, that its clause asks for. A bare "run htop" belongs to the
+  nearest clause before it that opens something. That test is wording too:
+  a real opening clause that also mentions an existing pane or a non-opening
+  verb ("split the window right", "split the current pane to the right",
+  "split right to keep an eye on things") is skipped, and the correct
+  pane-with-program is refused. It fails safe, and saying the program in the
+  same clause as the pane ("split right with htop") always works.
 - **"At a shell prompt" is checked twice, not proven.** Typing needs the
   shell's prompt marks (OSC 133), and, from what Kilix reports out of band,
   that the pane is not in the alternate screen and that what holds its
