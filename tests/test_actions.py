@@ -1448,10 +1448,10 @@ class ReviewR10Round2(unittest.TestCase):
 
     def test_still_not_names(self):                                        # KN-R10-06
         for prompt, tool, key, word in (("close the tab with everything", "close_tab", "tab", "everything"),
-                                        ("close the tab over-there", "close_tab", "tab", "over-there"),
+                                        ("close the tab with others", "close_tab", "tab", "others"),
                                         ("close the next pane over", "close_pane", "pane", "over"),
                                         ("close the next tab quick", "close_tab", "tab", "quick"),
-                                        ("close the tab swiftly", "close_tab", "tab", "swiftly")):
+                                        ("close the tab for good", "close_tab", "tab", "for good")):
             self.assertEqual(self.admitted(prompt, [call(tool, **{key: word})]), [], prompt)
 
     def test_another_counts_only_in_this_panes_clauses(self):              # KN-R10-07
@@ -1482,6 +1482,51 @@ class ReviewR10Round2(unittest.TestCase):
         got = self.admitted("open a tab, switch to the pane on the right, and launch htop",
                             [call("open_tab", program="htop")])
         self.assertEqual(got, [Action("open_tab", {"program": "htop"})])
+
+
+class ReviewR10Round3(unittest.TestCase):
+    """Review R10, round 3: KN-R10-09..12."""
+
+    def admitted(self, prompt, calls):
+        return [r for r in interpret(prompt, calls) if isinstance(r, Action)]
+
+    def test_short_names_after_the_unit_are_names(self):                   # KN-R10-09
+        for prompt, tool, word in (("close tab nightly", "close_tab", "nightly"),
+                                   ("go to tab weekly", "go_to_tab", "weekly"),
+                                   ("go to tab reply", "go_to_tab", "reply"),
+                                   ("close tab back-end", "close_tab", "back-end")):
+            self.assertEqual(self.admitted(prompt, [call(tool, tab=word)]),
+                             [Action(tool, {"tab": "name:" + word})], prompt)
+
+    def test_the_opener_is_what_opens(self):                               # KN-R10-10
+        for prompt, args in (("open a pane below, give the tab a new name, and run tail",
+                              {"side": "below", "program": "tail"}),
+                             ("split below, make the left pane smaller, and run htop",
+                              {"side": "below", "program": "htop"}),
+                             ("split right, add the tab to my favourites, then start htop",
+                              {"side": "right", "program": "htop"})):
+            self.assertIn(Action("open_pane", args), self.admitted(prompt, [call("open_pane", **args)]),
+                          prompt)
+        for prompt, calls in (("open a tab and a pane, then run htop",
+                               [call("open_tab"), call("open_pane"), call("open_tab", program="htop")]),
+                              ("new tab, then split right, make it big, and run python3",
+                               [call("open_tab"), call("open_pane", side="right"),
+                                call("open_tab", program="python3")])):
+            got = self.admitted(prompt, calls)
+            self.assertNotIn(calls[-1]["arguments"]["program"],
+                             [a.args.get("program") for a in got if a.kind == "open_tab"], prompt)
+
+    def test_two_panes_on_one_side_stay_two(self):                          # KN-R10-11
+        for prompt in ("split below, then split below running tail",
+                       "split below, and a pane below running tail",
+                       "split below, and a new pane below running tail",
+                       "split below, then a further pane below running tail"):
+            got = self.admitted(prompt, [call("open_pane", side="below"), call("open_pane", program="tail")])
+            self.assertNotIn(Action("open_pane", {"side": "below", "program": "tail"}), got, prompt)
+        got = self.admitted("retitle this tab logs and open a pane below running tail",
+                            [call("rename_tab", name="logs"), call("open_pane", side="below"),
+                             call("open_pane", program="tail")])
+        self.assertIn(Action("open_pane", {"side": "below", "program": "tail"}), got)
 
 
 if __name__ == "__main__":
