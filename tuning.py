@@ -863,8 +863,10 @@ def main(argv: list[str]) -> int:
                              start_new_session=True)
         print(f"kilix-needle: tuning in the background; progress in {root}/tune.log")
         return 0
+    import asset
     try:
         return tune(args.base_dir, args.library, args.run, args.job)
-    except TuneError as error:
+    except (TuneError, asset.AssetError) as error:
+        # Review R11: a missing runtime ended in a traceback.
         print(f"kilix-needle tune: {error}", file=sys.stderr)
         return 1

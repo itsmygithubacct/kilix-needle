@@ -337,6 +337,35 @@ class ReviewR11(unittest.TestCase):
         named = [p for p in (self.home / "tuning").iterdir() if p.name != "fresh"]
         tuning._check_resumable(named[0])
 
+    def test_a_background_log_does_not_make_a_run_new(self):                # KN-R11-31 (M57, M61)
+        root = self.home / "tuning" / "bg-done"
+        root.mkdir(parents=True)
+        for name in ("background.log", ".base.done", ".select.done"):
+            (root / name).write_text("{}")
+        with self.assertRaisesRegex(tuning.TuneError, "selected already"):
+            tuning._check_resumable(root)
+        imported = self.home / "tuning" / "bg-imported"
+        imported.mkdir()
+        for name in ("background.log", "tuned.cact"):
+            (imported / name).write_text("x")
+        with self.assertRaisesRegex(tuning.TuneError, "not an unfinished"):
+            tuning._check_resumable(imported)
+
+    def test_a_missing_runtime_is_a_message_not_a_traceback(self):          # KN-R11-32
+        import asset
+        err = io.StringIO()
+        with mock.patch.object(tuning, "tune", side_effect=asset.AssetError("no runtime")), \
+                mock.patch.object(sys, "stderr", err):
+            self.assertEqual(tuning.main([]), 1)
+        self.assertIn("kilix-needle tune: no runtime", err.getvalue())
+
+    def test_every_write_holds_the_lock(self):                               # KN-R11-31 (M19)
+        import fcntl
+        with mock.patch("fcntl.flock", wraps=fcntl.flock) as flock:
+            tuning.select(self.home / "a6", "cd" * 32, "apps")
+            tuning.deselect("apps")
+        self.assertEqual([c.args[1] for c in flock.call_args_list], [fcntl.LOCK_EX, fcntl.LOCK_EX])
+
     def test_a_link_to_an_unfinished_run_is_not_resumed(self):               # KN-R11-29 (M49)
         elsewhere = self.home / "elsewhere-run"
         elsewhere.mkdir()

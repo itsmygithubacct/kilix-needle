@@ -395,6 +395,13 @@ real shape, including window groups.
   "split right to keep an eye on things") is skipped, and the correct
   pane-with-program is refused. It fails safe, and saying the program in the
   same clause as the pane ("split right with htop") always works.
+- **A selected run's report can record a failed re-gate.** `tune --run`
+  resumes only a run it started and has not selected. It knows which runs
+  those are from the run's own markers, not from the selection file. A run
+  selected through `--select`, or one whose `tune` was stopped between
+  selecting and marking, can still be resumed. That runs only its gates:
+  the model's bytes are never written again. If those gates then fail, the
+  run's `gates.json` records the failure while the run stays selected.
 - **"At a shell prompt" is checked twice, not proven.** Typing needs the
   shell's prompt marks (OSC 133), and, from what Kilix reports out of band,
   that the pane is not in the alternate screen and that what holds its
