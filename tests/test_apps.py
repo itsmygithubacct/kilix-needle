@@ -525,7 +525,7 @@ class ReviewR12Round2(unittest.TestCase):
         for request in ("open doom?!", "open doom?.", "open doom\u2048", "open doom. ?",
                         "? open doom", "open doom ?", "open doom??", "can you open doom??",
                         "can you open doom?!", "can you open doom? thanks?",
-                        "? can you open doom?"):
+                        "? can you open doom?", "open doom\u037e", "hide the clock\u037e"):
             self.assertEqual(admitted(request, [call("launch", app="doom")]), [], request)
         for request in ("can you open doom?", "could you open doom? thanks",
                         "can you open doom ?"):
@@ -542,6 +542,10 @@ class ReviewR12Round2(unittest.TestCase):
                         "open doom, 'translate to french'", "open doom, `per the ticket`",
                         "open doom, \u02bcper the ticket\u02bc"):
             self.assertEqual(admitted(request, [call("launch", app="doom")]), [], request)
+        for request in ("\u00abhe goes\u00bb, open doom", "\u2039jk\u203a, open doom",
+                        "\u201ahe goes\u2018, open doom"):                     # KN-R12-602
+            [result] = apps.interpret(request, [call("launch", app="doom")])
+            self.assertIn("reports", result.reason, request)
         # Apostrophes inside words are not quotation marks.
         self.assertEqual(admitted("let's play doom", [call("launch", app="doom")]),
                          [["launch", {"app": "doom"}]])
@@ -549,6 +553,15 @@ class ReviewR12Round2(unittest.TestCase):
         reading = apps._read("open doom, per the ticket, and then hide the clock")
         self.assertEqual([p.text for p in reading.parts],
                          ["open doom", "per the ticket", "hide the clock"])
+
+    def test_an_item_said_both_ways_refuses(self):                               # held-out v1 row
+        calls = [call("show", item="clock", on=False), call("show", item="battery", on=False)]
+        self.assertEqual(admitted("swap the clock for the battery indicator in the top bar: "
+                                  "clock hidden, battery shown", calls), [])
+        self.assertEqual(admitted("hide the clock and the battery: battery shown", calls),
+                         [["show", {"item": "clock", "on": False}]])
+        self.assertEqual([p.text for p in apps._read("hide the clock: now").parts],
+                         ["hide the clock", "now"])
 
     def test_disable_then_launch_refuses_the_launch_in_either_order(self):        # KN-R12-206
         for calls in ([call("game", game="doom", available=False), call("launch", app="doom")],

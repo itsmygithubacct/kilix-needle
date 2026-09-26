@@ -281,7 +281,8 @@ _REPORTED = re.compile(r"\b(?:anyone|anybody|someone|somebody|everyone|everybody
                        r"says|said|say|saying|told|tells|telling|tell me to|asked|asks|"
                        r"asking|wrote|writes|written|reads|read out|according to|claims|"
                        r"claimed|wants me to|suggest\w*|recommend\w*|mention\w*|quot\w*|"
-                       r"instruct\w*)\b|\"|(?<!\w)'[^']+'(?!\w)")    # a quoted span, not apostrophes
+                       r"instruct\w*)\b|[\"\u00ab\u00bb\u2039\u203a\u201a\u201e]|"
+                       r"(?<!\w)'[^']+'(?!\w)")    # quotation marks or a quoted span
 _QUESTION = re.compile(r"^(?:(?:so|and|but|ok|okay|hey|hmm|um|well)\s+)*(?:should|shall|"
                        r"how(?! about)|what|why|when|where|which|who|whose|is|are|am|was|were|"
                        r"does|did|do (?:i|we|you)|has|had|have (?:you|i|we)|will (?:i|it|that)|"
@@ -301,7 +302,8 @@ _SEQUENCE = re.compile(r"\b(?:(?:and )?(?:after that|afterwards?)|before i forge
 _EITHER = re.compile(r"\b(?:or|either)\b")
 _BAR_SAVE = re.compile(r"\b(?:all|every|everything|each|any)\b.*(?<!top )(?<!status )(?<!the )"
                        r"(?<!task )(?<!menu )(?<!my )(?<!panes )\b(?:bar|save)\b")
-_CONTRAST = re.compile(r"\b(?:except|excepting|excluding|rather than|instead of|instead|"
+_CONTRAST = re.compile(r"\b(?:except|excepting|excluding|rather than|instead of|instead|swap\w*|"
+                       r"replac\w*|exchange|"
                        r"but not|other than|apart from|aside from|besides|save for|in place of|"
                        r"as opposed to|versus|vs)\b")
 _INSTALL = re.compile(r"\b(?:re ?install\w*|install\w*|uninstall\w*|updat\w*|upgrad\w*|"
@@ -342,11 +344,14 @@ _TERSE_SETTINGS = re.compile(rf"(?:(?:the )?(?:settings|options|preferences) for
                              rf"(?:settings|options|preferences|section|page))(?: please)?")
 
 
-_CLAUSE_SPLIT = re.compile(r"\s*(?:,|;|\band then\b|\bthen\b|\band\b)\s*")
+_CLAUSE_SPLIT = re.compile(r"\s*(?:,|;|:|\band then\b|\bthen\b|\band\b)\s*")
 
 
 def _plain_words(text: str) -> str:
     """Lower case, hyphens and underscores as spaces, backticks as apostrophes, single spaces."""
+    # U+037E is the Greek question mark: NFKC makes it ";", a clause separator
+    # (review R12 round 6), so it is read as the question it is.
+    text = str(text).replace("\u037e", "?")
     return " ".join(re.sub(r"[_\-]+", " ", normalize(text).casefold().replace("`", "'")).split())
 
 
@@ -604,6 +609,12 @@ def _admit(name: str, args: dict, reading: Reading) -> Action | Refusal:
         item, on = args.get("item"), args.get("on")
         if item not in ITEMS or not isinstance(on, bool):
             return Refusal(name, "not a known indicator or button, or no on/off")
+        # Said both ways anywhere in the request, it is refused (held-out v1:
+        # "...: clock hidden, battery shown" admitted hiding the battery).
+        said = {_particle(p.text) if p.bare or p.on is None else p.on
+                for p in parts if _mentions_item(item, p.text)}
+        if {True, False} <= said or "both" in said:
+            return Refusal(name, f"the request says {item} both ways")
         for part in parts:
             if item in _DEVICE_ITEMS and _DEVICE_VERB.search(part.verb) \
                     and not _WIDGET.search(part.text):
