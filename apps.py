@@ -328,9 +328,10 @@ _NEW_TAB = re.compile(r"\b(?:in|into)\s+(?:a|another|its own)\s+(?:new\s+)?tab\b
 _DEVICE_ITEMS = frozenset({"volume", "dictate", "speak", "network"})   # "turn off the wifi"
 # Only a display verb or a widget word makes a device word the indicator
 # (held-out v2: "drop the volume to half" read "drop" as hide).
-_DISPLAY_VERB = re.compile(r"\b(?:show|hide|hidden|display|unhide|reveal|stop showing|get rid of|"
-                           r"remove|lose|restore|want to see|take\b.*\boff|(?:put|bring)\b.*\bback|"
-                           r"(?:don'?t|do not|no longer) (?:need|want))\b")
+# Only the plain display verbs: "restore the volume", "bring the wifi back",
+# "remove the microphone" and "take the mic off mute" mean the device
+# (review R12 round 9).
+_DISPLAY_VERB = re.compile(r"\b(?:show|hide|hidden|display|unhide|reveal|stop showing)\b")
 _WIDGET = re.compile(r"\b(?:buttons?|icons?|indicators?|widgets?|bar|panes?)\b")
 
 
@@ -627,9 +628,13 @@ def _admit(name: str, args: dict, reading: Reading) -> Action | Refusal:
         for part in parts:
             # The widget word may be in the verb's clause or its continuations
             # ("remove the read aloud and wifi icons from the top bar").
-            group = " ".join(p.text for p in parts if p.verb == part.verb)
-            if item in _DEVICE_ITEMS and not _DISPLAY_VERB.search(part.verb) \
-                    and not _WIDGET.search(group):
+            # A widget word that is part of another item's name ("the close
+            # button") does not say this one is an indicator (round 9).
+            group = _without_other_names(item, " ".join(p.text for p in parts
+                                                        if p.verb == part.verb))
+            if item in _DEVICE_ITEMS and (not _DISPLAY_VERB.search(part.verb)
+                                          and not _WIDGET.search(group)
+                                          or _MUTE.search(" ".join(p.text for p in parts))):
                 continue
             # "hide the clock and doom": a bare name continues only its own kind.
             if part.bare and not any(_mentions_item(other, part.verb) for other in ITEMS):
@@ -708,6 +713,19 @@ def _admit(name: str, args: dict, reading: Reading) -> Action | Refusal:
                 and "center" not in part.text and "centre" not in part.text:
             return Action(name, {"section": section})
     return Refusal(name, f"no part of the request opens the {section} settings")
+
+
+# Muting is the device, wherever the request says it.
+_MUTE = re.compile(r"\b(?:un)?mut(?:e|ed|es|ing)\b")
+
+
+def _without_other_names(item: str, text: str) -> str:
+    """The text with every other item's names, and item groups, taken out."""
+    names = [n for other in ITEMS if other != item for n in _names(ITEM_NAMES, other)]
+    names += list(ITEM_GROUPS) + [n for key in SECTIONS for n in _names(SECTION_NAMES, key)]
+    for name in sorted(names, key=len, reverse=True):
+        text = re.sub(rf"(?<!\w){re.escape(name)}(?!\w)", " ", text)
+    return text
 
 
 def _both_ways(parts: tuple, names) -> bool:
