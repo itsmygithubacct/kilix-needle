@@ -454,7 +454,7 @@ class ReviewR12Round2(unittest.TestCase):
             "belay", "abort", "oops", "maybe", "perhaps",
             "not", "never", "no", "none", "nothing", "don't", "do not", "avoid", "without",
             "cannot", "can't", "won't", "shouldn't", "no need to", "neither", "nor", "isn't",
-            "anyone", "someone", "everybody", "siri", "alexa", "he types", "typed", "in the story", "he says", "she said", "say",
+            "anyone", "someone", "everybody", "siri", "alexa", "he types:", "she typed:", "in the story", "he says", "she said", "say",
             "saying", "he told me", "tells", "telling", "tell me to", "he asked", "asks", "asking",
             "she wrote", "writes", "written", "the wiki reads", "read out", "according to the wiki",
             "claims", "claimed", "he wants me to", "suggested", "recommended", "mentioned",
@@ -565,6 +565,29 @@ class ReviewR12Round2(unittest.TestCase):
                          [["show", {"item": "clock", "on": False}]])
         self.assertEqual([p.text for p in apps._read("hide the clock: now").parts],
                          ["hide the clock", "now"])
+
+    def test_games_and_pane_stats_said_two_ways_refuse(self):                    # KN-R12-701
+        for mode in ("always", "off"):                     # one call each, so no clash hides it
+            self.assertEqual(admitted("set pane cpu to always: cpu off",
+                                      [call("pane_stat", stat="cpu", mode=mode)]), [], mode)
+        self.assertEqual(admitted("set pane cpu to auto, always",                      # AP54
+                                  [call("pane_stat", stat="cpu", mode="auto")]), [])
+        self.assertEqual(admitted("enable doom: doom disabled",
+                                  [call("game", game="doom", available=v) for v in (True, False)]),
+                         [])
+        self.assertEqual(admitted("turn the clock off and on",
+                                  [call("show", item="clock", on=v) for v in (True, False)]), [])
+        self.assertEqual(admitted("show pane cpu always and memory off",
+                                  [call("pane_stat", stat="cpu", mode="always"),
+                                   call("pane_stat", stat="memory", mode="off")]),
+                         [["pane_stat", {"stat": "cpu", "mode": "always"}],
+                          ["pane_stat", {"stat": "memory", "mode": "off"}]])
+        self.assertEqual(admitted("hide the clock in exchange for the battery",
+                                  [call("show", item="clock", on=False)]), [])          # KN-R12-703
+        for request, one in (("open the text editor, i need to type",                   # KN-R12-702
+                              call("launch", app="kilix-notepad")),
+                             ("open doom, it's a great story", call("launch", app="doom"))):
+            self.assertEqual(len(admitted(request, [one])), 1, request)
 
     def test_disable_then_launch_refuses_the_launch_in_either_order(self):        # KN-R12-206
         for calls in ([call("game", game="doom", available=False), call("launch", app="doom")],

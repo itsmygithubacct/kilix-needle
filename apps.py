@@ -231,9 +231,9 @@ _NOT_ON = [r"\bstop hiding\b", r"\bun hide\b"]   # read as on
 _FINITE = re.compile(r"\b(?:is|are|was|were|be|been|has|(?<=\s)have|had|looks|seems|feels|"
                      r"gets|got|keeps|stays|works|crashed|broke|died)\b")
 # A bare continuation's own word for on or off: "turn the clock on and the battery off".
-_PARTICLE_ON = re.compile(r"\b(?:on|back)$|\b(?:available|visible|shown)\b")
+_PARTICLE_ON = re.compile(r"\b(?:on|back)$|\b(?:available|visible|shown|enabled)\b")
 _PARTICLE_OFF = re.compile(r"\b(?:off|hidden|gone|removed|away|unavailable|invisible|disappear|"
-                           r"vanish|out of)\b")
+                           r"vanish|out of|disabled)\b")
 _PARTICLE_VERB = re.compile(r"(?:turn|switch)\b")    # "turn the clock and the battery off"
 
 # Polite words before a verb.
@@ -278,11 +278,10 @@ _CANCEL = re.compile(r"\b(?:cancel|never ?mind|nvm|scratch that|forget (?:it|tha
                      r"ignore (?:that|this|me)|just kidding|kidding|joking|jk|lol|psych|"
                      r"disregard|strike that|belay|abort|oops|maybe|perhaps)\b")
 _REPORTED = re.compile(r"\b(?:anyone|anybody|someone|somebody|everyone|everybody|siri|alexa|"
-                       r"typ(?:e|es|ed|ing)|story|"
                        r"says|said|say|saying|told|tells|telling|tell me to|asked|asks|"
                        r"asking|wrote|writes|written|reads|read out|according to|claims|"
                        r"claimed|wants me to|suggest\w*|recommend\w*|mention\w*|quot\w*|"
-                       r"instruct\w*)\b|[\"\u00ab\u00bb\u2039\u203a\u201a\u201e]|"
+                       r"instruct\w*)\b|\btyp(?:es|ed|ing)\s*:|\bin the story\b|[\"\u00ab\u00bb\u2039\u203a\u201a\u201e]|"
                        r"(?<!\w)'[^']+'(?!\w)")    # quotation marks or a quoted span
 _QUESTION = re.compile(r"^(?:(?:so|and|but|ok|okay|hey|hmm|um|well)\s+)*(?:should|shall|"
                        r"how(?! about)|what|why|when|where|which|who|whose|is|are|am|was|were|"
@@ -559,6 +558,9 @@ def _read(request: str) -> Reading:
             if after_but:
                 # "disable every game but doom": "but" there means except.
                 return Reading(refusal="the request makes an exception: name just what to change")
+            if _particle(clause) is not None and not _names_something(clause):
+                # "turn the clock off and on": an on or off that names nothing.
+                return Reading(refusal="the request says on or off without saying what")
             own = _particle(clause)
             if own is None:
                 on = last.on
@@ -612,11 +614,7 @@ def _admit(name: str, args: dict, reading: Reading) -> Action | Refusal:
             return Refusal(name, "not a known indicator or button, or no on/off")
         # Said both ways anywhere in the request, it is refused (held-out v1:
         # "...: clock hidden, battery shown" admitted hiding the battery).
-        said = {p.on if p.on is not None or not p.bare else _particle(p.text)
-                for p in parts if _mentions_item(item, p.text)}
-        said |= {_particle(p.text) for p in parts
-                 if p.bare and _mentions_item(item, p.text) and _particle(p.text) is not None}
-        if {True, False} <= said or "both" in said:
+        if _both_ways(parts, lambda text: _mentions_item(item, text)):
             return Refusal(name, f"the request says {item} both ways")
         for part in parts:
             if item in _DEVICE_ITEMS and _DEVICE_VERB.search(part.verb) \
@@ -633,6 +631,10 @@ def _admit(name: str, args: dict, reading: Reading) -> Action | Refusal:
         if stat not in STATS or mode not in MODES:
             return Refusal(name, "not cpu or memory, or not auto, always or off")
         other = "cpu" if stat == "memory" else "memory"
+        # Two modes for this stat anywhere ("set pane cpu to always: cpu off").
+        if len({m for p in parts if _mentions(STAT_NAMES, stat, p.text)
+                for m in MODES if _mentions(MODE_NAMES, m, p.text)}) > 1:
+            return Refusal(name, f"the request says two modes for pane {stat}")
         for index, part in enumerate(parts):
             if not _mentions(STAT_NAMES, stat, part.text) \
                     or part.bare and not _names_kind(STAT_NAMES, STATS, part.verb):
@@ -668,6 +670,8 @@ def _admit(name: str, args: dict, reading: Reading) -> Action | Refusal:
         available = args.get("available")
         if game is None or not isinstance(available, bool):
             return Refusal(name, f"{args.get('game')!r} is not a Kilix game, or no on/off")
+        if _both_ways(parts, lambda text: _mentions(LAUNCH_NAMES, game, text)):
+            return Refusal(name, f"the request says {game} both ways")
         for index, part in enumerate(parts):
             named = _mentions(LAUNCH_NAMES, game, part.text)
             # "fire up pong and afterwards make it unavailable"; not "enable doom then hide it".
@@ -693,6 +697,14 @@ def _admit(name: str, args: dict, reading: Reading) -> Action | Refusal:
                 and "center" not in part.text and "centre" not in part.text:
             return Action(name, {"section": section})
     return Refusal(name, f"no part of the request opens the {section} settings")
+
+
+def _both_ways(parts: tuple, names) -> bool:
+    """Whether the request says a thing on in one place and off in another,
+    counting what a bare continuation inherits and what it says itself."""
+    said = {p.on for p in parts if names(p.text) and p.on is not None}
+    said |= {_particle(p.text) for p in parts if names(p.text) and p.bare}
+    return {True, False} <= said or "both" in said
 
 
 def _names_kind(table: dict, keys: tuple, clause: str) -> bool:
