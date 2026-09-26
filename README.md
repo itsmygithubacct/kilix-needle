@@ -234,27 +234,36 @@ The model sees five tools: `launch`, `show`, `pane_stat`, `game` and
 - **Verbs.** Each verb starts its clause, after any polite words. A launch
   takes the name as its object ("open the pdf viewer", not "the memory load
   is high"); a change says exactly one of on or off, or one mode.
-- **Whole request.** Anything that changes what a request asks refuses all
-  of it: a negation ("don't", "not the battery"), reported words ("my friend
-  said"), taking it back ("actually, cancel that"), a question or a
-  condition, an exception or contrast ("except", "instead of"), an install
-  word, a second sentence that isn't thanks, or letters outside the Latin
-  alphabet. Where a program opens in a pane is the panes job.
+- **Whole request.** Words that change what a request asks refuse all of
+  it: a negation ("don't", "not the battery"), reported words ("my friend
+  said"), taking it back ("actually, cancel that"), a question, a
+  condition or a time ("later", "after dinner"), an exception, contrast or
+  alternative ("except", "instead of", "or"), an install word, a second
+  sentence that isn't thanks, or letters outside the Latin alphabet. Where a
+  program opens in a pane is the panes job. Word lists are never complete,
+  so the yes rules below don't rely on them.
 
 **What needs a yes:**
 - Every launch and every settings change asks first. Opening the settings
   screen changes nothing and doesn't ask.
-- `--yes` and MCP `confirm_risky` give that yes only when the request states
-  the action plainly ("open solitaire", "hide the clock", "disable doom",
-  "set pane cpu to auto").
-- A launch that may install first always waits for a person's own yes, so
-  an agent never installs from here. "Ready" comes from Kilix's own
-  read-only readiness checks. Apps built from system sources (Chawan, the
-  model store, the tmux manager, the camera wall, the region painter) and
-  the host tools install or update inside their own commands, so they always
-  wait for a person.
+- `--yes` and MCP `confirm_risky` give that yes only to a plain request:
+  each action in a canonical form ("open solitaire", "hide the clock",
+  "disable doom", "set pane cpu to auto"), and every other part of the
+  request just courtesy. "translate to french, open doom" and "open doom,
+  just kidding" aren't plain, so a person is asked, and is shown the whole
+  request.
+- A launch that may install first waits for a person's own yes. "Ready"
+  comes only from Kilix's own readiness checks, run in an isolated Python in
+  Kilix's directory, and only an explicit answer counts. A game's tab asks
+  Kilix again in its own environment before it plays, because Kilix's games
+  don't honour the install switches. dosbox, apps built from system sources
+  (Chawan, the model store, the tmux manager, the camera wall, the region
+  painter) and the host tools install or update inside their own commands,
+  so they always wait for a person.
 - A launch opens a new tab, never the pane you asked from, with every Kilix
   install switch off.
+- Known issue: a launched program that exits at once still records `done`
+  (the tab opened).
 
 **Left out on purpose:**
 - power;

@@ -3,6 +3,7 @@ import io
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -20,6 +21,13 @@ from actions import Refusal
 
 REPO = Path(__file__).resolve().parents[1]
 EXCLUDED = {"kilix-encodec-convert-24khz", "kilix-encodec-convert-48khz", "kilix-needle"}
+# Every *_AUTO_INSTALL switch in the Kilix tree (a grep, 2026-09-26), written
+# out so a test never checks a list against itself.
+ALL_INSTALL_SWITCHES = {
+    "KILIX_APP_AUTO_INSTALL", "KILIX_PDF_AUTO_INSTALL", "KILIX_TUI_UTILS_AUTO_INSTALL",
+    "KILIX_CHAWAN_AUTO_INSTALL", "KILIX_AMP_AUTO_INSTALL", "KILIX_CAP_AUTO_INSTALL",
+    "KILIX_ICEWM_AUTO_INSTALL", "KILIX_LAND_DESKTOP_AUTO_INSTALL", "KILIX_LOOK_AUTO_INSTALL",
+    "KILIX_MASK_AUTO_INSTALL", "KILIX_NVR_AUTO_INSTALL", "KILIX_RTSP_AUTO_INSTALL"}
 
 
 def call(tool, **arguments):
@@ -145,11 +153,12 @@ class TemplateRows(unittest.TestCase):
     refused (mutants AP20-AP23)."""
 
     def test_it_after_a_launch_is_that_game(self):                                     # AP21
+        # The launch itself refuses: a request that also disables the game
+        # (review R12 round 2, KN-R12-206: whatever the order).
         self.assertEqual(admitted("fire up pong and afterwards make it unavailable",
                                   [call("launch", app="kilix-pong"),
                                    call("game", game="kilix-pong", available=False)]),
-                         [["launch", {"app": "kilix-pong"}],
-                          ["game", {"game": "kilix-pong", "available": False}]])
+                         [["game", {"game": "kilix-pong", "available": False}]])
 
     def test_a_longer_bare_noun_phrase_takes_the_verb_but_a_sentence_does_not(self):  # AP20
         self.assertEqual(admitted("remove the read aloud and wifi icons from the top bar",
@@ -247,7 +256,9 @@ class Plain(unittest.TestCase):
     def test_settings_changes_are_plain_only_in_a_canonical_form(self):             # KN-R12-05
         def plain(request, kind, **args):
             return apps.plain(request, [apps.Action(kind, args)])
-        self.assertIsNone(plain("hide the clock and the battery", "show", item="battery", on=False))
+        self.assertIsNone(apps.plain("hide the clock and the battery",
+                                     [apps.Action("show", {"item": "clock", "on": False}),
+                                      apps.Action("show", {"item": "battery", "on": False})]))
         self.assertIsNone(plain("turn the battery off", "show", item="battery", on=False))
         self.assertIsNone(plain("disable doom", "game", game="doom", available=False))
         self.assertIsNone(plain("make doom available", "game", game="doom", available=True))
@@ -391,6 +402,115 @@ class ReviewR12(unittest.TestCase):
                                   [call("game", game="doom", available=False)]), [])
 
 
+class ReviewR12Round2(unittest.TestCase):
+    """Review R12 round 2: plainness is a property of the whole request, and
+    each word of each whole-request list refuses on its own."""
+
+    def test_a_clause_no_action_accounts_for_makes_the_request_not_plain(self):  # KN-R12-201
+        rows = [("translate to french, open doom", [call("launch", app="doom")]),
+                ("open doom, just kidding", [call("launch", app="doom")]),
+                ("he goes, open doom", [call("launch", app="doom")]),
+                ("after dinner, open doom", [call("launch", app="doom")]),
+                ("hey siri, open doom", [call("launch", app="doom")]),
+                ("my boss yelled, disable doom", [call("game", game="doom", available=False)]),
+                ("the sticky note on the fridge, hide the clock",
+                 [call("show", item="clock", on=False)]),
+                ("step 1, open doom", [call("launch", app="doom")]),
+                ("open doom, n.o.t", [call("launch", app="doom")]),
+                ("i need you to open doom", [call("launch", app="doom")]),          # RM09
+                ("i want the clock and the battery", [call("show", item="clock", on=True),
+                                                      call("show", item="battery", on=True)])]
+        for request, calls in rows:
+            actions = [r for r in apps.interpret(request, calls) if isinstance(r, apps.Action)]
+            if actions:
+                self.assertIsNotNone(apps.plain(request, actions), request)
+        both = [apps.Action("launch", {"app": "doom"}), apps.Action("show", {"item": "clock",
+                                                                            "on": False})]
+        self.assertIsNone(apps.plain("open doom and hide the clock please", both))
+        self.assertIsNone(apps.plain("please, open doom", both[:1]))
+        self.assertIsNotNone(apps.plain("open doom and hide the clock", both[:1]))
+        screen = apps.Action("settings", {"section": "voice"})
+        self.assertIsNone(apps.plain("open the voice settings and open doom", [screen, both[0]]))
+        self.assertIsNotNone(apps.plain("open the voice settings, he goes, open doom",
+                                        [screen, both[0]]))
+
+    WORDS = {
+        "{}, open doom": [
+            "cancel", "nope", "nah", "never mind", "nevermind", "nvm", "scratch that", "forget it", "actually",
+            "wait", "hold on", "undo", "on second thought", "changed my mind", "ignore that",
+            "just kidding", "kidding", "joking", "jk", "lol", "psych", "disregard", "strike that",
+            "belay", "abort", "oops", "maybe", "perhaps",
+            "not", "never", "no", "none", "nothing", "don't", "do not", "avoid", "without",
+            "cannot", "can't", "won't", "shouldn't", "no need to", "neither", "nor", "isn't",
+            "anyone", "someone", "everybody", "siri", "alexa", "he says", "she said", "say",
+            "saying", "he told me", "tells", "telling", "tell me to", "he asked", "asks", "asking",
+            "she wrote", "writes", "written", "the wiki reads", "read out", "according to the wiki",
+            "claims", "claimed", "he wants me to", "suggested", "recommended", "mentioned",
+            "quote", "instructed",
+            "except", "excluding", "rather than", "instead of", "instead", "other than",
+            "apart from", "aside from", "besides", "save for", "in place of", "as opposed to",
+            "versus", "vs",
+            "if so", "unless it is late", "whether", "in case", "suppose", "supposing",
+            "imagine", "pretend", "hypothetically", "theoretically", "in theory", "simulate",
+            "assuming", "once i", "when i", "provided", "as long as", "as soon as", "ever",
+            "how to", "how do", "how can",
+            "reinstall", "install", "installer", "uninstall", "update", "upgrade", "download",
+            "set up", "setup", "grab", "fetch", "delete", "purge", "from the store",
+            "build", "compile",
+            "later", "tonight", "tomorrow", "today", "after dinner", "before bed", "during exams",
+            "until noon", "whenever", "while", "at midnight", "5 pm", "in 5", "in an hour",
+            "in a few", "soon", "eventually", "someday", "next week", "on weekends",
+            "every day",
+            "or", "either"],
+    }
+
+    def test_every_listed_word_refuses_on_its_own(self):                           # R12 RM19-RM32
+        for form, words in self.WORDS.items():
+            for word in words:
+                request = form.format(word)
+                results = apps.interpret(request, [call("launch", app="doom")])
+                self.assertIsInstance(results[0], Refusal, request)
+
+    def test_other_round_two_rows(self):
+        refused = [("shall I hide the clock", call("show", item="clock", on=False)),
+                   ("dοn't open doom", call("launch", app="doom")),                   # RM41 Greek
+                   ("disable all games bar doom", call("game", game="doom", available=False)),
+                   ("hide the clock and the battery indicator up on the top bar for me",
+                    call("show", item="battery", on=False)),                          # RM33
+                   ("make sure pane cpu is always shown",
+                    call("pane_stat", stat="cpu", mode="always")),                   # RM34
+                   ("open doom in the current tab", call("launch", app="doom")),     # RM37
+                   ("open doom in a new tab in the left pane", call("launch", app="doom")),
+                   ("where is the games list", call("settings", section="games")),   # RM44
+                   ("turn off the wifi", call("show", item="network", on=False)),    # KN-R12-204
+                   ("disable the microphone", call("show", item="dictate", on=False)),
+                   ("i want the clock to disappear", call("show", item="clock", on=True)),
+                   ("hide the clock and doom", call("game", game="doom", available=False)),
+                   ("open doom on the laptop", call("launch", app="doom")),
+                   ("if you could open doom, that would be terrible", call("launch", app="doom")),
+                   ("i want the wifi icon out of my sight", call("show", item="network", on=True))]
+        for request, one in refused:
+            self.assertEqual(admitted(request, [one]), [], request)
+        self.assertEqual(admitted("turn off the wifi icon", [call("show", item="network", on=False)]),
+                         [["show", {"item": "network", "on": False}]])
+        self.assertEqual(admitted("if you could open doom, that would be great",
+                                  [call("launch", app="doom")]), [["launch", {"app": "doom"}]])
+
+    def test_rows_the_whole_request_words_no_longer_reach(self):                 # AP54, AP62, AP102
+        self.assertEqual(admitted("set pane cpu to always and off",
+                                  [call("pane_stat", stat="cpu", mode="always")]), [])
+        self.assertEqual(admitted("disable doom and the clock",
+                                  [call("show", item="clock", on=False)]), [])
+        both = [apps.Action("launch", {"app": "solitaire"}), apps.Action("launch", {"app": "doom"})]
+        self.assertIsNotNone(apps.plain("open solitaire and doom", both))
+
+    def test_disable_then_launch_refuses_the_launch_in_either_order(self):        # KN-R12-206
+        for calls in ([call("game", game="doom", available=False), call("launch", app="doom")],
+                      [call("launch", app="doom"), call("game", game="doom", available=False)]):
+            self.assertEqual(admitted("disable doom, then open doom", calls),
+                             [["game", {"game": "doom", "available": False}]])
+
+
 class Runner(unittest.TestCase):
     def resolve(self, app, ready=True):
         asked = []
@@ -420,11 +540,16 @@ class Runner(unittest.TestCase):
         self.assertEqual(step.tab[-4], "/opt/k/kilix")
 
     def test_dosbox_is_a_game_and_host_tools_are_never_ready(self):                # KN-R12-01, -02
+        # dosbox is never ready: Kilix's dosbox_ready and ensure_dosbox read
+        # different settings (review R12 round 2, KN-R12-202).
         step, asked = self.resolve("dosbox")
-        self.assertEqual((asked, step.tab[-3:]), ([("game", "dosbox")], ("games", "play", "dosbox")))
+        self.assertEqual((asked, step.ready, step.install_tab[-3:]),
+                         ([], False, ("games", "play", "dosbox")))
+        # A ready game's tab asks Kilix again, in its own environment, before playing.
         step, asked = self.resolve("solitaire")
-        self.assertEqual((asked, step.tab[-3:]), ([("game", "solitaire")],
-                                                  ("games", "play", "solitaire")))
+        self.assertEqual(asked, [("game", "solitaire")])
+        self.assertEqual(step.tab[-7:], ("python3", "-I", "-B", "-c", apps_kilix.GAME_GUARD,
+                                         kilix.KILIX, "solitaire"))
         for tool in apps.HOST_TOOLS:
             step, asked = self.resolve(tool)
             self.assertEqual((asked, step.ready), ([], False), tool)
@@ -453,16 +578,28 @@ class Runner(unittest.TestCase):
 
     def test_the_probe_runs_with_every_install_switch_off_and_its_status_decides(self):  # R12 M12, M15
         home = Path(self.enterContext(tempfile.TemporaryDirectory()))
-        for status, ready in ((0, True), (1, False), (2, False)):
+        for status, out, ready in ((0, b"READY\n", True), (0, b"", False), (0, b"NOT READY\n", False),
+                                   (1, b"READY\n", False), (2, b"", False)):
             with mock.patch.object(apps_kilix, "_kilix_home", return_value=home), \
                     mock.patch("subprocess.run",
-                               return_value=mock.Mock(returncode=status)) as run:
-                self.assertEqual(apps_kilix._ready("app", "kilix-pdf"), ready)
-            argv, env = run.call_args.args[0], run.call_args.kwargs["env"]
-            self.assertEqual(argv, ["python3", "-c", apps_kilix.PROBE, str(home), "app",
+                               return_value=mock.Mock(returncode=status, stdout=out)) as run:
+                self.assertEqual(apps_kilix._ready("app", "kilix-pdf"), ready, (status, out))
+            argv, kwargs = run.call_args.args[0], run.call_args.kwargs
+            self.assertEqual(argv, ["python3", "-I", "-B", "-c", apps_kilix.PROBE, str(home), "app",
                                     "kilix-pdf"])
-            for name in apps_kilix.NO_INSTALL:
-                self.assertEqual(env[name], "0")
+            self.assertEqual(kwargs["cwd"], str(home))
+            self.assertEqual(kwargs["env"]["GIT_OPTIONAL_LOCKS"], "0")
+            for name in ALL_INSTALL_SWITCHES:
+                self.assertEqual(kwargs["env"][name], "0")
+        with mock.patch.object(apps_kilix, "_kilix_home", return_value=home), \
+                mock.patch("subprocess.run", side_effect=subprocess.TimeoutExpired("p", 30)):
+            self.assertFalse(apps_kilix._ready("app", "kilix-pdf"))
+
+    def test_the_install_switches_are_every_one_kilix_has(self):                  # R12 RM16
+        self.assertEqual(set(apps_kilix.NO_INSTALL), ALL_INSTALL_SWITCHES)
+        step, _ = self.resolve("kilix-pdf")
+        for name in ALL_INSTALL_SWITCHES:
+            self.assertIn(f"--env={name}=0", step.tab)
 
     def test_a_failed_probe_reads_as_not_ready(self):
         with mock.patch.object(apps_kilix, "_kilix_home", return_value=Path("/nowhere")), \
@@ -471,9 +608,9 @@ class Runner(unittest.TestCase):
         with mock.patch.object(apps_kilix, "_kilix_home", return_value=None):
             self.assertFalse(apps_kilix._ready("game", "doom"))
 
-    def test_the_probe_asks_kilix_readiness_only(self):                           # KN-R12-01, -02, -10
-        """The real probe, against a stand-in Kilix whose readiness functions say
-        what the test wants and whose installers fail the test if called."""
+    def stand_in_kilix(self):
+        """A stand-in Kilix whose readiness functions say what the test wants
+        and whose installers exit 7 if called."""
         home = Path(self.enterContext(tempfile.TemporaryDirectory()))
         (home / "config" / "kilix_sdk").mkdir(parents=True)
         (home / "desktop").mkdir()
@@ -496,15 +633,51 @@ class Runner(unittest.TestCase):
             "def main(argv):\n    raise SystemExit(7)\n")
         (home / "desktop" / "games.py").write_text(
             "def game_enabled(name):\n    return name != 'disabled'\n"
-            "def game_ready(name):\n    return None if name == 'missing' else '/bin/game'\n"
+            "def game_ready(name):\n"
+            "    if name == 'exits':\n        raise SystemExit(0)\n"
+            "    return None if name == 'missing' else '/bin/game'\n"
             "def ensure(name):\n    raise SystemExit(7)\n")
+        (home / "kilix").write_text("#!/bin/sh\necho \"PLAYED $*\"\n")
+        (home / "kilix").chmod(0o755)
+        return home
+
+    def test_the_probe_asks_kilix_readiness_only(self):                           # KN-R12-01, -02, -10
+        """The real probe, against the stand-in Kilix."""
+        home = self.stand_in_kilix()
         cases = {("app", "git-ready"): True, ("app", "archive-ready"): True,
                  ("app", "git-missing"): False, ("app", "system-app"): False,
                  ("app", "custom-app"): False, ("app", "unknown"): False,
-                 ("game", "doom"): True, ("game", "disabled"): False, ("game", "missing"): False}
+                 ("game", "doom"): True, ("game", "disabled"): False, ("game", "missing"): False,
+                 ("game", "exits"): False}
         with mock.patch.object(apps_kilix, "_kilix_home", return_value=home):
             for (kind, name), ready in cases.items():
                 self.assertEqual(apps_kilix._ready(kind, name), ready, (kind, name))
+        self.assertEqual(list(home.rglob("__pycache__")), [])            # R12 RM11
+
+    def test_a_file_in_the_callers_directory_cannot_answer_for_kilix(self):       # KN-R12-203
+        home = self.stand_in_kilix()
+        here = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        for module in ("shutil", "os", "configparser", "argparse", "types"):
+            (here / f"{module}.py").write_text("print('READY')\nraise SystemExit(0)\n")
+        previous = os.getcwd()
+        os.chdir(here)
+        self.addCleanup(os.chdir, previous)
+        with mock.patch.object(apps_kilix, "_kilix_home", return_value=home):
+            self.assertFalse(apps_kilix._ready("game", "missing"))
+            self.assertFalse(apps_kilix._ready("app", "git-missing"))
+            self.assertTrue(apps_kilix._ready("game", "doom"))
+
+    def test_a_game_tab_asks_kilix_again_before_playing(self):                   # KN-R12-202
+        home = self.stand_in_kilix()
+        env = {"PATH": f"{home}:/usr/bin:/bin", "HOME": str(home)}
+        for game, played in (("doom", True), ("missing", False), ("disabled", False)):
+            done = subprocess.run(["python3", "-I", "-B", "-c", apps_kilix.GAME_GUARD, "kilix", game],
+                                  env=env, stdin=subprocess.DEVNULL, capture_output=True,
+                                  text=True, timeout=30)
+            self.assertEqual(done.stdout.startswith(f"PLAYED games play {game}"), played, done)
+            self.assertEqual(done.returncode, 0 if played else 1, game)
+            if not played:
+                self.assertIn("does not install it", done.stdout)
 
 
 class Flow(unittest.TestCase):
@@ -604,6 +777,21 @@ class Flow(unittest.TestCase):
                                            assume_yes=True, fail=("show",))
         self.assertEqual(performed, [])
         self.assertEqual([i["outcome"] for i in record["items"]], ["failed", "skipped"])
+
+    def test_a_refusal_holds_the_settings_screen_too(self):                       # R12 RM06
+        _, performed = self.run_calls("open the voice settings and open doom",
+                                      [call("settings", section="voice"),
+                                       call("launch", app="kilix-nothing")])
+        self.assertEqual(performed, [])
+
+    def test_a_request_that_is_not_plain_is_shown_whole(self):                    # KN-R12-205
+        asked = []
+        self.run_calls("open doom, i am bored", [call("launch", app="doom")],
+                       confirm=lambda q: asked.append(q) or False)
+        self.run_calls("hide the clock", [call("show", item="clock", on=False)],
+                       confirm=lambda q: asked.append(q) or False)
+        self.assertEqual(asked, ["  'open doom, i am bored' asks to open doom in a new tab? [y/N] ",
+                                 "  hide clock? [y/N] "])
 
     def test_dry_run_performs_nothing(self):
         record, performed = self.run_calls("hide the clock", [call("show", item="clock", on=False)],

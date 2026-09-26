@@ -320,7 +320,11 @@ def run_apps_calls(request: str, calls: list, options: Options,
         needs_yes = hold or broken or action.kind in apps.SIDE_EFFECT_KINDS
         waived = (options.assume_yes and not hold and not broken and unplain is None
                   and step.ready)
-        if needs_yes and not waived and not confirm(f"  {step.summary}? [y/N] "):
+        # A request that isn't plain is shown whole, so the person sees what
+        # else it says ("hide the clock later") and not only the action.
+        question = (f"  {step.summary}? [y/N] " if unplain is None
+                    else f"  {request!r} asks to {step.summary}? [y/N] ")
+        if needs_yes and not waived and not confirm(question):
             entry["outcome"] = "skipped"
             entry["reason"] = ("declined" if confirm is _terminal_confirm and sys.stdin.isatty()
                                else "needs a person's yes: it may install first" if not step.ready

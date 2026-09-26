@@ -58,7 +58,8 @@ _APPS_REQUEST = {"type": "string",
 TOOL_LIST += [
     {"name": "kilix_apps_plan",
      "description": "Show what a plain request would do to Kilix apps, games and settings. "
-                    "Changes nothing; it only runs Kilix's own read-only readiness checks.",
+                    "Changes nothing; it runs Kilix's own readiness checks in an isolated "
+                    "Python, which at most creates Kilix's empty apps directory.",
      "inputSchema": {"type": "object", "properties": {"request": _APPS_REQUEST},
                      "required": ["request"], "additionalProperties": False}},
     {"name": "kilix_apps_act",
@@ -66,9 +67,10 @@ TOOL_LIST += [
                     "app or game in a new tab, show or hide a top-bar indicator or pane "
                     "button, set the pane CPU/memory readout, make a game available or not, "
                     "open a settings section. Everything but opening a settings section needs "
-                    "confirm_risky=true and a plainly stated request, and nothing that may "
-                    "install is ever run from here: apps built from system sources and the "
-                    "host tools always wait for a person.",
+                    "confirm_risky=true and a plain request (each action in a canonical form, "
+                    "nothing else said but courtesy). A launch that may install waits for a "
+                    "person: dosbox, apps built from system sources and the host tools "
+                    "always do.",
      "inputSchema": {"type": "object", "properties": {
          "request": _APPS_REQUEST,
          "confirm_risky": {"type": "boolean", "default": False,
