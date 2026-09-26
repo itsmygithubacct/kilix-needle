@@ -632,6 +632,11 @@ def _admit(name: str, args: dict, reading: Reading) -> Action | Refusal:
             # button") does not say this one is an indicator (round 9).
             group = _without_other_names(item, " ".join(p.text for p in parts
                                                         if p.verb == part.verb))
+            # "show the wifi password": a device word with a noun of its own.
+            if item in _DEVICE_ITEMS and re.search(
+                    rf"(?:{'|'.join(map(re.escape, _names(ITEM_NAMES, item)))})\s+{_DEVICE_NOUN}",
+                    part.text):
+                continue
             if item in _DEVICE_ITEMS and (not _DISPLAY_VERB.search(part.verb)
                                           and not _WIDGET.search(group)
                                           or _MUTE.search(" ".join(p.text for p in parts))):
@@ -715,14 +720,17 @@ def _admit(name: str, args: dict, reading: Reading) -> Action | Refusal:
     return Refusal(name, f"no part of the request opens the {section} settings")
 
 
+_DEVICE_NOUN = (r"(?:password|passcode|speed|signal|strength|connection|network|name|level|"
+                r"settings?|card|driver|device|adapter|router|output|input|source)\b")
 # Muting is the device, wherever the request says it.
 _MUTE = re.compile(r"\b(?:un)?mut(?:e|ed|es|ing)\b")
 
 
 def _without_other_names(item: str, text: str) -> str:
-    """The text with every other item's names, and item groups, taken out."""
+    """The text with every other item's names, and item groups, taken out
+    (not section names: "the top bar" says indicator; review R12 round 10)."""
     names = [n for other in ITEMS if other != item for n in _names(ITEM_NAMES, other)]
-    names += list(ITEM_GROUPS) + [n for key in SECTIONS for n in _names(SECTION_NAMES, key)]
+    names += list(ITEM_GROUPS)
     for name in sorted(names, key=len, reverse=True):
         text = re.sub(rf"(?<!\w){re.escape(name)}(?!\w)", " ", text)
     return text

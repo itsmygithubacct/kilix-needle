@@ -595,7 +595,9 @@ class ReviewR12Round2(unittest.TestCase):
                         "bring the wifi back", "put the volume back to normal",
                         "i don't need the wifi", "remove the microphone",
                         "hide the volume, it's at fifty percent",                     # KN-R12-904
-                        "show the mic and unmute it", "show the mic, it is muted"):      # AP134
+                        "show the mic and unmute it", "show the mic, it is muted",      # AP134
+                        "show the wifi password", "show the internet speed",            # 1002
+                        "hide my wifi network"):
             self.assertEqual(admitted(request, [call("show", item=i, on=v)
                                                 for i in ("volume", "network", "dictate")
                                                 for v in (True, False)]), [], request)
@@ -604,6 +606,11 @@ class ReviewR12Round2(unittest.TestCase):
         self.assertEqual(admitted("switch off the volume and the battery icons",       # AP131
                                   [call("show", item="volume", on=False)]),
                          [["show", {"item": "volume", "on": False}]])
+        for request, item, on in (("put the wifi on the top bar", "network", True),      # 1001
+                                  ("remove the wifi from the top bar", "network", False),
+                                  ("take the network off the status bar", "network", False)):
+            self.assertEqual(admitted(request, [call("show", item=item, on=on)]),
+                             [["show", {"item": item, "on": on}]], request)
         for request, item in (("hide the volume", "volume"), ("drop the volume icon", "volume"),
                               ("remove the wifi indicator", "network")):
             self.assertEqual(admitted(request, [call("show", item=item, on=False)]),
