@@ -194,7 +194,7 @@ _OPEN = re.compile(r"\b(?:open|launch|start|run|play|"
                    r"get me|spin up|let'?s play|wanna play|want to play|like to play|"
                    r"in the mood for|up for a round of|up for some|a round of|a game of)\b",
                    re.I)
-_GAP = r"(?:\s+[\w'-]+){0,4}?\s+"      # "put the clock back", "turn cpu off"
+_GAP = r"(?:\s+[\w'-]+){0,6}?\s+"      # "put the clock back", "turn the text to speech button on"
 _ON = [rf"\b(?:turn|switch){_GAP}on\b", rf"\b(?:put|bring|add){_GAP}back\b",
        rf"\bmake{_GAP}available\b", r"\bturn on\b", r"\bswitch on\b", r"\bput back\b",
        r"\bbring back\b", r"\bshow\b", r"\bdisplay\b", r"\bre-?enable\b", r"\benable\b",
@@ -286,19 +286,37 @@ def _polarity(clause: str) -> bool | None:
     return found.pop()
 
 
+_FINITE = re.compile(r"\b(?:is|are|was|were|be|been|has|have|had|looks?|seems?|feels?|"
+                     r"gets?|got|keeps?|stays?|works?|crashed|broke|died)\b")
+
+
 def _clauses_with_verbs(request: str) -> list[tuple[str, str]]:
     """Each clause, with the verb clause it belongs to: a bare noun phrase after
     a verb clause ("hide the clock and the battery") takes that clause's verb."""
     out, last = [], ""
     for clause in _clause_parts(request):
-        has_verb = bool(_OPEN.search(clause) or _polarity(clause) is not None
-                        or _SETTINGS_WORD.search(clause))
+        # "the settings app" names an app: its settings word is not a verb.
+        settings_verb = _SETTINGS_WORD.search(clause) and not any(
+            _mentions(LAUNCH_NAMES, key, clause) for key in APPS)
+        has_verb = bool(_OPEN.search(clause) or _polarity(clause) is not None or settings_verb)
         if has_verb:
             last = clause
             out.append((clause, clause))
         else:
-            out.append((clause, last if len(clause.split()) <= 4 else clause))
+            # A bare noun phrase ("and wifi icons from the top bar") continues
+            # the verb before it; a clause with its own verb ("the battery is
+            # low") does not.
+            bare = len(clause.split()) <= 7 and not _FINITE.search(clause)
+            out.append((clause, last if bare else clause))
     return out
+
+
+def _names_something(clause: str) -> bool:
+    """The clause is about some stat, item, app, game or section."""
+    return any(_mentions(table, key, clause)
+               for table, keys in ((STAT_NAMES, STATS), (ITEM_NAMES, ITEMS),
+                                   (LAUNCH_NAMES, LAUNCHABLE), (SECTION_NAMES, SECTIONS))
+               for key in keys)
 
 
 def _refused_context(clause: str, verb_clause: str) -> str | None:
@@ -370,8 +388,8 @@ def _admit(name: str, args: dict, request: str) -> Action | Refusal:
             # Everything said about this stat, up to the next clause that names a
             # stat, must say one mode: "always, or maybe off" says two.
             span = [where or ""] + [c for c, _ in parts[index + 1:][:next(
-                (i for i, (c, _) in enumerate(parts[index + 1:])
-                 if any(_mentions(STAT_NAMES, s, c) for s in STATS)), len(parts))]]
+                (i for i, (c, _) in enumerate(parts[index + 1:]) if _names_something(c)),
+                len(parts))]]
             if where and not any(_mentions(MODE_NAMES, other, text)
                                  for other in MODES if other != mode for text in span):
                 return Action(name, {"stat": stat, "mode": mode})
@@ -381,8 +399,13 @@ def _admit(name: str, args: dict, request: str) -> Action | Refusal:
         available = args.get("available")
         if game is None or not isinstance(available, bool):
             return Refusal(name, f"{args.get('game')!r} is not a Kilix game, or no on/off")
-        for clause, verb_clause in parts:
-            if not _mentions(LAUNCH_NAMES, game, clause):
+        for index, (clause, verb_clause) in enumerate(parts):
+            named = _mentions(LAUNCH_NAMES, game, clause)
+            # "fire up pong and afterwards make it unavailable"
+            if not named and index and re.search(r"\b(?:it|that one|that game)\b", clause) \
+                    and _mentions(LAUNCH_NAMES, game, parts[index - 1][0]):
+                named, verb_clause = True, clause
+            if not named:
                 continue
             reason = _refused_context(clause, verb_clause)
             if reason:

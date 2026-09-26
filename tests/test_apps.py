@@ -131,6 +131,48 @@ class Guards(unittest.TestCase):
                          [["show", {"item": "clock", "on": False}]])
 
 
+class TemplateRows(unittest.TestCase):
+    """Phrasings the kilix_apps training templates use, which the checks once
+    refused (mutants AP20-AP23)."""
+
+    def test_it_after_a_launch_is_that_game(self):                                     # AP21
+        self.assertEqual(admitted("fire up pong and afterwards make it unavailable",
+                                  [call("launch", app="kilix-pong"),
+                                   call("game", game="kilix-pong", available=False)]),
+                         [["launch", {"app": "kilix-pong"}],
+                          ["game", {"game": "kilix-pong", "available": False}]])
+
+    def test_a_longer_bare_noun_phrase_takes_the_verb_but_a_sentence_does_not(self):  # AP20
+        self.assertEqual(admitted("remove the read aloud and wifi icons from the top bar",
+                                  [call("show", item="speak", on=False),
+                                   call("show", item="network", on=False)]),
+                         [["show", {"item": "speak", "on": False}],
+                          ["show", {"item": "network", "on": False}]])
+        self.assertEqual(admitted("hide the clock and the battery is low",
+                                  [call("show", item="clock", on=False),
+                                   call("show", item="battery", on=False)]),
+                         [["show", {"item": "clock", "on": False}]])
+
+    def test_another_things_clause_is_not_a_second_mode(self):                        # AP22
+        self.assertEqual(admitted("set cpu to always and hide the dictate",
+                                  [call("pane_stat", stat="cpu", mode="always"),
+                                   call("show", item="dictate", on=False)]),
+                         [["pane_stat", {"stat": "cpu", "mode": "always"}],
+                          ["show", {"item": "dictate", "on": False}]])
+
+    def test_a_longer_phrasal_gap(self):
+        self.assertEqual(admitted("turn the text to speech button on",
+                                  [call("show", item="speak", on=True)]),
+                         [["show", {"item": "speak", "on": True}]])
+
+    def test_the_settings_app_is_an_app_not_a_settings_verb(self):                   # AP23
+        self.assertEqual(admitted("open the weather app and the settings app",
+                                  [call("launch", app="kilix-weather"),
+                                   call("launch", app="kilix-settings-center")]),
+                         [["launch", {"app": "kilix-weather"}],
+                          ["launch", {"app": "kilix-settings-center"}]])
+
+
 class Bait(unittest.TestCase):
     """Requests that must do nothing, each with every misreading a model could
     plausibly make of it."""
