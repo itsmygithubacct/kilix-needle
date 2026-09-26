@@ -582,6 +582,21 @@ class ReviewR12Round2(unittest.TestCase):
                                    call("pane_stat", stat="memory", mode="off")]),
                          [["pane_stat", {"stat": "cpu", "mode": "always"}],
                           ["pane_stat", {"stat": "memory", "mode": "off"}]])
+        for request in ("drop the volume to half", "drop the volume",                # held-out v2
+                        "lower the volume", "set the volume to 30 percent", "volume at 50%",
+                        "kill the wifi", "cut the mic"):
+            self.assertEqual(admitted(request, [call("show", item=i, on=False)
+                                                for i in ("volume", "network", "dictate")]),
+                             [], request)
+        self.assertEqual(admitted("show the volume at 50%",                            # AP130
+                                  [call("show", item="volume", on=True)]), [])
+        self.assertEqual(admitted("switch off the volume and the battery icons",       # AP131
+                                  [call("show", item="volume", on=False)]),
+                         [["show", {"item": "volume", "on": False}]])
+        for request, item in (("hide the volume", "volume"), ("drop the volume icon", "volume"),
+                              ("remove the wifi indicator", "network")):
+            self.assertEqual(admitted(request, [call("show", item=item, on=False)]),
+                             [["show", {"item": item, "on": False}]], request)
         self.assertEqual(admitted("clock off, show the clock",                         # KN-R12-801
                                   [call("show", item="clock", on=True)]), [])
         self.assertEqual(admitted("doom disabled, enable doom",

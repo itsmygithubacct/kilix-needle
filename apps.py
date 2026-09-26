@@ -299,6 +299,8 @@ _WHEN = re.compile(r"\b(?:later|tonight|tomorrow|today|yesterday|after|before|du
                    r"weekends?|weekdays?|every (?:day|night|morning|evening))\b")
 _SEQUENCE = re.compile(r"\b(?:(?:and )?(?:after that|afterwards?)|before i forget)\b")
 # Alternatives, and "all games bar doom".
+_LEVEL = re.compile(r"\b(?:to|by|at)\s+(?:half|max(?:imum)?|min(?:imum)?|zero|full|\d+)\b|"
+                    r"\d\s*%|\bpercent\b|\blouder\b|\bquieter\b")
 _EITHER = re.compile(r"\b(?:or|either)\b")
 _BAR_SAVE = re.compile(r"\b(?:all|every|everything|each|any)\b.*(?<!top )(?<!status )(?<!the )"
                        r"(?<!task )(?<!menu )(?<!my )(?<!panes )\b(?:bar|save)\b")
@@ -324,7 +326,11 @@ _NEW_TAB = re.compile(r"\b(?:in|into)\s+(?:a|another|its own)\s+(?:new\s+)?tab\b
 
 # "turn off the microphone" is the device, not the pane button.
 _DEVICE_ITEMS = frozenset({"volume", "dictate", "speak", "network"})   # "turn off the wifi"
-_DEVICE_VERB = re.compile(r"\b(?:turn|switch|mute|unmute|disable|enable|kill|cut)\b")
+# Only a display verb or a widget word makes a device word the indicator
+# (held-out v2: "drop the volume to half" read "drop" as hide).
+_DISPLAY_VERB = re.compile(r"\b(?:show|hide|hidden|display|unhide|reveal|stop showing|get rid of|"
+                           r"remove|lose|restore|want to see|take\b.*\boff|(?:put|bring)\b.*\bback|"
+                           r"(?:don'?t|do not|no longer) (?:need|want))\b")
 _WIDGET = re.compile(r"\b(?:buttons?|icons?|indicators?|widgets?|bar|panes?)\b")
 
 
@@ -500,6 +506,8 @@ def _refusal(text: str) -> str | None:
         return "the request is a condition or a supposition, not an instruction"
     if _WHEN.search(_SEQUENCE.sub(" ", text)):
         return "the request says when, not now"
+    if _LEVEL.search(text):
+        return "volume and other levels are not set here"
     if _EITHER.search(text) or _BAR_SAVE.search(text):
         return "the request offers alternatives or exceptions: name just what to change"
     if _INSTALL.search(text):
@@ -617,8 +625,11 @@ def _admit(name: str, args: dict, reading: Reading) -> Action | Refusal:
         if _both_ways(parts, lambda text: _mentions_item(item, text)):
             return Refusal(name, f"the request says {item} both ways")
         for part in parts:
-            if item in _DEVICE_ITEMS and _DEVICE_VERB.search(part.verb) \
-                    and not _WIDGET.search(part.text):
+            # The widget word may be in the verb's clause or its continuations
+            # ("remove the read aloud and wifi icons from the top bar").
+            group = " ".join(p.text for p in parts if p.verb == part.verb)
+            if item in _DEVICE_ITEMS and not _DISPLAY_VERB.search(part.verb) \
+                    and not _WIDGET.search(group):
                 continue
             # "hide the clock and doom": a bare name continues only its own kind.
             if part.bare and not any(_mentions_item(other, part.verb) for other in ITEMS):
