@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import re
 
-from actions import Refusal, _clauses, normalize
+from actions import Refusal, normalize
 
 # ---------------------------------------------------------------------------
 # What Kilix has. tests/test_apps.py holds these to the vendored catalog and,
@@ -281,7 +281,7 @@ _REPORTED = re.compile(r"\b(?:anyone|anybody|someone|somebody|everyone|everybody
                        r"says|said|say|saying|told|tells|telling|tell me to|asked|asks|"
                        r"asking|wrote|writes|written|reads|read out|according to|claims|"
                        r"claimed|wants me to|suggest\w*|recommend\w*|mention\w*|quot\w*|"
-                       r"instruct\w*)\b|\"")
+                       r"instruct\w*)\b|\"|(?<!\w)'|'(?!\w)")    # quotation marks, not apostrophes
 _QUESTION = re.compile(r"^(?:(?:so|and|but|ok|okay|hey|hmm|um|well)\s+)*(?:should|shall|"
                        r"how(?! about)|what|why|when|where|which|who|whose|is|are|am|was|were|"
                        r"does|did|do (?:i|we|you)|has|had|have (?:you|i|we)|will (?:i|it|that)|"
@@ -340,6 +340,9 @@ _TERSE_STAT = re.compile(rf"(?:the )?(?:pane )?(?:{_alternation(STAT_NAMES)})(?:
 _TERSE_SETTINGS = re.compile(rf"(?:(?:the )?(?:settings|options|preferences) for (?:the )?"
                              rf"(?:{_alternation(SECTION_NAMES)})|(?:the )?(?:{_alternation(SECTION_NAMES)}) "
                              rf"(?:settings|options|preferences|section|page))(?: please)?")
+
+
+_CLAUSE_SPLIT = re.compile(r"\s*(?:,|;|\band then\b|\bthen\b|\band\b)\s*")
 
 
 def _plain_words(text: str) -> str:
@@ -522,7 +525,9 @@ def _read(request: str) -> Reading:
     sentence = sentence.rstrip(" .!?")
     clauses = []
     for index, chunk in enumerate(re.split(r"\s*,?\s*\bbut\b\s*", sentence)):
-        pieces = [c.strip() for c in _clauses(chunk) if c.strip()]
+        # Its own split, not the panes job's: that one blanks quoted text, and a
+        # blanked span vanished from the reading (review R12 round 4).
+        pieces = [c.strip() for c in _CLAUSE_SPLIT.split(chunk) if c.strip()]
         clauses += [(c, index > 0 and n == 0) for n, c in enumerate(pieces)]
     parts, last = [], None
     for index, (clause, after_but) in enumerate(clauses):

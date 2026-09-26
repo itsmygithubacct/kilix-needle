@@ -438,6 +438,8 @@ class ReviewR12Round2(unittest.TestCase):
                         "open the voice settings he goes, open doom",
                         "open doom, open the voice settings as a joke"):
             self.assertIsNotNone(apps.plain(request, [screen, both[0]]), request)
+        self.assertIsNotNone(apps.plain("open the voice settings, go to the dry run page, open doom",
+                                        [screen, both[0]]))                         # R12 RM69
         self.assertIsNone(apps.plain("open doom, take me to the voice section", [screen, both[0]]))
         self.assertIsNone(apps.plain("open settings for voice and open doom", [screen, both[0]]))
 
@@ -518,6 +520,19 @@ class ReviewR12Round2(unittest.TestCase):
                                   [call("show", item="clock", on=False)]), [])
         both = [apps.Action("launch", {"app": "solitaire"}), apps.Action("launch", {"app": "doom"})]
         self.assertIsNotNone(apps.plain("open solitaire and doom", both))
+
+    def test_quoted_words_never_vanish(self):                                     # KN-R12-401
+        for request in ("'he goes', open doom", "open doom, 'n.o.t'",
+                        "open doom, 'translate to french'", "open doom, `per the ticket`",
+                        "open doom, \u02bcper the ticket\u02bc"):
+            self.assertEqual(admitted(request, [call("launch", app="doom")]), [], request)
+        # Apostrophes inside words are not quotation marks.
+        self.assertEqual(admitted("let's play doom", [call("launch", app="doom")]),
+                         [["launch", {"app": "doom"}]])
+        # Nothing said is dropped from the reading.
+        reading = apps._read("open doom, per the ticket, and then hide the clock")
+        self.assertEqual([p.text for p in reading.parts],
+                         ["open doom", "per the ticket", "hide the clock"])
 
     def test_disable_then_launch_refuses_the_launch_in_either_order(self):        # KN-R12-206
         for calls in ([call("game", game="doom", available=False), call("launch", app="doom")],
