@@ -293,14 +293,14 @@ _CONDITION = re.compile(r"\b(?:if|unless|whether|in case|suppose|supposing|imagi
                         r"how about (?!a game of|a round of|some\b))\b")
 # "hide the clock later": a when is not now. Sequence words are fine.
 _WHEN = re.compile(r"\b(?:later|tonight|tomorrow|today|yesterday|after|before|during|until|till|"
-                   r"whenever|while|midnight|noon|o'?clock|\d+ ?(?:am|pm)|in \d+|in an? (?:hour|"
+                   r"whenever|while (?:i|you|we|he|she|they|the|my)|midnight|noon|o'?clock|\d+ ?(?:am|pm)|in \d+|in an? (?:hour|"
                    r"minute|second|bit|while|moment)|in a few|soon|eventually|someday|next|"
                    r"weekends?|weekdays?|every (?:day|night|morning|evening))\b")
 _SEQUENCE = re.compile(r"\b(?:(?:and )?(?:after that|afterwards?)|before i forget)\b")
 # Alternatives, and "all games bar doom".
 _EITHER = re.compile(r"\b(?:or|either)\b")
 _BAR_SAVE = re.compile(r"\b(?:all|every|everything|each|any)\b.*(?<!top )(?<!status )(?<!the )"
-                       r"(?<!task )(?<!menu )\b(?:bar|save)\b")
+                       r"(?<!task )(?<!menu )(?<!my )(?<!panes )\b(?:bar|save)\b")
 _CONTRAST = re.compile(r"\b(?:except|excepting|excluding|rather than|instead of|instead|"
                        r"but not|other than|apart from|aside from|besides|save for|in place of|"
                        r"as opposed to|versus|vs)\b")
@@ -749,6 +749,9 @@ _PLAIN_FORMS = {
                   (r"(?:hide|stop showing) (?:the )?pane (?P<name>.+?)", "off"),
                   (r"always show (?:the )?pane (?P<name>.+?)", "always")],
 }
+_SCREEN_FORM = re.compile(_P_HEAD + r"(?:open|show me|take me to|go to) (?:the )?(?:(?P<name>[\w ]+?) "
+                          r"(?:settings|section|page)|settings (?:for|at) (?:the )?(?P<name2>[\w ]+?))"
+                          + _P_TAIL)
 _PLAIN_TABLE = {"launch": ("app", LAUNCH_NAMES), "show": ("item", ITEM_NAMES),
                 "game": ("game", LAUNCH_NAMES), "pane_stat": ("stat", STAT_NAMES)}
 
@@ -809,12 +812,16 @@ def plain(request: str, actions: list) -> str | None:
                     "pane_stat": "set"}[action.kind]
             return f"it does not simply say to {what} {next(iter(action.args.values()))}"
         accounted |= found
-    screens = [a for a in actions if isinstance(a, Action) and a.kind == "settings"]
+    # A settings screen accounts for a clause only in its own canonical form
+    # (review R12 round 3: "open the voice settings as a dry run, open doom").
+    screens = [a.args["section"] for a in actions
+               if isinstance(a, Action) and a.kind == "settings"]
     for index, part in enumerate(reading.parts):
         if index in accounted or _COURTESY.fullmatch(part.text):
             continue
-        if any(isinstance(_admit("settings", a.args, Reading(parts=(part,))), Action)
-               for a in screens):
+        screen = _SCREEN_FORM.fullmatch(part.text)
+        if screen and any(_is_name(SECTION_NAMES, section, screen["name"] or screen["name2"])
+                          for section in screens):
             continue
         return f"it says more than the actions do: {part.text!r}"
     return None

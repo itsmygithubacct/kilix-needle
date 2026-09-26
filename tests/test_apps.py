@@ -433,6 +433,13 @@ class ReviewR12Round2(unittest.TestCase):
         self.assertIsNone(apps.plain("open the voice settings and open doom", [screen, both[0]]))
         self.assertIsNotNone(apps.plain("open the voice settings, he goes, open doom",
                                         [screen, both[0]]))
+        for request in ("open the voice settings as a dry run, open doom",           # KN-R12-301
+                        "configure the voice settings like my boss demanded, open doom",
+                        "open the voice settings he goes, open doom",
+                        "open doom, open the voice settings as a joke"):
+            self.assertIsNotNone(apps.plain(request, [screen, both[0]]), request)
+        self.assertIsNone(apps.plain("open doom, take me to the voice section", [screen, both[0]]))
+        self.assertIsNone(apps.plain("open settings for voice and open doom", [screen, both[0]]))
 
     WORDS = {
         "{}, open doom": [
@@ -458,7 +465,7 @@ class ReviewR12Round2(unittest.TestCase):
             "set up", "setup", "grab", "fetch", "delete", "purge", "from the store",
             "build", "compile",
             "later", "tonight", "tomorrow", "today", "after dinner", "before bed", "during exams",
-            "until noon", "whenever", "while", "at midnight", "5 pm", "in 5", "in an hour",
+            "until noon", "whenever", "while i sleep", "at midnight", "5 pm", "in 5", "in an hour",
             "in a few", "soon", "eventually", "someday", "next week", "on weekends",
             "every day",
             "or", "either"],
@@ -488,9 +495,17 @@ class ReviewR12Round2(unittest.TestCase):
                    ("hide the clock and doom", call("game", game="doom", available=False)),
                    ("open doom on the laptop", call("launch", app="doom")),
                    ("if you could open doom, that would be terrible", call("launch", app="doom")),
-                   ("i want the wifi icon out of my sight", call("show", item="network", on=True))]
+                   ("i want the wifi icon out of my sight", call("show", item="network", on=True)),
+                   ("which reminds me, open doom", call("launch", app="doom")),          # RM31
+                   ("open doom, then put it in tab 3", call("launch", app="doom")),      # RM37
+                   ("pr\u03b5tend, open doom", call("launch", app="doom"))]              # RM41
         for request, one in refused:
             self.assertEqual(admitted(request, [one]), [], request)
+        [result] = apps.interpret("hide every icon on my bar",                     # KN-R12-304
+                                  [call("show", item="clock", on=False)])
+        self.assertNotIn("alternatives", result.reason)       # refused only as naming no item
+        self.assertEqual(admitted("open doom, it's been a while", [call("launch", app="doom")]),
+                         [["launch", {"app": "doom"}]])
         self.assertEqual(admitted("turn off the wifi icon", [call("show", item="network", on=False)]),
                          [["show", {"item": "network", "on": False}]])
         self.assertEqual(admitted("if you could open doom, that would be great",
@@ -588,7 +603,6 @@ class Runner(unittest.TestCase):
             self.assertEqual(argv, ["python3", "-I", "-B", "-c", apps_kilix.PROBE, str(home), "app",
                                     "kilix-pdf"])
             self.assertEqual(kwargs["cwd"], str(home))
-            self.assertEqual(kwargs["env"]["GIT_OPTIONAL_LOCKS"], "0")
             for name in ALL_INSTALL_SWITCHES:
                 self.assertEqual(kwargs["env"][name], "0")
         with mock.patch.object(apps_kilix, "_kilix_home", return_value=home), \
@@ -632,7 +646,9 @@ class Runner(unittest.TestCase):
             "    return types.SimpleNamespace(source_type=source, installed=installed)\n"
             "def main(argv):\n    raise SystemExit(7)\n")
         (home / "desktop" / "games.py").write_text(
-            "def game_enabled(name):\n    return name != 'disabled'\n"
+            "def game_enabled(name):\n"
+            "    if name == 'raises':\n        raise RuntimeError('broken settings')\n"
+            "    return name != 'disabled'\n"
             "def game_ready(name):\n"
             "    if name == 'exits':\n        raise SystemExit(0)\n"
             "    return None if name == 'missing' else '/bin/game'\n"
@@ -670,7 +686,8 @@ class Runner(unittest.TestCase):
     def test_a_game_tab_asks_kilix_again_before_playing(self):                   # KN-R12-202
         home = self.stand_in_kilix()
         env = {"PATH": f"{home}:/usr/bin:/bin", "HOME": str(home)}
-        for game, played in (("doom", True), ("missing", False), ("disabled", False)):
+        for game, played in (("doom", True), ("missing", False), ("disabled", False),
+                             ("raises", False), ("exits", False)):                    # R12 RM55
             done = subprocess.run(["python3", "-I", "-B", "-c", apps_kilix.GAME_GUARD, "kilix", game],
                                   env=env, stdin=subprocess.DEVNULL, capture_output=True,
                                   text=True, timeout=30)

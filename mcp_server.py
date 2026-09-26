@@ -58,8 +58,9 @@ _APPS_REQUEST = {"type": "string",
 TOOL_LIST += [
     {"name": "kilix_apps_plan",
      "description": "Show what a plain request would do to Kilix apps, games and settings. "
-                    "Changes nothing; it runs Kilix's own readiness checks in an isolated "
-                    "Python, which at most creates Kilix's empty apps directory.",
+                    "Changes no setting and installs nothing. It runs Kilix's own readiness "
+                    "checks in an isolated Python; they may create Kilix's empty apps "
+                    "directory and refresh a managed checkout's git index.",
      "inputSchema": {"type": "object", "properties": {"request": _APPS_REQUEST},
                      "required": ["request"], "additionalProperties": False}},
     {"name": "kilix_apps_act",

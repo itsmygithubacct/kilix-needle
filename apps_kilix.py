@@ -111,7 +111,7 @@ def _ready(kind: str, name: str) -> bool:
         return False
     try:
         done = subprocess.run([*_PYTHON, PROBE, str(home), kind, name], cwd=str(home),
-                              env=dict(os.environ, **NO_INSTALL, GIT_OPTIONAL_LOCKS="0"),
+                              env=dict(os.environ, **NO_INSTALL),
                               capture_output=True, timeout=30, check=False)
     except (OSError, subprocess.TimeoutExpired):
         return False
