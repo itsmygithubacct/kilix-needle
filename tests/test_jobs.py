@@ -14,6 +14,9 @@ import jobs
 import needle_cli
 import tuning
 
+# A job registered but not built (no pack, no gates), for the refusal tests.
+NOTES = jobs.Job("notes", "a job not built, for the tests", "evals/notes",
+                 "evals/notes/dev.jsonl", "evals/notes/test.jsonl", "evals/notes/heldout-v1.jsonl")
 APPS = jobs.Job("apps", "a second job, for the tests", "evals/apps",
                 "evals/apps/dev.jsonl", "evals/apps/test.jsonl", "evals/apps/heldout-v1.jsonl")
 
@@ -25,7 +28,7 @@ class Selection(unittest.TestCase):
         self.home = Path(self.dir.name)
         for patcher in (mock.patch.multiple(tuning, APP_HOME=self.home,
                                             SELECTION=self.home / "model.json"),
-                        mock.patch.dict(jobs.JOBS, {"apps": APPS})):
+                        mock.patch.dict(jobs.JOBS, {"apps": APPS, "notes": NOTES})):
             patcher.start()
             self.addCleanup(patcher.stop)
 
@@ -87,7 +90,7 @@ class Selection(unittest.TestCase):
         status = json.loads(out.getvalue())
         self.assertEqual(status["job"], "panes")
         self.assertEqual(status["selected"]["run"], "qat-6")
-        self.assertEqual(sorted(status["jobs"]), ["apps", "panes"])
+        self.assertEqual(sorted(status["jobs"]), ["apps", "notes", "panes"])
         self.assertIsNone(status["jobs"]["apps"]["selected"])
         with self.assertRaises(SystemExit), mock.patch.object(sys, "stderr", io.StringIO()):
             tuning.main(["--job", "nothing", "--status"])
@@ -134,7 +137,7 @@ class ReviewR11(unittest.TestCase):
         self.home = Path(self.dir.name)
         for patcher in (mock.patch.multiple(tuning, APP_HOME=self.home,
                                             SELECTION=self.home / "model.json"),
-                        mock.patch.dict(jobs.JOBS, {"apps": APPS})):
+                        mock.patch.dict(jobs.JOBS, {"apps": APPS, "notes": NOTES})):
             patcher.start()
             self.addCleanup(patcher.stop)
         self.file = self.home / "model.json"
@@ -203,13 +206,13 @@ class ReviewR11(unittest.TestCase):
         self.assertEqual(status["jobs"]["panes"]["in_use"], "x-panes")
 
     def test_jobs_not_built_yet_are_refused_not_run_as_panes(self):        # KN-R11-01, -02, -07
-        with self.assertRaisesRegex(tuning.TuneError, "tuning for the apps job"):
-            tuning.tune(None, None, None, "apps")
-        with self.assertRaisesRegex(tuning.TuneError, "gates for the apps job"):
-            tuning.stage_gates(tuning.Run(self.home / "r"), {}, None, "ab" * 32, "apps")
+        with self.assertRaisesRegex(tuning.TuneError, "tuning for the notes job"):
+            tuning.tune(None, None, None, "notes")
+        with self.assertRaisesRegex(tuning.TuneError, "gates for the notes job"):
+            tuning.stage_gates(tuning.Run(self.home / "r"), {}, None, "ab" * 32, "notes")
         err = io.StringIO()
         with mock.patch.object(sys, "stderr", err):
-            self.assertEqual(tuning.main(["--job", "apps"]), 1)
+            self.assertEqual(tuning.main(["--job", "notes"]), 1)
         self.assertIsNone(tuning.selected("panes"))
 
     def _incoming(self, name, data):
@@ -425,12 +428,14 @@ class ReviewR11(unittest.TestCase):
     def test_nothing_is_created_for_a_job_not_built(self):                  # KN-R11-15
         err = io.StringIO()
         with mock.patch.object(sys, "stderr", err):
-            self.assertEqual(tuning.main(["--job", "apps", "--background"]), 1)
+            self.assertEqual(tuning.main(["--job", "notes", "--background"]), 1)
         run, _ = self._incoming("a2", b"w")
+        report = json.loads((run / "gates.json").read_text())
+        (run / "gates.json").write_text(json.dumps({**report, "job": "notes"}))
         with self.assertRaisesRegex(tuning.TuneError, "not built"):
-            tuning.select_run(run, "apps")
+            tuning.select_run(run, "notes")
         self.assertFalse((self.home / "tuning").exists())
-        tuning.deselect("apps")
+        tuning.deselect("notes")
         self.assertFalse(self.file.exists())
         self.assertFalse((self.home / "model.json.lock").exists())
 

@@ -43,15 +43,18 @@ import jobs
 REPO = Path(__file__).resolve().parent
 
 
-def library_path() -> Path:
-    """kilix-ml's kilix_panes pack: the tuning library has one source, kilix-ml.
+PACKS = {"panes": "kilix_panes", "apps": "kilix_apps"}   # kilix-ml domain per job
+
+
+def library_path(job: str = jobs.DEFAULT) -> Path:
+    """kilix-ml's pack for a job: the tuning library has one source, kilix-ml.
 
     KILIX_ML_HOME names a kilix-ml checkout (a workspace's live copy);
     otherwise the pinned third_party/kilix-ml submodule is used.
     """
     configured = os.environ.get("KILIX_ML_HOME")
     ml = Path(configured).expanduser() if configured else REPO / "third_party" / "kilix-ml"
-    return ml / "domains" / "kilix_panes"
+    return ml / "domains" / PACKS[jobs.get(job).name]
 
 
 LIBRARY = library_path()
@@ -75,6 +78,10 @@ SUPPLEMENT = REPO / "corpus-supplement"
 RECIPE = {"train": {"epochs": 4, "qat": True},
           "data": {"supplements": [SUPPLEMENT], "cap_share": 0.18},
           "gates": {"heldout": jobs.JOBS["panes"].heldout}}
+# The apps job: the same training method (QAT, 4 epochs), its own blind pack
+# and no supplements or cap yet; its gate is its own held-out set.
+APPS_RECIPE = {"train": {"epochs": 4, "qat": True}, "data": {},
+               "gates": {"heldout": jobs.JOBS["apps"].heldout}}
 STAGES = ("base", "source", "env", "data", "train", "export", "gates", "select")
 
 
@@ -102,11 +109,11 @@ def load_manifest(library: Path = LIBRARY) -> dict:
     return manifest
 
 
-def recipe(manifest: dict) -> dict:
+def recipe(manifest: dict, job: str = jobs.DEFAULT) -> dict:
     """The manifest with kilix-needle's recipe applied, excluding every eval set."""
     merged = {key: dict(value) if isinstance(value, dict) else value
               for key, value in manifest.items()}
-    for section, values in RECIPE.items():
+    for section, values in (APPS_RECIPE if jobs.get(job).name == "apps" else RECIPE).items():
         merged.setdefault(section, {}).update(values)
     # Every job's sets, not only this job's: evals/<job>/ as well as evals/.
     evals = sorted(str(p.relative_to(REPO)) for p in (REPO / "evals").rglob("*.jsonl"))
@@ -205,7 +212,12 @@ def stage_env(run: Run, manifest: dict, library: Path) -> None:
 
 
 _INTENT = {"open": "open a {kind}", "close": "close a {kind}", "go_to": "go to a {kind}",
-           "adjust": "change the current tab", "run_in_pane": "type a command into a pane"}
+           "adjust": "change the current tab", "run_in_pane": "type a command into a pane",
+           "launch": "open an app", "show": "show or hide an indicator or button",
+           "pane_stat": "set how panes show a stat", "game": "change the games list",
+           "settings": "open the settings"}
+_NO_APP_TOOL = ("No tool fits: the request does not ask to open a Kilix app or game, "
+                "or to show, hide or set a Kilix indicator, game or setting.")
 _NO_TOOL = ("No tool fits: the request does not ask to open, close, go to, change or "
             "type into a pane or tab.")
 
@@ -300,8 +312,43 @@ def cap_share(rows: list[dict], share: float, seed: int) -> tuple[list[dict], di
     return kept, capped
 
 
-def build_data(library: Path, manifest: dict, out: Path) -> dict:
+def _build_apps_data(library: Path, manifest: dict, out: Path) -> dict:
+    """The apps job's rows: its own five tools, kept only when apps' checks
+    admit every labelled action exactly."""
+    import apps
+    data = manifest["data"]
+    if data["toolset"] != "apps":
+        raise TuneError("the apps job trains its own five-tool schema")
+    corpus = load_generator(library)
+    exclude = set()
+    for rel in data["exclude"]:
+        with open(REPO / rel, encoding="utf-8") as handle:
+            exclude |= {corpus._fold(json.loads(line)["request"]) for line in handle if line.strip()}
+    rows, dropped = corpus.generate(data["seed"], data["per_template"], exclude)
+    examples, inconsistent = [], 0
+    for row in rows:
+        calls = [{"name": kind, "arguments": args} for kind, args in row["actions"]]
+        admitted = [[a.kind, a.args] for a in apps.interpret(row["query"], calls)
+                    if isinstance(a, apps.Action)]
+        if admitted != row["actions"]:
+            inconsistent += 1   # a training answer the tool would refuse teaches nothing
+            continue
+        examples.append({"query": row["query"], "tools": apps.TOOLS,
+                         "reasoning": reasoning_for(calls, row.get("spans", []))
+                         if calls else _NO_APP_TOOL,
+                         "answers": calls})
+    stats = {"generated": len(rows), "kept": len(examples), "eval_matches_dropped": dropped,
+             "inconsistent_dropped": inconsistent}
+    with open(out, "w", encoding="utf-8") as handle:
+        for example in examples:
+            handle.write(json.dumps(example, ensure_ascii=False) + "\n")
+    return stats
+
+
+def build_data(library: Path, manifest: dict, out: Path, job: str = jobs.DEFAULT) -> dict:
     """Generate, check against the running tool's rules, write upstream's format."""
+    if jobs.get(job).name == "apps":
+        return _build_apps_data(library, manifest, out)
     data = manifest["data"]
     added = []
     if data.get("supplements"):
@@ -469,20 +516,25 @@ def stage_gates(run: Run, manifest: dict, library_image, cact_sha: str,
     weights = asset.load_verified(run.root / "tuned.cact", cact_sha,
                                   (run.root / "tuned.cact").stat().st_size)
     sets = {"dev": spec.dev, "test": spec.test, "heldout": manifest["gates"]["heldout"]}
+    if spec.name == "apps":
+        import apps
+        tools, translate, reference_tools = apps.TOOLS, (lambda calls: calls), apps.TOOLS
+    else:
+        from actions import LEGACY_TOOLS
+        tools, translate, reference_tools = toolset.TOOLS, toolset.to_actions, LEGACY_TOOLS
     results = {}
-    with weights, LibEngine(library_image, toolset.TOOLS, weights) as engine:
+    with weights, LibEngine(library_image, tools, weights) as engine:
         for name, rel in sets.items():
             with open(REPO / rel, encoding="utf-8") as handle:
                 cases = [json.loads(line) for line in handle if line.strip()]
-            results[name] = score(engine, cases, 1, toolset.to_actions)
+            results[name] = score(engine, cases, 1, translate, spec.name)
     # The reference is measured now, with these checks and this held-out set:
-    # the untuned model (the library's built-in weights) with the ten-tool
-    # schema, which is the configuration used when no tuned model is selected.
-    from actions import LEGACY_TOOLS as TEN
+    # the untuned model (the library's built-in weights) with the schema used
+    # when no tuned model is selected (panes: the ten tools; apps: its five).
     with open(REPO / sets["heldout"], encoding="utf-8") as handle:
         heldout_cases = [json.loads(line) for line in handle if line.strip()]
-    with LibEngine(library_image, TEN) as base:
-        reference = score(base, heldout_cases, 1)
+    with LibEngine(library_image, reference_tools) as base:
+        reference = score(base, heldout_cases, 1, job=spec.name)
     failures = gate(manifest, results, reference)
     report = {"job": job, "cact_sha256": cact_sha, "failures": failures,
               "totals": {name: r["totals"] for name, r in results.items()},
@@ -619,7 +671,7 @@ def _check_run_name(name: str) -> None:
 def _check_gated_job(job: str) -> None:
     """Refuse a job whose gates are not built, before anything is created."""
     jobs.get(job)
-    if job != "panes":
+    if job not in PACKS:
         raise TuneError(f"the gates for the {job} job are not built yet")
 
 
@@ -680,8 +732,8 @@ def select_run(source: Path, job: str = jobs.DEFAULT) -> Path:
             raise TuneError(f"the gates need the needle2 runtime to run: {error}") from error
         with library_image:
             try:
-                report = stage_gates(Run(gate_dir), recipe(load_manifest()), library_image,
-                                     digest, job)
+                report = stage_gates(Run(gate_dir), recipe(load_manifest(library_path(job)), job),
+                                     library_image, digest, job)
             except LibEngineError as error:
                 # Review KN-R2-07: rejected bytes were a traceback, not a refusal.
                 raise TuneError(f"{source.name}: the runtime rejected the weights ({error})") \
@@ -744,13 +796,14 @@ def selected(job: str = jobs.DEFAULT) -> dict | None:
 def tune(base_dir: Path | None, library_file: str | None, run_name: str | None,
          job: str = jobs.DEFAULT) -> int:
     import asset
-    if job != "panes":
+    if job not in PACKS:
         # Review R11: --job was accepted and the panes model trained and selected.
         raise TuneError(f"tuning for the {job} job is not built yet")
     if run_name:
         _check_run_name(run_name)
-    manifest = recipe(load_manifest())
-    root = APP_HOME / "tuning" / (run_name or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"))
+    library = LIBRARY if job == "panes" else library_path(job)
+    manifest = recipe(load_manifest(library), job)
+    root = runs_dir(job) / (run_name or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"))
     _check_resumable(root)
     run = Run(root)
     print(f"kilix-needle tune: {run.root}")
@@ -762,21 +815,21 @@ def tune(base_dir: Path | None, library_file: str | None, run_name: str | None,
         if not run.done("source"):
             stage_source(run, manifest); run.mark("source")
         if not run.done("env"):
-            stage_env(run, manifest, LIBRARY); run.mark("env")
+            stage_env(run, manifest, library); run.mark("env")
         if not run.done("data"):
-            stats = build_data(LIBRARY, manifest, run.root / "train.jsonl")
+            stats = build_data(library, manifest, run.root / "train.jsonl", job)
             run.log(f"data: {stats}"); run.mark("data", stats)
         if not run.done("train"):
             stage_train(run, manifest); run.mark("train")
         if not run.done("export"):
             digest = stage_export(run, manifest); run.mark("export", {"sha256": digest})
         digest = json.loads((run.root / ".export.done").read_text())["sha256"]
-        report = stage_gates(run, manifest, library_image, digest)
+        report = stage_gates(run, manifest, library_image, digest, job)
         run.mark("gates", report)
     if report["failures"]:
         print("kilix-needle tune: gates failed; the current model stays in use")
         return 1
-    select(run.root, digest)
+    select(run.root, digest, job)
     run.mark("select")
     run.log("select: the tuned model is now used")
     return 0
@@ -840,19 +893,19 @@ def main(argv: list[str]) -> int:
         return 0
     if args.background:
         # Refused here, not in the detached child (review R11).
-        if args.job != "panes":
+        if args.job not in PACKS:
             print(f"kilix-needle tune: tuning for the {args.job} job is not built yet",
                   file=sys.stderr)
             return 1
         try:
             if args.run:
                 _check_run_name(args.run)
-                _check_resumable(APP_HOME / "tuning" / args.run)
+                _check_resumable(runs_dir(args.job) / args.run)
         except TuneError as error:
             print(f"kilix-needle tune: {error}", file=sys.stderr)
             return 1
         name = args.run or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        root = APP_HOME / "tuning" / name
+        root = runs_dir(args.job) / name
         root.mkdir(parents=True, exist_ok=True, mode=0o700)
         rest = [a for a in argv if a != "--background"]
         if not args.run:
