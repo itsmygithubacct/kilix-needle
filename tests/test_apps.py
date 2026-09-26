@@ -105,6 +105,32 @@ class Admission(unittest.TestCase):
                                   [call("launch", app="solitaire")]), [])
 
 
+class Guards(unittest.TestCase):
+    """One test per guard that the rows above do not reach (mutants AP6-AP17)."""
+
+    def test_an_install_word_beside_an_opening_verb_refuses(self):              # AP6
+        self.assertEqual(admitted("download and open the weather app",
+                                  [call("launch", app="kilix-weather")]), [])
+        self.assertEqual(admitted("launch the weather app after downloading it",
+                                  [call("launch", app="kilix-weather")]), [])
+
+    def test_a_name_that_could_be_two_apps_refuses(self):                        # AP8
+        self.assertEqual(admitted("open pong doom", [call("launch", app="pong doom")]), [])
+
+    def test_a_shorter_name_inside_a_longer_one_is_the_longer(self):              # AP9
+        table = {"x": ["chess"], "y": ["chess bash"]}
+        self.assertIsNone(apps._mentions(table, "x", "play chess bash"))
+        self.assertIsNotNone(apps._mentions(table, "y", "play chess bash"))
+
+    def test_two_modes_in_one_clause_refuse(self):                               # AP12
+        self.assertEqual(admitted("show cpu on panes always, or maybe off",
+                                  [call("pane_stat", stat="cpu", mode="always")]), [])
+
+    def test_the_same_action_twice_is_one(self):                                 # AP17
+        self.assertEqual(admitted("hide the clock", [call("show", item="clock", on=False)] * 2),
+                         [["show", {"item": "clock", "on": False}]])
+
+
 class Bait(unittest.TestCase):
     """Requests that must do nothing, each with every misreading a model could
     plausibly make of it."""

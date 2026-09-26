@@ -327,6 +327,10 @@ def _admit(name: str, args: dict, request: str) -> Action | Refusal:
                 named, verb_clause = True, clause
             if not named:
                 continue
+            # "download and open X": a bare verb clause just before governs X too.
+            before = parts[index - 1][0] if index else ""
+            if before and len(before.split()) <= 2 and _UNSAFE_CONTEXT.search(before):
+                return Refusal(name, "installs, updates and removals are not done here")
             reason = _refused_context(clause, verb_clause)
             if reason:
                 return Refusal(name, reason)
@@ -363,8 +367,13 @@ def _admit(name: str, args: dict, request: str) -> Action | Refusal:
                                       parts[index + 1][0]):
                 nearby.append(parts[index + 1][0])
             where = next((text for text in nearby if _mentions(MODE_NAMES, mode, text)), None)
-            if where and not any(_mentions(MODE_NAMES, other, where)
-                                 for other in MODES if other != mode):
+            # Everything said about this stat, up to the next clause that names a
+            # stat, must say one mode: "always, or maybe off" says two.
+            span = [where or ""] + [c for c, _ in parts[index + 1:][:next(
+                (i for i, (c, _) in enumerate(parts[index + 1:])
+                 if any(_mentions(STAT_NAMES, s, c) for s in STATS)), len(parts))]]
+            if where and not any(_mentions(MODE_NAMES, other, text)
+                                 for other in MODES if other != mode for text in span):
                 return Action(name, {"stat": stat, "mode": mode})
         return Refusal(name, f"no part of the request sets pane {stat} to {mode}")
     if name == "game":
