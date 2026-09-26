@@ -389,6 +389,9 @@ class ReviewR12(unittest.TestCase):
                          [])
 
     def test_two_ways_or_a_disabled_launch_refuse(self):                          # KN-R12-10
+        self.assertEqual(admitted("disable doom and enable doom",
+                                  [call("game", game="doom", available=False),
+                                   call("game", game="doom", available=True)]), [])     # AP58
         self.assertEqual(admitted("hide the clock and show the clock",
                                   [call("show", item="clock", on=False),
                                    call("show", item="clock", on=True)]), [])
@@ -451,7 +454,7 @@ class ReviewR12Round2(unittest.TestCase):
             "belay", "abort", "oops", "maybe", "perhaps",
             "not", "never", "no", "none", "nothing", "don't", "do not", "avoid", "without",
             "cannot", "can't", "won't", "shouldn't", "no need to", "neither", "nor", "isn't",
-            "anyone", "someone", "everybody", "siri", "alexa", "he says", "she said", "say",
+            "anyone", "someone", "everybody", "siri", "alexa", "he types", "typed", "in the story", "he says", "she said", "say",
             "saying", "he told me", "tells", "telling", "tell me to", "he asked", "asks", "asking",
             "she wrote", "writes", "written", "the wiki reads", "read out", "according to the wiki",
             "claims", "claimed", "he wants me to", "suggested", "recommended", "mentioned",

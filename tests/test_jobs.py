@@ -107,15 +107,18 @@ class Selection(unittest.TestCase):
 
 
 class EvalSets(unittest.TestCase):
+    SETS = ("evals/dev.jsonl", "evals/apps/dev.jsonl", "evals/apps/heldout-v1.jsonl",
+            "evals/apps/heldout-v2.jsonl")
+
     def test_every_jobs_eval_sets_are_kept_out_of_training_data(self):
         with tempfile.TemporaryDirectory(prefix="kn-jobs-") as tmp:
             root = Path(tmp)
-            for rel in ("evals/dev.jsonl", "evals/apps/dev.jsonl", "evals/apps/heldout-v1.jsonl"):
+            for rel in self.SETS:
                 (root / rel).parent.mkdir(parents=True, exist_ok=True)
                 (root / rel).write_text("{}\n")
             with mock.patch.object(tuning, "REPO", root):
                 excluded = tuning.recipe(tuning.load_manifest())["data"]["exclude"]
-        for rel in ("evals/dev.jsonl", "evals/apps/dev.jsonl", "evals/apps/heldout-v1.jsonl"):
+        for rel in self.SETS:
             self.assertIn(rel, excluded)
 
     def test_the_panes_gate_is_the_jobs_heldout_set(self):
@@ -490,7 +493,7 @@ class AppsTuning(unittest.TestCase):
 
     def test_the_apps_recipe_is_its_own(self):                                     # R12 M21
         manifest = tuning.recipe(tuning.load_manifest(tuning.library_path("apps")), "apps")
-        self.assertEqual(manifest["gates"]["heldout"], "evals/apps/heldout-v1.jsonl")
+        self.assertEqual(manifest["gates"]["heldout"], "evals/apps/heldout-v2.jsonl")
         self.assertFalse(manifest["data"].get("supplements"))
         self.assertEqual(manifest["data"]["toolset"], "apps")
         evals = {str(p.relative_to(tuning.REPO)) for p in (tuning.REPO / "evals").rglob("*.jsonl")}

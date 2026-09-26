@@ -278,6 +278,7 @@ _CANCEL = re.compile(r"\b(?:cancel|never ?mind|nvm|scratch that|forget (?:it|tha
                      r"ignore (?:that|this|me)|just kidding|kidding|joking|jk|lol|psych|"
                      r"disregard|strike that|belay|abort|oops|maybe|perhaps)\b")
 _REPORTED = re.compile(r"\b(?:anyone|anybody|someone|somebody|everyone|everybody|siri|alexa|"
+                       r"typ(?:e|es|ed|ing)|story|"
                        r"says|said|say|saying|told|tells|telling|tell me to|asked|asks|"
                        r"asking|wrote|writes|written|reads|read out|according to|claims|"
                        r"claimed|wants me to|suggest\w*|recommend\w*|mention\w*|quot\w*|"
@@ -611,8 +612,10 @@ def _admit(name: str, args: dict, reading: Reading) -> Action | Refusal:
             return Refusal(name, "not a known indicator or button, or no on/off")
         # Said both ways anywhere in the request, it is refused (held-out v1:
         # "...: clock hidden, battery shown" admitted hiding the battery).
-        said = {_particle(p.text) if p.bare or p.on is None else p.on
+        said = {p.on if p.on is not None or not p.bare else _particle(p.text)
                 for p in parts if _mentions_item(item, p.text)}
+        said |= {_particle(p.text) for p in parts
+                 if p.bare and _mentions_item(item, p.text) and _particle(p.text) is not None}
         if {True, False} <= said or "both" in said:
             return Refusal(name, f"the request says {item} both ways")
         for part in parts:
