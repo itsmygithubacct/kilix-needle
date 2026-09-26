@@ -701,9 +701,11 @@ def _admit(name: str, args: dict, reading: Reading) -> Action | Refusal:
 
 def _both_ways(parts: tuple, names) -> bool:
     """Whether the request says a thing on in one place and off in another,
-    counting what a bare continuation inherits and what it says itself."""
+    counting what each clause reads as and every on/off word it says."""
     said = {p.on for p in parts if names(p.text) and p.on is not None}
-    said |= {_particle(p.text) for p in parts if names(p.text) and p.bare}
+    # Every clause's own on/off word counts, not only a bare one's (review R12
+    # round 8: "clock off, show the clock").
+    said |= {_particle(p.text) for p in parts if names(p.text)}
     return {True, False} <= said or "both" in said
 
 

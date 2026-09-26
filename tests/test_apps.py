@@ -582,6 +582,15 @@ class ReviewR12Round2(unittest.TestCase):
                                    call("pane_stat", stat="memory", mode="off")]),
                          [["pane_stat", {"stat": "cpu", "mode": "always"}],
                           ["pane_stat", {"stat": "memory", "mode": "off"}]])
+        self.assertEqual(admitted("clock off, show the clock",                         # KN-R12-801
+                                  [call("show", item="clock", on=True)]), [])
+        self.assertEqual(admitted("doom disabled, enable doom",
+                                  [call("game", game="doom", available=True)]), [])
+        # "it" names the game only through the clause before: only the clash
+        # rule refuses this (KN-R12-802, AP58).
+        self.assertEqual(admitted("enable doom, then disable it",
+                                  [call("game", game="doom", available=True),
+                                   call("game", game="doom", available=False)]), [])
         self.assertEqual(admitted("hide the clock in exchange for the battery",
                                   [call("show", item="clock", on=False)]), [])          # KN-R12-703
         for request, one in (("open the text editor, i need to type",                   # KN-R12-702
