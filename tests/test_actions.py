@@ -899,6 +899,9 @@ class ReviewR2Contract(unittest.TestCase):
     def test_typography_is_normalized_before_the_checks(self):
         [r] = interpret("don\u2019t close tab 2", [call("close_tab", tab="2")])
         self.assertIsInstance(r, Refusal)
+        for apostrophe in ("\u02bc", "\u02b9"):                       # review R12 (KN-R12-08)
+            [r] = interpret(f"don{apostrophe}t close tab 2", [call("close_tab", tab="2")])
+            self.assertIsInstance(r, Refusal, apostrophe)
 
 
 # 2026-09-24: 'close the tab of my build' (object ends at 'of') and

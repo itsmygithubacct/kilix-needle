@@ -476,5 +476,124 @@ class ReviewR11(unittest.TestCase):
             tuning.select_run(run, "apps")
 
 
+class AppsTuning(unittest.TestCase):
+    """The apps job tunes, gates and selects with its own pack, sets, schema
+    and checks (review R12: M20, M21, M22 and M26 survived with no test)."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory(prefix="kn-apps-tune-")
+        self.addCleanup(self.dir.cleanup)
+        self.home = Path(self.dir.name)
+        patcher = mock.patch.multiple(tuning, APP_HOME=self.home, SELECTION=self.home / "model.json")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_the_apps_recipe_is_its_own(self):                                     # R12 M21
+        manifest = tuning.recipe(tuning.load_manifest(tuning.library_path("apps")), "apps")
+        self.assertEqual(manifest["gates"]["heldout"], "evals/apps/heldout-v1.jsonl")
+        self.assertFalse(manifest["data"].get("supplements"))
+        self.assertEqual(manifest["data"]["toolset"], "apps")
+        evals = {str(p.relative_to(tuning.REPO)) for p in (tuning.REPO / "evals").rglob("*.jsonl")}
+        self.assertLessEqual(evals, set(manifest["data"]["exclude"]))
+        panes = tuning.recipe(tuning.load_manifest(tuning.library_path("panes")), "panes")
+        self.assertNotEqual(panes["gates"]["heldout"], manifest["gates"]["heldout"])
+
+    def test_apps_rows_are_kept_only_when_the_checks_admit_them(self):            # R12 M20
+        library = self.home / "pack"
+        library.mkdir()
+        (library / "generate.py").write_text(
+            "def _fold(text):\n    return ' '.join(text.casefold().split())\n"
+            "def generate(seed, per_template, exclude):\n"
+            "    rows = [{'query': 'hide the clock', 'actions': [['show', {'item': 'clock', 'on': False}]]},\n"
+            "            {'query': 'the clock is wrong', 'actions': [['show', {'item': 'clock', 'on': False}]]},\n"
+            "            {'query': 'open doom', 'actions': [['launch', {'app': 'doom'}]]}]\n"
+            "    kept = [r for r in rows if _fold(r['query']) not in exclude]\n"
+            "    return kept, len(rows) - len(kept)\n")
+        evals = self.home / "evals.jsonl"
+        evals.write_text(json.dumps({"request": "open doom"}) + "\n")
+        manifest = {"data": {"toolset": "apps", "seed": 0, "per_template": 1,
+                             "exclude": [str(evals)]}}
+        out = self.home / "train.jsonl"
+        with mock.patch.object(tuning, "REPO", Path("/")):
+            stats = tuning.build_data(library, manifest, out, "apps")
+        self.assertEqual((stats["kept"], stats["inconsistent_dropped"],
+                          stats["eval_matches_dropped"]), (1, 1, 1))
+        rows = [json.loads(line) for line in out.read_text().splitlines()]
+        self.assertEqual([r["query"] for r in rows], ["hide the clock"])
+        import apps
+        self.assertEqual(rows[0]["tools"], apps.TOOLS)
+
+    def test_the_apps_gates_use_the_apps_sets_schema_and_checks(self):            # R12 M22
+        import apps
+        run = tuning.Run(self.home / "run")
+        (run.root / "tuned.cact").write_bytes(b"w")
+        engines, scored = [], []
+
+        class Engine:
+            def __init__(self, library, tools, weights=None):
+                engines.append(tools)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        def score(engine, cases, runs=1, translate=None, job="panes"):
+            scored.append((job, len(cases)))
+            return {"totals": {}, "tags": {}}
+        manifest = tuning.recipe(tuning.load_manifest(tuning.library_path("apps")), "apps")
+        with mock.patch("libengine.LibEngine", Engine), mock.patch("evaluate.score", score), \
+                mock.patch("asset.load_verified", return_value=mock.MagicMock()), \
+                mock.patch.object(tuning, "gate", return_value=[]):
+            report = tuning.stage_gates(run, manifest, mock.MagicMock(), "ab" * 32, "apps")
+        self.assertEqual(engines, [apps.TOOLS, apps.TOOLS])
+        self.assertEqual({job for job, _ in scored}, {"apps"})
+        sizes = {rel: sum(1 for line in (tuning.REPO / rel).read_text().splitlines() if line.strip())
+                 for rel in (jobs.JOBS["apps"].dev, jobs.JOBS["apps"].test,
+                             jobs.JOBS["apps"].heldout)}
+        self.assertEqual([n for _, n in scored], [*sizes.values(), sizes[jobs.JOBS["apps"].heldout]])
+        self.assertEqual(report["job"], "apps")
+
+    def test_tune_uses_the_apps_pack(self):                                        # R12 M26
+        seen = []
+
+        def load(library):
+            seen.append(library)
+            raise tuning.TuneError("stop here")
+        with mock.patch.object(tuning, "load_manifest", side_effect=load):
+            with self.assertRaises(tuning.TuneError):
+                tuning.tune(None, None, "a1", "apps")
+        self.assertEqual(seen, [tuning.library_path("apps")])
+
+    def test_an_apps_selection_names_its_schema_and_in_use_loads_it(self):        # KN-R12-11
+        import apps
+        import toolset
+        run = self.home / "tuning" / "jobs" / "apps" / "a1"
+        run.mkdir(parents=True)
+        (run / "tuned.cact").write_bytes(b"w")
+        tuning.select(run, tuning.sha256_file(run / "tuned.cact"), "apps")
+        tuning.select(run, tuning.sha256_file(run / "tuned.cact"), "panes")
+        self.assertEqual(tuning.selected("apps")["toolset"], "apps")
+        self.assertEqual(tuning.selected("panes")["toolset"], "five")
+        for job, tools in (("apps", apps.TOOLS), ("panes", toolset.TOOLS)):
+            loaded = []
+
+            class Engine:
+                def __init__(self, library, schema, weights=None):
+                    loaded.append(schema)
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *exc):
+                    return False
+            with mock.patch("libengine.LibEngine", Engine), \
+                    mock.patch("asset.installed_library", return_value=mock.MagicMock()), \
+                    mock.patch("asset.load_verified", return_value=mock.MagicMock()):
+                self.assertTrue(tuning.in_use(job).startswith("tuned"))
+            self.assertEqual(loaded, [tools], job)
+
+
 if __name__ == "__main__":
     unittest.main()

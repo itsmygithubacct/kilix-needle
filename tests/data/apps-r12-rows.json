@@ -1,0 +1,2331 @@
+{
+"attacks": [
+{
+"id": "Q1",
+"request": "should I open doom?",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+],
+"want": []
+},
+{
+"id": "Q2",
+"request": "should I hide the clock?",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "clock",
+"on": false
+}
+}
+],
+"want": []
+},
+{
+"id": "Q3",
+"request": "what happens if I disable doom?",
+"calls": [
+{
+"name": "game",
+"arguments": {
+"game": "doom",
+"available": false
+}
+}
+],
+"want": []
+},
+{
+"id": "Q4",
+"request": "how do I hide the battery?",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "battery",
+"on": false
+}
+}
+],
+"want": []
+},
+{
+"id": "Q5",
+"request": "is my cpu always this busy?",
+"calls": [
+{
+"name": "pane_stat",
+"arguments": {
+"stat": "cpu",
+"mode": "always"
+}
+}
+],
+"want": []
+},
+{
+"id": "Q6",
+"request": "my memory is always full",
+"calls": [
+{
+"name": "pane_stat",
+"arguments": {
+"stat": "memory",
+"mode": "always"
+}
+}
+],
+"want": []
+},
+{
+"id": "Q7",
+"request": "if I launched solitaire would it be slow?",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "solitaire"
+}
+}
+],
+"want": []
+},
+{
+"id": "Q8",
+"request": "would you hide the clock if I asked?",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "clock",
+"on": false
+}
+}
+],
+"want": []
+},
+{
+"id": "N1",
+"request": "do not, under any circumstances, open doom",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+],
+"want": []
+},
+{
+"id": "N2",
+"request": "open doom, not solitaire",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "solitaire"
+}
+}
+],
+"want": [
+[
+"launch",
+{
+"app": "doom"
+}
+]
+]
+},
+{
+"id": "N3",
+"request": "open doom instead of solitaire",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "solitaire"
+}
+}
+],
+"want": []
+},
+{
+"id": "N4",
+"request": "hide the clock and not the battery",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "battery",
+"on": false
+}
+}
+],
+"want": []
+},
+{
+"id": "N5",
+"request": "hide the clock, not the battery",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "battery",
+"on": false
+}
+}
+],
+"want": []
+},
+{
+"id": "N6",
+"request": "don't set cpu to always",
+"calls": [
+{
+"name": "pane_stat",
+"arguments": {
+"stat": "cpu",
+"mode": "always"
+}
+}
+],
+"want": []
+},
+{
+"id": "N7",
+"request": "I do not want pane cpu always",
+"calls": [
+{
+"name": "pane_stat",
+"arguments": {
+"stat": "cpu",
+"mode": "always"
+}
+}
+],
+"want": []
+},
+{
+"id": "N8",
+"request": "never open doom",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+],
+"want": []
+},
+{
+"id": "N9",
+"request": "don't open doom",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+],
+"want": []
+},
+{
+"id": "N10",
+"request": "don't hide the clock",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "clock",
+"on": false
+}
+}
+],
+"want": []
+},
+{
+"id": "N11",
+"request": "open pong rather than chess",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "chess-bash"
+}
+}
+],
+"want": []
+},
+{
+"id": "N12",
+"request": "open doom? no, never mind",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+],
+"want": []
+},
+{
+"id": "N13",
+"request": "open doom. actually cancel that",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+],
+"want": []
+},
+{
+"id": "N14",
+"request": "hide the clock but keep the battery",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "battery",
+"on": false
+}
+}
+],
+"want": []
+},
+{
+"id": "N15",
+"request": "disable every game except doom",
+"calls": [
+{
+"name": "game",
+"arguments": {
+"game": "doom",
+"available": false
+}
+}
+],
+"want": []
+},
+{
+"id": "N16",
+"request": "hide everything except the clock",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "clock",
+"on": false
+}
+}
+],
+"want": []
+},
+{
+"id": "N17",
+"request": "disable every game but doom",
+"calls": [
+{
+"name": "game",
+"arguments": {
+"game": "doom",
+"available": false
+}
+}
+],
+"want": []
+},
+{
+"id": "N18",
+"request": "wait, don't; open doom",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+],
+"want": [
+[
+"launch",
+{
+"app": "doom"
+}
+]
+]
+},
+{
+"id": "R1",
+"request": "my friend said, open doom",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+],
+"want": []
+},
+{
+"id": "R2",
+"request": "he told me: launch doom",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+],
+"want": []
+},
+{
+"id": "R3",
+"request": "the wiki says hide the clock",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "clock",
+"on": false
+}
+}
+],
+"want": []
+},
+{
+"id": "R4",
+"request": "my kid keeps asking me to open solitaire",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "solitaire"
+}
+}
+],
+"want": []
+},
+{
+"id": "R5",
+"request": "someone wrote 'disable doom' on a sticky note",
+"calls": [
+{
+"name": "game",
+"arguments": {
+"game": "doom",
+"available": false
+}
+}
+],
+"want": []
+},
+{
+"id": "R6",
+"request": "the manual reads, disable doom",
+"calls": [
+{
+"name": "game",
+"arguments": {
+"game": "doom",
+"available": false
+}
+}
+],
+"want": []
+},
+{
+"id": "P1",
+"request": "turn the clock on and the battery off",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "battery",
+"on": true
+}
+}
+],
+"want": [
+[
+"show",
+{
+"item": "clock",
+"on": true
+}
+]
+]
+},
+{
+"id": "P2",
+"request": "I want the clock gone",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "clock",
+"on": true
+}
+}
+],
+"want": []
+},
+{
+"id": "P3",
+"request": "I want the clock hidden",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "clock",
+"on": true
+}
+}
+],
+"want": []
+},
+{
+"id": "P4",
+"request": "put the clock away",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "clock",
+"on": true
+}
+}
+],
+"want": []
+},
+{
+"id": "P5",
+"request": "I'd like the battery indicator off the bar",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "battery",
+"on": true
+}
+}
+],
+"want": []
+},
+{
+"id": "P6",
+"request": "show the battery instead of the clock",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "clock",
+"on": true
+}
+}
+],
+"want": [
+[
+"show",
+{
+"item": "battery",
+"on": true
+}
+]
+]
+},
+{
+"id": "P7",
+"request": "enable doom and solitaire off",
+"calls": [
+{
+"name": "game",
+"arguments": {
+"game": "solitaire",
+"available": true
+}
+}
+],
+"want": [
+[
+"game",
+{
+"game": "doom",
+"available": true
+}
+]
+]
+},
+{
+"id": "P8",
+"request": "I want to play doom",
+"calls": [
+{
+"name": "game",
+"arguments": {
+"game": "doom",
+"available": true
+}
+}
+],
+"want": []
+},
+{
+"id": "P9",
+"request": "show me doom",
+"calls": [
+{
+"name": "game",
+"arguments": {
+"game": "doom",
+"available": true
+}
+}
+],
+"want": []
+},
+{
+"id": "P10",
+"request": "I need the wifi icon removed",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "network",
+"on": true
+}
+}
+],
+"want": []
+},
+{
+"id": "P11",
+"request": "show pane cpu always and memory off",
+"calls": [
+{
+"name": "pane_stat",
+"arguments": {
+"stat": "memory",
+"mode": "always"
+}
+}
+],
+"want": [
+[
+"pane_stat",
+{
+"stat": "cpu",
+"mode": "always"
+}
+]
+]
+},
+{
+"id": "P12",
+"request": "make doom unavailable and solitaire available",
+"calls": [
+{
+"name": "game",
+"arguments": {
+"game": "doom",
+"available": true
+}
+}
+],
+"want": []
+},
+{
+"id": "X1",
+"request": "reinstall doom, then play it",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+],
+"want": []
+},
+{
+"id": "X2",
+"request": "run the doom installer",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+],
+"want": []
+},
+{
+"id": "X3",
+"request": "turn off the microphone",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "dictate",
+"on": false
+}
+}
+],
+"want": []
+},
+{
+"id": "X4",
+"request": "turn the volume off",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "volume",
+"on": false
+}
+}
+],
+"want": []
+},
+{
+"id": "X5",
+"request": "mute the volume and hide the clock",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "volume",
+"on": false
+}
+}
+],
+"want": []
+},
+{
+"id": "X6",
+"request": "set up doom and play it",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+],
+"want": []
+},
+{
+"id": "X7",
+"request": "grab doom from the store and open it",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+],
+"want": []
+},
+{
+"id": "X8",
+"request": "close doom",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+],
+"want": []
+},
+{
+"id": "X9",
+"request": "quit solitaire and start pong",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "solitaire"
+}
+}
+],
+"want": []
+},
+{
+"id": "X10",
+"request": "turn off session logging",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "close",
+"on": false
+}
+}
+],
+"want": []
+},
+{
+"id": "X11",
+"request": "shut down the computer and open doom",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+],
+"want": [
+[
+"launch",
+{
+"app": "doom"
+}
+]
+]
+},
+{
+"id": "X12",
+"request": "download dosbox and then run it",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "dosbox"
+}
+}
+],
+"want": []
+},
+{
+"id": "X13",
+"request": "install doom. open it",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+],
+"want": []
+},
+{
+"id": "X14",
+"request": "hide the transcripts",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "transcripts"
+}
+}
+],
+"want": []
+},
+{
+"id": "X15",
+"request": "update solitaire and play it",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "solitaire"
+}
+}
+],
+"want": []
+},
+{
+"id": "V1",
+"request": "the memory load is high",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "memory"
+}
+}
+],
+"want": []
+},
+{
+"id": "V2",
+"request": "at the start of doom the music is loud",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+],
+"want": []
+},
+{
+"id": "V3",
+"request": "run the tests and show me the time it took",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "clock",
+"on": true
+}
+}
+],
+"want": []
+},
+{
+"id": "V4",
+"request": "open the mines level in doom",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "minesweeper"
+}
+}
+],
+"want": [
+[
+"launch",
+{
+"app": "doom"
+}
+]
+]
+},
+{
+"id": "V5",
+"request": "run memory tests in the left pane",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "memory"
+}
+}
+],
+"want": []
+},
+{
+"id": "V6",
+"request": "I love playing chess bash",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "chess-bash"
+}
+}
+],
+"want": []
+},
+{
+"id": "V7",
+"request": "give me a minute, then we can talk about doom",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+],
+"want": []
+},
+{
+"id": "V8",
+"request": "the voice page is broken",
+"calls": [
+{
+"name": "settings",
+"arguments": {
+"section": "voice"
+}
+}
+],
+"want": []
+},
+{
+"id": "V9",
+"request": "open my notes in vim, not the text editor",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "kilix-notepad"
+}
+}
+],
+"want": []
+},
+{
+"id": "I1",
+"request": "doom crashed, never open it again",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+],
+"want": []
+},
+{
+"id": "I2",
+"request": "disable doom and open it",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+],
+"want": [
+[
+"launch",
+{
+"app": "doom"
+}
+]
+]
+},
+{
+"id": "I3",
+"request": "open solitaire and doom",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "solitaire"
+}
+},
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+],
+"want": [
+[
+"launch",
+{
+"app": "solitaire"
+}
+],
+[
+"launch",
+{
+"app": "doom"
+}
+]
+]
+},
+{
+"id": "I4",
+"request": "hide the clock and the battery",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "clock",
+"on": false
+}
+},
+{
+"name": "show",
+"arguments": {
+"item": "battery",
+"on": false
+}
+}
+],
+"want": [
+[
+"show",
+{
+"item": "clock",
+"on": false
+}
+],
+[
+"show",
+{
+"item": "battery",
+"on": false
+}
+]
+]
+},
+{
+"id": "I5",
+"request": "I hate doom, it is awful",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+],
+"want": []
+},
+{
+"id": "I6",
+"request": "enable doom then hide it",
+"calls": [
+{
+"name": "game",
+"arguments": {
+"game": "doom",
+"available": false
+}
+}
+],
+"want": [
+[
+"game",
+{
+"game": "doom",
+"available": true
+}
+]
+]
+},
+{
+"id": "T1",
+"request": "don\u2019t open doom",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+],
+"want": []
+},
+{
+"id": "T2",
+"request": "d\u043en't open doom",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+],
+"want": []
+},
+{
+"id": "T3",
+"request": "\uff4f\uff50\uff45\uff4e doom",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+],
+"want": [
+[
+"launch",
+{
+"app": "doom"
+}
+]
+]
+},
+{
+"id": "T4",
+"request": "don\u02bct open doom",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+],
+"want": []
+},
+{
+"id": "T5",
+"request": "do n\u200bot open doom",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+],
+"want": []
+},
+{
+"id": "T6",
+"request": "hide the clock \u2014 no, don\u2019t",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "clock",
+"on": false
+}
+}
+],
+"want": []
+},
+{
+"id": "F1",
+"request": "open solitaire",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "solitaire"
+}
+}
+],
+"want": [
+[
+"launch",
+{
+"app": "solitaire"
+}
+]
+]
+},
+{
+"id": "F2",
+"request": "hide the clock",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "clock",
+"on": false
+}
+}
+],
+"want": [
+[
+"show",
+{
+"item": "clock",
+"on": false
+}
+]
+]
+},
+{
+"id": "F3",
+"request": "turn the battery indicator back on",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "battery",
+"on": true
+}
+}
+],
+"want": [
+[
+"show",
+{
+"item": "battery",
+"on": true
+}
+]
+]
+},
+{
+"id": "F4",
+"request": "remove the split buttons",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "split_left",
+"on": false
+}
+}
+],
+"want": [
+[
+"show",
+{
+"item": "split_left",
+"on": false
+}
+]
+]
+},
+{
+"id": "F5",
+"request": "show pane memory always",
+"calls": [
+{
+"name": "pane_stat",
+"arguments": {
+"stat": "memory",
+"mode": "always"
+}
+}
+],
+"want": [
+[
+"pane_stat",
+{
+"stat": "memory",
+"mode": "always"
+}
+]
+]
+},
+{
+"id": "F6",
+"request": "stop showing cpu on panes",
+"calls": [
+{
+"name": "pane_stat",
+"arguments": {
+"stat": "cpu",
+"mode": "off"
+}
+}
+],
+"want": [
+[
+"pane_stat",
+{
+"stat": "cpu",
+"mode": "off"
+}
+]
+]
+},
+{
+"id": "F7",
+"request": "disable doom",
+"calls": [
+{
+"name": "game",
+"arguments": {
+"game": "doom",
+"available": false
+}
+}
+],
+"want": [
+[
+"game",
+{
+"game": "doom",
+"available": false
+}
+]
+]
+},
+{
+"id": "F8",
+"request": "make chess bash available",
+"calls": [
+{
+"name": "game",
+"arguments": {
+"game": "chess-bash",
+"available": true
+}
+}
+],
+"want": [
+[
+"game",
+{
+"game": "chess-bash",
+"available": true
+}
+]
+]
+},
+{
+"id": "F9",
+"request": "open the voice settings",
+"calls": [
+{
+"name": "settings",
+"arguments": {
+"section": "voice"
+}
+}
+],
+"want": [
+[
+"settings",
+{
+"section": "voice"
+}
+]
+]
+},
+{
+"id": "F10",
+"request": "take me to the games section",
+"calls": [
+{
+"name": "settings",
+"arguments": {
+"section": "games"
+}
+}
+],
+"want": [
+[
+"settings",
+{
+"section": "games"
+}
+]
+]
+},
+{
+"id": "F11",
+"request": "bring up the launcher",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "launcher"
+}
+}
+],
+"want": [
+[
+"launch",
+{
+"app": "launcher"
+}
+]
+]
+},
+{
+"id": "F12",
+"request": "show me the temperatures",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "temps"
+}
+}
+],
+"want": [
+[
+"launch",
+{
+"app": "temps"
+}
+]
+]
+},
+{
+"id": "F13",
+"request": "start the voice studio",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "kilix-voice-studio"
+}
+}
+],
+"want": [
+[
+"launch",
+{
+"app": "kilix-voice-studio"
+}
+]
+]
+},
+{
+"id": "F14",
+"request": "open the settings center",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "kilix-settings-center"
+}
+}
+],
+"want": [
+[
+"launch",
+{
+"app": "kilix-settings-center"
+}
+]
+]
+},
+{
+"id": "F15",
+"request": "play doom",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+],
+"want": [
+[
+"launch",
+{
+"app": "doom"
+}
+]
+]
+},
+{
+"id": "F16",
+"request": "hide the clock please",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "clock",
+"on": false
+}
+}
+],
+"want": [
+[
+"show",
+{
+"item": "clock",
+"on": false
+}
+]
+]
+},
+{
+"id": "F17",
+"request": "can you show the clock again",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "clock",
+"on": true
+}
+}
+],
+"want": [
+[
+"show",
+{
+"item": "clock",
+"on": true
+}
+]
+]
+},
+{
+"id": "F18",
+"request": "open DOSBox",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "dosbox"
+}
+}
+],
+"want": [
+[
+"launch",
+{
+"app": "dosbox"
+}
+]
+]
+},
+{
+"id": "F19",
+"request": "i don't need the clock",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "clock",
+"on": false
+}
+}
+],
+"want": [
+[
+"show",
+{
+"item": "clock",
+"on": false
+}
+]
+]
+},
+{
+"id": "F20",
+"request": "open the volume mixer",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "mixer"
+}
+}
+],
+"want": [
+[
+"launch",
+{
+"app": "mixer"
+}
+]
+]
+},
+{
+"id": "F21",
+"request": "open doom, it's been a while",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+],
+"want": [
+[
+"launch",
+{
+"app": "doom"
+}
+]
+]
+},
+{
+"id": "F22",
+"request": "hide the battery and wifi icons from the top bar",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "battery",
+"on": false
+}
+},
+{
+"name": "show",
+"arguments": {
+"item": "network",
+"on": false
+}
+}
+],
+"want": [
+[
+"show",
+{
+"item": "battery",
+"on": false
+}
+],
+[
+"show",
+{
+"item": "network",
+"on": false
+}
+]
+]
+},
+{
+"id": "F23",
+"request": "set pane cpu to auto",
+"calls": [
+{
+"name": "pane_stat",
+"arguments": {
+"stat": "cpu",
+"mode": "auto"
+}
+}
+],
+"want": [
+[
+"pane_stat",
+{
+"stat": "cpu",
+"mode": "auto"
+}
+]
+]
+},
+{
+"id": "F24",
+"request": "turn off the maximize button",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "maximize",
+"on": false
+}
+}
+],
+"want": [
+[
+"show",
+{
+"item": "maximize",
+"on": false
+}
+]
+]
+},
+{
+"id": "F25",
+"request": "launch kilix pong",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "kilix-pong"
+}
+}
+],
+"want": [
+[
+"launch",
+{
+"app": "kilix-pong"
+}
+]
+]
+},
+{
+"id": "F26",
+"request": "open the file manager",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "kilix-file"
+}
+}
+],
+"want": [
+[
+"launch",
+{
+"app": "kilix-file"
+}
+]
+]
+},
+{
+"id": "F27",
+"request": "open the pdf viewer",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "pdf viewer"
+}
+}
+],
+"want": [
+[
+"launch",
+{
+"app": "kilix-pdf"
+}
+]
+]
+}
+],
+"legit": [
+{
+"request": "switch the clock off",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "clock",
+"on": false
+}
+}
+]
+},
+{
+"request": "can you get rid of the battery icon",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "battery",
+"on": false
+}
+}
+]
+},
+{
+"request": "bring the clock back",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "clock",
+"on": true
+}
+}
+]
+},
+{
+"request": "make doom available again",
+"calls": [
+{
+"name": "game",
+"arguments": {
+"game": "doom",
+"available": true
+}
+}
+]
+},
+{
+"request": "open the voice section of settings",
+"calls": [
+{
+"name": "settings",
+"arguments": {
+"section": "voice"
+}
+}
+]
+},
+{
+"request": "pop open solitaire",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "solitaire"
+}
+}
+]
+},
+{
+"request": "let me play doom",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+}
+]
+},
+{
+"request": "fire up the calculator",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "kilix-calculator"
+}
+}
+]
+},
+{
+"request": "take me to the top bar settings",
+"calls": [
+{
+"name": "settings",
+"arguments": {
+"section": "top-bar"
+}
+}
+]
+},
+{
+"request": "open settings for pane buttons",
+"calls": [
+{
+"name": "settings",
+"arguments": {
+"section": "pane-buttons"
+}
+}
+]
+},
+{
+"request": "show cpu on panes only when busy",
+"calls": [
+{
+"name": "pane_stat",
+"arguments": {
+"stat": "cpu",
+"mode": "auto"
+}
+}
+]
+},
+{
+"request": "hide pane memory",
+"calls": [
+{
+"name": "pane_stat",
+"arguments": {
+"stat": "memory",
+"mode": "off"
+}
+}
+]
+},
+{
+"request": "I'd like to play chess",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "chess-bash"
+}
+}
+]
+},
+{
+"request": "turn the clock and the battery off",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "clock",
+"on": false
+}
+},
+{
+"name": "show",
+"arguments": {
+"item": "battery",
+"on": false
+}
+}
+]
+},
+{
+"request": "open the transcripts",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "transcripts"
+}
+}
+]
+},
+{
+"request": "launch the software center",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "kilix-software-center"
+}
+}
+]
+},
+{
+"request": "show the date",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "calendar",
+"on": true
+}
+}
+]
+},
+{
+"request": "hide the date and time",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "calendar",
+"on": false
+}
+},
+{
+"name": "show",
+"arguments": {
+"item": "clock",
+"on": false
+}
+}
+]
+},
+{
+"request": "put the battery indicator back",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "battery",
+"on": true
+}
+}
+]
+},
+{
+"request": "take the network icon off the top bar",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "network",
+"on": false
+}
+}
+]
+},
+{
+"request": "stop showing memory on panes",
+"calls": [
+{
+"name": "pane_stat",
+"arguments": {
+"stat": "memory",
+"mode": "off"
+}
+}
+]
+},
+{
+"request": "always show cpu on panes",
+"calls": [
+{
+"name": "pane_stat",
+"arguments": {
+"stat": "cpu",
+"mode": "always"
+}
+}
+]
+},
+{
+"request": "disable solitaire and pong",
+"calls": [
+{
+"name": "game",
+"arguments": {
+"game": "solitaire",
+"available": false
+}
+},
+{
+"name": "game",
+"arguments": {
+"game": "kilix-pong",
+"available": false
+}
+}
+]
+},
+{
+"request": "I don't want doom in the games list",
+"calls": [
+{
+"name": "game",
+"arguments": {
+"game": "doom",
+"available": false
+}
+}
+]
+},
+{
+"request": "open the weather",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "kilix-weather"
+}
+}
+]
+},
+{
+"request": "can you open the file browser please",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "kilix-file"
+}
+}
+]
+},
+{
+"request": "start dosbox",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "dosbox"
+}
+}
+]
+},
+{
+"request": "open the games settings",
+"calls": [
+{
+"name": "settings",
+"arguments": {
+"section": "games"
+}
+}
+]
+},
+{
+"request": "hide the clock, the battery and the wifi",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "clock",
+"on": false
+}
+},
+{
+"name": "show",
+"arguments": {
+"item": "battery",
+"on": false
+}
+},
+{
+"name": "show",
+"arguments": {
+"item": "network",
+"on": false
+}
+}
+]
+},
+{
+"request": "enable joustix, then launch it",
+"calls": [
+{
+"name": "game",
+"arguments": {
+"game": "joustix",
+"available": true
+}
+},
+{
+"name": "launch",
+"arguments": {
+"app": "joustix"
+}
+}
+]
+},
+{
+"request": "open the memory tool",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "memory"
+}
+}
+]
+},
+{
+"request": "show me the memory usage",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "memory"
+}
+}
+]
+},
+{
+"request": "hide the split buttons",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "split_left",
+"on": false
+}
+},
+{
+"name": "show",
+"arguments": {
+"item": "split_right",
+"on": false
+}
+},
+{
+"name": "show",
+"arguments": {
+"item": "split_up",
+"on": false
+}
+},
+{
+"name": "show",
+"arguments": {
+"item": "split_down",
+"on": false
+}
+}
+]
+},
+{
+"request": "show the font buttons on panes",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "font_increase",
+"on": true
+}
+},
+{
+"name": "show",
+"arguments": {
+"item": "font_decrease",
+"on": true
+}
+}
+]
+},
+{
+"request": "hide the temperature",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "temperature",
+"on": false
+}
+}
+]
+},
+{
+"request": "open chawan",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "kilix-chawan"
+}
+}
+]
+},
+{
+"request": "please launch the lunar lander",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "terminal-lander"
+}
+}
+]
+},
+{
+"request": "I'm in the mood for some pong",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "kilix-pong"
+}
+}
+]
+},
+{
+"request": "open doom and then hide the clock",
+"calls": [
+{
+"name": "launch",
+"arguments": {
+"app": "doom"
+}
+},
+{
+"name": "show",
+"arguments": {
+"item": "clock",
+"on": false
+}
+}
+]
+},
+{
+"request": "show the clock but hide the battery",
+"calls": [
+{
+"name": "show",
+"arguments": {
+"item": "clock",
+"on": true
+}
+},
+{
+"name": "show",
+"arguments": {
+"item": "battery",
+"on": false
+}
+}
+]
+}
+]
+}

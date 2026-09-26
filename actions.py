@@ -296,6 +296,7 @@ def _target_value(raw: str, *, relative: bool) -> str | None:
 
 
 _TYPOGRAPHY = str.maketrans({"\u2018": "'", "\u2019": "'", "\u201b": "'", "\u2032": "'",
+                             "\u02bc": "'", "\u02b9": "'",   # review R12: "don\u02bct open doom"
                              "\u201c": '"', "\u201d": '"', "\u2033": '"',
                              "\u2010": "-", "\u2011": "-", "\u2012": "-", "\u2013": "-",
                              "\u2014": "-", "\u2015": "-", "\u2212": "-", "\u00a0": " "})

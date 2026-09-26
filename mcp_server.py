@@ -10,8 +10,9 @@ Two tools per job, so a harness's own approval setting can tell them apart:
                own pane and tab can never be closed, and closing, typing or
                starting a program runs only with confirm_risky=true
 - kilix_apps_plan / kilix_apps_act   the same for the apps job: launching
-               Kilix apps and games (confirm_risky=true, and never an
-               install) and showing or hiding Kilix indicators and games
+               Kilix apps and games and changing Kilix settings, each only
+               with confirm_risky=true and a plainly stated request; nothing
+               that may install ever runs from here
 
 Messages are newline-delimited JSON-RPC 2.0 on stdin/stdout, as the MCP stdio
 transport specifies; stdout carries nothing else. The engine starts on the
@@ -57,19 +58,22 @@ _APPS_REQUEST = {"type": "string",
 TOOL_LIST += [
     {"name": "kilix_apps_plan",
      "description": "Show what a plain request would do to Kilix apps, games and settings. "
-                    "Runs nothing.",
+                    "Changes nothing; it only runs Kilix's own read-only readiness checks.",
      "inputSchema": {"type": "object", "properties": {"request": _APPS_REQUEST},
                      "required": ["request"], "additionalProperties": False}},
     {"name": "kilix_apps_act",
      "description": "Carry out a plain request on Kilix apps, games and settings: open an "
                     "app or game in a new tab, show or hide a top-bar indicator or pane "
                     "button, set the pane CPU/memory readout, make a game available or not, "
-                    "open a settings section. Opening an app needs confirm_risky=true, and "
-                    "nothing that would install is ever run from here.",
+                    "open a settings section. Everything but opening a settings section needs "
+                    "confirm_risky=true and a plainly stated request, and nothing that may "
+                    "install is ever run from here: apps built from system sources and the "
+                    "host tools always wait for a person.",
      "inputSchema": {"type": "object", "properties": {
          "request": _APPS_REQUEST,
          "confirm_risky": {"type": "boolean", "default": False,
-                           "description": "allow opening an app or game already installed"}},
+                           "description": "allow a plainly stated launch of something already "
+                                          "installed, or a plainly stated settings change"}},
          "required": ["request"], "additionalProperties": False}},
 ]
 _JOB_OF = {"kilix_plan": "panes", "kilix_act": "panes",

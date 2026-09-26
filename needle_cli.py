@@ -280,12 +280,13 @@ def run_apps_calls(request: str, calls: list, options: Options,
                    confirm: Callable[[str], bool] = _terminal_confirm) -> dict:
     """Interpret, confirm and perform apps-job calls.
 
-    Settings changes are reversible and run when admitted. A launch starts a
-    program: it needs a yes, which a yes given in advance (--yes, MCP
-    confirm_risky) gives only for a plainly stated launch of something already
-    installed. A launch that would install always waits for a person. Once
-    anything in the request is refused or fails, nothing later runs without a
-    person's yes.
+    Every launch and settings change needs a yes (review R12: "should I hide
+    the clock?" once hid it with no one asked). A yes given in advance (--yes,
+    MCP confirm_risky) gives it only for an action the request states plainly,
+    and for a launch only of something already installed: a launch that may
+    install always waits for a person. Opening the settings screen changes
+    nothing and needs no yes. Once anything in the request is refused or
+    fails, nothing later runs without a person's yes.
     """
     import apps
     import apps_kilix
@@ -316,13 +317,13 @@ def run_apps_calls(request: str, calls: list, options: Options,
         if options.dry_run:
             entry["outcome"] = "would"
             continue
-        needs_yes = hold or broken or action.risky
+        needs_yes = hold or broken or action.kind in apps.SIDE_EFFECT_KINDS
         waived = (options.assume_yes and not hold and not broken and unplain is None
                   and step.ready)
         if needs_yes and not waived and not confirm(f"  {step.summary}? [y/N] "):
             entry["outcome"] = "skipped"
             entry["reason"] = ("declined" if confirm is _terminal_confirm and sys.stdin.isatty()
-                               else "needs a person's yes: it installs first" if not step.ready
+                               else "needs a person's yes: it may install first" if not step.ready
                                else "needs a person's yes: an earlier action in the request "
                                     "did not go as asked" if (hold or broken) and options.assume_yes
                                else f"needs a person's yes: the request is not a plain "

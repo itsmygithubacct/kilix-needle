@@ -2,10 +2,17 @@
 
 A launch opens a new tab running `kilix app run ID`, `kilix games play ID` or a
 host tool, never in the caller's pane (`kilix app run` replaces the process
-that runs it). Catalog apps install on first use unless told not to, so every
-launch runs with KILIX_APP_AUTO_INSTALL=0 unless a person agreed to the
-install. Settings changes run `kilix settings --set` or `kilix games enable|
-disable`, which Kilix applies to its running instances itself.
+that runs it). Settings changes run `kilix settings --set` or `kilix games
+enable|disable`, which Kilix applies to its running instances itself.
+
+Installing needs a person's own yes. So "ready" comes only from Kilix's own
+readiness functions, called in a Python probe that installs nothing
+(`content_app.application_spec` with `Installer.ready`, `games.game_ready`
+with `games.game_enabled`), never from a kilix verb: review R12 found `kilix
+app install dosbox` boots DOSBox and `kilix launcher` runs an installer. Apps
+Kilix builds from system or custom sources, and the host tools, install or
+update inside their own verbs, so they are never ready: every launch of one
+waits for a person. The tab also turns off every install switch Kilix has.
 """
 from __future__ import annotations
 
@@ -18,8 +25,6 @@ import subprocess
 import apps
 import kilix
 
-_TUI_UTILS = {"launcher": "kilix-launcher", "temps": "kilix-temps", "memory": "kilix-memory",
-              "mixer": "kilix-volume"}
 _HOST_ARGV = {"launcher": ["launcher"], "temps": ["temps"], "memory": ["memory"],
               "mixer": ["volume"], "transcripts": ["transcript", "list"]}
 _TITLES = {"launcher": "Launcher", "temps": "Temperatures", "memory": "Memory",
@@ -41,47 +46,57 @@ def _kilix_home() -> Path | None:
     return Path(os.path.realpath(found)).parent if found else None
 
 
-def _app_ready(content_id: str) -> bool:
-    """`kilix app install ID` with installing refused only reports: 0 when ready."""
-    env = dict(os.environ, KILIX_APP_AUTO_INSTALL="0", KILIX_PDF_AUTO_INSTALL="0")
-    try:
-        done = subprocess.run([kilix.KILIX, "app", "install", content_id], env=env,
-                              capture_output=True, timeout=30, check=False)
-    except (OSError, subprocess.TimeoutExpired):
-        return False
-    return done.returncode == 0
+# Every per-component install switch Kilix reads (grep of the Kilix tree).
+NO_INSTALL = {name: "0" for name in (
+    "KILIX_APP_AUTO_INSTALL", "KILIX_PDF_AUTO_INSTALL", "KILIX_TUI_UTILS_AUTO_INSTALL",
+    "KILIX_CHAWAN_AUTO_INSTALL", "KILIX_AMP_AUTO_INSTALL", "KILIX_CAP_AUTO_INSTALL",
+    "KILIX_ICEWM_AUTO_INSTALL", "KILIX_LAND_DESKTOP_AUTO_INSTALL", "KILIX_LOOK_AUTO_INSTALL",
+    "KILIX_MASK_AUTO_INSTALL", "KILIX_NVR_AUTO_INSTALL", "KILIX_RTSP_AUTO_INSTALL")}
+
+# Runs Kilix's readiness functions and nothing else; exit 0 only when ready.
+PROBE = """
+import sys
+home, kind, name = sys.argv[1:4]
+sys.dont_write_bytecode = True
+sys.path[:0] = [home + "/config", home + "/desktop"]
+try:
+    if kind == "game":
+        import games
+        ready = bool(games.game_enabled(name)) and bool(games.game_ready(name))
+    else:
+        import content_app
+        from kilix_sdk import content
+        from kilix_sdk._content_runtime import apps_root
+        spec = content_app.application_spec(name)
+        ready = (spec.source_type in ("git", "archive")
+                 and bool(content.Installer(apps_root()).ready(spec)))
+except Exception:
+    ready = False
+sys.exit(0 if ready else 1)
+"""
 
 
-def _game_ready(game: str) -> bool:
-    """The desktops' own readiness check; any failure reads as not ready, so the
-    launch waits for a person rather than installing unasked."""
+def _ready(kind: str, name: str) -> bool:
+    """Any failure reads as not ready, so the launch waits for a person."""
     home = _kilix_home()
-    if home is None or not (home / "desktop" / "games.py").is_file():
+    if home is None:
         return False
-    probe = ("import sys; sys.path[:0] = [sys.argv[1] + '/config', sys.argv[1] + '/desktop']; "
-             "import games; sys.exit(0 if games.game_ready(sys.argv[2]) else 1)")
     try:
-        done = subprocess.run(["python3", "-c", probe, str(home), game], capture_output=True,
+        done = subprocess.run(["python3", "-c", PROBE, str(home), kind, name],
+                              env=dict(os.environ, **NO_INSTALL), capture_output=True,
                               timeout=30, check=False)
     except (OSError, subprocess.TimeoutExpired):
         return False
     return done.returncode == 0
 
 
-def _tool_ready(tool: str) -> bool:
-    binary = _TUI_UTILS.get(tool)
-    if binary is None:
-        return True
-    prefix = Path(os.environ.get("KILIX_TUI_UTILS_PREFIX") or Path.home() / ".local")
-    return os.access(prefix / "bin" / binary, os.X_OK)
-
-
 def _tab(title: str, command: list[str], *, install: bool, hold: bool = False) -> tuple:
+    gates = {"KILIX_APP_AUTO_INSTALL": "1"} if install else NO_INSTALL
     argv = ["launch", "--type=tab", f"--tab-title={title}",
-            f"--env=KILIX_APP_AUTO_INSTALL={'1' if install else '0'}"]
+            *(f"--env={name}={value}" for name, value in gates.items())]
     if hold:
         argv.append("--hold")
-    return tuple(argv + ["--", "kilix", *command])
+    return tuple(argv + ["--", kilix.KILIX, *command])
 
 
 def resolve(action: apps.Action) -> Step:
@@ -89,16 +104,17 @@ def resolve(action: apps.Action) -> Step:
     if kind == "launch":
         app = args["app"]
         if app in apps.HOST_TOOLS:
+            # Their verbs run Kilix's tui-utils installer, or install when missing.
             command, title = _HOST_ARGV[app], _TITLES[app]
-            ready = _tool_ready(app)
-            hold = app == "transcripts"
-        elif app in apps.GAMES:
+            ready, hold = False, app == "transcripts"
+        elif app in apps.AVAILABILITY:
+            # dosbox too: Kilix keeps it in Games, and `kilix app` hands it there.
             command, title, hold = ["games", "play", app], app, False
-            ready = _game_ready(app)
+            ready = _ready("game", app)
         else:
             command, title, hold = ["app", "run", app], app, False
-            ready = _app_ready(app)
-        words = f"open {app} in a new tab" + ("" if ready else " (it installs first)")
+            ready = _ready("app", app)
+        words = f"open {app} in a new tab" + ("" if ready else " (it may install first)")
         return Step(action, words, tab=_tab(title, command, install=False, hold=hold), ready=ready,
                     install_tab=None if ready else _tab(title, command, install=True, hold=hold))
     if kind == "show":

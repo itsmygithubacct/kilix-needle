@@ -617,7 +617,7 @@ def _update_selections(change) -> None:
 def select(run_root: Path, cact_sha: str, job: str = jobs.DEFAULT) -> None:
     jobs.get(job)
     entry = {"weights": str(run_root / "tuned.cact"), "sha256": cact_sha,
-             "toolset": "five", "run": run_root.name}
+             "toolset": "apps" if job == "apps" else "five", "run": run_root.name}
     _update_selections(lambda stored: stored.__setitem__(job, entry))
 
 
@@ -760,7 +760,9 @@ def in_use(job: str = jobs.DEFAULT) -> str:
     """
     import asset
     from libengine import LibEngine, LibEngineError
+    import apps
     import toolset
+    tools = apps.TOOLS if job == "apps" else toolset.TOOLS
     choice = selected(job)
     if choice is not None:
         try:
@@ -769,7 +771,7 @@ def in_use(job: str = jobs.DEFAULT) -> str:
                   else asset.installed_library()) as library, \
                     asset.load_verified(choice["weights"], choice["sha256"],
                                         os.path.getsize(choice["weights"])) as weights, \
-                    LibEngine(library, toolset.TOOLS, weights):
+                    LibEngine(library, tools, weights):
                 pass
             return f"tuned {choice.get('run', '')}".strip()
         except LibEngineError as error:

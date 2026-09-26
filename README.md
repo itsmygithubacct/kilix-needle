@@ -231,19 +231,30 @@ The model sees five tools: `launch`, `show`, `pane_stat`, `game` and
 - **Names.** The app, game, indicator or section must be one Kilix really
   has, from the catalog and kilix-settings' controls, and the request must
   name it.
-- **Verbs.** In the same clause, the request needs an opening verb for a
-  launch, or exactly one of show or hide for a change. A negated or reported
-  request does nothing.
+- **Verbs.** Each verb starts its clause, after any polite words. A launch
+  takes the name as its object ("open the pdf viewer", not "the memory load
+  is high"); a change says exactly one of on or off, or one mode.
+- **Whole request.** Anything that changes what a request asks refuses all
+  of it: a negation ("don't", "not the battery"), reported words ("my friend
+  said"), taking it back ("actually, cancel that"), a question or a
+  condition, an exception or contrast ("except", "instead of"), an install
+  word, a second sentence that isn't thanks, or letters outside the Latin
+  alphabet. Where a program opens in a pane is the panes job.
 
-**Launches:**
-- A launch opens a new tab, never the pane you asked from.
-- It starts a program, so it needs a yes.
-- `--yes` and MCP `confirm_risky` give that yes only for a plainly stated
-  launch of something already installed.
-- A launch that would install first always waits for a person's own yes.
-  An agent never installs from here.
-
-Settings changes can be undone by asking again, and run without a question.
+**What needs a yes:**
+- Every launch and every settings change asks first. Opening the settings
+  screen changes nothing and doesn't ask.
+- `--yes` and MCP `confirm_risky` give that yes only when the request states
+  the action plainly ("open solitaire", "hide the clock", "disable doom",
+  "set pane cpu to auto").
+- A launch that may install first always waits for a person's own yes, so
+  an agent never installs from here. "Ready" comes from Kilix's own
+  read-only readiness checks. Apps built from system sources (Chawan, the
+  model store, the tmux manager, the camera wall, the region painter) and
+  the host tools install or update inside their own commands, so they always
+  wait for a person.
+- A launch opens a new tab, never the pane you asked from, with every Kilix
+  install switch off.
 
 **Left out on purpose:**
 - power;

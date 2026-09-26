@@ -121,6 +121,10 @@ ITEM_NAMES = {
     "synchronize_input": ["synchronize input", "synchronise input", "sync input",
                           "broadcast input", "synchronized input"],
 }
+# Names for several items at once: "remove the split buttons".
+ITEM_GROUPS = {"split buttons": ("split_left", "split_right", "split_up", "split_down"),
+               "font buttons": ("font_increase", "font_decrease"),
+               "font size buttons": ("font_increase", "font_decrease")}
 STAT_NAMES = {"cpu": ["cpu", "processor"], "memory": ["memory", "ram", "mem"]}
 MODE_NAMES = {"always": ["always", "all the time", "permanently", "at all times", "constantly"],
               "off": ["off", "never", "hide", "hidden", "disable", "stop showing", "no longer",
@@ -185,41 +189,145 @@ class Action:
 
 
 # ---------------------------------------------------------------------------
-# Verbs. A launch needs a verb that opens or plays in the same clause; a show
-# or game change needs one polarity, said once, in the clause that names it.
+# Reading a request.
+#
+# History, so it is not repeated. Review R12 found that looking for the right
+# words in the clause that names a thing is not enough: "do not, under any
+# circumstances, open doom", "my friend said, open doom", "open doom. actually
+# cancel that", "should I hide the clock?", "hide the clock, not the battery"
+# and "disable every game except doom" were all admitted. So:
+#   - a negation, report, cancel, question, condition, contrast, install word,
+#     second sentence or non-Latin letter anywhere refuses the whole request;
+#   - each verb starts its clause (after polite words), and a launch takes the
+#     name as its object ("the memory load is high" opens nothing);
+#   - a bare continuation ("... and the battery") takes the verb before it,
+#     unless it says its own on or off.
 
-# Verbs, not their -ing forms: "I love playing chess bash" asks for nothing.
-_OPEN = re.compile(r"\b(?:open|launch|start|run|play|"
-                   r"fire up|boot up|boot|bring up|pull up|load|load up|show me|give me|"
-                   r"get me|spin up|let'?s play|wanna play|want to play|like to play|"
-                   r"in the mood for|up for a round of|up for some|a round of|a game of)\b",
-                   re.I)
-_GAP = r"(?:\s+[\w'-]+){0,6}?\s+"      # "put the clock back", "turn the text to speech button on"
+_GAP = r"(?:\s+[\w']+){0,6}?\s+"      # "put the clock back", "turn the text to speech button on"
+# Negated wishes that mean "off", said as one phrase: "I don't need the clock",
+# "never show cpu on panes"; not "I don't want to play doom".
+_NEGATED_WANT = r"\b(?:don'?t|do not|no longer|never)\s+(?:show|want|need|display)\b(?!\s+to\b)"
 _ON = [rf"\b(?:turn|switch){_GAP}on\b", rf"\b(?:put|bring|add){_GAP}back\b",
        rf"\bmake{_GAP}available\b", r"\bturn on\b", r"\bswitch on\b", r"\bput back\b",
-       r"\bbring back\b", r"\bshow\b", r"\bdisplay\b", r"\bre-?enable\b", r"\benable\b",
-       r"\bunhide\b", r"\brestore\b", r"\breveal\b", r"\b(?:want|like) to see\b",
-       r"\bi (?:want|need)\b", r"\bi'?d like\b", r"\bi would like\b", r"\ballow\b",
-       r"\bunblock\b", r"\badd\b", r"\bput\b"]
+       r"\bbring back\b", r"\bshow\b(?!\s+me\b)", r"\bdisplay\b", r"\bre ?enable\b",
+       r"\benable\b", r"\bunhide\b", r"\brestore\b", r"\breveal\b", r"\b(?:want|like) to see\b",
+       r"\ballow\b", r"\bunblock\b", rf"\badd{_GAP}to\b",
+       rf"\bput{_GAP}(?:in|on|onto|into) (?:the |my )?(?:top bar|status bar|bar|panes?|games list)\b"]
+# A wish reads as on only when nothing in the clause says off: "I want a
+# dictation button on my panes", not "I want the clock hidden" or "I'd like
+# the battery indicator off the bar"; and not "I want to play doom".
+_WISH = [r"\bi (?:want|need)\b(?!\s+to\b)", r"\bi'?d like\b(?!\s+to\b)",
+         r"\bi would like\b(?!\s+to\b)"]
 _OFF = [rf"\b(?:turn|switch){_GAP}off\b", rf"\bmake{_GAP}unavailable\b",
-        rf"\btake{_GAP}(?:off|away|out)\b", r"\bturn off\b", r"\bswitch off\b",
-        r"\bget rid of\b", r"\bstop showing\b", r"\b(?:don'?t|do not|no longer) (?:show|want|need)\b",
-        r"\bhide\b", r"\bremove\b", r"\bdisable\b", r"\bdrop\b", r"\bditch\b", r"\blose\b",
-        r"\bblock\b"]
-_NOT_ON = [r"\b(?:don'?t|do not) hide\b", r"\bstop hiding\b", r"\bun-hide\b"]   # read as on
+        rf"\btake{_GAP}(?:off|away|out)\b", rf"\bput{_GAP}away\b", r"\bturn off\b",
+        r"\bswitch off\b", r"\bget rid of\b", r"\bstop showing\b", _NEGATED_WANT, r"\bhide\b",
+        r"\bremove\b", r"\bdisable\b", r"\bdrop\b", r"\bditch\b", r"\blose\b", r"\bblock\b"]
+# "I want the clock gone", but not "the clock is gone".
+_OFF_STATE = [r"\bhidden\b", r"\bgone\b", r"\bremoved\b", r"\baway\b"]
+_NOT_ON = [r"\bstop hiding\b", r"\bun hide\b"]   # read as on
+# Third person only: "keep cpu visible" and "get rid of the clock" are instructions,
+# and so is "have the panes show cpu" (a "have" that starts the clause).
+_FINITE = re.compile(r"\b(?:is|are|was|were|be|been|has|(?<=\s)have|had|looks|seems|feels|"
+                     r"gets|got|keeps|stays|works|crashed|broke|died)\b")
+# A bare continuation's own word for on or off: "turn the clock on and the battery off".
+_PARTICLE_ON = re.compile(r"\b(?:on|back)$|\b(?:available|visible|shown)\b")
+_PARTICLE_OFF = re.compile(r"\b(?:off|hidden|gone|removed|away|unavailable|invisible)\b")
+_PARTICLE_VERB = re.compile(r"(?:turn|switch)\b")    # "turn the clock and the battery off"
+
+# Polite words before a verb.
+_HEAD = re.compile(r"^(?:(?:please|pls|kindly|ok|okay|alright|hey|hi|yo|just|now|so|"
+                   r"(?:can|could|would|will) you(?: please| kindly| be so kind as to)?|can we|"
+                   r"i (?:need|want) you to|i'?d like you to|i (?:have|need|want) to|help me|"
+                   r"go ahead and|let me|let'?s)\s+)*")
+# Verbs, not their -ing forms: "I love playing chess bash" asks for nothing.
+_OPEN = re.compile(r"(?:open|pop open|launch|start|run|play|fire up|boot up|boot|bring up|"
+                   r"pull up|load up|load|show me|give me|get me|spin up|let'?s play|"
+                   r"(?:i )?(?:really |just )?(?:wanna|want to) play|"
+                   r"(?:i'?d |i would )?like to play|(?:i'?m |i am )?in the mood for|"
+                   r"(?:i )?(?:feel like|fancy)(?: a game of| a round of| some| playing)?|"
+                   r"(?:i'?m |i am |anyone |who'?s )?up for (?:a round of|a game of|some)|"
+                   r"how about (?:a game of|a round of|some)|a round of|a game of)\b")
+# Offers that may end in a question mark: "up for a round of chess?"
+_INVITE = re.compile(r"^(?:anyone |who'?s |i'?m )?(?:up for|how about|fancy|feel like)\b")
+_SET_VERB = re.compile(r"(?:always |only |never )?(?:set|change|make|put|pin|turn|switch|show|"
+                       r"display|hide|keep|stop showing)\b")
+_NAV = re.compile(r"(?:open|show me|show|go (?:straight )?(?:to|into)|take me (?:to|into)|bring up|"
+                  r"pull up|jump (?:to|into)|navigate to|switch to|head (?:over )?to|"
+                  r"get me (?:to|into)|get into|display|configure|change|adjust|tweak|edit|"
+                  r"i (?:need|want)(?: to see)?)\b")
+# "where are the games settings": a question that only asks the way.
+_WAY_QUESTION = re.compile(r"^(?:where (?:are|is|can i|do i)|how (?:do|can) i (?:get to|find|reach|"
+                           r"open|change))\b")
+_GAME_VERB = re.compile(r"\b(?:enable|disable|re ?enable|available|unavailable|allow|block|"
+                        r"unblock)\b")
+# What may stand between a launch verb and the name, and what may follow it.
+_FILLER = r"(?:(?:the|a|an|my|me|us|some|of|up|round|game|quick|little|new|our|this|that)\s+)*"
+_TAIL = re.compile(r"(?:please|pls|now|for|again|right|thanks|thank you|quickly|quick|real|up|"
+                   r"too|in|with|on|game|app|tool|program|then|already|asap|soon)\b")
 _SETTINGS_WORD = re.compile(r"\b(?:settings?|preferences|prefs|options|config(?:ure|uration)?|"
-                            r"section|page|screen|panel)\b", re.I)
-_UNSAFE_CONTEXT = re.compile(r"\b(?:install|installing|uninstall|uninstalling|update|updating|"
-                             r"upgrade|remove the app|delete|download|downloading)\b", re.I)
-_NEGATION = re.compile(r"\b(?:not|never|don'?t|do not|avoid|without|cannot|can'?t|won'?t|"
-                       r"shouldn'?t|no need to|neither|nor)\b", re.I)
-_REPORTED = re.compile(r"\b(?:says|said|say|saying|told|tells|asked me|wrote|writes|reads|"
-                       r"according to|claims|claimed)\b", re.I)
+                            r"section|page|screen|panel)\b")
+
+# Request-wide refusals, as (pattern, reason).
+_NEGATION = re.compile(r"\b(?:not|never|no|none|nothing|don'?t|do not|avoid|without|cannot|"
+                       r"can'?t|won'?t|shouldn'?t|no need to|neither|nor|\w+n't)\b")
+_CANCEL = re.compile(r"\b(?:cancel|never ?mind|nvm|scratch that|forget (?:it|that|about it)|"
+                     r"actually|wait|hold on|undo|on second thoughts?|changed my mind|"
+                     r"ignore (?:that|this|me))\b")
+_REPORTED = re.compile(r"\b(?:says|said|say|saying|told|tells|telling|tell me to|asked|asks|"
+                       r"asking|wrote|writes|written|reads|read out|according to|claims|"
+                       r"claimed|wants me to|suggest\w*|recommend\w*|mention\w*|quot\w*|"
+                       r"instruct\w*)\b|\"")
+_QUESTION = re.compile(r"^(?:(?:so|and|but|ok|okay|hey|hmm|um|well)\s+)*(?:should|shall|"
+                       r"how(?! about)|what|why|when|where|which|who|whose|is|are|am|was|were|"
+                       r"does|did|do (?:i|we|you)|has|had|have (?:you|i|we)|will (?:i|it|that)|"
+                       r"would (?:it|that|i)|could (?:i|it)|can i|may i|might)\b")
+_POLITE_ASK = re.compile(r"^(?:(?:please|pls|ok|okay|hey|hi)\s+)*(?:can|could|would|will) you\b")
+_CONDITION = re.compile(r"\b(?:if|unless|whether|in case|suppose|supposing|imagine|"
+                        r"hypothetically|assuming|once i|when i)\b")
+_CONTRAST = re.compile(r"\b(?:except|excepting|excluding|rather than|instead of|instead|"
+                       r"but not|other than|apart from|aside from|besides|save for|in place of|"
+                       r"as opposed to|versus|vs)\b")
+_INSTALL = re.compile(r"\b(?:re ?install\w*|install\w*|uninstall\w*|updat\w*|upgrad\w*|"
+                      r"download\w*|set up|setup|grab|fetch|delete|purge|from the store|"
+                      r"remove the app|build|compile)\b")
+# "if you could open doom, that would be great" is a polite instruction.
+_POLITE_IF = re.compile(r"if you (?:could|can|would)(?: please)? (?P<ask>.+?)(?:,? (?:that would be|"
+                        r"that'?d be) (?:great|nice|lovely|awesome|good|perfect))?[.!]*")
+_COURTESY = re.compile(r"(?:thanks|thank you|thx|ty|cheers|please|pls|ta|hi|hello|hey|ok|okay)"
+                       r"(?: (?:so much|a lot|very much|there))?[.!]*")
+# Where a program opens, other than a new tab, is the panes job.
+_PLACED = re.compile(r"\b(?:in|into|on|at|to|beside|next to|below|above|under)\s+(?:(?:the|a|an|"
+                     r"this|that|my|another|current|same|other|its own)\s+)?(?:[\w']+\s+)?"
+                     r"(?:pane|split|window|column|tab)\b(?!\s+(?:buttons?|transcripts?|stats?|"
+                     r"left|right|up|down|above|below|list|bar)\b)")
+_NEW_TAB = re.compile(r"\b(?:in|into)\s+(?:a|another|its own)\s+(?:new\s+)?tab\b")
+
+
+# "turn off the microphone" is the device, not the pane button.
+_DEVICE_ITEMS = frozenset({"volume", "dictate", "speak"})
+_DEVICE_VERB = re.compile(r"\b(?:turn|switch|mute|unmute)\b")
+_WIDGET = re.compile(r"\b(?:buttons?|icons?|indicators?|widgets?|bar|panes?)\b")
+
+
+def _alternation(table: dict) -> str:
+    return "|".join(re.escape(" ".join(re.sub(r"[_\-]+", " ", w).split()))
+                    for w in sorted({w for key in table for w in [key, *table[key]]},
+                                    key=len, reverse=True))
+
+
+# Terse forms with no verb that still say one thing: "pane ram always",
+# "cpu on panes off", "tools options please", "settings for the speech".
+_TERSE_STAT = re.compile(rf"(?:the )?(?:pane )?(?:{_alternation(STAT_NAMES)})(?: (?:stat|meter|usage|"
+                         rf"readout))?(?: on (?:the |my )?panes?)?(?: (?:on|to|at))? "
+                         rf"(?:{_alternation(MODE_NAMES)})(?: please)?")
+_TERSE_SETTINGS = re.compile(rf"(?:(?:the )?(?:settings|options|preferences) for (?:the )?"
+                             rf"(?:{_alternation(SECTION_NAMES)})|(?:the )?(?:{_alternation(SECTION_NAMES)}) "
+                             rf"(?:settings|options|preferences|section|page))(?: please)?")
 
 
 def _plain_words(text: str) -> str:
-    """Lower case, hyphens and underscores as spaces, single spaces."""
-    return " ".join(re.sub(r"[_\-]+", " ", normalize(text).casefold()).split())
+    """Lower case, hyphens and underscores as spaces, backticks as apostrophes, single spaces."""
+    return " ".join(re.sub(r"[_\-]+", " ", normalize(text).casefold().replace("`", "'")).split())
 
 
 def _names(table: dict, key: str) -> list[str]:
@@ -249,8 +357,12 @@ def _resolve(table: dict, universe: tuple, value) -> str | None:
     return best[0][1]
 
 
-def _clause_parts(request: str) -> list[str]:
-    return [_plain_words(c) for c in _clauses(normalize(request)) if c.strip()]
+def _is_name(table: dict, key: str, text: str) -> bool:
+    """The text is exactly one of key's names (or, for items, a group holding it)."""
+    said = _plain_words(text)
+    if table is ITEM_NAMES and key in ITEM_GROUPS.get(said, ()):
+        return True
+    return said in _names(table, key)
 
 
 def _mentions(table: dict, key: str, clause: str) -> re.Match | None:
@@ -268,47 +380,266 @@ def _mentions(table: dict, key: str, clause: str) -> re.Match | None:
     return None
 
 
+def _mentions_item(item: str, clause: str) -> bool:
+    return bool(_mentions(ITEM_NAMES, item, clause)) or any(
+        item in members and _said(group, clause) for group, members in ITEM_GROUPS.items())
+
+
 def _polarity(clause: str) -> bool | None:
     """True, False, or None when the clause says neither or both."""
     text = clause
     found = set()
-    for patterns, value in ((_NOT_ON, True), (_OFF, False), (_ON, True)):
+    lists = [(_NOT_ON, True), (_OFF, False), (_ON, True)]
+    if not _FINITE.search(clause):
+        lists.append((_OFF_STATE, False))
+    if not _PARTICLE_OFF.search(clause):
+        lists.append((_WISH, True))
+    for patterns, value in lists:
         for pattern in patterns:
             if re.search(pattern, text):
                 found.add(value)
                 text = re.sub(pattern, " ", text)
-    if len(found) != 1:
-        return None
-    # A negation left over after the polarity phrases took theirs flips or
-    # muddles the meaning: refuse rather than guess.
-    if _NEGATION.search(text):
-        return None
-    return found.pop()
+    return found.pop() if len(found) == 1 else None
 
 
-_FINITE = re.compile(r"\b(?:is|are|was|were|be|been|has|have|had|looks?|seems?|feels?|"
-                     r"gets?|got|keeps?|stays?|works?|crashed|broke|died)\b")
+def _body(clause: str) -> str:
+    """The clause after its polite words."""
+    return clause[_HEAD.match(clause).end():]
 
 
-def _clauses_with_verbs(request: str) -> list[tuple[str, str]]:
-    """Each clause, with the verb clause it belongs to: a bare noun phrase after
-    a verb clause ("hide the clock and the battery") takes that clause's verb."""
-    out, last = [], ""
-    for clause in _clause_parts(request):
-        # "the settings app" names an app: its settings word is not a verb.
-        settings_verb = _SETTINGS_WORD.search(clause) and not any(
-            _mentions(LAUNCH_NAMES, key, clause) for key in APPS)
-        has_verb = bool(_OPEN.search(clause) or _polarity(clause) is not None or settings_verb)
-        if has_verb:
-            last = clause
-            out.append((clause, clause))
+def _opening(clause: str) -> str | None:
+    """What follows the opening verb, when the clause starts with one."""
+    body = _body(clause)
+    match = _OPEN.match(body)
+    return body[match.end():].strip() if match else None
+
+
+def _object(text: str, table: dict, key: str) -> bool:
+    """The text is filler words, then a name of key, then at most a tail that
+    says nothing more about what it is ("doom for me", not "memory tests")."""
+    for phrase in _names(table, key):
+        match = re.match(rf"{_FILLER}{re.escape(phrase)}(?!\w)\s*", text)
+        if match and (match.end() == len(text) or _TAIL.match(text, match.end())):
+            return bool(_mentions(table, key, text))
+    return False
+
+
+def _particle(clause: str) -> bool | None | str:
+    on, off = bool(_PARTICLE_ON.search(clause)), bool(_PARTICLE_OFF.search(clause))
+    return "both" if on and off else True if on else False if off else None
+
+
+@dataclass(frozen=True)
+class Part:
+    """One clause, the verb clause it belongs to, and the on/off it says."""
+    text: str
+    verb: str
+    on: bool | None
+    bare: bool = False
+
+
+@dataclass(frozen=True)
+class Reading:
+    parts: tuple = ()
+    refusal: str | None = None     # refuses every call
+    placed: bool = False           # says where a program opens: the panes job
+    way: bool = False              # only asks where something is ("where are the games settings")
+
+
+def _has_verb(clause: str) -> bool:
+    body = _body(clause)
+    return (_polarity(clause) is not None or _opening(clause) is not None
+            or bool(_SET_VERB.match(body) or _NAV.match(body) or _PARTICLE_VERB.match(body)))
+
+
+def _is_bare(clause: str) -> bool:
+    return len(clause.split()) <= 7 and not _FINITE.search(clause)
+
+
+def _refusal(text: str) -> str | None:
+    """Why the whole request is refused, if it is."""
+    if any(c.isalpha() and not ("a" <= c <= "z" or "ß" <= c <= "ɏ") for c in text):
+        return "the request has letters outside the Latin alphabet"
+    if _REPORTED.search(text):
+        return "the request reports someone else's words"
+    if _CANCEL.search(text):
+        return "the request takes something back"
+    unwanted = text
+    for pattern in [_NEGATED_WANT, *_NOT_ON]:
+        unwanted = re.sub(pattern, " ", unwanted)
+    if _NEGATION.search(unwanted):
+        return "the request says not to, or not what: say just what to do"
+    if _CONTRAST.search(text):
+        return "the request makes an exception or a contrast: name just what to change"
+    if _CONDITION.search(text):
+        return "the request is a condition or a supposition, not an instruction"
+    if _INSTALL.search(text):
+        return "installs, updates and removals are not done here"
+    return None
+
+
+def _read(request: str) -> Reading:
+    text = _plain_words(request)
+    sentences = [s for s in re.split(r"(?<=[.!?])\s+", text) if s.strip(" .!?")]
+    asked = [s for s in sentences if not _COURTESY.fullmatch(s)]
+    if len(asked) > 1:
+        return Reading(refusal="the request says more than one sentence: one instruction at a time")
+    if not asked:
+        return Reading()
+    sentence = asked[0]
+    polite = _POLITE_IF.fullmatch(sentence)
+    if polite:
+        sentence = polite["ask"]
+    way = bool(_WAY_QUESTION.match(sentence))
+    if not way and (_QUESTION.match(sentence) or sentence.endswith("?")
+                    and not (_POLITE_ASK.match(sentence) or _INVITE.match(sentence))):
+        return Reading(refusal="the request is a question, not an instruction")
+    reason = _refusal(sentence)
+    if reason:
+        return Reading(refusal=reason)
+    sentence = sentence.rstrip(" .!?")
+    clauses = []
+    for index, chunk in enumerate(re.split(r"\s*,?\s*\bbut\b\s*", sentence)):
+        pieces = [c.strip() for c in _clauses(chunk) if c.strip()]
+        clauses += [(c, index > 0 and n == 0) for n, c in enumerate(pieces)]
+    parts, last = [], None
+    for index, (clause, after_but) in enumerate(clauses):
+        if _has_verb(clause):
+            on = _polarity(clause)
+            if on is None and _PARTICLE_VERB.match(_body(clause)):
+                # "turn the clock and the battery off": the group's last word says.
+                group = []
+                for following, _ in clauses[index + 1:]:
+                    if _has_verb(following) or not _is_bare(following):
+                        break
+                    group.append(following)
+                said = _particle(group[-1]) if group else None
+                on = said if isinstance(said, bool) else None
+            last = Part(clause, clause, on)
+            parts.append(last)
+        elif last is not None and _is_bare(clause):
+            if after_but:
+                # "disable every game but doom": "but" there means except.
+                return Reading(refusal="the request makes an exception: name just what to change")
+            own = _particle(clause)
+            if own is None:
+                on = last.on
+            elif own == "both":
+                on = None
+            elif _PARTICLE_VERB.match(_body(last.verb)) or own == last.on:
+                on = own
+            else:
+                on = None                  # "enable doom and solitaire off"
+            parts.append(Part(clause, last.verb, on, bare=True))
         else:
-            # A bare noun phrase ("and wifi icons from the top bar") continues
-            # the verb before it; a clause with its own verb ("the battery is
-            # low") does not.
-            bare = len(clause.split()) <= 7 and not _FINITE.search(clause)
-            out.append((clause, last if bare else clause))
-    return out
+            last = None                    # "the battery is low" ends the verb's reach
+            parts.append(Part(clause, clause, None))
+    placed = bool(_PLACED.search(sentence)) and not _NEW_TAB.search(sentence)
+    return Reading(tuple(parts), None, placed, way)
+
+
+# ---------------------------------------------------------------------------
+
+
+def _admit(name: str, args: dict, reading: Reading) -> Action | Refusal:
+    parts = reading.parts
+    if name == "launch":
+        app = _resolve(LAUNCH_NAMES, LAUNCHABLE, args.get("app"))
+        if app is None:
+            return Refusal(name, f"{args.get('app')!r} is not a Kilix app, game or tool")
+        if reading.placed:
+            return Refusal(name, "where a program opens in a pane is the panes job; "
+                                 "this job opens it in a new tab")
+        for index, part in enumerate(parts):
+            if part.bare:
+                if _opening(part.verb) is not None and _object(part.text, LAUNCH_NAMES, app):
+                    return Action(name, {"app": app})
+                continue
+            rest = _opening(part.text)
+            if rest is None:
+                continue
+            if _object(rest, LAUNCH_NAMES, app):
+                return Action(name, {"app": app})
+            # "enable joustix, then launch it": "it" is the app the clause
+            # before named, and only that one.
+            it = re.match(r"(?:it|that one|that game|that app)(?!\w)\s*", rest)
+            if it and index and (it.end() == len(rest) or _TAIL.match(rest, it.end())) \
+                    and _mentions(LAUNCH_NAMES, app, parts[index - 1].text):
+                return Action(name, {"app": app})
+        return Refusal(name, f"no part of the request asks to open {app}")
+    if name == "show":
+        item, on = args.get("item"), args.get("on")
+        if item not in ITEMS or not isinstance(on, bool):
+            return Refusal(name, "not a known indicator or button, or no on/off")
+        for part in parts:
+            if item in _DEVICE_ITEMS and _DEVICE_VERB.search(part.verb) \
+                    and not _WIDGET.search(part.text):
+                continue
+            if _mentions_item(item, part.text) and part.on is on:
+                return Action(name, {"item": item, "on": on})
+        return Refusal(name, f"no part of the request asks to {'show' if on else 'hide'} {item}")
+    if name == "pane_stat":
+        stat, mode = args.get("stat"), args.get("mode")
+        if stat not in STATS or mode not in MODES:
+            return Refusal(name, "not cpu or memory, or not auto, always or off")
+        other = "cpu" if stat == "memory" else "memory"
+        for index, part in enumerate(parts):
+            if not _mentions(STAT_NAMES, stat, part.text):
+                continue
+            # A verb that sets or shows, in an instruction: not "my memory is always full".
+            if not (_SET_VERB.match(_body(part.verb)) or _polarity(part.verb) is not None
+                    or _TERSE_STAT.fullmatch(part.text)) or _FINITE.search(part.verb):
+                continue
+
+            def modes(text):
+                return {m for m in MODES if _mentions(MODE_NAMES, m, text)}
+            said = modes(part.text)
+            if not said and part.bare:
+                said = modes(part.verb)
+            # "..., switch it off": the next clause says the mode of this one.
+            if not said and index + 1 < len(parts) and re.search(r"\bit\b", parts[index + 1].text) \
+                    and not _mentions(STAT_NAMES, other, parts[index + 1].text):
+                said = modes(parts[index + 1].text)
+            if said != {mode} or (part.on is False and mode != "off"):
+                continue
+            # Everything said up to the next clause that names something must
+            # not say another mode: "always, or maybe off" says two.
+            following = []
+            for later in parts[index + 1:]:
+                if _names_something(later.text):
+                    break
+                following.append(later.text)
+            if not any(modes(text) - {mode} for text in following):
+                return Action(name, {"stat": stat, "mode": mode})
+        return Refusal(name, f"no part of the request sets pane {stat} to {mode}")
+    if name == "game":
+        game = _resolve(LAUNCH_NAMES, AVAILABILITY, args.get("game"))
+        available = args.get("available")
+        if game is None or not isinstance(available, bool):
+            return Refusal(name, f"{args.get('game')!r} is not a Kilix game, or no on/off")
+        for index, part in enumerate(parts):
+            named = _mentions(LAUNCH_NAMES, game, part.text)
+            # "fire up pong and afterwards make it unavailable"; not "enable doom then hide it".
+            if not named and index and re.search(r"\b(?:it|that one|that game)\b", part.text) \
+                    and _GAME_VERB.search(part.text) \
+                    and _mentions(LAUNCH_NAMES, game, parts[index - 1].text):
+                named = True
+            if named and part.on is available:
+                return Action(name, {"game": game, "available": available})
+        return Refusal(name, f"no part of the request makes {game} "
+                             f"{'available' if available else 'unavailable'}")
+    # settings
+    section = args.get("section")
+    if section not in SECTIONS:
+        return Refusal(name, "not a settings section")
+    for part in parts:
+        asks = _NAV.match(_body(part.verb)) or reading.way or _TERSE_SETTINGS.fullmatch(part.text)
+        if asks and _mentions(SECTION_NAMES, section, part.text) \
+                and _SETTINGS_WORD.search(part.text) \
+                and (reading.way or not _FINITE.search(part.text)) \
+                and "center" not in part.text and "centre" not in part.text:
+            return Action(name, {"section": section})
+    return Refusal(name, f"no part of the request opens the {section} settings")
 
 
 def _names_something(clause: str) -> bool:
@@ -319,115 +650,16 @@ def _names_something(clause: str) -> bool:
                for key in keys)
 
 
-def _refused_context(clause: str, verb_clause: str) -> str | None:
-    if _REPORTED.search(verb_clause):
-        return "the request reports someone else's words"
-    if _UNSAFE_CONTEXT.search(verb_clause):
-        return "installs, updates and removals are not done here"
-    return None
-
-
-# ---------------------------------------------------------------------------
-
-
-def _admit(name: str, args: dict, request: str) -> Action | Refusal:
-    parts = _clauses_with_verbs(request)
-    if name == "launch":
-        app = _resolve(LAUNCH_NAMES, LAUNCHABLE, args.get("app"))
-        if app is None:
-            return Refusal(name, f"{args.get('app')!r} is not a Kilix app, game or tool")
-        for index, (clause, verb_clause) in enumerate(parts):
-            named = _mentions(LAUNCH_NAMES, app, clause)
-            # "enable joustix, then launch it": "it" is the app the clause
-            # before named, and only that one.
-            if not named and index and re.search(r"\b(?:it|that one|that game|that app)\b", clause) \
-                    and _mentions(LAUNCH_NAMES, app, parts[index - 1][0]):
-                named, verb_clause = True, clause
-            if not named:
-                continue
-            # "download and open X": a bare verb clause just before governs X too.
-            before = parts[index - 1][0] if index else ""
-            if before and len(before.split()) <= 2 and _UNSAFE_CONTEXT.search(before):
-                return Refusal(name, "installs, updates and removals are not done here")
-            reason = _refused_context(clause, verb_clause)
-            if reason:
-                return Refusal(name, reason)
-            verb = _OPEN.search(verb_clause)
-            if not verb or _NEGATION.search(verb_clause[:verb.start()]):
-                continue
-            return Action(name, {"app": app})
-        return Refusal(name, f"no part of the request asks to open {app}")
-    if name == "show":
-        item, on = args.get("item"), args.get("on")
-        if item not in ITEMS or not isinstance(on, bool):
-            return Refusal(name, "not a known indicator or button, or no on/off")
-        for clause, verb_clause in parts:
-            if not _mentions(ITEM_NAMES, item, clause):
-                continue
-            reason = _refused_context(clause, verb_clause)
-            if reason:
-                return Refusal(name, reason)
-            if _polarity(verb_clause) is on:
-                return Action(name, {"item": item, "on": on})
-        return Refusal(name, f"no part of the request asks to {'show' if on else 'hide'} {item}")
-    if name == "pane_stat":
-        stat, mode = args.get("stat"), args.get("mode")
-        if stat not in STATS or mode not in MODES:
-            return Refusal(name, "not cpu or memory, or not auto, always or off")
-        for index, (clause, verb_clause) in enumerate(parts):
-            if not _mentions(STAT_NAMES, stat, clause) or _REPORTED.search(verb_clause):
-                continue
-            # The mode in this clause, else in its verb clause, else in the next
-            # when that one only says it ("..., switch it off").
-            nearby = [clause, verb_clause]
-            if index + 1 < len(parts) and re.search(r"\bit\b", parts[index + 1][0]) \
-                    and not _mentions(STAT_NAMES, "cpu" if stat == "memory" else "memory",
-                                      parts[index + 1][0]):
-                nearby.append(parts[index + 1][0])
-            where = next((text for text in nearby if _mentions(MODE_NAMES, mode, text)), None)
-            # Everything said about this stat, up to the next clause that names a
-            # stat, must say one mode: "always, or maybe off" says two.
-            span = [where or ""] + [c for c, _ in parts[index + 1:][:next(
-                (i for i, (c, _) in enumerate(parts[index + 1:]) if _names_something(c)),
-                len(parts))]]
-            if where and not any(_mentions(MODE_NAMES, other, text)
-                                 for other in MODES if other != mode for text in span):
-                return Action(name, {"stat": stat, "mode": mode})
-        return Refusal(name, f"no part of the request sets pane {stat} to {mode}")
-    if name == "game":
-        game = _resolve(LAUNCH_NAMES, AVAILABILITY, args.get("game"))
-        available = args.get("available")
-        if game is None or not isinstance(available, bool):
-            return Refusal(name, f"{args.get('game')!r} is not a Kilix game, or no on/off")
-        for index, (clause, verb_clause) in enumerate(parts):
-            named = _mentions(LAUNCH_NAMES, game, clause)
-            # "fire up pong and afterwards make it unavailable"
-            if not named and index and re.search(r"\b(?:it|that one|that game)\b", clause) \
-                    and _mentions(LAUNCH_NAMES, game, parts[index - 1][0]):
-                named, verb_clause = True, clause
-            if not named:
-                continue
-            reason = _refused_context(clause, verb_clause)
-            if reason:
-                return Refusal(name, reason)
-            if _polarity(verb_clause) is available:
-                return Action(name, {"game": game, "available": available})
-        return Refusal(name, f"no part of the request makes {game} "
-                             f"{'available' if available else 'unavailable'}")
-    # settings
-    section = args.get("section")
-    if section not in SECTIONS:
-        return Refusal(name, "not a settings section")
-    for clause, verb_clause in parts:
-        if _mentions(SECTION_NAMES, section, clause) and _SETTINGS_WORD.search(verb_clause) \
-                and not _REPORTED.search(verb_clause) and not _NEGATION.search(verb_clause) \
-                and "center" not in clause and "centre" not in clause:
-            return Action(name, {"section": section})
-    return Refusal(name, f"no part of the request opens the {section} settings")
+def _key(action: Action) -> tuple:
+    """What an action sets: two admitted actions setting it differently clash."""
+    args = action.args
+    return {"show": ("show", args.get("item")), "pane_stat": ("pane_stat", args.get("stat")),
+            "game": ("game", args.get("game"))}.get(action.kind, (action.kind, id(action)))
 
 
 def interpret(request: str, calls: list) -> list[Action | Refusal]:
     """Turn the engine's calls into admitted actions or named refusals."""
+    reading = _read(request)
     results: list[Action | Refusal] = []
     seen = set()
     for call in calls if isinstance(calls, list) else []:
@@ -436,32 +668,100 @@ def interpret(request: str, calls: list) -> list[Action | Refusal]:
         if name not in TOOL_NAMES or not isinstance(args, dict):
             results.append(Refusal(str(name), "not a kilix-needle apps action"))
             continue
-        result = _admit(name, args, request)
+        if reading.refusal:
+            result = Refusal(name, reading.refusal)
+        elif reading.way and name != "settings":
+            result = Refusal(name, "the request asks where something is; only a settings "
+                                   "screen opens for that")
+        else:
+            result = _admit(name, args, reading)
         if isinstance(result, Action):
             key = (result.kind, tuple(sorted(result.args.items())))
             if key in seen:
                 continue            # the same action twice is one action
             seen.add(key)
         results.append(result)
+    admitted = [r for r in results if isinstance(r, Action)]
+    clashing = {_key(a) for a in admitted for b in admitted if a is not b and _key(a) == _key(b)}
+    disabled = set()
+    for index, result in enumerate(results):
+        if isinstance(result, Action) and result.kind == "game" and not result.args["available"]:
+            disabled.add(result.args["game"])
+        if isinstance(result, Action) and _key(result) in clashing:
+            results[index] = Refusal(result.kind, "the request sets this two ways")
+        elif isinstance(result, Action) and result.kind == "launch" \
+                and result.args["app"] in disabled:
+            # "disable doom and open it": the tab would only say doom is disabled.
+            results[index] = Refusal("launch", f"the request makes {result.args['app']} "
+                                               "unavailable")
     return results
 
 
-# A yes given in advance covers only a launch the request states outright:
-# an opening verb with the app named right after it, nothing reported,
-# negated or refused. Settings changes are reversible and never need it.
-_PLAIN_LAUNCH = re.compile(r"^(?:please |can you |could you |pls )?(?:open|launch|start|play|run)"
-                           r" (?:the |a |up )?(?P<name>[\w .+-]+?)(?: please| now| for me)?[.!]?$")
+# A yes given in advance (--yes, MCP confirm_risky) covers only an action the
+# request states outright, in a canonical form of the action itself. Each form
+# is (pattern, value), where value is the on/off or mode the form says, or
+# None when the pattern's "mode" group says it.
+_P_HEAD = r"^(?:(?:please|pls|can you|could you|would you)\s+)?"
+_P_TAIL = r"(?:\s+(?:please|pls|now|for me|thanks|thank you))?$"
+_PLAIN_FORMS = {
+    "launch": [(r"(?:open|launch|start|play|run) (?:the )?(?P<name>.+?)", None)],
+    "show": [(r"(?:show|unhide) (?:the )?(?P<name>.+?)", True), (r"hide (?:the )?(?P<name>.+?)", False),
+             (r"(?:turn|switch) on (?:the )?(?P<name>.+?)", True),
+             (r"(?:turn|switch) off (?:the )?(?P<name>.+?)", False),
+             (r"(?:turn|switch) (?:the )?(?P<name>.+?) on", True),
+             (r"(?:turn|switch) (?:the )?(?P<name>.+?) off", False)],
+    "game": [(r"enable (?P<name>.+?)", True), (r"disable (?P<name>.+?)", False),
+             (r"make (?P<name>.+?) available", True), (r"make (?P<name>.+?) unavailable", False)],
+    "pane_stat": [(r"set (?:the )?pane (?P<name>.+?) to (?P<mode>.+?)", None),
+                  (r"show (?:the )?pane (?P<name>.+?) (?P<mode>always|auto)", None),
+                  (r"(?:hide|stop showing) (?:the )?pane (?P<name>.+?)", "off"),
+                  (r"always show (?:the )?pane (?P<name>.+?)", "always")],
+}
+_PLAIN_TABLE = {"launch": ("app", LAUNCH_NAMES), "show": ("item", ITEM_NAMES),
+                "game": ("game", LAUNCH_NAMES), "pane_stat": ("stat", STAT_NAMES)}
+
+
+def _value(action: Action):
+    return {"show": action.args.get("on"), "game": action.args.get("available"),
+            "pane_stat": action.args.get("mode")}.get(action.kind)
+
+
+def _form(kind: str, text: str, value) -> re.Match | None:
+    """The canonical form of this kind the text is, saying this value."""
+    for pattern, says in _PLAIN_FORMS[kind]:
+        match = re.match(_P_HEAD + pattern + _P_TAIL, text)
+        if not match:
+            continue
+        if kind == "pane_stat" and says is None:
+            if not _is_name(MODE_NAMES, value, match["mode"]):
+                continue
+        elif says is not None and says != value:
+            continue
+        return match
+    return None
+
+
+def _plainly(action: Action, part: Part) -> bool:
+    field_name, table = _PLAIN_TABLE[action.kind]
+    key, value = action.args[field_name], _value(action)
+    if part.bare:
+        # "hide the clock and the battery": a bare name after a plain verb clause.
+        name = re.match(r"(?:the )?(?P<name>.+)$", part.text)["name"]
+        return action.kind != "launch" and _is_name(table, key, name) \
+            and _form(action.kind, part.verb, value) is not None
+    match = _form(action.kind, part.text, value)
+    return bool(match) and _is_name(table, key, match["name"])
 
 
 def plain(request: str, actions: list) -> str | None:
-    """None when every launch is stated plainly; otherwise why not."""
-    launches = [a for a in actions if isinstance(a, Action) and a.kind == "launch"]
-    if not launches:
-        return None
-    parts = _clause_parts(request)
-    for action in launches:
-        if not any((m := _PLAIN_LAUNCH.match(clause))
-                   and _resolve(LAUNCH_NAMES, LAUNCHABLE, m["name"]) == action.args["app"]
-                   for clause in parts):
-            return f"it does not simply say to open {action.args['app']}"
+    """None when every launch and settings change is stated plainly; otherwise why not."""
+    reading = _read(request)
+    for action in actions:
+        if not isinstance(action, Action) or action.kind not in SIDE_EFFECT_KINDS:
+            continue
+        if reading.refusal or not any(_plainly(action, part) for part in reading.parts):
+            what = {"launch": "open", "show": "show or hide", "game": "change",
+                    "pane_stat": "set"}[action.kind]
+            target = next(iter(action.args.values()))
+            return f"it does not simply say to {what} {target}"
     return None
