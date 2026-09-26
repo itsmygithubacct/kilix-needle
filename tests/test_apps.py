@@ -521,6 +521,22 @@ class ReviewR12Round2(unittest.TestCase):
         both = [apps.Action("launch", {"app": "solitaire"}), apps.Action("launch", {"app": "doom"})]
         self.assertIsNotNone(apps.plain("open solitaire and doom", both))
 
+    def test_any_question_mark_is_a_question(self):                               # KN-R12-501
+        for request in ("open doom?!", "open doom?.", "open doom\u2048", "open doom. ?",
+                        "? open doom", "open doom ?", "open doom??", "can you open doom??",
+                        "can you open doom?!", "can you open doom? thanks?",
+                        "? can you open doom?"):
+            self.assertEqual(admitted(request, [call("launch", app="doom")]), [], request)
+        for request in ("can you open doom?", "could you open doom? thanks",
+                        "can you open doom ?"):
+            self.assertEqual(admitted(request, [call("launch", app="doom")]),
+                             [["launch", {"app": "doom"}]], request)
+
+    def test_an_apostrophe_at_a_word_edge_is_not_a_quotation(self):               # KN-R12-502
+        for request in ("open doom, the kids' favourite", "open doom 'cause i am bored"):
+            [result] = apps.interpret(request, [call("launch", app="doom")])
+            self.assertNotIn("reports", getattr(result, "reason", ""), request)
+
     def test_quoted_words_never_vanish(self):                                     # KN-R12-401
         for request in ("'he goes', open doom", "open doom, 'n.o.t'",
                         "open doom, 'translate to french'", "open doom, `per the ticket`",

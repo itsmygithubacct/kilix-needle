@@ -281,7 +281,7 @@ _REPORTED = re.compile(r"\b(?:anyone|anybody|someone|somebody|everyone|everybody
                        r"says|said|say|saying|told|tells|telling|tell me to|asked|asks|"
                        r"asking|wrote|writes|written|reads|read out|according to|claims|"
                        r"claimed|wants me to|suggest\w*|recommend\w*|mention\w*|quot\w*|"
-                       r"instruct\w*)\b|\"|(?<!\w)'|'(?!\w)")    # quotation marks, not apostrophes
+                       r"instruct\w*)\b|\"|(?<!\w)'[^']+'(?!\w)")    # a quoted span, not apostrophes
 _QUESTION = re.compile(r"^(?:(?:so|and|but|ok|okay|hey|hmm|um|well)\s+)*(?:should|shall|"
                        r"how(?! about)|what|why|when|where|which|who|whose|is|are|am|was|were|"
                        r"does|did|do (?:i|we|you)|has|had|have (?:you|i|we)|will (?:i|it|that)|"
@@ -515,8 +515,13 @@ def _read(request: str) -> Reading:
     if polite:
         sentence = polite["ask"]
     way = bool(_WAY_QUESTION.match(sentence))
-    if not way and (_QUESTION.match(sentence) or sentence.endswith("?")
-                    and not (_POLITE_ASK.match(sentence) or _INVITE.match(sentence))):
+    # Any question mark anywhere makes it a question (review R12 round 5:
+    # "open doom?!", "? open doom"), except the one that closes a polite ask
+    # or an offer ("can you open doom?"), or a way-finding question.
+    closing = re.search(r"[.!?\s]*$", sentence).group()
+    polite_mark = (text.count("?") == 1 and closing.strip() == "?"
+                   and bool(_POLITE_ASK.match(sentence) or _INVITE.match(sentence)))
+    if not way and (_QUESTION.match(sentence) or "?" in text and not polite_mark):
         return Reading(refusal="the request is a question, not an instruction")
     # A way-finding question's own "how do I" is not a supposition.
     reason = _refusal(_WAY_QUESTION.sub("", sentence, count=1) if way else sentence)
