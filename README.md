@@ -213,6 +213,51 @@ kilix-needle tune --job panes --deselect      # that job back to its base model
 
 A selection saved before jobs existed is read as the `panes` selection.
 
+## The apps job
+
+`kilix-needle apps "…"` launches Kilix apps and games and changes Kilix
+settings. The MCP tools are `kilix_apps_plan` and `kilix_apps_act`.
+
+```sh
+kilix-needle apps "open the pdf viewer"          # a new tab running kilix-pdf
+kilix-needle apps "hide the clock and the battery"
+kilix-needle apps "show memory on panes always"
+kilix-needle apps "disable doom in the games list"
+kilix-needle apps --dry-run "take me to the voice settings"
+```
+
+The model sees five tools: `launch`, `show`, `pane_stat`, `game` and
+`settings`. Every call passes `apps.py`'s checks:
+- **Names.** The app, game, indicator or section must be one Kilix really
+  has, from the catalog and kilix-settings' controls, and the request must
+  name it.
+- **Verbs.** In the same clause, the request needs an opening verb for a
+  launch, or exactly one of show or hide for a change. A negated or reported
+  request does nothing.
+
+**Launches:**
+- A launch opens a new tab, never the pane you asked from.
+- It starts a program, so it needs a yes.
+- `--yes` and MCP `confirm_risky` give that yes only for a plainly stated
+  launch of something already installed.
+- A launch that would install first always waits for a person's own yes.
+  An agent never installs from here.
+
+Settings changes can be undone by asking again, and run without a question.
+
+**Left out on purpose:**
+- power;
+- installs, updates and removals, except a launch a person confirms;
+- bulk changes;
+- transcript budgets and turning session logging off;
+- voice engines, models and devices;
+- volume levels;
+- closing apps (that's the panes job).
+
+**Accuracy.** Stock Needle 2 gets 29 of 40 dev and 58 of 90 test requests
+exactly right on this schema, with 0 unsafe. A tuned model for this job is
+next; the bench decides the job's default (see Jobs).
+
 ## Fine-tuning
 
 ```sh

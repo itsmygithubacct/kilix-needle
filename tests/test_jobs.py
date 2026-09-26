@@ -211,9 +211,6 @@ class ReviewR11(unittest.TestCase):
         with mock.patch.object(sys, "stderr", err):
             self.assertEqual(tuning.main(["--job", "apps"]), 1)
         self.assertIsNone(tuning.selected("panes"))
-        with self.assertRaises(SystemExit) as stop, mock.patch.object(sys, "stderr", io.StringIO()):
-            evaluate.main(["evals/dev.jsonl", "--job", "apps"])
-        self.assertEqual(stop.exception.code, 2)
 
     def _incoming(self, name, data):
         run = self.home / "incoming" / name

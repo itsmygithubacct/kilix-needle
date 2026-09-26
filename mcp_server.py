@@ -2,13 +2,16 @@
 
     kilix-needle mcp [--engine FILE] [--root DIR]
 
-Two tools, so a harness's own approval setting can tell them apart:
+Two tools per job, so a harness's own approval setting can tell them apart:
 
 - kilix_plan   what a request would do, resolved against the live panes;
                runs nothing
 - kilix_act    do it, as an agent: every check still applies, the caller's
                own pane and tab can never be closed, and closing, typing or
                starting a program runs only with confirm_risky=true
+- kilix_apps_plan / kilix_apps_act   the same for the apps job: launching
+               Kilix apps and games (confirm_risky=true, and never an
+               install) and showing or hiding Kilix indicators and games
 
 Messages are newline-delimited JSON-RPC 2.0 on stdin/stdout, as the MCP stdio
 transport specifies; stdout carries nothing else. The engine starts on the
@@ -48,25 +51,53 @@ TOOL_LIST = [
 ]
 
 
+_APPS_REQUEST = {"type": "string",
+                 "description": "a plain request about Kilix apps, games or settings, e.g. "
+                                "'open solitaire', 'hide the clock', 'disable doom'"}
+TOOL_LIST += [
+    {"name": "kilix_apps_plan",
+     "description": "Show what a plain request would do to Kilix apps, games and settings. "
+                    "Runs nothing.",
+     "inputSchema": {"type": "object", "properties": {"request": _APPS_REQUEST},
+                     "required": ["request"], "additionalProperties": False}},
+    {"name": "kilix_apps_act",
+     "description": "Carry out a plain request on Kilix apps, games and settings: open an "
+                    "app or game in a new tab, show or hide a top-bar indicator or pane "
+                    "button, set the pane CPU/memory readout, make a game available or not, "
+                    "open a settings section. Opening an app needs confirm_risky=true, and "
+                    "nothing that would install is ever run from here.",
+     "inputSchema": {"type": "object", "properties": {
+         "request": _APPS_REQUEST,
+         "confirm_risky": {"type": "boolean", "default": False,
+                           "description": "allow opening an app or game already installed"}},
+         "required": ["request"], "additionalProperties": False}},
+]
+_JOB_OF = {"kilix_plan": "panes", "kilix_act": "panes",
+           "kilix_apps_plan": "apps", "kilix_apps_act": "apps"}
+
+
 class Server:
     def __init__(self, runtime_factory):
         self._runtime_factory = runtime_factory
-        self._runtime = None
+        self._runtimes = {}
 
-    def _ensure_engine(self):
-        if self._runtime is None:
-            runtime = self._runtime_factory()
+    def _ensure_engine(self, job: str = "panes"):
+        if job not in self._runtimes:
+            # Each job runs its own engine with its own tools; panes keeps the
+            # factory's original call.
+            runtime = self._runtime_factory() if job == "panes" else self._runtime_factory(job)
             runtime.__enter__()
-            self._runtime = runtime
-        return self._runtime
+            self._runtimes[job] = runtime
+        return self._runtimes[job]
 
     def close(self) -> None:
-        if self._runtime is not None:
-            self._runtime.close()
+        for runtime in self._runtimes.values():
+            runtime.close()
 
     def call_tool(self, name: str, arguments: dict) -> dict:
-        if name not in ("kilix_plan", "kilix_act"):
+        if name not in _JOB_OF:
             raise ValueError(f"unknown tool {name!r}")
+        job = _JOB_OF[name]
         request = arguments.get("request") if isinstance(arguments, dict) else None
         if not isinstance(request, str):
             raise ValueError("request must be a string")
@@ -74,13 +105,14 @@ class Server:
         if not isinstance(confirm, bool):
             raise ValueError("confirm_risky must be true or false")
         try:
-            engine = self._ensure_engine()
+            engine = self._ensure_engine(job)
         except (asset.AssetError, EngineError, LibEngineError) as error:
             return {"content": [{"type": "text", "text": f"kilix-needle unavailable: {error}"}],
                     "isError": True}
-        options = needle_cli.Options(dry_run=name == "kilix_plan",
-                                     assume_yes=name == "kilix_act" and confirm, agent=True)
-        record = needle_cli.run_request(engine, request, options, needle_cli._never)
+        options = needle_cli.Options(dry_run=name.endswith("_plan"),
+                                     assume_yes=name.endswith("_act") and confirm, agent=True)
+        run = needle_cli.run_apps_request if job == "apps" else needle_cli.run_request
+        record = run(engine, request, options, needle_cli._never)
         return {"content": [{"type": "text", "text": json.dumps(record, ensure_ascii=False)}],
                 "structuredContent": record, "isError": False}
 

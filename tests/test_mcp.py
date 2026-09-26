@@ -63,7 +63,7 @@ class Protocol(unittest.TestCase):
             {"jsonrpc": "2.0", "id": 3, "method": "nope"}])
         self.assertEqual(replies[0]["result"]["protocolVersion"], "2025-03-26")
         self.assertEqual([t["name"] for t in replies[1]["result"]["tools"]],
-                         ["kilix_plan", "kilix_act"])
+                         ["kilix_plan", "kilix_act", "kilix_apps_plan", "kilix_apps_act"])
         self.assertEqual(replies[2]["error"]["code"], -32601)
         self.assertEqual(replies[3]["error"]["code"], -32700)   # the "not json" line
         self.assertEqual(len(replies), 4)                       # the notification got no reply
