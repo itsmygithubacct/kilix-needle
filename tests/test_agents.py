@@ -222,6 +222,22 @@ class Checks(unittest.TestCase):
                                   [call("agent", agent="codex", dir="~/src/my")], dirs=None), [])
 
 
+    def test_a_payload_is_sent_in_the_requests_own_characters(self):    # KN-R14-04
+        request = "tell the codex session in kilix: rename FooBar in CHANGELOG.md, set \u201cDEBUG=1\u201d"
+        sent = admitted(request, [call("tell", session="codex@kilix",
+                                       text='rename FooBar in CHANGELOG.md, set "DEBUG=1"')])
+        self.assertEqual(sent[0][1]["text"], "rename FooBar in CHANGELOG.md, set \u201cDEBUG=1\u201d")
+        self.assertEqual(admitted(request, [call("tell", session="codex@kilix",
+                                                 text="rename foobar in changelog.md, set "
+                                                      '"debug=1"')]), [])
+
+    def test_control_and_format_characters_refuse(self):
+        for request in ("tell the codex session in kilix: push\nnow",
+                        "tell the codex session in kilix: push \u202enow",
+                        "tell the codex session in kilix: push\u2028now"):
+            self.assertIsNone(agents.parse(request), repr(request))
+
+
 class ReviewR14(unittest.TestCase):
     """Review R14's attack rows (tests/data/agents-r14-rows.json), with the
     verdict each must get in the fixture and in production. Four rows are the

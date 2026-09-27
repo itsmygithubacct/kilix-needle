@@ -36,8 +36,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import re
+import unicodedata
 
-from actions import Refusal, normalize
+from actions import _TYPOGRAPHY, Refusal, normalize
 
 AGENTS = ("claude", "codex", "grok", "qwen-omp")
 AGENT_NAMES = {
@@ -108,6 +109,10 @@ class Action:
 
 def _fold(text: str) -> str:
     return " ".join(normalize(text).casefold().split())
+
+
+def _plain(text: str) -> str:
+    return " ".join(str(text).translate(_TYPOGRAPHY).split())
 
 
 def _lower(text: str) -> str:
@@ -243,13 +248,16 @@ class Payload:
     closing full stop or the quotes around it."""
     text: str
 
-    def forms(self) -> set:
+    def forms(self) -> dict:
+        """The spans the model may give, by their plain spelling (typography
+        made plain), each mapped to the request's own characters."""
         text = self.text.strip()
         forms = {text}
-        if len(text) > 1 and text[0] == text[-1] and text[0] in "\"'`":
+        plain = _plain(text)
+        if len(plain) > 1 and plain[0] == plain[-1] and plain[0] in "\"'`":
             forms.add(text[1:-1].strip())
         forms |= {f[:-1].rstrip() for f in list(forms) if f.endswith((".", "!"))}
-        return {f for f in forms if f}
+        return {_plain(f): f for f in forms if f}
 
 
 @dataclass(frozen=True)
@@ -283,8 +291,8 @@ def _dir_forms(table: dict) -> dict:
 
 class _Reader:
     def __init__(self, request: str, dirs: dict | None):
-        self.org = request
-        self.low = _lower(request)
+        self.org = request              # spans are cut from the request's own characters
+        self.low = _lower(request.translate(_TYPOGRAPHY))       # one for one: same positions
         self.dirs = dirs
         self.n = len(request)
         self.polite = False
@@ -564,7 +572,7 @@ class _Reader:
 
 
 def _payload_ok(payload: Payload, weak: bool) -> bool:
-    text = payload.text.strip()
+    text = _plain(payload.text)
     if not text or text[0] in "-/!#@" or len(text.encode()) > 4096:
         return False
     if len(text) > 1 and text[0] in "\"'`" and text[1:2] in "-/!#@":
@@ -627,11 +635,11 @@ def _match(call: dict, want: Want, dirs) -> tuple[Action | None, str]:
         wanted = want.get(key)
         if wanted is None:
             return (None, "") if empty(key) else (False, f"the request gives no {key}")
-        value = args.get(key)
-        if not isinstance(value, str) or " ".join(value.split()) not in wanted.forms():
+        value, forms = args.get(key), wanted.forms()
+        if not isinstance(value, str) or _plain(value) not in forms:
             return False, (f"the {key} is not the request's words from its marker to its end, "
                            f"as written")
-        return " ".join(value.split()), ""
+        return forms[_plain(value)], ""
 
     if name == "agent":
         if _resolve_name(AGENT_NAMES, args.get("agent")) != want.get("agent"):
@@ -686,7 +694,7 @@ def _match(call: dict, want: Want, dirs) -> tuple[Action | None, str]:
 
 
 def _why_not(request: str) -> str:
-    low = _lower(request)
+    low = _lower(normalize(request))
     for pattern, reason in _REFUSE:
         if pattern.search(low):
             return reason
@@ -697,8 +705,10 @@ def _why_not(request: str) -> str:
 
 def parse(request: str, dirs: dict | None = FIXTURE_DIRS) -> list | None:
     """The actions the request states, as Want tuples, or None."""
-    text = normalize(request)
-    if re.search(r"[\x00-\x08\x0a-\x1f\x7f]", text):
+    text = str(request)
+    # One line of visible text: no control or format characters (line breaks,
+    # bidi overrides, zero-width marks) that would change what is sent.
+    if any(unicodedata.category(ch) in ("Cc", "Cf", "Zl", "Zp") and ch != "\t" for ch in text):
         return None
     text = " ".join(text.split())
     if len(text) > MAX_REQUEST:
