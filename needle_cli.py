@@ -268,7 +268,8 @@ def run_calls(request: str, calls: list, options: Options,
 
 
 def run_agents_request(engine, request: str, options: Options,
-                       confirm: Callable[[str], bool] = _terminal_confirm) -> dict:
+                       confirm: Callable[[str], bool] = _terminal_confirm, *,
+                       cwd: str | None = None) -> dict:
     """One agents-job request, as the same record as run_request."""
     try:
         request = check_prompt(request)
@@ -276,7 +277,7 @@ def run_agents_request(engine, request: str, options: Options,
         return {"request": request, "status": 1, "note": str(error), "items": []}
     engine.reset()
     reply = engine.complete(request)
-    return run_agents_calls(request, reply.get("function_calls") or [], options)
+    return run_agents_calls(request, reply.get("function_calls") or [], options, cwd=cwd)
 
 
 def run_agents_calls(request: str, calls: list, options: Options, *,
@@ -437,7 +438,11 @@ def handle(engine: Engine, request: str, *, dry_run: bool = False, assume_yes: b
     options = Options(dry_run=dry_run, assume_yes=assume_yes, agent=agent,
                       under_overlay=under_overlay)
     run = {"apps": run_apps_request, "agents": run_agents_request}.get(job, run_request)
-    record = run(engine, request, options, _never if agent else _terminal_confirm)
+    if job == "agents":
+        record = run(engine, request, options, _never if agent else _terminal_confirm,
+                     cwd=os.getcwd())
+    else:
+        record = run(engine, request, options, _never if agent else _terminal_confirm)
     print(json.dumps(record, ensure_ascii=False) if as_json else render(record), file=out)
     return record["status"]
 

@@ -148,7 +148,15 @@ class Server:
                                      assume_yes=name.endswith("_act") and confirm, agent=True)
         run = {"apps": needle_cli.run_apps_request,
                "agents": needle_cli.run_agents_request}.get(job, needle_cli.run_request)
-        record = run(engine, request, options, needle_cli._never)
+        if job == "agents":
+            import agents_kilix
+            try:
+                caller_cwd = agents_kilix.calling_cwd()
+            except agents_kilix.AgentsError:
+                caller_cwd = None
+            record = run(engine, request, options, needle_cli._never, cwd=caller_cwd)
+        else:
+            record = run(engine, request, options, needle_cli._never)
         return {"content": [{"type": "text", "text": json.dumps(record, ensure_ascii=False)}],
                 "structuredContent": record, "isError": False}
 

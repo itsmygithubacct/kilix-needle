@@ -30,7 +30,7 @@ import kilix
 
 HERE = ("here", "this repo", "this directory", "the current folder", "this folder",
         "the current directory", "this project")
-ROOTS = ("gpu_terminal", "research", "src", "projects", "code", "repos", "work", "scratch-workers")
+ROOTS = ("gpu_terminal", "research")
 PROVIDER_AGENT = {"claude": "claude", "codex": "codex", "grok": "grok", "omp": "qwen-omp",
                   "kimi": "kimi"}
 
@@ -55,46 +55,100 @@ def resolve_dir(said: str, *, cwd: str | None = None, home: Path | None = None) 
     home = home or Path.home()
     folded = agents._fold(said)
     if folded in HERE:
-        return Path(cwd or os.getcwd()).resolve()
-    if folded.startswith("~/") or folded.startswith("/"):
+        if not cwd:
+            raise AgentsError("the calling pane's directory is unknown; 'here' cannot be resolved")
+        path = Path(cwd).resolve()
+        if not path.is_dir():
+            raise AgentsError(f"the calling pane's directory is not available: {cwd}")
+        return path
+    if said.strip().startswith(("~/", "/")):
         path = Path(os.path.expanduser(said.strip())).resolve()
         if not path.is_dir():
             raise AgentsError(f"{said} is not an existing directory")
         return path
-    name = folded.removeprefix("the ").removesuffix(" repo").removesuffix(" repository")
-    name = name.replace(" ", "-")
+
+    name = said.strip()
+    if name.casefold().startswith("the "):
+        name = name[4:]
+    for suffix in (" repository", " repo"):
+        if name.casefold().endswith(suffix):
+            name = name[:-len(suffix)]
+            break
+
+    map_file = home / ".config" / "kilix-needle" / "dirs.json"
+    if map_file.exists():
+        try:
+            mapped = json.loads(map_file.read_text())
+        except (OSError, UnicodeError, json.JSONDecodeError) as error:
+            raise AgentsError(f"cannot read directory map {map_file}: {error}") from error
+        if not isinstance(mapped, dict):
+            raise AgentsError(f"directory map {map_file} must be a JSON object")
+        if name in mapped:
+            value = mapped[name]
+            if not isinstance(value, str) or not Path(value).is_absolute():
+                raise AgentsError(f"directory map entry {name!r} must be an absolute path")
+            path = Path(value).resolve()
+            if not path.is_dir():
+                raise AgentsError(f"directory map entry {name!r} is not an existing directory")
+            return path
+
     found = set()
     for root in ROOTS:
         base = home / root
-        if not base.is_dir():
+        if not base.is_dir() or base.is_symlink():
             continue
-        if base.name == name:
-            found.add(base.resolve())
-        for depth in ("*", "*/*", "*/*/*"):
-            for candidate in base.glob(depth):
-                if candidate.name == name and candidate.is_dir() and not candidate.is_symlink():
-                    found.add(candidate.resolve())
+        for current, directories, _files in os.walk(base, followlinks=False):
+            directories[:] = [item for item in directories
+                              if not item.startswith(".") and not (Path(current) / item).is_symlink()]
+            candidate = Path(current)
+            if candidate.name == name and (candidate / ".git").exists():
+                found.add(candidate.resolve())
+            directories[:] = [item for item in directories if item != ".git"]
     if len(found) != 1:
         raise AgentsError(f"{said}: {'no' if not found else len(found)} matching directories"
                           f"{'' if not found else ' (' + ', '.join(map(str, sorted(found))) + ')'}")
     return found.pop()
 
 
-def caller() -> tuple[int, str]:
-    """This process's own pane and its broker identity."""
-    listing = json.loads(_run(["agent-control", "list"]))
+def _listing(argv: list[str]) -> dict:
+    try:
+        listing = json.loads(_run(argv))
+    except (TypeError, ValueError, json.JSONDecodeError) as error:
+        raise AgentsError(f"kilix {argv[0]} returned invalid JSON: {error}") from error
+    if not isinstance(listing, dict):
+        raise AgentsError(f"kilix {argv[0]} returned an invalid listing")
+    return listing
+
+
+def caller_info() -> tuple[int, str, str | None]:
+    """This process's own pane, broker identity and pane cwd."""
+    listing = _listing(["agent-control", "list"])
     pane = listing.get("caller_pane")
     for item in listing.get("panes", []):
-        if item.get("pane_id") == pane and item.get("broker"):
-            return pane, item["broker"]
+        if isinstance(item, dict) and item.get("pane_id") == pane and item.get("broker"):
+            cwd = item.get("cwd") if isinstance(item.get("cwd"), str) else None
+            return pane, str(item["broker"]), cwd
     raise AgentsError("the caller's own pane is unknown; run from a Kilix pane")
 
 
-def find_session(agent: str, directory: Path) -> dict:
+def caller() -> tuple[int, str]:
+    pane, broker, _cwd = caller_info()
+    return pane, broker
+
+
+def calling_cwd() -> str | None:
+    return caller_info()[2]
+
+
+def find_session(agent: str, directory: Path, *, caller_pane: int | None = None) -> dict:
     """Exactly one live pane of that agent in that directory."""
-    snapshot = json.loads(_run(["panes", "list", "--json"]))
+    if caller_pane is None:
+        caller_pane = caller_info()[0]
+    snapshot = _listing(["panes", "list", "--json"])
     matches = []
     for pane in snapshot.get("panes", []):
+        if not isinstance(pane, dict) or pane.get("pane_id") == caller_pane:
+            continue
         coding = pane.get("coding_session") or {}
         provider = PROVIDER_AGENT.get(str(coding.get("provider") or ""))
         cwd = coding.get("cwd") or pane.get("cwd") or ""
@@ -104,6 +158,15 @@ def find_session(agent: str, directory: Path) -> dict:
         raise AgentsError(f"{'no' if not matches else len(matches)} live {agent} sessions in "
                           f"{directory}")
     return matches[0]
+
+
+def _broker_id(pane: dict) -> str:
+    broker = pane.get("broker")
+    if isinstance(broker, dict):
+        broker = broker.get("session_id")
+    if not isinstance(broker, str) or not broker:
+        raise AgentsError(f"pane {pane.get('pane_id')} has no broker identity")
+    return broker
 
 
 @dataclass
@@ -150,67 +213,96 @@ def summary(entry: dict) -> str:
 def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> list[dict]:
     """Run admitted actions in order; stop at the first that fails."""
     results = []
-    launched: dict[str, int] = {}
+    launched: dict[str, dict] = {}
     last = None
+    caller_cache = None
+
+    def get_caller():
+        nonlocal caller_cache
+        if caller_cache is None:
+            caller_cache = caller_info()
+        return caller_cache
+
     for action in actions:
         entry = {"kind": action.kind, "args": dict(action.args)}
         results.append(entry)
         try:
             if action.kind == "agent":
                 directory = resolve_dir(action.args["dir"], cwd=cwd)
-                pane, broker = caller()
+                pane, broker, _caller_cwd = get_caller()
                 argv = launch_argv(action, directory, pane, broker)
                 if dry_run:
                     entry.update(outcome="would", argv=argv)
-                    last = None
+                    last = {"pane_id": f"<new pane {len(launched) + 1}>",
+                            "agent": action.args["agent"], "broker": "<new pane broker>"}
+                    launched[f"{action.args['agent']}@{action.args['dir']}"] = last
                     continue
-                result = json.loads(_run(argv, timeout=60))
-                last = result["pane"]["pane_id"]
+                result = _listing_result(argv, timeout=60)
+                pane_result = result.get("pane")
+                if not isinstance(pane_result, dict) or pane_result.get("pane_id") is None:
+                    raise AgentsError("kilix agent-control returned no launched pane")
+                last = {"pane_id": pane_result["pane_id"], "agent": action.args["agent"]}
                 launched[f"{action.args['agent']}@{action.args['dir']}"] = last
-                entry.update(outcome="done", pane=last,
+                entry.update(outcome="done", pane=last["pane_id"],
                              folder_trust=result.get("folder_trust"))
                 continue
             target = action.args["session"]
             if target == "it":
                 if last is None:
                     raise AgentsError("'it' names no session launched by this request")
-                pane_id = last
+                target_info = last
+                pane_id = last["pane_id"]
+                target_agent = last["agent"]
             else:
                 agent, _, said = target.partition("@")
-                pane_id = find_session(agent, resolve_dir(said, cwd=cwd))["pane_id"]
+                caller_pane = get_caller()[0]
+                target_info = find_session(agent, resolve_dir(said, cwd=cwd),
+                                           caller_pane=caller_pane)
+                pane_id = target_info["pane_id"]
+                target_agent = agent
             if action.kind == "wait":
-                argv = ["panes", "wait", str(pane_id), "--for", action.args["for"], "--json"]
-                if action.args.get("timeout"):
-                    argv += ["--timeout", str(action.args["timeout"])]
+                wait_timeout = action.args.get("timeout") or 3600
+                argv = ["panes", "wait", str(pane_id), "--for", action.args["for"], "--json",
+                        "--timeout", str(wait_timeout)]
                 if dry_run:
                     entry.update(outcome="would", argv=argv)
                     continue
-                _run(argv, timeout=(action.args.get("timeout") or 3600) + 30)
+                _run(argv, timeout=wait_timeout + 30)
                 entry.update(outcome="done", pane=pane_id)
                 continue
             # tell
-            if action.args.get("wait") and not dry_run:
-                _run(["panes", "wait", str(pane_id), "--for", "idle", "--json"], timeout=3630)
-            snapshot = json.loads(_run(["panes", "list", "--json"]))
-            pane = next((p for p in snapshot.get("panes", []) if p.get("pane_id") == pane_id),
-                        None)
-            if pane is None:
-                raise AgentsError(f"pane {pane_id} is gone")
-            activity = pane.get("activity")
-            agent = PROVIDER_AGENT.get(str((pane.get("coding_session") or {}).get("provider")
-                                           or ""), "")
-            if activity == "waiting":
-                raise AgentsError("the session is waiting on an approval or a menu; the "
-                                  "message is held so it can't answer that")
-            if activity in ("unknown", "agent", None):
-                raise AgentsError("the session's state can't be read, so the message is held; "
-                                  "ask to wait until it is done first")
-            if agent == "qwen-omp" and activity != "idle":
+            waited = bool(action.args.get("wait"))
+            wait_timeout = action.args.get("timeout") or 3600
+            if waited and not dry_run:
+                _run(["panes", "wait", str(pane_id), "--for", "idle", "--json", "--timeout",
+                      str(wait_timeout)], timeout=wait_timeout + 30)
+            if dry_run and isinstance(pane_id, str) and pane_id.startswith("<new pane"):
+                pane = target_info
+                activity = "idle" if waited else "working"
+            elif dry_run and waited:
+                pane = target_info
+                activity = "idle"
+            else:
+                snapshot = _listing(["panes", "list", "--json"])
+                pane = next((p for p in snapshot.get("panes", [])
+                             if isinstance(p, dict) and p.get("pane_id") == pane_id), None)
+                if pane is None:
+                    raise AgentsError(f"pane {pane_id} is gone")
+                activity = pane.get("activity")
+                coding = pane.get("coding_session") or {}
+                observed_agent = PROVIDER_AGENT.get(str(coding.get("provider") or ""), "")
+                if not observed_agent and target != "it":
+                    raise AgentsError("the target is not a live coding-agent pane")
+                if observed_agent and observed_agent != target_agent:
+                    raise AgentsError("the target coding agent changed; the message is held")
+            if activity not in ("idle", "working"):
+                raise AgentsError("the session is not idle or working; the message is held")
+            if target_agent == "qwen-omp" and activity != "idle":
                 # omp's files can't show an approval prompt (review R13, KX-R13-16):
                 # only an idle omp session takes a message.
                 raise AgentsError("a qwen-omp session takes a message only when idle; ask to "
                                   "wait until it is done first")
-            broker = pane.get("broker") or ""
+            broker = _broker_id(pane)
             argv = ["agent-control", "send", str(pane_id), "--expect-broker", broker,
                     "--text", action.args["text"], "--submit"]
             if dry_run:
@@ -218,7 +310,17 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
                 continue
             _run(argv)
             entry.update(outcome="done", delivery="not confirmed", pane=pane_id)
-        except (AgentsError, KeyError, ValueError) as error:
+        except (AgentsError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
             entry.update(outcome="failed", reason=str(error))
             break
     return results
+
+
+def _listing_result(argv: list[str], *, timeout: float) -> dict:
+    try:
+        result = json.loads(_run(argv, timeout=timeout))
+    except (TypeError, ValueError, json.JSONDecodeError) as error:
+        raise AgentsError(f"kilix {argv[0]} returned invalid JSON: {error}") from error
+    if not isinstance(result, dict):
+        raise AgentsError(f"kilix {argv[0]} returned an invalid result")
+    return result
