@@ -734,3 +734,34 @@ class ReviewR14Round6(unittest.TestCase):
     def test_no_stray_dash(self):
         wants = agents.parse("open codex in kilix: review the diff - then wait for it to finish")
         self.assertEqual(wants[0].get("prompt").text, "review the diff")
+
+
+class ReviewR14Round7(unittest.TestCase):
+    """Review R14 round 7: one scan per request (70), and a wait or condition on
+    a session anywhere in a payload that reaches the end refuses (71)."""
+
+    READINGS = {
+        "open codex in kilix: review the diff (and wait for it to finish)": None,
+        "open codex in kilix: review the diff; but wait for it to finish": None,
+        "open codex in kilix: wait for it to finish": None,
+        "open codex in kilix: review & wait for it to finish": None,
+        "open codex in kilix to review the diff and wait for the reviewer to finish": None,
+        "open codex in kilix to review the diff and wait for it to finish": 2,
+        "tell codex in kilix to fix the tests, then wait for CI": 1,
+        "open codex in kilix: wait 30 seconds between retries": 1,
+    }
+
+    def test_readings(self):
+        for request, count in self.READINGS.items():
+            wants = agents.parse(request)
+            self.assertEqual(len(wants) if wants else None, count, request)
+
+    def test_a_long_crafted_request_parses_quickly(self):
+        import time
+        tail = "zz. open codex in kilix"
+        for unit in ("tell codex in kilix: wait x and ", "tell codex in kilix to sleep x then ",
+                     "tell codex in kilix: " + "a; " * 30):
+            request = (unit * (agents.MAX_REQUEST // len(unit) + 1))[:agents.MAX_REQUEST - len(tail)]
+            started = time.process_time()
+            agents.parse(request + tail)
+            self.assertLess(time.process_time() - started, 5.0, unit)

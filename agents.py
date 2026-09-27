@@ -35,6 +35,7 @@ request says in a directory position (a path, "here", or a name, optionally
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import bisect
 import re
 import unicodedata
 
@@ -365,6 +366,15 @@ class _Reader:
         self.n = len(request)
         self.polite = False
         self.dead = set()               # (pos, state) where the rest has no reading
+        # Where, once for the whole request, a session clause (a wait, a
+        # condition, a message or launch to a session) or a timed wait starts
+        # at a word, and where a wait or condition on a session starts: a
+        # payload looks its own range up here instead of re-scanning
+        # (review R14 round 7, KN-R14-70).
+        starts = [m.start() for m in re.finditer(r"\b\w", self.low)]
+        self.clause_at = [p for p in starts if _SESSION_CLAUSE.match(self.low, p)
+                          or _TIMED_WAIT.match(self.low, p)]
+        self.wait_at = [p for p in starts if _WAIT_COND.match(self.low, p)]
         self.dir_key = _dir_forms(dirs if dirs is not None else {"here": list(_HERE)})
         self.dir_re = re.compile(rf"(?:{_alternation(self.dir_key)}){_END}")
 
@@ -476,9 +486,7 @@ class _Reader:
             # What follows will run; a wait or condition anywhere inside the
             # part before it ("(wait for it to finish); then tell it …") would
             # be lost while the next clause runs at once (KN-R14-65).
-            if any(_SESSION_CLAUSE.match(_lower(text.text), w.start())
-                   or _TIMED_WAIT.match(_lower(text.text), w.start())
-                   for w in re.finditer(r"\b\w", _lower(text.text))):
+            if _within(self.clause_at, start, sep.start()):
                 continue
             rest = self.chain(sep.end(), acts + (make(text),))
             if rest:
@@ -486,6 +494,11 @@ class _Reader:
         # A closing ", thanks" is said to this tool, not part of the payload.
         end = _COURTESY_TAIL.search(self.low, start).start()
         text = Payload(self.org[start:end].rstrip())
+        # Nothing runs after a payload that reaches the end, but a wait or a
+        # condition on a session anywhere in it would still be lost: refuse
+        # (KN-R14-71).
+        if _within(self.wait_at, start, end):
+            return None
         return acts + (make(text),) if _payload_ok(text, weak, tell and not strict) else None
 
     def launch(self, pos, acts):
@@ -768,7 +781,8 @@ class _Reader:
 # message or launch to a session, "give it N minutes", "let me know when".
 # Built from the grammar's verb tables so a new verb can't be missed
 # (review R14 round 5, KN-R14-61).
-_SESSION_WORD = (r"(?:it|its|it's|them|they|session|" + _alternation(_AGENT_ALIAS) + r")")
+_SESSION_WORD = (r"(?:it|its|it's|them|they|session|the (?:reviewer|worker|helper|agent|instance|"
+                 r"new one|other one)|" + _alternation(_AGENT_ALIAS) + r")")
 # Wait verbs, the grammar's own and the ones it doesn't read ("pause until",
 # "stand by", "hang tight"): in a payload they still mean a wait.
 _ANY_WAIT = (r"(?:" + _WAIT.pattern.replace("(?P<verb>", "(?:") +
@@ -790,9 +804,23 @@ _SESSION_CLAUSE = re.compile(
 
 # Before a later clause that will run, "wait a bit" / "give it five minutes"
 # is a wait too, and the clause after it must not run at once.
-_TIMED_WAIT = re.compile(_ANY_WAIT + r"\b[^,;.()]*?\b(?:a bit|a while|a moment|a minute|a sec\w*|"
+_TIMED_WAIT = re.compile(_ANY_WAIT + r"\b[^,;.()]{0,80}?\b(?:a bit|a while|a moment|a minute|a sec\w*|"
                          r"(?:\d+|" + _alternation(_NUMBERS) + r") (?:seconds?|secs?|minutes?|mins?|"
                          r"hours?))\b")
+
+
+# A wait on a session or a condition on its turn (the first alternatives of
+# _SESSION_CLAUSE), anywhere in a payload.
+_WAIT_COND = re.compile(
+    _ANY_WAIT + r"\b[^,;.()]{0,80}?\b(?:" + _SESSION_WORD[3:-1] + r"|until|till)\b"
+    r"|(?:when|once|after|as soon as|by the time) (?:it|it's|its|they|that|that's|this|"
+    r"(?:the )?\w+ (?:session|review|run)|" + _alternation(_AGENT_ALIAS) + r")\b[^,;.()]{0,80}?\b"
+    r"(?:done|finish\w*|complete\w*|idle|ready|through|asks?|waiting|blocked|needs?)\b")
+
+
+def _within(positions: list, start: int, end: int) -> bool:
+    i = bisect.bisect_left(positions, start)
+    return i < len(positions) and positions[i] < end
 
 
 _COND_TELL = re.compile(
