@@ -136,6 +136,19 @@ class BoundaryTests(unittest.TestCase):
             self.assertEqual(out["source"]["compressed_digest"], out["source"]["digest"])
             self.assertEqual([r["origin"]["byte_start"] for r in out["records"]], [0, 4])
 
+    def test_archive_trailing_plain_bytes_are_not_passed_through(self):
+        valid = subprocess.run(["zstd", "-q", "-c"], input=b"good\n",
+                               stdout=subprocess.PIPE, check=True).stdout
+        skip = b"\x50\x2a\x4d\x18\x00\x00\x00\x00"
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "raw.log.zst"
+            for prefix in (valid, skip):
+                with self.subTest(prefix=prefix[:4]):
+                    path.write_bytes(prefix + b"NOT AN ARCHIVE\n")
+                    with self.assertRaises(SourceError) as raised:
+                        read_source(str(path), "raw")
+                    self.assertEqual(raised.exception.code, "invalid_archive")
+
     def test_missing_header_session_id_remains_unknown(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "unrelated-name.jsonl"

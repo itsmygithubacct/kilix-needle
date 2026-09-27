@@ -6,6 +6,7 @@ import binascii
 import hashlib
 import json
 import re
+from collections import Counter
 
 from .index import Index, SCHEMA_VERSION, consistent_read
 
@@ -73,6 +74,21 @@ def _validate(limit: int, kind: str | None, query: str | None) -> None:
 
 
 def bounded(result: dict) -> dict:
+    # Long transcripts can have hundreds of unsupported rows. Keep useful
+    # evidence available while explicitly accounting for omitted diagnostics.
+    result = dict(result)
+    coverage = result.get("coverage")
+    if isinstance(coverage, dict):
+        coverage = dict(coverage)
+        gaps = coverage.get("gaps")
+        if isinstance(gaps, list) and len(gaps) > 32:
+            coverage.update(gaps=gaps[:20], gaps_total=len(gaps), gaps_omitted=len(gaps) - 20,
+                            gap_counts=dict(Counter(str(g.get("code", "unknown")) for g in gaps)))
+        result["coverage"] = coverage
+    errors = result.get("errors")
+    if isinstance(errors, list) and len(errors) > 32:
+        result.update(errors=errors[:20], errors_total=len(errors), errors_omitted=len(errors) - 20,
+                      error_counts=dict(Counter(str(e.get("code", "unknown")) for e in errors)))
     if len(json.dumps(result, ensure_ascii=False).encode("utf-8")) > MAX_JSON_TEXT:
         raise QueryError("result_too_large", "response envelope exceeds size bound; narrow the query")
     return result

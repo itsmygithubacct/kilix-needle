@@ -165,6 +165,21 @@ class LogsEndToEndTests(unittest.TestCase):
         self.assertLessEqual(len((rendered + "\n").encode("utf-8")), query.MAX_RENDER)
         self.assertTrue(rendered.endswith(" [truncated]"))
 
+    def test_many_unsupported_rows_keep_evidence_and_diagnostic_counts(self):
+        with self.path.open("a") as stream:
+            for _ in range(400):
+                stream.write('{"type":"unsupported-synthetic-row"}\n')
+        result = self.read("brief", limit=1)
+        self.assertEqual(result["status"], "partial", result)
+        self.assertEqual(len(result["events"]), 1)
+        self.assertFalse(result["coverage"]["complete"])
+        self.assertEqual(result["coverage"]["gaps_total"], 400)
+        self.assertEqual(result["coverage"]["gaps_omitted"], 380)
+        self.assertEqual(result["coverage"]["gap_counts"], {"unsupported_record": 400})
+        self.assertEqual(result["errors_total"], 400)
+        self.assertEqual(result["errors_omitted"], 380)
+        self.assertLess(len(json.dumps(result).encode()), 32768)
+
 
 if __name__ == "__main__":
     unittest.main()

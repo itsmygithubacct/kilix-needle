@@ -98,8 +98,7 @@ def _decompress(compressed: bytes, max_bytes: int, deadline: float) -> tuple[byt
     snapshot_file.flush()
     snapshot_file.seek(0)
     try:
-        proc = subprocess.Popen(["zstd", "-dcf", f"/proc/self/fd/{snapshot_file.fileno()}"],
-                                pass_fds=(snapshot_file.fileno(),), stdout=subprocess.PIPE,
+        proc = subprocess.Popen(["zstd", "-dc"], stdin=snapshot_file, stdout=subprocess.PIPE,
                                 stderr=subprocess.DEVNULL)
     except OSError as exc:
         snapshot_file.close()
