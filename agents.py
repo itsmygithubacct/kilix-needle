@@ -149,14 +149,14 @@ _PREAMBLE = re.compile(
 _TRAILER = re.compile(r"(?:[.!]*,? (?:thanks|thank you|thx|ty|cheers|please|pls))?"
                       r"(?P<mark>[.!?]*) *$")
 _SEP = re.compile(r"(?:,? and then |, then |; |,? and |, | then )")
-_PAYLOAD_END = re.compile(r"(?:; |, (?:and )?then,? |,? and (?:then,? )?|, | then,? )")
+_PAYLOAD_END = re.compile(r"(?:; |, (?:and )?then,? |,? and (?:then,? )?|, | then,? | -+ (?:then,? )?)")
 # After ":" a payload also ends before a wait or a "when … is done" clause
 # ("…: review the diff, and when it's done tell it to push"), which speak
 # about sessions, not to one (KN-R14-45).
 _WAIT_OR_WHEN = re.compile(r"(?:wait|block|hold on|hang on|when|once|after|as soon as)\b")
 _CLAUSE_LEAD = re.compile(r"(?:(?:and|then|also|please|pls|just|meanwhile|so|now|next|"
                           r"afterwards|after (?:that|this)),? )*")
-_SEQUENCE = re.compile(r"(?:; |, (?:and )?then,? )")
+_SEQUENCE = re.compile(r"(?:; |, (?:and )?then,? | -+ then,? )")
 _SUBORDINATE = re.compile(r"\b(?:if|when|whenever|once|unless|until|till|before|after|in case|"
                           r"as soon as|while)\b")
 _DET = re.compile(r"(?:(?:a|an|the|another|one more|new|fresh|blank|second|separate|me a|"
@@ -473,6 +473,13 @@ class _Reader:
                 continue
             if _SUBORDINATE.search(_lower(text.text)):
                 break
+            # What follows will run; a wait or condition anywhere inside the
+            # part before it ("(wait for it to finish); then tell it …") would
+            # be lost while the next clause runs at once (KN-R14-65).
+            if any(_SESSION_CLAUSE.match(_lower(text.text), w.start())
+                   or _TIMED_WAIT.match(_lower(text.text), w.start())
+                   for w in re.finditer(r"\b\w", _lower(text.text))):
+                continue
             rest = self.chain(sep.end(), acts + (make(text),))
             if rest:
                 return rest
@@ -761,21 +768,31 @@ class _Reader:
 # message or launch to a session, "give it N minutes", "let me know when".
 # Built from the grammar's verb tables so a new verb can't be missed
 # (review R14 round 5, KN-R14-61).
-_SESSION_WORD = (r"(?:it|its|it's|them|they|that|that's|this|session|"
-                 + _alternation(_AGENT_ALIAS) + r")")
+_SESSION_WORD = (r"(?:it|its|it's|them|they|session|" + _alternation(_AGENT_ALIAS) + r")")
+# Wait verbs, the grammar's own and the ones it doesn't read ("pause until",
+# "stand by", "hang tight"): in a payload they still mean a wait.
+_ANY_WAIT = (r"(?:" + _WAIT.pattern.replace("(?P<verb>", "(?:") +
+             r"|pause|stand by|hang tight|sleep|poll|check back|check in)")
 _SESSION_CLAUSE = re.compile(
-    r"(?:" + _WAIT.pattern.replace("(?P<verb>", "(?:") + r")\b[^,;.]*?\b(?:" + _SESSION_WORD[3:-1]
-    + r"|until|till|done|idle|finish\w*|a bit|a while|a minute|a sec\w*|\d+|"
-    + _alternation(_NUMBERS) + r")\b"
-    r"|(?:when|once|after|as soon as|by the time)\b[^,;.]*?\b(?:done|finish\w*|complete\w*|idle|"
-    r"ready|through|asks?|waiting|blocked|needs?)\b"
-    r"|(?:sit tight|hang on|hold on|hold|wait|block)(?=\s*(?:[,;.!]|$))"
-    r"|give (?:it|them|" + _alternation(_AGENT_ALIAS) + r"|the \w+ session)\b"
+    _ANY_WAIT + r"\b[^,;.()]*?\b(?:" + _SESSION_WORD[3:-1] + r"|until|till)\b"
+    r"|(?:when|once|after|as soon as|by the time) (?:it|it's|its|they|that|that's|this|"
+    r"(?:the )?\w+ (?:session|review|run)|" + _alternation(_AGENT_ALIAS) + r")\b[^,;.()]*?\b"
+    r"(?:done|finish\w*|complete\w*|idle|ready|through|asks?|waiting|blocked|needs?)\b"
+    r"|(?:sit tight|hang on|hold on|hold|wait|block|stand by|hang tight)(?=\s*(?:[,;.!)]|$))"
+    r"|give (?:it|them|" + _alternation(_AGENT_ALIAS) + r"|the \w+ session) (?:\w+ )?"
+    r"(?:seconds?|minutes?|mins?|hours?|a (?:bit|while|moment|minute|sec\w*))\b"
     r"|(?:" + _TELL.pattern.replace("(?P<verb>", "(?:") + r") (?:the |that |this )?" + _SESSION_WORD
     + r"\b"
     r"|(?:" + _LAUNCH.pattern + r"|" + _RESUME.pattern + r") (?:(?:a|an|the|another|new|me a) )*"
     + r"(?:" + _alternation(_AGENT_ALIAS) + r")" + _END +
     r"|(?:let me know|notify me|tell me|ping me|alert me) (?:when|once|if|as soon as)\b")
+
+
+# Before a later clause that will run, "wait a bit" / "give it five minutes"
+# is a wait too, and the clause after it must not run at once.
+_TIMED_WAIT = re.compile(_ANY_WAIT + r"\b[^,;.()]*?\b(?:a bit|a while|a moment|a minute|a sec\w*|"
+                         r"(?:\d+|" + _alternation(_NUMBERS) + r") (?:seconds?|secs?|minutes?|mins?|"
+                         r"hours?))\b")
 
 
 _COND_TELL = re.compile(

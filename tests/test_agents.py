@@ -707,3 +707,30 @@ class ReviewR14Round5(unittest.TestCase):
         for request, count in self.READINGS.items():
             wants = agents.parse(request)
             self.assertEqual(len(wants) if wants else None, count, request)
+
+
+class ReviewR14Round6(unittest.TestCase):
+    """Review R14 round 6 (KN-R14-65..69): a payload cut before a later clause
+    holds no wait, condition or timed wait at any word; plain task text that
+    mentions waiting stays a payload when nothing follows it."""
+
+    READINGS = {
+        "tell the codex session in kilix: run the migration (wait for it to finish); then tell it: "
+        "deploy": None,
+        "open codex in kilix: review the diff (wait for it to finish); then tell it to push": None,
+        "open codex in kilix to review the diff, wait a bit, then tell it to push": None,
+        "open codex in kilix: review the diff, pause until it finishes": None,
+        "open codex in kilix: review the diff - then wait for it to finish": 2,
+        "open codex in kilix: add a lock, and block a second writer": 1,
+        "open codex in kilix: wait 30 seconds between retries": 1,
+        "open codex in kilix: give the session tokens a TTL": 1,
+    }
+
+    def test_readings(self):
+        for request, count in self.READINGS.items():
+            wants = agents.parse(request)
+            self.assertEqual(len(wants) if wants else None, count, request)
+
+    def test_no_stray_dash(self):
+        wants = agents.parse("open codex in kilix: review the diff - then wait for it to finish")
+        self.assertEqual(wants[0].get("prompt").text, "review the diff")
