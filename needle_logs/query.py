@@ -68,6 +68,16 @@ def bounded(result: dict) -> dict:
     return result
 
 
+def _envelope(index: Index, source_id: str) -> dict:
+    snap = index.snapshot(source_id)
+    if not snap:
+        raise QueryError("not_found", "source is not indexed")
+    return {"events": [], "next_cursor": None, "has_more": False,
+            "source": {k: snap[k] for k in ("source_id", "session_id", "generation", "digest", "path", "provider", "size")},
+            "coverage": snap["coverage"], "pipeline": {"config": snap["config"], "schema_version": SCHEMA_VERSION},
+            "snapshot": {"checkpoint": snap["checkpoint"]}}
+
+
 def list_events(index: Index, source_id: str, *, limit: int = 20, kind: str | None = None,
                 query: str | None = None, since_cursor: str | None = None) -> dict:
     _validate(limit, kind, query)
@@ -117,7 +127,14 @@ def source_event(index: Index, event_id: str) -> dict:
 
 def search(index: Index, source_id: str, term: str, *, limit: int = 20) -> dict:
     _validate(limit, None, term)
-    result = list_events(index, source_id, limit=limit, query=term)
+    result = _envelope(index, source_id)
+    events = index.events(source_id, query=term, limit=limit + 1)
+    # Search returns references, not shortened objects masquerading as full events.
+    # Full evidence remains available through event/source lookup.
+    result["event_matches"] = [{k: event[k] for k in
+                                ("event_id", "kind", "sequence", "evidence_class")}
+                               for event in events[:limit]]
+    result["has_more"] = len(events) > limit
     records = index.search_records(source_id, term, limit + 1)
     result["has_more_records"] = len(records) > limit
     matches = []
@@ -137,7 +154,7 @@ def search(index: Index, source_id: str, term: str, *, limit: int = 20) -> dict:
 
 def brief(index: Index, source_id: str, *, limit: int = 20) -> dict:
     _validate(limit, None, None)
-    result = list_events(index, source_id, limit=1)
+    result = _envelope(index, source_id)
     result["events"], omitted = index.recent_events(source_id, limit)
     result["omitted_events"] = omitted
     result["has_more"] = omitted > 0
@@ -180,6 +197,8 @@ def render(result: dict, operation: str) -> str:
         ref = event["evidence"][0]
         lines.append(f"{event['kind']} [{event['event_id']} / {ref['record_id']}]: {_slice(clean(ref['quote']), 800)}")
     if operation == "search":
+        for match in result.get("event_matches", []):
+            lines.append(f"{match['kind']} [{match['event_id']}] ({match['evidence_class']})")
         for match in result.get("matches", []):
             lines.append(f"Record ({match['role']}/{match['channel']}) [{match['record_id']}:{match['start']}]: {clean(match['quote'])}")
     if not lines:

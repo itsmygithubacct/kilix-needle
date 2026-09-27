@@ -4,6 +4,7 @@ import io
 import json
 import os
 from pathlib import Path
+import sqlite3
 import tempfile
 import unittest
 from unittest import mock
@@ -97,6 +98,38 @@ class LogsEndToEndTests(unittest.TestCase):
                                     "message": {"role": "user", "content": "What remains?"}}) + "\n")
         stale = self.read(limit=1, since_cursor=first["next_cursor"])
         self.assertEqual(stale["errors"][0]["code"], "cursor_invalid")
+
+    def test_cached_evidence_is_checked_again_when_read(self):
+        for key, forged in (("evidence_class", "structured_fact"),
+                            ("session_id", "someone-else"), ("sequence", 1234)):
+            with self.subTest(key=key):
+                event = self.read()["events"][-1]
+                event[key] = forged
+                with contextlib.closing(sqlite3.connect(self.cache)) as db:
+                    db.execute("UPDATE events SET payload=? WHERE event_id=?",
+                               (json.dumps(event), event["event_id"]))
+                    db.commit()
+                result = self.read("source", event_id=event["event_id"])
+                self.assertEqual(result["status"], "error")
+                self.assertEqual(result["errors"][0]["code"], "index_corrupt")
+
+    def test_long_old_record_does_not_block_recent_brief_or_search(self):
+        rows = [
+            {"type": "assistant", "sessionId": "session-one", "message": {
+                "role": "assistant", "content": [{"type": "text",
+                "text": "x" * 40000 + " cache-target " + "y" * 1000}]}},
+            {"type": "user", "sessionId": "session-one", "message": {
+                "role": "user", "content": "Check the index."}},
+        ]
+        self.path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+        brief = self.read("brief", limit=1)
+        self.assertEqual(brief["status"], "ok", brief)
+        self.assertEqual(brief["omitted_events"], 1)
+        found = self.read("search", query="cache-target", limit=1)
+        self.assertEqual(found["status"], "ok", found)
+        self.assertEqual(found["event_matches"][0]["kind"], "answer")
+        self.assertIn("cache-target", found["matches"][0]["quote"])
+        self.assertLess(len(json.dumps(found).encode()), 32768)
 
 
 if __name__ == "__main__":

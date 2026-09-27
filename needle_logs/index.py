@@ -191,11 +191,71 @@ class Index:
         row = self.db.execute("SELECT s.source_id,s.path,s.provider,s.session_id,g.generation,g.digest,g.size,g.config,g.coverage,g.checkpoint FROM sources s JOIN generations g ON s.source_id=g.source_id WHERE s.source_id=?", (source_id,)).fetchone()
         return dict(row) | {"coverage": json.loads(row["coverage"])} if row else None
 
+    def _read_record(self, row, snap: dict) -> dict:
+        """Cross-check serialized evidence against its database identity."""
+        try:
+            record = json.loads(row["payload"])
+            for key in ("source_id", "generation", "record_id", "sequence", "text"):
+                if record[key] != row[key]:
+                    raise ValueError("record column mismatch")
+            if (record["source_id"], record["generation"], record["session_id"]) != (
+                    snap["source_id"], snap["generation"], snap["session_id"]):
+                raise ValueError("foreign record")
+            if (record["schema"] != "kilix.logs.record/v1" or
+                    record["quality"] not in ("structured", "approximate") or
+                    not isinstance(record["text"], str) or type(record["sequence"]) is not int):
+                raise ValueError("record metadata mismatch")
+            return record
+        except (ValueError, TypeError, KeyError) as error:
+            raise IndexCorrupt("cached record contradicts its stored identity") from error
+
+    def _read_event(self, row, snap: dict) -> dict:
+        """Validate cached payloads on every read, including source lookup."""
+        try:
+            event = json.loads(row["payload"])
+            for key in ("source_id", "generation", "event_id", "sequence", "kind"):
+                if event[key] != row[key]:
+                    raise ValueError("event column mismatch")
+            if (event["source_id"], event["generation"], event["session_id"]) != (
+                    snap["source_id"], snap["generation"], snap["session_id"]):
+                raise ValueError("foreign event")
+            if (event["schema"] != "kilix.logs.event/v1" or event["kind"] not in KINDS or
+                    type(event["sequence"]) is not int or not isinstance(event["evidence"], list)
+                    or not event["evidence"]):
+                raise ValueError("invalid event metadata")
+            stored = self.db.execute(
+                "SELECT record_id,start,end,quote FROM evidence WHERE source_id=? AND generation=? "
+                "AND config=? AND event_id=? ORDER BY ordinal",
+                (snap["source_id"], snap["generation"], snap["config"], event["event_id"])).fetchall()
+            if event["evidence"] != [dict(item) for item in stored]:
+                raise ValueError("evidence column mismatch")
+            for position, item in enumerate(event["evidence"]):
+                if not isinstance(item["record_id"], str):
+                    raise ValueError("invalid record ID")
+                record = self.record(snap["source_id"], item["record_id"])
+                if record is None or type(item["start"]) is not int or type(item["end"]) is not int:
+                    raise ValueError("missing record or invalid offsets")
+                if not 0 <= item["start"] < item["end"] <= len(record["text"]):
+                    raise ValueError("invalid span")
+                if record["text"][item["start"]:item["end"]] != item["quote"]:
+                    raise ValueError("quote mismatch")
+                expected = ({"user": "user_statement", "assistant": "assistant_claim",
+                             "tool": "structured_fact"}.get(record["role"], "unattributed_text")
+                            if record["quality"] == "structured" else "unattributed_text")
+                if event["evidence_class"] != expected:
+                    raise ValueError("evidence class mismatch")
+                if position == 0 and (event["sequence"], event.get("timestamp")) != (
+                        record["sequence"], record.get("timestamp")):
+                    raise ValueError("event anchor mismatch")
+            return event
+        except (ValueError, TypeError, KeyError) as error:
+            raise IndexCorrupt("cached event contradicts canonical evidence") from error
+
     def events(self, source_id: str, *, kind: str | None = None, query: str | None = None, after: tuple[int, str] | None = None, limit: int = 20) -> list[dict]:
         snap = self.snapshot(source_id)
         if not snap:
             return []
-        sql = "SELECT DISTINCT e.payload,e.sequence,e.event_id FROM events e"
+        sql = "SELECT DISTINCT e.* FROM events e"
         args = []
         if query is not None:
             sql += " JOIN evidence v ON v.source_id=e.source_id AND v.generation=e.generation AND v.config=e.config AND v.event_id=e.event_id"
@@ -212,7 +272,7 @@ class Index:
             args.extend((after[0], after[0], after[1]))
         sql += " ORDER BY e.sequence,e.event_id LIMIT ?"
         args.append(limit)
-        return [json.loads(row["payload"]) for row in self.db.execute(sql, args)]
+        return [self._read_event(row, snap) for row in self.db.execute(sql, args)]
 
     def recent_events(self, source_id: str, limit: int) -> tuple[list[dict], int]:
         snap = self.snapshot(source_id)
@@ -220,14 +280,15 @@ class Index:
             return [], 0
         args = (source_id, snap["generation"], snap["config"])
         count = self.db.execute("SELECT count(*) FROM events WHERE source_id=? AND generation=? AND config=?", args).fetchone()[0]
-        rows = self.db.execute("SELECT payload FROM events WHERE source_id=? AND generation=? AND config=? ORDER BY sequence DESC,event_id DESC LIMIT ?", args + (limit,))
-        return list(reversed([json.loads(row[0]) for row in rows])), max(0, count - limit)
+        rows = self.db.execute("SELECT * FROM events WHERE source_id=? AND generation=? AND config=? ORDER BY sequence DESC,event_id DESC LIMIT ?", args + (limit,))
+        return list(reversed([self._read_event(row, snap) for row in rows])), max(0, count - limit)
 
     def event(self, event_id: str) -> tuple[dict, dict] | None:
-        row = self.db.execute("SELECT e.payload,s.source_id FROM events e JOIN sources s ON s.source_id=e.source_id WHERE e.event_id=? LIMIT 1", (event_id,)).fetchone()
+        row = self.db.execute("SELECT e.* FROM events e JOIN sources s ON s.source_id=e.source_id WHERE e.event_id=? LIMIT 1", (event_id,)).fetchone()
         if not row:
             return None
-        return json.loads(row["payload"]), self.snapshot(row["source_id"])
+        snap = self.snapshot(row["source_id"])
+        return self._read_event(row, snap), snap
 
     def search_records(self, source_id: str, term: str, limit: int) -> list[dict]:
         snap = self.snapshot(source_id)
@@ -235,18 +296,18 @@ class Index:
             return []
         escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         rows = self.db.execute(
-            "SELECT payload FROM records WHERE source_id=? AND generation=? AND config=? "
+            "SELECT * FROM records WHERE source_id=? AND generation=? AND config=? "
             "AND text LIKE ? ESCAPE '\\' ORDER BY sequence LIMIT ?",
             (source_id, snap["generation"], snap["config"], "%" + escaped + "%", limit),
         )
-        return [json.loads(row["payload"]) for row in rows]
+        return [self._read_record(row, snap) for row in rows]
 
     def record(self, source_id: str, record_id: str) -> dict | None:
         snap = self.snapshot(source_id)
         if not snap:
             return None
-        row = self.db.execute("SELECT payload FROM records WHERE source_id=? AND generation=? AND config=? AND record_id=?", (source_id, snap["generation"], snap["config"], record_id)).fetchone()
-        return json.loads(row["payload"]) if row else None
+        row = self.db.execute("SELECT * FROM records WHERE source_id=? AND generation=? AND config=? AND record_id=?", (source_id, snap["generation"], snap["config"], record_id)).fetchone()
+        return self._read_record(row, snap) if row else None
 
     def status(self) -> list[dict]:
         rows = self.db.execute("SELECT source_id FROM sources ORDER BY source_id LIMIT 1000").fetchall()
