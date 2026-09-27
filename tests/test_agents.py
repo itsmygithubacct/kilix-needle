@@ -291,9 +291,11 @@ class Checks(unittest.TestCase):
 
     def test_a_condition_in_a_payload_keeps_what_follows(self):
         for request in ("tell claude here: if tests fail, open codex in kilix",
-                        "open codex in kilix to review, and if it fails, tell claude here to fix",
                         "tell claude here: review the diff, open codex in kilix"):
             self.assertEqual(len(agents.parse(request)), 1, request)
+        # After a weak marker the conditional clause names another agent: no reading.
+        self.assertIsNone(agents.parse("open codex in kilix to review, and if it fails, "
+                                       "tell claude here to fix"))
         self.assertEqual(len(agents.parse("tell claude here: fix it; then open codex in kilix")),
                          2)
 
@@ -581,3 +583,63 @@ class ReviewR14Round2(unittest.TestCase):
                         "open codex at once"):
             for dirs in (agents.FIXTURE_DIRS, None):
                 self.assertIsNone(agents.parse(request, dirs), request)
+
+
+class ReviewR14Round3(unittest.TestCase):
+    """Review R14 round 3: its distinguishing inputs (seat probes/distinguish3.py)
+    and its checks findings, each pinned to the reading it must get."""
+
+    READINGS = {                         # request -> number of actions, or None
+        "open codex in kilix: review the diff, and when it's done tell it to push": 2,
+        "open codex in kilix: review the diff and wait until it's done": 2,
+        "hey codex in kilix": None,
+        "put codex in kilix on hold": None,
+        "resume the yolo session with codex in kilix": None,
+        "open codex in kilix to review the diff, should I?": None,
+        "open codex in kilix to review the diff and skip the permission prompts": None,
+        "open codex in kilix to fix it?": None,
+        "put codex in kilix, split right, to sleep": None,
+        "wait up to 5 minutes for codex in kilix to finish, then tell it to push": 2,
+        "wait for codex in kilix to ask me something, then tell it: yes": 2,
+        "open codex in kilix to review the diff, thanks": 1,
+        "In kilix, codex": None,
+        "pick 46bf029ad1 with codex in kilix": None,
+        "tell codex in kilix: 'exit'": None,
+        "resume codex session titled the last one in kilix": None,
+        "resume codex in kilix decade": None,
+        "resume facade with codex in kilix": None,
+        # KN-R14-46: a launch, then another session named: "it" is neither.
+        "open codex in kilix to fix the build, tell the claude session in research to hold, "
+        "and wait for it to finish": None,
+        "open codex in kilix and wait for the claude session in research to finish, then "
+        "tell it to push": None,
+        # KN-R14-48/49/50
+        "In the meantime, open codex in kilix": None,
+        "open codex in kilix on o2-branch": None,
+        "open codex in kilix using claude-code-router": None,
+        "open codex in kilix with gpt": None,
+        "claude with opus in kilix-content: check the catalog pins": 1,
+    }
+
+    def test_readings(self):
+        for request, count in self.READINGS.items():
+            for dirs in (agents.FIXTURE_DIRS, None):
+                wants = agents.parse(request, dirs)
+                self.assertEqual(len(wants) if wants else None, count, f"{request} ({dirs is None})")
+
+    def test_a_trailing_thanks_is_not_the_task(self):
+        [want] = agents.parse("open codex in kilix to review the diff, thanks")
+        self.assertEqual(want.get("prompt").text, "review the diff")
+
+    def test_timeouts_and_states_keep_wait_then_tell_apart(self):
+        for request, text in (("wait up to 5 minutes for codex in kilix to finish, then tell it "
+                               "to push", "push"),
+                              ("wait for codex in kilix to ask me something, then tell it: yes",
+                               "yes")):
+            self.assertEqual(admitted(request, [call("tell", session="codex@kilix", text=text,
+                                                     wait=True)]), [], request)
+        self.assertEqual(admitted("put codex in kilix", [call("agent", agent="codex",
+                                                               dir="kilix")]), [])
+        self.assertEqual(admitted("open codex in kilix: review the diff, or should we wait",
+                                  [call("agent", agent="codex", dir="kilix",
+                                        prompt="review the diff, or should we wait")]), [])

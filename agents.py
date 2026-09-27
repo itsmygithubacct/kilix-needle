@@ -150,6 +150,10 @@ _TRAILER = re.compile(r"(?:[.!]*,? (?:thanks|thank you|thx|ty|cheers|please|pls)
                       r"(?P<mark>[.!?]*) *$")
 _SEP = re.compile(r"(?:,? and then |, then |; |,? and |, | then )")
 _PAYLOAD_END = re.compile(r"(?:; |, (?:and )?then |,? and |, | then )")
+# After ":" a payload also ends before a wait or a "when … is done" clause
+# ("…: review the diff, and when it's done tell it to push"), which speak
+# about sessions, not to one (KN-R14-45).
+_WAIT_OR_WHEN = re.compile(r"(?:wait|block|hold on|hang on|when|once|after|as soon as)\b")
 _SEQUENCE = re.compile(r"(?:; |, (?:and )?then )")
 _SUBORDINATE = re.compile(r"\b(?:if|when|whenever|once|unless|until|till|before|after|in case|"
                           r"as soon as|while)\b")
@@ -194,8 +198,11 @@ _MODEL = [re.compile(rf",? (?:using |with |on |via )?(?:the )?model:? {_MODEL_TO
 _MODEL_WORDS = frozenset("opus sonnet haiku fable mythos".split())
 # Without the word "model", a model is named by its family ("with gpt-6",
 # "on opus"), never any token with a digit ("on pr-1234", "using python3").
-_MODEL_FAMILY = re.compile(r"(?:gpt|o[1-9]|opus|sonnet|haiku|fable|mythos|claude|grok|qwen|kimi|"
-                           r"gemini|llama|deepseek|mistral|codex)(?:[-.:]?[a-z0-9]+)*")
+_MODEL_FAMILY = re.compile(
+    r"gpt-?\d[\w.-]*|o[1-9](?:-(?:mini|pro|high|low|preview))?"
+    r"|(?:claude-)?(?:opus|sonnet|haiku|fable|mythos)(?:-?\d[\w.-]*)?"
+    r"|(?:grok|gemini|llama|kimi|mistral)-?k?\d[\w.-]*|qwen-?\d[\w.-]*|deepseek-?[a-z]*-?\d[\w.-]*"
+    r"|codex-?\d[\w.-]*")
 _STOP = frozenset("""a an the my our your this that it its last latest previous prior recent
 old older other whatever same one most earlier in at inside within under here with using on to
 and split for of""".split())
@@ -273,7 +280,9 @@ _CONTROL_AGENT = re.compile(
 _NOT_A_DIR = frozenset("""once background foreground tmux screen parallel progress charge
 supervision general time order place case turn full detail private public secret silence
 peace sequence batch bulk total fact short advance addition particular front back middle
-charge person mind review debug verbose quiet silent sandbox docker container""".split())
+charge person mind review debug verbose quiet silent sandbox docker container meantime
+meanwhile future past end beginning morning evening afternoon night event moment future
+hurry rush way sense light terms touch line person practice theory principle""".split())
 _PERMISSION = re.compile(r"yolo|danger|bypass|approv|permission|sandbox|unsafe|full-?auto|"
                          r"^auto$|trust")
 _REFUSE = [
@@ -457,8 +466,8 @@ class _Reader:
             return None
         for sep in _PAYLOAD_END.finditer(self.low, start):
             text = Payload(self.org[start:sep.start()])
-            if strict and not _SEQUENCE.fullmatch(sep[0]) or not _payload_ok(
-                    text, weak, tell and not strict):
+            if strict and not _SEQUENCE.fullmatch(sep[0]) and not _WAIT_OR_WHEN.match(
+                    self.low, sep.end()) or not _payload_ok(text, weak, tell and not strict):
                 continue
             if _SUBORDINATE.search(_lower(text.text)):
                 break
@@ -556,7 +565,7 @@ class _Reader:
         # A task: strong markers, then "and tell it to", then more clauses, then weak.
         strong = re.compile(r"(?::|,? -|,? (?:with |on )?(?:the |this |a )?(?P<task>task|prompt)[:,]?) "
                             ).match(self.low, pos)
-        if terse and not (strong and strong["task"]):
+        if terse and not (strong and (strong["task"] or "model" in found or "place" in found)):
             # A bare "codex in kilix: done" is a status line or an address,
             # not a launch; a terse launch takes only "task:".
             return self.after(pos, acts + (make(),)) if not strong else None
@@ -759,9 +768,13 @@ def _last_session(acts) -> str | None:
     it is the only one, or the session a wait or message named."""
     if not acts:
         return None
+    launches = sum(a.kind == "agent" for a in acts)
     if acts[-1].kind == "agent":
-        return "it" if sum(a.kind == "agent" for a in acts) == 1 else None
-    return acts[-1].get("session")
+        return "it" if launches == 1 else None
+    named = acts[-1].get("session")
+    # A launch earlier and another session named since: "it" could be
+    # either, so it names neither (review R14 round 3, KN-R14-46).
+    return named if named == "it" or not launches else None
 
 
 def _payload_ok(payload: Payload, weak: str | None, tell: bool = False) -> bool:
@@ -787,6 +800,16 @@ def _payload_ok(payload: Payload, weak: str | None, tell: bool = False) -> bool:
                               for m in re.finditer(r"(?:^|[,;] ?(?:and |then |and then )?| and (?:then )?| then )",
                                                   low)):
         return False            # "and codex in research" is another clause, not a task
+    if (weak or tell) and any(_WAIT_OR_WHEN.match(low, m.end()) for m in re.finditer(
+            r"[,;] ?(?:and |then |and then )?| and (?:then )?| then ", low)):
+        return False            # "…, and wait for it to finish" left over from a clause
+    if weak or tell:
+        for segment in re.split(r"[,;] ?(?:and |then |and then )?| and (?:then )?| then ", low)[1:]:
+            words = re.findall(r"[a-z][a-z']*", segment)
+            while words and words[0] in _LEAD:
+                words = words[1:]
+            if words and words[0] in _JOB_HEAD and _AGENT.search(segment):
+                return False    # ", tell the claude session in research …" is a clause
     sentences = re.split(r"(?<=[.!?;])\s+", low)
     for index, sentence in enumerate(sentences):
         words = re.findall(r"[a-z][a-z']*", sentence)
