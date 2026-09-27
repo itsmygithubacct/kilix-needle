@@ -309,12 +309,12 @@ class _Reader:
             return self.dir_key[hit[0]], hit.end()
         if self.dirs is not None or not m:
             return None
-        path = re.compile(r"(?:~|\.\.?)?/[^\s,;:'\"`]*").match(self.low, start)
+        path = re.compile(r"~?/[^\s,;:'\"`]*").match(self.low, start)
         if path:
             end = path.end()
             while end > start and self.low[end - 1] == ".":
                 end -= 1
-            if end > start + 1 or self.low[start] == "/":
+            if end > start + 1 and self.low[start:end] not in ("~/",):
                 return self.org[start:end], end
             return None
         name = re.compile(r"(?:the )?(?P<n>[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?)"

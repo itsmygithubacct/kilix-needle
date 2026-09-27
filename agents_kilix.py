@@ -70,9 +70,9 @@ def resolve_dir(said: str, *, cwd: str | None = None, home: Path | None = None) 
     name = said.strip()
     if name.casefold().startswith("the "):
         name = name[4:]
-    for suffix in (" repository", " repo"):
-        if name.casefold().endswith(suffix):
-            name = name[:-len(suffix)]
+    for suffix in agents._DIR_SUFFIX:          # the words the checks take after a name
+        if name.casefold().endswith(" " + suffix):
+            name = name[:-len(suffix) - 1]
             break
 
     map_file = home / ".config" / "kilix-needle" / "dirs.json"
