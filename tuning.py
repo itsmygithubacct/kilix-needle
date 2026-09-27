@@ -351,7 +351,8 @@ def _labels(job: str, actions: list) -> list:
             agent, _, where = value.partition("@")
             return f"{agent}@{place(where)}"
         return value
-    return [[kind, {key: label(key, value) for key, value in args.items()}]
+    return [[kind, {key: label(key, value) for key, value in args.items()
+                     if not (key == "place" and value == "tab")}]    # a tab is the default
             for kind, args in actions]
 
 
