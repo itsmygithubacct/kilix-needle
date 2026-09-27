@@ -246,3 +246,78 @@ class GenericAndResearchNames(unittest.TestCase):
             for name in ("widget", "base", "checkout", "the checkout"):
                 with self.assertRaises(agents_kilix.AgentsError, msg=name):
                     agents_kilix.resolve_dir(name, home=home)
+
+
+class RunnerSurvivors(unittest.TestCase):
+    """Review R14 round 5's runner survivors (K01, K03, R08, R10) and KN-R14-64."""
+
+    def perform(self, actions, panes, wait_fails=False):
+        sent = []
+
+        def fake(argv, timeout=30):
+            sent.append(argv)
+            if argv[:2] == ["agent-control", "list"]:
+                return json.dumps({"caller_pane": 1, "panes": [{"pane_id": 1, "broker": "a" * 16,
+                                                                "cwd": "/w"}]})
+            if argv[:2] == ["panes", "list"]:
+                return json.dumps({"panes": panes})
+            if argv[:2] == ["panes", "wait"] and wait_fails:
+                raise agents_kilix.AgentsError("timed out")
+            if argv[0] == "agent-control" and argv[1] in ("new-tab", "split"):
+                return json.dumps({"pane": {"pane_id": 7}})
+            return "{}"
+        with mock.patch.object(agents_kilix, "_run", side_effect=fake), \
+                mock.patch.object(agents_kilix, "resolve_dir",
+                                  side_effect=lambda said, cwd=None: Path("/w/kilix")):
+            results = agents_kilix.perform(actions, cwd="/w/kilix")
+        return results, [a for a in sent if a[:2] == ["agent-control", "send"]]
+
+    def pane(self, **extra):
+        pane = {"pane_id": 7, "cwd": "/w/kilix", "activity": "idle",
+                "broker": {"session_id": "b" * 16},
+                "coding_session": {"provider": "codex", "cwd": "/w/kilix"}}
+        pane.update(extra)
+        return pane
+
+    def test_it_holds_when_the_launched_pane_reports_another_agent(self):          # K01
+        actions = [agents.Action("agent", {"agent": "codex", "dir": "kilix"}),
+                   agents.Action("tell", {"session": "it", "text": "go"})]
+        results, sends = self.perform(actions, [self.pane(coding_session={
+            "provider": "claude", "cwd": "/w/kilix"})])
+        self.assertEqual(results[1]["outcome"], "failed")
+        self.assertEqual(sends, [])
+
+    def test_a_malformed_session_record_holds(self):                               # R10
+        actions = [agents.Action("agent", {"agent": "codex", "dir": "kilix"}),
+                   agents.Action("tell", {"session": "it", "text": "go"})]
+        results, sends = self.perform(actions, [self.pane(coding_session="codex")])
+        self.assertEqual(results[1]["outcome"], "failed")
+        self.assertEqual(sends, [])
+
+    def test_a_pane_back_at_its_shell_is_never_typed_into(self):                   # K03
+        tell = agents.Action("tell", {"session": "claude@kilix", "text": "rm -rf build"})
+        results, sends = self.perform([tell], [self.pane(pane_id=3, activity="shell",
+                                                         coding_session={"provider": "claude",
+                                                                         "cwd": "/w/kilix"})])
+        self.assertEqual(results[0]["outcome"], "failed")
+        self.assertEqual(sends, [])
+
+    def test_a_symlinked_checkout_is_not_indexed(self):                            # R08
+        with tempfile.TemporaryDirectory() as home_string:
+            home = Path(home_string)
+            (home / "gpu_terminal").mkdir()
+            (home / "elsewhere" / "secretproj" / ".git").mkdir(parents=True)
+            (home / "gpu_terminal" / "link").symlink_to(home / "elsewhere")
+            agents_kilix._DIR_SCAN_CACHE.clear()
+            with self.assertRaises(agents_kilix.AgentsError):
+                agents_kilix.resolve_dir("secretproj", home=home)
+
+    def test_a_failed_wait_says_the_message_was_sent(self):                        # KN-R14-64
+        actions = [agents.Action("tell", {"session": "claude@kilix", "text": "go"}),
+                   agents.Action("wait", {"session": "claude@kilix", "for": "idle"})]
+        pane = self.pane(pane_id=3, activity="working",
+                         coding_session={"provider": "claude", "cwd": "/w/kilix"})
+        results, sends = self.perform(actions, [pane], wait_fails=True)
+        self.assertEqual(len(sends), 1)
+        self.assertEqual(results[-1]["outcome"], "failed")
+        self.assertIn("message was sent", results[-1]["reason"])

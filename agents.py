@@ -155,13 +155,7 @@ _PAYLOAD_END = re.compile(r"(?:; |, (?:and )?then,? |,? and (?:then,? )?|, | the
 # about sessions, not to one (KN-R14-45).
 _WAIT_OR_WHEN = re.compile(r"(?:wait|block|hold on|hang on|when|once|after|as soon as)\b")
 _CLAUSE_LEAD = re.compile(r"(?:(?:and|then|also|please|pls|just|meanwhile|so|now|next|"
-                          r"afterwards),? )*")
-_SESSION_CLAUSE = re.compile(
-    r"(?:wait|block|hold on|hang on)\b[^,;.]*?\b(?:it|its|it's|them|session|"
-    + _alternation(_AGENT_ALIAS) + r")\b"
-    r"|(?:when|once|after|as soon as) (?:it|it's|its|they|the \w+(?: \w+)? session|"
-    + _alternation(_AGENT_ALIAS) + r")\b"
-    r"|(?:let me know|notify me|tell me|ping me|alert me) (?:when|once|if|as soon as)\b")
+                          r"afterwards|after (?:that|this)),? )*")
 _SEQUENCE = re.compile(r"(?:; |, (?:and )?then,? )")
 _SUBORDINATE = re.compile(r"\b(?:if|when|whenever|once|unless|until|till|before|after|in case|"
                           r"as soon as|while)\b")
@@ -762,6 +756,34 @@ class _Reader:
         return self.tell(sep.end(), acts, cond=session)
 
 
+# The heads of this grammar's own clauses, as they would start a later part
+# of a payload: a wait (every wait verb), a condition on a turn ending, a
+# message or launch to a session, "give it N minutes", "let me know when".
+# Built from the grammar's verb tables so a new verb can't be missed
+# (review R14 round 5, KN-R14-61).
+_SESSION_WORD = (r"(?:it|its|it's|them|they|that|that's|this|session|"
+                 + _alternation(_AGENT_ALIAS) + r")")
+_SESSION_CLAUSE = re.compile(
+    r"(?:" + _WAIT.pattern.replace("(?P<verb>", "(?:") + r")\b[^,;.]*?\b(?:" + _SESSION_WORD[3:-1]
+    + r"|until|till|done|idle|finish\w*|a bit|a while|a minute|a sec\w*|\d+|"
+    + _alternation(_NUMBERS) + r")\b"
+    r"|(?:when|once|after|as soon as|by the time)\b[^,;.]*?\b(?:done|finish\w*|complete\w*|idle|"
+    r"ready|through|asks?|waiting|blocked|needs?)\b"
+    r"|(?:sit tight|hang on|hold on|hold|wait|block)(?=\s*(?:[,;.!]|$))"
+    r"|give (?:it|them|" + _alternation(_AGENT_ALIAS) + r"|the \w+ session)\b"
+    r"|(?:" + _TELL.pattern.replace("(?P<verb>", "(?:") + r") (?:the |that |this )?" + _SESSION_WORD
+    + r"\b"
+    r"|(?:" + _LAUNCH.pattern + r"|" + _RESUME.pattern + r") (?:(?:a|an|the|another|new|me a) )*"
+    + r"(?:" + _alternation(_AGENT_ALIAS) + r")" + _END +
+    r"|(?:let me know|notify me|tell me|ping me|alert me) (?:when|once|if|as soon as)\b")
+
+
+_COND_TELL = re.compile(
+    r"\b(?:when|once|after|as soon as)\b[^.;]*?\b(?:done|finish\w*|complete\w*|idle|ready)\b"
+    r"[^.;]*?\b(?:" + _TELL.pattern.replace("(?P<verb>", "(?:") + r") (?:the |that |this )?"
+    + _SESSION_WORD + r"\b")
+
+
 def _seconds(m) -> int | None:
     """The seconds a timeout phrase says (half an hour, 5 minutes), up to a day."""
     if m["half"]:
@@ -816,6 +838,8 @@ def _payload_ok(payload: Payload, weak: str | None, tell: bool = False) -> bool:
         rest = _CLAUSE_LEAD.match(low, m.end()).end()
         if _SESSION_CLAUSE.match(low, rest):
             return False
+    if _COND_TELL.search(low):
+        return False            # "… when the review is done tell it to push", no separator
     if weak or tell:
         for segment in re.split(r"[,;] ?(?:and |then |and then )?| and (?:then )?| then ", low)[1:]:
             words = re.findall(r"[a-z][a-z']*", segment)

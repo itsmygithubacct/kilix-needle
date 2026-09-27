@@ -417,7 +417,14 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
                 delivery = "queued"
             entry.update(outcome="done", delivery=delivery, pane=pane_id)
         except (AgentsError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
-            entry.update(outcome="failed", reason=str(error))
+            reason = str(error)
+            sent = [e for e in results[:-1] if e["kind"] == "tell" and e.get("outcome") == "done"]
+            if sent:
+                # A failed wait after a message doesn't undo it: say so, so
+                # nobody sends it again (review R14 round 5, KN-R14-64).
+                reason += "; the earlier message was sent" if len(sent) == 1 else \
+                    f"; the {len(sent)} earlier messages were sent"
+            entry.update(outcome="failed", reason=reason)
             break
     return results
 

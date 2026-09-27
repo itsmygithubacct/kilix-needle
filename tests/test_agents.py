@@ -290,9 +290,10 @@ class Checks(unittest.TestCase):
 
 
     def test_a_condition_in_a_payload_keeps_what_follows(self):
-        for request in ("tell claude here: if tests fail, open codex in kilix",
-                        "tell claude here: review the diff, open codex in kilix"):
-            self.assertEqual(len(agents.parse(request)), 1, request)
+        # A conditional launch inside a message has no single reading either.
+        self.assertIsNone(agents.parse("tell claude here: if tests fail, open codex in kilix"))
+        # A later part that starts a launch has no single reading (R14 round 5).
+        self.assertIsNone(agents.parse("tell claude here: review the diff, open codex in kilix"))
         # After a weak marker the conditional clause names another agent: no reading.
         self.assertIsNone(agents.parse("open codex in kilix to review, and if it fails, "
                                        "tell claude here to fix"))
@@ -674,3 +675,35 @@ class ReviewR14Round4(unittest.TestCase):
         wants = agents.parse("open codex in kilix to review the diff and then, when it's done, "
                              "tell it to push")
         self.assertEqual(wants[0].get("prompt").text, "review the diff")
+
+
+class ReviewR14Round5(unittest.TestCase):
+    """Review R14 round 5 (KN-R14-61/62/63): clause heads from the grammar's own
+    tables never hide in a payload; plain task text stays a payload."""
+
+    READINGS = {
+        "open codex in kilix: review the diff and hold until it's done": None,
+        "open codex in kilix: review the diff and sit tight": None,
+        "open codex in kilix: review the diff and watch it": None,
+        "open codex in kilix: review the diff; once done, tell it to push": None,
+        "open codex in kilix: review the diff, and when finished tell it to push": None,
+        "open codex in kilix: review the diff. After that, tell it to push.": None,
+        "open codex in kilix: review the diff when the review is done tell it to push": None,
+        "open codex in kilix to review the diff, give it five minutes, then tell it to push": None,
+        "open codex in kilix to review the diff, wait a bit, then tell it to push": None,
+        "tell the claude session in research: summarize; when that's done, tell codex in kilix "
+        "to merge": None,
+        "open codex in kilix: review the diff, and open claude in research": None,     # N02
+        "open codex in kilix: review it. then open claude in research to help": None,  # M46
+        "open codex in kilix: add a retry, and when it times out log the error": 1,
+        "tell codex in kilix to fix the tests, then wait for CI": 1,
+        "tell codex in kilix to rebase and after that run the suite": 1,
+        # M46: lead words don't hide a controlling verb after a weak marker.
+        "open codex in kilix and just stop it": None,
+        "open codex in kilix to please stop": None,
+    }
+
+    def test_readings(self):
+        for request, count in self.READINGS.items():
+            wants = agents.parse(request)
+            self.assertEqual(len(wants) if wants else None, count, request)
