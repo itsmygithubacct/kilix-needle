@@ -782,15 +782,15 @@ class _Reader:
 # Built from the grammar's verb tables so a new verb can't be missed
 # (review R14 round 5, KN-R14-61).
 _SESSION_WORD = (r"(?:it|its|it's|them|they|session|the (?:reviewer|worker|helper|agent|instance|"
-                 r"new one|other one)|" + _alternation(_AGENT_ALIAS) + r")")
+                 r"new one|other one|tab|pane|new tab|new pane)|" + _alternation(_AGENT_ALIAS) + r")")
 # Wait verbs, the grammar's own and the ones it doesn't read ("pause until",
 # "stand by", "hang tight"): in a payload they still mean a wait.
 _ANY_WAIT = (r"(?:" + _WAIT.pattern.replace("(?P<verb>", "(?:") +
              r"|pause|stand by|hang tight|sleep|poll|check back|check in)")
 _SESSION_CLAUSE = re.compile(
-    _ANY_WAIT + r"\b[^,;.()]*?\b(?:" + _SESSION_WORD[3:-1] + r"|until|till)\b"
+    _ANY_WAIT + r"\b[^,;.()]{0,80}?\b(?:" + _SESSION_WORD[3:-1] + r")\b"
     r"|(?:when|once|after|as soon as|by the time) (?:it|it's|its|they|that|that's|this|"
-    r"(?:the )?\w+ (?:session|review|run)|" + _alternation(_AGENT_ALIAS) + r")\b[^,;.()]*?\b"
+    r"(?:the )?\w+ (?:session|review|run)|" + _alternation(_AGENT_ALIAS) + r")\b[^,;.()]{0,80}?\b"
     r"(?:done|finish\w*|complete\w*|idle|ready|through|asks?|waiting|blocked|needs?)\b"
     r"|(?:sit tight|hang on|hold on|hold|wait|block|stand by|hang tight)(?=\s*(?:[,;.!)]|$))"
     r"|give (?:it|them|" + _alternation(_AGENT_ALIAS) + r"|the \w+ session) (?:\w+ )?"
@@ -812,7 +812,7 @@ _TIMED_WAIT = re.compile(_ANY_WAIT + r"\b[^,;.()]{0,80}?\b(?:a bit|a while|a mom
 # A wait on a session or a condition on its turn (the first alternatives of
 # _SESSION_CLAUSE), anywhere in a payload.
 _WAIT_COND = re.compile(
-    _ANY_WAIT + r"\b[^,;.()]{0,80}?\b(?:" + _SESSION_WORD[3:-1] + r"|until|till)\b"
+    _ANY_WAIT + r"\b[^,;.()]{0,80}?\b(?:" + _SESSION_WORD[3:-1] + r")\b"
     r"|(?:when|once|after|as soon as|by the time) (?:it|it's|its|they|that|that's|this|"
     r"(?:the )?\w+ (?:session|review|run)|" + _alternation(_AGENT_ALIAS) + r")\b[^,;.()]{0,80}?\b"
     r"(?:done|finish\w*|complete\w*|idle|ready|through|asks?|waiting|blocked|needs?)\b")
@@ -824,8 +824,8 @@ def _within(positions: list, start: int, end: int) -> bool:
 
 
 _COND_TELL = re.compile(
-    r"\b(?:when|once|after|as soon as)\b[^.;]*?\b(?:done|finish\w*|complete\w*|idle|ready)\b"
-    r"[^.;]*?\b(?:" + _TELL.pattern.replace("(?P<verb>", "(?:") + r") (?:the |that |this )?"
+    r"\b(?:when|once|after|as soon as)\b[^.;]{0,120}?\b(?:done|finish\w*|complete\w*|idle|ready)\b"
+    r"[^.;]{0,120}?\b(?:" + _TELL.pattern.replace("(?P<verb>", "(?:") + r") (?:the |that |this )?"
     + _SESSION_WORD + r"\b")
 
 

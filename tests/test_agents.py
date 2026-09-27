@@ -765,3 +765,21 @@ class ReviewR14Round7(unittest.TestCase):
             started = time.process_time()
             agents.parse(request + tail)
             self.assertLess(time.process_time() - started, 5.0, unit)
+
+
+class ReviewR14Round8(unittest.TestCase):
+    """Review R14 round 8 (KN-R14-74/75): a wait "until" something that isn't a
+    session is task text; "the tab/pane" name the session."""
+
+    READINGS = {
+        "open codex in kilix: make the retry loop wait until the socket is ready": 1,
+        "open codex in kilix: the CLI should block until the lock is free": 1,
+        "open codex in kilix to review the diff and wait for the tab to finish": None,
+        "open codex in kilix: review the diff and wait until codex is done": None,
+        "open codex in kilix: review the diff and hold until it's done": None,
+    }
+
+    def test_readings(self):
+        for request, count in self.READINGS.items():
+            wants = agents.parse(request)
+            self.assertEqual(len(wants) if wants else None, count, request)
