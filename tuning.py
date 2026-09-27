@@ -43,7 +43,8 @@ import jobs
 REPO = Path(__file__).resolve().parent
 
 
-PACKS = {"panes": "kilix_panes", "apps": "kilix_apps"}   # kilix-ml domain per job
+PACKS = {"panes": "kilix_panes", "apps": "kilix_apps",   # kilix-ml domain per job
+         "agents": "kilix_agents"}
 
 
 def library_path(job: str = jobs.DEFAULT) -> Path:
@@ -82,6 +83,21 @@ RECIPE = {"train": {"epochs": 4, "qat": True},
 # and no supplements or cap yet; its gate is its own held-out set.
 APPS_RECIPE = {"train": {"epochs": 4, "qat": True}, "data": {},
                "gates": {"heldout": jobs.JOBS["apps"].heldout}}
+# The agents job: the same method, its own blind pack and held-out set.
+AGENTS_RECIPE = {"train": {"epochs": 4, "qat": True}, "data": {},
+                 "gates": {"heldout": jobs.JOBS["agents"].heldout}}
+JOB_RECIPES = {"apps": APPS_RECIPE, "agents": AGENTS_RECIPE}
+
+
+def job_schema(job: str):
+    """(module, tools) of a job with its own schema, or None for panes."""
+    if job == "apps":
+        import apps
+        return apps, apps.TOOLS
+    if job == "agents":
+        import agents
+        return agents, agents.TOOLS
+    return None
 STAGES = ("base", "source", "env", "data", "train", "export", "gates", "select")
 
 
@@ -113,7 +129,7 @@ def recipe(manifest: dict, job: str = jobs.DEFAULT) -> dict:
     """The manifest with kilix-needle's recipe applied, excluding every eval set."""
     merged = {key: dict(value) if isinstance(value, dict) else value
               for key, value in manifest.items()}
-    for section, values in (APPS_RECIPE if jobs.get(job).name == "apps" else RECIPE).items():
+    for section, values in JOB_RECIPES.get(jobs.get(job).name, RECIPE).items():
         merged.setdefault(section, {}).update(values)
     # Every job's sets, not only this job's: evals/<job>/ as well as evals/.
     evals = sorted(str(p.relative_to(REPO)) for p in (REPO / "evals").rglob("*.jsonl"))
@@ -215,9 +231,12 @@ _INTENT = {"open": "open a {kind}", "close": "close a {kind}", "go_to": "go to a
            "adjust": "change the current tab", "run_in_pane": "type a command into a pane",
            "launch": "open an app", "show": "show or hide an indicator or button",
            "pane_stat": "set how panes show a stat", "game": "change the games list",
-           "settings": "open the settings"}
+           "settings": "open the settings", "agent": "start a coding session",
+           "wait": "wait for a coding session", "tell": "send a coding session a message"}
 _NO_APP_TOOL = ("No tool fits: the request does not ask to open a Kilix app or game, "
                 "or to show, hide or set a Kilix indicator, game or setting.")
+_NO_AGENT_TOOL = ("No tool fits: the request does not ask to start, wait for or message a "
+                  "coding session.")
 _NO_TOOL = ("No tool fits: the request does not ask to open, close, go to, change or "
             "type into a pane or tab.")
 
@@ -312,13 +331,38 @@ def cap_share(rows: list[dict], share: float, seed: int) -> tuple[list[dict], di
     return kept, capped
 
 
-def _build_apps_data(library: Path, manifest: dict, out: Path) -> dict:
-    """The apps job's rows: its own five tools, kept only when apps' checks
-    admit every labelled action exactly."""
-    import apps
+def _labels(job: str, actions: list) -> list:
+    """The labelled actions as the job's checks admit them (the agents job
+    admits "here" and its kin as "here"; everything else as written)."""
+    if job != "agents":
+        return actions
+    import agents
+    here = set(agents.FIXTURE_DIRS["here"])
+
+    def place(value):
+        return "here" if agents._fold(value) in here else value
+
+    def label(key, value):
+        if not isinstance(value, str):
+            return value
+        if key == "dir":
+            return place(value)
+        if key == "session" and "@" in value:
+            agent, _, where = value.partition("@")
+            return f"{agent}@{place(where)}"
+        return value
+    return [[kind, {key: label(key, value) for key, value in args.items()
+                     if not (key == "place" and value == "tab")}]    # a tab is the default
+            for kind, args in actions]
+
+
+def _build_job_data(library: Path, manifest: dict, out: Path, job: str) -> dict:
+    """A job with its own schema: rows kept only when the job's checks admit
+    every labelled action exactly."""
+    module, tools = job_schema(job)
     data = manifest["data"]
-    if data["toolset"] != "apps":
-        raise TuneError("the apps job trains its own five-tool schema")
+    if data["toolset"] != job:
+        raise TuneError(f"the {job} job trains its own schema")
     corpus = load_generator(library)
     exclude = set()
     for rel in data["exclude"]:
@@ -328,14 +372,14 @@ def _build_apps_data(library: Path, manifest: dict, out: Path) -> dict:
     examples, inconsistent = [], 0
     for row in rows:
         calls = [{"name": kind, "arguments": args} for kind, args in row["actions"]]
-        admitted = [[a.kind, a.args] for a in apps.interpret(row["query"], calls)
-                    if isinstance(a, apps.Action)]
-        if admitted != row["actions"]:
+        admitted = [[a.kind, a.args] for a in module.interpret(row["query"], calls)
+                    if isinstance(a, module.Action)]
+        if admitted != _labels(job, row["actions"]):
             inconsistent += 1   # a training answer the tool would refuse teaches nothing
             continue
-        examples.append({"query": row["query"], "tools": apps.TOOLS,
+        examples.append({"query": row["query"], "tools": tools,
                          "reasoning": reasoning_for(calls, row.get("spans", []))
-                         if calls else _NO_APP_TOOL,
+                         if calls else (_NO_AGENT_TOOL if job == "agents" else _NO_APP_TOOL),
                          "answers": calls})
     stats = {"generated": len(rows), "kept": len(examples), "eval_matches_dropped": dropped,
              "inconsistent_dropped": inconsistent}
@@ -347,8 +391,8 @@ def _build_apps_data(library: Path, manifest: dict, out: Path) -> dict:
 
 def build_data(library: Path, manifest: dict, out: Path, job: str = jobs.DEFAULT) -> dict:
     """Generate, check against the running tool's rules, write upstream's format."""
-    if jobs.get(job).name == "apps":
-        return _build_apps_data(library, manifest, out)
+    if job_schema(jobs.get(job).name) is not None:
+        return _build_job_data(library, manifest, out, jobs.get(job).name)
     data = manifest["data"]
     added = []
     if data.get("supplements"):
@@ -516,9 +560,9 @@ def stage_gates(run: Run, manifest: dict, library_image, cact_sha: str,
     weights = asset.load_verified(run.root / "tuned.cact", cact_sha,
                                   (run.root / "tuned.cact").stat().st_size)
     sets = {"dev": spec.dev, "test": spec.test, "heldout": manifest["gates"]["heldout"]}
-    if spec.name == "apps":
-        import apps
-        tools, translate, reference_tools = apps.TOOLS, (lambda calls: calls), apps.TOOLS
+    if job_schema(spec.name) is not None:
+        _, schema = job_schema(spec.name)
+        tools, translate, reference_tools = schema, (lambda calls: calls), schema
     else:
         from actions import LEGACY_TOOLS
         tools, translate, reference_tools = toolset.TOOLS, toolset.to_actions, LEGACY_TOOLS
@@ -617,7 +661,7 @@ def _update_selections(change) -> None:
 def select(run_root: Path, cact_sha: str, job: str = jobs.DEFAULT) -> None:
     jobs.get(job)
     entry = {"weights": str(run_root / "tuned.cact"), "sha256": cact_sha,
-             "toolset": "apps" if job == "apps" else "five", "run": run_root.name}
+             "toolset": job if job_schema(job) is not None else "five", "run": run_root.name}
     _update_selections(lambda stored: stored.__setitem__(job, entry))
 
 
@@ -760,9 +804,8 @@ def in_use(job: str = jobs.DEFAULT) -> str:
     """
     import asset
     from libengine import LibEngine, LibEngineError
-    import apps
     import toolset
-    tools = apps.TOOLS if job == "apps" else toolset.TOOLS
+    tools = job_schema(job)[1] if job_schema(job) is not None else toolset.TOOLS
     choice = selected(job)
     if choice is not None:
         try:
