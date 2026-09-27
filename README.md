@@ -161,6 +161,56 @@ too: `kilix-needle --agent --json --yes REQUEST` prints one JSON record. Don't
 expose it inside omp.sh's Docker sandbox: its network namespace cannot reach
 Kilix's abstract socket.
 
+## Read pane logs
+
+The experimental `logs` command reads recorded evidence without loading an
+action model. It can index Claude and Codex JSONL sources or committed plain
+UTF-8 recording lines. Structured tool output retains its tool role even when
+its text looks like a user message.
+
+```sh
+kilix-needle logs brief --session claude-needle
+kilix-needle logs events --file /path/to/rollout.jsonl --provider codex --json
+kilix-needle logs search --session claude-needle --query "parser" --limit 10
+kilix-needle logs source --event evt-ID --json
+kilix-needle logs cache status
+kilix-needle logs cache clear
+```
+
+`--session` selects a pane by ID, coding-session ID, broker ID, or unique title;
+ambiguous selectors fail. `--file` requires an explicit provider: `claude`,
+`codex`, or `raw`. Zstandard archives additionally require `zstd`. The pinned
+`third_party/kilix-tui-utils` submodule supplies structured adapters.
+
+Events cite exact Unicode spans in canonical records, which retain byte and
+JSON-pointer origins. The baseline extracts user requests/questions, assistant
+answer excerpts, and narrow test/error lines in structured tool output. An
+assistant's statement stays an assistant claim. `brief` shows the newest bounded
+events with citations; it does not reconcile conflicting statements. Search is
+lexical and also searches records without event labels. Source lookup retrieves
+the cached evidence snapshot, which may differ from a subsequently edited log.
+
+JSON reports coverage gaps and source generations. Exit codes are 0 for a
+complete read, 1 for partial coverage or read failure, and 2 for invalid input
+or an invalid cursor. Limits bound snapshots and responses. A response too large
+for the envelope is rejected explicitly; narrow the query. Events can be paged
+with `--since-cursor`, but appends or rewrites invalidate the old snapshot's
+cursor. This first implementation rebuilds each snapshot rather than indexing
+appends incrementally.
+
+The private local SQLite cache contains excerpts of the source logs. CLI
+`--cache-path` can place it in a chosen private directory. The MCP tool
+`kilix_logs_read` exposes `events`, `brief`, `search`, and `source` with the same
+evidence rules; it has no action-engine or confirmation path. Only the CLI
+exposes cache clearing.
+
+Raw recording support is deliberately limited: terminal control sequences,
+redraws, binary data, and unfinished lines produce explicit partial coverage.
+It does not reconstruct a terminal screen or infer speakers from rendered
+labels. Grok/OMP structured adapters and full terminal replay are pending.
+Semantic extraction and fine-tuning are experiments; the usable CLI currently
+supports only `--mode baseline`. No logs model has qualified for selection.
+
 ## The engine
 
 The base engine is the upstream `needle` binary, installed as the `needle2`
