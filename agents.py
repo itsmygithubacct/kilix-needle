@@ -1,28 +1,36 @@
 """The agents job: launch coding-agent sessions, wait for them, message them.
 
-The model sees three tools (TOOLS). Every call is untrusted. A request is
-admitted only when it is *accounted for*:
+The model sees three tools (TOOLS). Every call is untrusted, and the checks
+never take the model's word for what the request says. They read the request
+themselves (`parse`) and admit the calls only when they are exactly that
+reading: the same actions in the same order, each with the same agent,
+directory, session, state, place, model, resume id, timeout and payload.
 
-1. Payloads come out first. A launch prompt or a message (`prompt`, `text`)
-   must appear verbatim in the request; that span is data, never read for
-   verbs, and is cut out. So are the names the calls use: the agent, the
-   directory, a model, a session id.
-2. What remains is the command. Every word of it must come from a closed
-   vocabulary of command and connective words (`_VOCABULARY`). A word
-   outside it ("translate", "pretend", "friend") means the request says
-   something no action accounts for, and nothing is admitted. This is the
-   structural form of review R12's lesson; word lists alone were always one
-   word short.
-3. The command may not negate, report, cancel, ask, install or change
-   permissions (`_REFUSE`), checked in the command only.
+The reading is a small grammar of clauses: launch or resume, wait, tell, and
+"when <session> is done, tell it ...". Within a clause an agent and its
+directory go together, so names can't be traded between clauses (review
+R14). Anything the grammar doesn't take -- a negation, a report, a question,
+a status line, "install", "yolo", "close", a leftover word -- means no reading,
+and nothing is admitted.
+
+Payloads (a launch's task, a message) are where the checks say they are: they
+start at a marker (":", "task:", "tell it to", "to", "and") and run to the end
+of the request, or to a separator after which the rest of the request reads
+as further clauses ("; when it's done, tell it ..."). The model's payload
+must equal that span, case preserved. A payload is data and is never read for
+verbs, except that one introduced only by "and"/"to" may not start with a job
+verb ("and close the claude session" is not a task), no payload starts with
+"/", "!", "#", "@" or "-" (client commands), and a later sentence in a payload
+may not start a job verb on an agent.
 
 Owner, 2026-09-27: a request to launch a coding agent is itself the consent,
 and sessions launch, wait for and message other sessions. So an admitted
 request needs no second yes. See AGENTS-JOB-DESIGN.md in the research notes.
 
-Directories and sessions are resolved outside this module (`Resolver`): the
-checks only require that the request names them. The eval sets use a fixed
-fixture workspace (FIXTURE_DIRS).
+Directories: the eval sets use a fixed fixture workspace (FIXTURE_DIRS) and
+admit its keys. Without a table (production) a directory is the words the
+request says in a directory position (a path, "here", or a name, optionally
+"the ... repo"); the runner resolves them on disk.
 """
 from __future__ import annotations
 
@@ -83,7 +91,9 @@ TOOLS = [
          "wait": {"type": "boolean", "description": "wait until it is idle first"}},
          "required": ["session", "text"]}},
 ]
+MAX_REQUEST = 4096
 TOOL_NAMES = frozenset(tool["name"] for tool in TOOLS)
+ARG_NAMES = {tool["name"]: frozenset(tool["parameters"]["properties"]) for tool in TOOLS}
 
 
 @dataclass(frozen=True)
@@ -96,40 +106,121 @@ class Action:
         return False            # the request is the consent (owner, 2026-09-27)
 
 
+def _fold(text: str) -> str:
+    return " ".join(normalize(text).casefold().split())
+
+
+def _lower(text: str) -> str:
+    """Lower case, one character for one, so positions match the original."""
+    return "".join(ch.lower() if len(ch.lower()) == 1 else ch for ch in text)
+
+
+def _alternation(phrases) -> str:
+    return "|".join(re.escape(p) for p in sorted(set(phrases), key=len, reverse=True))
+
+
+def _resolve_name(table: dict, value) -> str | None:
+    if not isinstance(value, str):
+        return None
+    said = _fold(value)
+    hits = [key for key in table if said == _fold(key) or said in map(_fold, table[key])]
+    return hits[0] if len(hits) == 1 else None
+
+
 # ---------------------------------------------------------------------------
-# The command's closed vocabulary. Anything else in the command, once
-# payloads and names are cut out, means the request isn't accounted for.
+# Words and phrases of the grammar (all matched on lower-cased text).
 
-_VOCABULARY = frozenset("""
-a an the new fresh another second separate my our your this that its it them his her
-of for in into at on from to with using via and then also too as
-please pls kindly could can would will you me us i we just now quickly quick go ahead
-ok okay hey so let lets let's up over there right away
-session sessions instance agent reviewer review worker helper copy pane tab split window
-repo repository dir directory folder checkout project workspace model cli
-open start launch spawn fire spin run bring kick off get boot create resume continue
-reopen pick back
-wait until till when once it's is has done finished finishes finish idle complete
-completes completed ready asks asking question questions needs input approval waiting
-blocked reaches be seconds second minutes minute mins min secs sec hours hour most
-timeout time limit longer than max maximum up
-tell ask send message ping know instruct say notify have saying saying: telling
-right left below above down beside next side vertical horizontal
-task turn goes go gets becomes hold block put give after but work working stop
-own under underneath top needs input
-""".split())
-_NUMBER_WORDS = frozenset("""one two three four five six seven eight nine ten eleven twelve
-fifteen twenty thirty forty forty-five fifty sixty ninety a an half""".split())
-_COURTESY = frozenset("thanks thank thx ty cheers please pls".split())
-
-# Refused in the command (never in a payload).
+_END = r"(?![\w/-]|\.\w)"                      # a name ends here: not "kilix.new", "kilix-2"
+_AGENT_ALIAS = {_fold(n): key for key, names in AGENT_NAMES.items() for n in [key, *names]}
+_AGENT = re.compile(rf"(?:{_alternation(_AGENT_ALIAS)}){_END}")
+_HERE = tuple(FIXTURE_DIRS["here"])
+_DIR_SUFFIX = ("repo", "repository", "checkout", "folder", "directory", "dir")
+_PREAMBLE = re.compile(
+    r"(?:(?:hey|hi|hello|ok|okay|so|alright|yo)[,!]? )*"
+    r"(?:(?:please|pls|kindly|now|just) )*"
+    r"(?P<ask>(?:can|could|would|will) you (?:please |kindly |just )*)?"
+    r"(?:(?:i need you to|i want you to|go ahead and|let'?s|please|pls|kindly|just|now) )*")
+_TRAILER = re.compile(r"(?:[.!]*,? (?:thanks|thank you|thx|ty|cheers|please|pls))?"
+                      r"(?P<mark>[.!?]*) *$")
+_SEP = re.compile(r"(?:,? and then |, then |; |,? and |, | then )")
+_PAYLOAD_END = re.compile(r"(?:; |, (?:and )?then |, and )")
+_DET = re.compile(r"(?:(?:a|an|the|another|one more|new|fresh|second|separate|me a|us a|"
+                  r"my|our) )*")
+_ROLE = re.compile(r" (?P<role>session|instance|agent|reviewer|review|worker|helper|pane|"
+                   r"window|tab|one)\b")
+_PREP = r"(?:(?:over |right |up |down )?(?:in|at|inside|within|under) )"
+_LAUNCH = re.compile(r"(?:open(?: up)?|start(?: up)?|launch|spawn|fire up|spin up|bring up|"
+                     r"boot(?: up)?|kick off|run|create|put)\b")
+_RESUME = re.compile(r"(?:resume|continue|reopen|pick (?:back )?up)\b")
+_WAIT = re.compile(r"(?:wait|block|hold on|hang on|hold|sit tight)\b")
+_TELL = re.compile(r"(?P<verb>tell|ask|message|ping|instruct|send|let)\b")
+_COND = re.compile(r"(?:when|once|after|as soon as) ")
+_PLACE = [
+    (re.compile(r",? (?:in a |as a )?(?:new )?split(?: pane)? (?:to the |on the )?"
+                r"(right|left|down|up|below|above)\b(?: of me| side)?"), None),
+    (re.compile(r",? (?:in a (?:new )?(?:split|pane) |as a split )?(?:to|on) (?:the|my) "
+                r"(right|left)(?: side)?(?: of me)?\b"), None),
+    (re.compile(r",? (?:in a (?:new )?(?:split|pane) |as a split )?(?:to the |on the )?"
+                r"(right|left) of me\b"), None),
+    (re.compile(r",? (?:in a (?:new )?(?:split|pane) |as a split )?"
+                r"(below|beneath|under|underneath|above) me\b"), None),
+    (re.compile(r",? (?:in a (?:new )?(?:split|pane) )?on top of me\b"), "up"),
+    (re.compile(r",? (?:in|as) (?:a )?(?:new |separate |its own )?tab\b"), "tab"),
+]
+_SIDE = {"right": "right", "left": "left", "down": "down", "up": "up", "below": "down",
+         "beneath": "down", "under": "down", "underneath": "down", "above": "up"}
+_MODEL_TOKEN = r"(?P<m>[a-z0-9][a-z0-9._:-]*[a-z0-9]|[a-z0-9])"
+_MODEL = [re.compile(rf",? (?:using |with |on |via )?(?:the )?model:? {_MODEL_TOKEN}{_END}"),
+          re.compile(rf",? (?:using|with|on|via) {_MODEL_TOKEN}{_END}")]
+_MODEL_WORDS = frozenset("opus sonnet haiku fable mythos".split())
+_STOP = frozenset("""a an the my our your this that it its last latest previous prior recent
+old older other whatever same one most earlier in at inside within under here with using on to
+and split for of""".split())
+_ID = r"(?P<id>[a-z0-9][a-z0-9._-]*[a-z0-9])"
+_HEX = re.compile(r" (?P<id>[0-9a-f]{6,}(?:-[0-9a-f]+)*)(?![\w.-])")
+_TITLE = re.compile(r" the (?P<t>(?:[a-z0-9][\w.-]* ){0,4}[a-z0-9][\w.-]*) session "
+                    r"(?:with |using |of |for )?")
+_IDLE_STATE = re.compile(
+    r"(?:'s| is| goes| went| gets| becomes| has| to be| to go| to get| to become)"
+    r" (?:done|finished|idle|complete|completed|through)(?: with (?:its|the) "
+    r"(?:turn|task|work|job|review|run))?\b"
+    r"|(?: to)? (?:finish|finishes|complete|completes)(?: (?:its|the) "
+    r"(?:turn|task|work|job|review|run)| up)?\b"
+    r"|(?: to)? (?:go|goes) idle\b")
+_WAITING_STATE = re.compile(
+    r"(?: to| is)?(?: stop and)? (?:ask|asks|asking)(?: me)?(?: for)? (?:approval|input|"
+    r"a question|questions|something|anything)\b"
+    r"|(?: to| is)? (?:need|needs|needing) (?:approval|input|me|my (?:approval|input))\b"
+    r"|(?: is| to be| gets| goes) (?:waiting|blocked)(?: (?:on|for) (?:approval|input|me|"
+    r"my (?:approval|input)))?\b")
+_NUMBERS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
+            "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "fifteen": 15,
+            "twenty": 20, "thirty": 30, "forty": 40, "forty-five": 45, "fifty": 50,
+            "sixty": 60, "ninety": 90, "a": 1, "an": 1}
+_UNIT = {"second": 1, "seconds": 1, "sec": 1, "secs": 1, "minute": 60, "minutes": 60,
+         "min": 60, "mins": 60, "hour": 3600, "hours": 3600}
+_AMOUNT = (r"(?P<half>half an hour)|(?P<n>\d+(?![.,]\d)|" + _alternation(_NUMBERS) +
+           r") (?P<u>" + _alternation(_UNIT) + r")\b")
+_TIMEOUT = [re.compile(r",? (?:but )?(?:give up after|(?:for )?up to|(?:for )?at most|"
+                       r"no (?:longer|more) than|with a timeout of|timeout(?: of)?|within|"
+                       r"max(?:imum)?(?: of)?) (?:" + _AMOUNT + ")"),
+            re.compile(r",? (?:" + _AMOUNT + r") (?:max|maximum|at most|tops)\b")]
+# A payload after a weak marker ("and", "to") may not start with these: "open
+# codex in kilix and close the claude session" is not a task for codex.
+_JOB_HEAD = frozenset("""open start launch spawn fire spin bring boot kick create put resume
+continue reopen pick wait block hold hang tell ask message ping instruct send let notify close
+kill quit exit terminate stop end cancel install uninstall reinstall update upgrade download skip
+bypass enable disable switch turn don't dont do not never no""".split())
+_LEAD = frozenset("then and also now please pls so next afterwards after that just".split())
+_PERMISSION = re.compile(r"yolo|danger|bypass|approv|permission|sandbox|unsafe|full-?auto|"
+                         r"^auto$|trust")
 _REFUSE = [
     (re.compile(r"\b(?:not|never|don'?t|do not|no|nope|without|cannot|can'?t|won'?t|\w+n't)\b"),
      "the request says not to"),
-    (re.compile(r"\b(?:said|says|say so|told|tells|wrote|writes|asked me|according to|"
-                r"someone|somebody|anyone|friend|boss|colleague)\b"),
+    (re.compile(r"\b(?:said|says|told|tells|wrote|writes|asked me|according to|someone|"
+                r"somebody|anyone|friend|boss|colleague)\b"),
      "the request reports someone else's words"),
-    (re.compile(r"\b(?:cancel|never ?mind|nvm|scratch that|actually|wait,? no|undo|jk|kidding)\b"),
+    (re.compile(r"\b(?:cancel|never ?mind|nvm|scratch that|actually|undo|jk|kidding)\b"),
      "the request takes something back"),
     (re.compile(r"\b(?:re ?install\w*|install\w*|uninstall\w*|updat\w*|upgrad\w*|download\w*|"
                 r"set up|setup)\b"),
@@ -137,265 +228,476 @@ _REFUSE = [
     (re.compile(r"\b(?:yolo|dangerous\w*|bypass\w*|skip\w* (?:the )?(?:approvals?|permissions?|"
                 r"prompts?)|auto.?approve\w*|always.?approve|permission\w*|sandbox\w*)\b"),
      "permissions follow Kilix's coding-yolo setting and are not set by a request"),
-    (re.compile(r"\b(?:kill|close|quit|exit|terminate)\b|\b(?:stop|end)\s+(?:it|them|that|the|this|"
-                r"those|\u2063)"),
+    (re.compile(r"\b(?:kill|close|quit|exit|terminate|stop|end)\b"),
      "closing or stopping sessions is not done here"),
+    (re.compile(r"\?"), "the request is a question"),
 ]
-_QUESTION_HEAD = re.compile(r"^(?:should|shall|how|what|why|which|who|whose|is|are|does|did|"
-                            r"do (?:i|we|you))\b")
-_POLITE_ASK = re.compile(r"^(?:(?:please|pls|ok|okay|hey|hi)\s+)*(?:can|could|would|will) you\b")
-
-_LAUNCH_VERB = re.compile(r"\b(?:open|start|launch|spawn|fire|spin|run|bring|kick|get|boot|"
-                          r"create|resume|continue|reopen|pick|put)\b")
-_RESUME_WORD = re.compile(r"\b(?:resume|continue|reopen|pick\b.*\bback|back)\b")
-_WAIT_WORD = re.compile(r"\b(?:wait|until|till|when|once|after)\b")
-_TELL_WORD = re.compile(r"\b(?:tell|ask|send|message|ping|let\b.*\bknow|instruct|say|notify|"
-                        r"have|give\b.*\binput)\b")
-_IDLE_WORD = re.compile(r"\b(?:done|finished|finishes|finish|idle|complete|completes|"
-                        r"completed|ready)\b")
-_WAITING_WORD = re.compile(r"\b(?:asks|asking|question|questions|needs|approval|"
-                           r"waiting|blocked)\b")
-_PLACE_WORDS = {"right": r"\bright\b", "left": r"\bleft\b",
-                "down": r"\b(?:below|down|under(?:neath)?)\b",
-                "up": r"\b(?:above|up|on top)\b(?! to)"}
-_SPLIT_WORD = re.compile(r"\b(?:split|beside|next to|side)\b")
-_UNIT = {"second": 1, "seconds": 1, "sec": 1, "secs": 1, "minute": 60, "minutes": 60,
-         "min": 60, "mins": 60, "hour": 3600, "hours": 3600}
-_NUMBERS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
-            "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "fifteen": 15,
-            "twenty": 20, "thirty": 30, "forty": 40, "forty-five": 45, "fifty": 50,
-            "sixty": 60, "ninety": 90, "half": 0.5, "a": 1, "an": 1}
-
-
-def _fold(text: str) -> str:
-    return " ".join(normalize(text).casefold().split())
-
-
-def _said(phrase: str, text: str) -> re.Match | None:
-    return re.search(rf"(?<![\w~/-]){re.escape(phrase)}(?![\w/-])", text)
-
-
-def _names(table: dict, key: str) -> list[str]:
-    return sorted({_fold(key)} | {_fold(n) for n in table.get(key, [])}, key=len, reverse=True)
-
-
-def _resolve_name(table: dict, value) -> str | None:
-    if not isinstance(value, str):
-        return None
-    said = _fold(value)
-    hits = [key for key in table if said in _names(table, key)]
-    return hits[0] if len(hits) == 1 else None
-
-
-def _mentioned(table: dict, key: str, text: str) -> list[str]:
-    """The names of key the text says, longest first, never a shorter name
-    inside a longer one of another key."""
-    found = []
-    for phrase in _names(table, key):
-        if _said(phrase, text):
-            longer = [p for other in table if other != key for p in _names(table, other)
-                      if len(p) > len(phrase) and phrase in p and _said(p, text)]
-            if not longer:
-                found.append(phrase)
-    return found
-
-
-@dataclass
-class Reading:
-    command: str = ""               # the request with payloads and names cut out
-    refusal: str | None = None
-    unaccounted: tuple = ()
-
-
-def _cut(text: str, span: str) -> str:
-    """Cut a verbatim span (and quotes right around it) out of folded text."""
-    index = text.find(span)
-    if index < 0:
-        return text
-    start, end = index, index + len(span)
-    while start > 0 and text[start - 1] in "\"'`":
-        start -= 1
-    while end < len(text) and text[end] in "\"'`":
-        end += 1
-    return text[:start] + " ⁣ " + text[end:]
-
-
-def read(request: str, calls: list, dirs: dict) -> Reading:
-    """Cut payloads and names out; check what remains."""
-    text = _fold(request)
-    for call in calls:
-        args = call.get("arguments") if isinstance(call, dict) else None
-        if not isinstance(args, dict):
-            continue
-        for key in ("prompt", "text"):
-            value = args.get(key)
-            if isinstance(value, str) and value.strip() and _fold(value) in text:
-                text = _cut(text, _fold(value))
-    names = [n for key in AGENT_NAMES for n in _names(AGENT_NAMES, key)]
-    names += [n for key in dirs for n in _names(dirs, key)]
-    for call in calls:
-        args = call.get("arguments") if isinstance(call, dict) else {}
-        for key in ("model", "resume"):
-            value = args.get(key) if isinstance(args, dict) else None
-            if isinstance(value, str) and value.strip():
-                names.append(_fold(value))
-    for name in sorted(set(names), key=len, reverse=True):
-        while True:
-            match = _said(name, text)
-            if not match:
-                break
-            text = text[:match.start()] + " ⁣ " + text[match.end():]
-    command = " ".join(text.replace("⁣", " ").split())
-    sentences = [s for s in re.split(r"(?<=[.!?])\s+", command) if s.strip(" .!?")]
-    if len([s for s in sentences if set(re.findall(r"[\w'-]+", s)) - _COURTESY]) > 1:
-        return Reading(command, "the request says more than one sentence")
-    if "?" in command and not _POLITE_ASK.match(command):
-        return Reading(command, "the request is a question")
-    if _QUESTION_HEAD.match(command) and not _POLITE_ASK.match(command):
-        return Reading(command, "the request is a question")
-    softened = re.sub(r"\bno (?:longer|more) than\b", " ", command)
-    for pattern, reason in _REFUSE:
-        if pattern.search(softened):
-            return Reading(command, reason)
-    words = re.findall(r"[a-z0-9'][a-z0-9'-]*", command)
-    unaccounted = tuple(w for w in words if w not in _VOCABULARY and w not in _NUMBER_WORDS
-                        and w not in _COURTESY and not w.isdigit())
-    if unaccounted:
-        return Reading(command, "the request says more than these actions: "
-                                + ", ".join(dict.fromkeys(unaccounted)), unaccounted)
-    return Reading(command)
 
 
 # ---------------------------------------------------------------------------
+# The reading.
+
+@dataclass(frozen=True)
+class Payload:
+    """A span of the request, case preserved; the model may leave off one
+    closing full stop or the quotes around it."""
+    text: str
+
+    def forms(self) -> set:
+        text = self.text.strip()
+        forms = {text}
+        if len(text) > 1 and text[0] == text[-1] and text[0] in "\"'`":
+            forms.add(text[1:-1].strip())
+        forms |= {f[:-1].rstrip() for f in list(forms) if f.endswith((".", "!"))}
+        return {f for f in forms if f}
 
 
-def _session(value, request_text: str, launched: set, dirs: dict) -> str | None:
-    """'it' (a session this request launches) or agent@dir, both named."""
+@dataclass(frozen=True)
+class Want:
+    kind: str
+    args: tuple                           # sorted (key, value) pairs
+
+    def get(self, key, default=None):
+        return dict(self.args).get(key, default)
+
+
+def _want(kind, **args) -> Want:
+    return Want(kind, tuple(sorted((k, v) for k, v in args.items() if v is not None)))
+
+
+class _Reader:
+    def __init__(self, request: str, dirs: dict | None):
+        self.org = request
+        self.low = _lower(request)
+        self.dirs = dirs
+        self.n = len(request)
+        self.polite = False
+        self.dead = set()               # (pos, state) where the rest has no reading
+        variants = []
+        table = dirs if dirs is not None else {"here": list(_HERE)}
+        for key, names in table.items():
+            for name in {_fold(key), *map(_fold, names)}:
+                forms = [name]
+                if not name.startswith(("the ", "this ", "~", "/")):
+                    forms.append("the " + name)
+                for form in list(forms):
+                    if not form.endswith(_DIR_SUFFIX):
+                        forms += [f"{form} {s}" for s in _DIR_SUFFIX]
+                variants += [(f, key) for f in forms]
+        self.dir_key = dict(variants)
+        self.dir_re = re.compile(rf"(?:{_alternation(self.dir_key)}){_END}")
+
+    # -- names ------------------------------------------------------------
+    def agent(self, pos):
+        m = _AGENT.match(self.low, pos)
+        return (_AGENT_ALIAS[m[0]], m.end()) if m else None
+
+    def directory(self, pos, bare_ok=False):
+        """A directory phrase at pos (with its leading space): the directory's
+        value and the end. A preposition comes first unless it is "here"."""
+        if not self.low.startswith(" ", pos):
+            return None
+        m = re.compile(r" " + _PREP).match(self.low, pos)
+        start = m.end() if m else pos + 1
+        hit = self.dir_re.match(self.low, start)
+        if hit and (m or bare_ok and self.dir_key[hit[0]] == "here"):
+            return self.dir_key[hit[0]], hit.end()
+        if self.dirs is not None or not m:
+            return None
+        path = re.compile(r"(?:~|\.\.?)?/[^\s,;:'\"`]*").match(self.low, start)
+        if path:
+            end = path.end()
+            while end > start and self.low[end - 1] == ".":
+                end -= 1
+            if end > start + 1 or self.low[start] == "/":
+                return self.org[start:end], end
+            return None
+        name = re.compile(r"(?:the )?(?P<n>[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?)"
+                          rf"(?: (?:{'|'.join(_DIR_SUFFIX)}))?{_END}").match(self.low, start)
+        if name and name["n"] not in _STOP and name["n"] not in _AGENT_ALIAS \
+                and name["n"] not in _MODEL_WORDS and name["n"] not in _SIDE \
+                and not _PERMISSION.search(name["n"]):
+            return self.org[start:name.end()], name.end()
+        return None
+
+    def session(self, pos, acts):
+        """A session phrase at pos (after a space): 'it' or agent@dir."""
+        if re.compile(r"it\b(?!')|it(?='s )").match(self.low, pos):
+            launches = [a for a in acts if a.kind == "agent"]
+            return ("it", pos + 2) if len(launches) == 1 else None
+        det = re.compile(r"(?:the |that |this )?(?:other |same )?").match(self.low, pos)
+        got = self.agent(det.end())
+        if not got:
+            return None
+        agent, pos = got
+        role = _ROLE.match(self.low, pos)
+        if role and role["role"] not in ("tab", "pane", "window"):
+            pos = role.end()
+        where = self.directory(pos, bare_ok=True)
+        if not where:
+            return None
+        return f"{agent}@{where[0]}", where[1]
+
+    # -- clauses ----------------------------------------------------------
+    def read(self):
+        """The actions the request states, or None."""
+        pre = _PREAMBLE.match(self.low)
+        self.polite = bool(pre["ask"])
+        return self.chain(pre.end(), ())
+
+    def after(self, pos, acts):
+        """What follows a finished clause: the end, or a separator and more."""
+        if self.at_end(pos):
+            return acts
+        sep = _SEP.match(self.low, pos)
+        return self.chain(sep.end(), acts) if sep else None
+
+    def at_end(self, pos):
+        tail = _TRAILER.match(self.low, pos)
+        return bool(tail) and ("?" not in tail["mark"] or self.polite)
+
+    def chain(self, pos, acts):
+        # What the rest can mean depends only on where it starts, whether
+        # "it" has exactly one launch to name, and whether a verbless launch
+        # may follow; a failure there is remembered, so a long request can't
+        # make the search explode.
+        launches = sum(a.kind == "agent" for a in acts)
+        state = (pos, min(launches, 2), not acts or acts[-1].kind == "agent")
+        if state in self.dead:
+            return None
+        for clause in (self.launch, self.wait, self.tell, self.cond):
+            got = clause(pos, acts)
+            if got:
+                return got
+        self.dead.add(state)
+        return None
+
+    def payload(self, start, acts, make, weak=False):
+        """A payload from start to the first separator after which the rest
+        reads as clauses, else to the end; make(payload) is its action."""
+        if start >= self.n or self.low[start] == " ":
+            return None
+        for sep in _PAYLOAD_END.finditer(self.low, start):
+            text = Payload(self.org[start:sep.start()])
+            if not _payload_ok(text, weak):
+                continue
+            rest = self.chain(sep.end(), acts + (make(text),))
+            if rest:
+                return rest
+        text = Payload(self.org[start:self.n].rstrip())
+        return acts + (make(text),) if _payload_ok(text, weak) else None
+
+    def launch(self, pos, acts):
+        verb = _LAUNCH.match(self.low, pos) or _RESUME.match(self.low, pos)
+        resuming = bool(verb) and bool(_RESUME.match(self.low, pos))
+        title = None
+        if verb:
+            pos = verb.end()
+            if resuming:
+                t = _TITLE.match(self.low, pos)
+                if t and not _STOP & set(t["t"].split()) and not _AGENT_ALIAS.keys() & {
+                        w for w in t["t"].split()}:
+                    title = self.org[t.start("t"):t.end("t")]
+                    pos = t.end() - 1
+            pos += 1 if self.low.startswith(" ", pos) else 0
+            if not self.low[pos - 1:pos] == " ":
+                return None
+        elif not (not acts or acts[-1].kind == "agent"):
+            return None             # terse "codex in kilix" opens a request or follows a launch
+        pos = _DET.match(self.low, pos).end()
+        got = self.agent(pos)
+        if not got:
+            return None
+        agent, pos = got
+        role = _ROLE.match(self.low, pos)
+        found = {"resume": title} if title else {}
+        if role:
+            pos = role.end()
+            if resuming and not title and role["role"] == "session":
+                ident = re.compile(rf" (?:id )?{_ID}(?![\w.-])").match(self.low, pos)
+                if ident and ident["id"] not in _STOP:
+                    found["resume"], pos = self.org[ident.start("id"):ident.end("id")], ident.end()
+        while True:
+            for kind in ("dir", "place", "model", "resume"):
+                if kind in found or kind == "resume" and not resuming:
+                    continue
+                got = self.modifier(kind, pos)
+                if got:
+                    found[kind], pos = got
+                    break
+            else:
+                break
+        if "dir" not in found or resuming != ("resume" in found):
+            return None
+        if found.get("resume") and _STOP & set(_fold(found["resume"]).split()):
+            return None
+
+        def make(prompt=None):
+            return _want("agent", agent=agent, dir=found["dir"], prompt=prompt,
+                         resume=found.get("resume"), model=found.get("model"),
+                         place=None if found.get("place") in (None, "tab") else found["place"])
+        # A task: strong markers, then "and tell it to", then more clauses, then weak.
+        strong = re.compile(r"(?::|,? -|,? (?:with the |with )?(?:task|prompt)[:,]?) "
+                            ).match(self.low, pos)
+        if strong:
+            return self.payload(strong.end(), acts, make)
+        told = re.compile(r",? and (?:tell it to|tell it:|ask it to|have it|get it to|let it) "
+                          ).match(self.low, pos)
+        if told:
+            return self.payload(told.end(), acts, make, weak=True)
+        plain = self.after(pos, acts + (make(),))
+        if plain:
+            return plain
+        weak = re.compile(r"(?:,? and| to) ").match(self.low, pos)
+        if weak:
+            return self.payload(weak.end(), acts, make, weak=True)
+        return None
+
+    def modifier(self, kind, pos):
+        if kind == "dir":
+            return self.directory(pos, bare_ok=True)
+        if kind == "place":
+            for pattern, fixed in _PLACE:
+                m = pattern.match(self.low, pos)
+                if m:
+                    return fixed or _SIDE[m[1]], m.end()
+            return None
+        if kind == "model":
+            for index, pattern in enumerate(_MODEL):
+                m = pattern.match(self.low, pos)
+                if m and m["m"] not in _AGENT_ALIAS and not _PERMISSION.search(m["m"]) and (
+                        index == 0 or re.search(r"\d", m["m"]) or m["m"] in _MODEL_WORDS):
+                    return self.org[m.start("m"):m.end("m")], m.end()
+            return None
+        # resume: "session <id>" or a bare hex id
+        m = re.compile(rf" session(?: id)? {_ID}(?![\w.-])").match(self.low, pos) \
+            or _HEX.match(self.low, pos)
+        if m and m["id"] not in _STOP:
+            return self.org[m.start("id"):m.end("id")], m.end()
+        return None
+
+    def timeout(self, pos):
+        for pattern in _TIMEOUT:
+            m = pattern.match(self.low, pos)
+            if m:
+                if m["half"]:
+                    return 1800, m.end()
+                count = int(m["n"]) if m["n"].isdigit() else _NUMBERS[m["n"]]
+                seconds = count * _UNIT[m["u"]]
+                return (seconds, m.end()) if 0 < seconds <= 86400 else None
+        return None
+
+    def wait(self, pos, acts):
+        verb = _WAIT.match(self.low, pos)
+        if not verb:
+            return None
+        pos = verb.end()
+        limit = None
+        early = self.timeout(pos)
+        if early:
+            limit, pos = early
+        until = re.compile(r" (?:until|till|for|on) ").match(self.low, pos)
+        if not until:
+            return None
+        got = self.session(until.end(), acts)
+        if not got:
+            return None
+        session, pos = got
+        idle, waiting = _IDLE_STATE.match(self.low, pos), _WAITING_STATE.match(self.low, pos)
+        if bool(idle) == bool(waiting):
+            return None
+        state, pos = ("idle", idle.end()) if idle else ("waiting", waiting.end())
+        if limit is None:
+            late = self.timeout(pos)
+            if late:
+                limit, pos = late
+        return self.after(pos, acts + (_want("wait", session=session, **{"for": state},
+                                             timeout=limit),))
+
+    def tell(self, pos, acts, cond=None):
+        verb = _TELL.match(self.low, pos)
+        if not verb:
+            return None
+        if not self.low.startswith(" ", verb.end()):
+            return None
+        if cond:
+            # "when <session> is done, tell it ...": the message goes to that
+            # session, once it is idle; naming another session is refused.
+            it = re.compile(r"it\b").match(self.low, verb.end() + 1)
+            got = (cond, it.end()) if it else self.session(verb.end() + 1, acts)
+            if got and got[0] != cond:
+                return None
+        else:
+            got = self.session(verb.end() + 1, acts)
+        if not got:
+            return None
+        session, pos = got
+        if verb["verb"] == "let":
+            marker = re.compile(r" know(?: that|:)? ").match(self.low, pos)
+        elif verb["verb"] == "send":
+            marker = re.compile(r" (?:this|the message|a message|a note)?: ").match(self.low, pos)
+        else:
+            marker = re.compile(r"(?::| to| that|,? saying:?| -) ").match(self.low, pos)
+        if not marker:
+            return None
+        return self.payload(marker.end(), acts, lambda text: _want(
+            "tell", session=session, text=text, wait=True if cond else None))
+
+    def cond(self, pos, acts):
+        head = _COND.match(self.low, pos)
+        if not head:
+            return None
+        got = self.session(head.end(), acts)
+        if not got:
+            return None
+        session, pos = got
+        idle = _IDLE_STATE.match(self.low, pos)
+        if not idle:
+            return None
+        sep = re.compile(r",? (?:then )?").match(self.low, idle.end())
+        return self.tell(sep.end(), acts, cond=session)
+
+
+def _payload_ok(payload: Payload, weak: bool) -> bool:
+    text = payload.text.strip()
+    if not text or text[0] in "-/!#@" or len(text.encode()) > 4096:
+        return False
+    if len(text) > 1 and text[0] in "\"'`" and text[1:2] in "-/!#@":
+        return False
+    sentences = re.split(r"(?<=[.!?;])\s+", _lower(text))
+    for index, sentence in enumerate(sentences):
+        words = re.findall(r"[a-z][a-z']*", sentence)
+        while words and words[0] in _LEAD:
+            words = words[1:]
+        head = words[0] if words else ""
+        if head in _JOB_HEAD and (index == 0 and weak or _AGENT.search(sentence)):
+            return False
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Matching the model's calls to the reading.
+
+def _dir_norm(value: str) -> str:
+    value = _fold(value).removeprefix("the ")
+    for suffix in _DIR_SUFFIX:
+        value = value.removesuffix(" " + suffix)
+    return value.replace(" ", "-")
+
+
+def _same_dir(value, want: str, dirs: dict | None) -> bool:
+    if not isinstance(value, str) or not value.strip():
+        return False
+    if dirs is not None:
+        return _resolve_name(dirs, value) == want or _resolve_name(
+            dirs, _dir_norm(value)) == want and want != "here"
+    if want == "here":
+        return _fold(value) in map(_fold, ("here", *_HERE))
+    if want.startswith(("~", "/", ".")):
+        return value.strip() == want
+    return _dir_norm(value) == _dir_norm(want)
+
+
+def _same_session(value, want: str, dirs) -> bool:
     if not isinstance(value, str):
-        return None
-    value = _fold(value)
-    if value == "it":
-        return "it" if launched and re.search(r"\b(?:it|them|that session|the session)\b",
-                                              request_text) else None
-    agent, sep, place = value.partition("@")
-    agent = _resolve_name(AGENT_NAMES, agent)
-    directory = _resolve_name(dirs, place)
-    if not sep or agent is None or directory is None:
-        return None
-    if not _mentioned(AGENT_NAMES, agent, request_text) or not _mentioned(dirs, directory,
-                                                                          request_text):
-        return None
-    return f"{agent}@{directory}"
+        return False
+    if want == "it":
+        return _fold(value) == "it"
+    agent, _, where = value.partition("@")
+    want_agent, _, want_where = want.partition("@")
+    return _resolve_name(AGENT_NAMES, agent) == want_agent and _same_dir(where, want_where, dirs)
 
 
-def _admit(name: str, args: dict, request_text: str, launched: set, dirs: dict):
+def _match(call: dict, want: Want, dirs) -> tuple[Action | None, str]:
+    name, args = call.get("name"), call.get("arguments")
+    if name != want.kind:
+        return None, f"the request asks for {want.kind} here, not {name}"
+    extra = set(args) - ARG_NAMES[name]
+    if extra:
+        return None, "unknown arguments: " + ", ".join(sorted(map(str, extra)))
+
+    def empty(key):
+        return args.get(key) in (None, "")
+
+    def payload(key):
+        wanted = want.get(key)
+        if wanted is None:
+            return (None, "") if empty(key) else (False, f"the request gives no {key}")
+        value = args.get(key)
+        if not isinstance(value, str) or " ".join(value.split()) not in wanted.forms():
+            return False, (f"the {key} is not the request's words from its marker to its end, "
+                           f"as written")
+        return " ".join(value.split()), ""
+
     if name == "agent":
-        agent = args.get("agent")
-        directory = _resolve_name(dirs, args.get("dir"))
-        if agent not in AGENTS or directory is None:
-            return Refusal(name, "not a known agent or directory")
-        if not _mentioned(AGENT_NAMES, agent, request_text):
-            return Refusal(name, f"the request doesn't name {agent}")
-        if not _mentioned(dirs, directory, request_text):
-            return Refusal(name, f"the request doesn't name the directory {directory}")
-        # A verb, or the terse form that opens with the agent ("qwen omp in kilix ml").
-        terse = any(request_text.startswith(n) for n in _names(AGENT_NAMES, agent))
-        if not _LAUNCH_VERB.search(request_text) and not terse:
-            return Refusal(name, "no launch verb")
-        out = {"agent": agent, "dir": directory}
-        prompt = args.get("prompt")
-        if prompt not in (None, ""):
-            if not isinstance(prompt, str) or _fold(prompt) not in request_text:
-                return Refusal(name, "the prompt is not the request's own words")
-            if prompt.lstrip().startswith("-") or "\n" in prompt:
-                return Refusal(name, "a prompt is one line and never starts with '-'")
-            out["prompt"] = _fold(prompt)
-        resume = args.get("resume")
-        if resume not in (None, ""):
-            if (not isinstance(resume, str) or not _said(_fold(resume), request_text)
-                    or not _RESUME_WORD.search(request_text)):
-                return Refusal(name, "resume needs a resume word and the session the request names")
-            if _fold(resume) in ("last", "latest", "the last one", "last one", "previous"):
-                return Refusal(name, "resume needs a session id or title, not 'the last one'")
-            out["resume"] = _fold(resume)
-        model = args.get("model")
-        if model not in (None, ""):
-            if not isinstance(model, str) or not _said(_fold(model), request_text):
-                return Refusal(name, "the model is not one the request names")
-            out["model"] = _fold(model)
-        place = args.get("place")
-        if place not in (None, "", "tab"):
-            if place not in PLACES or not _SPLIT_WORD.search(request_text) and not re.search(
-                    _PLACE_WORDS[place], request_text):
-                return Refusal(name, "the request doesn't say that side")
-            if not re.search(_PLACE_WORDS[place], request_text):
-                return Refusal(name, "the request doesn't say that side")
-            out["place"] = place
-        return Action(name, out)
+        if _resolve_name(AGENT_NAMES, args.get("agent")) != want.get("agent"):
+            return None, f"the request names {want.get('agent')}"
+        if not _same_dir(args.get("dir"), want.get("dir"), dirs):
+            return None, "not the directory the request names for that agent"
+        out = {"agent": want.get("agent"), "dir": want.get("dir")}
+        prompt, why = payload("prompt")
+        if prompt is False:
+            return None, why
+        for key in ("resume", "model"):
+            wanted, value = want.get(key), args.get(key)
+            if wanted is None and not empty(key) or wanted is not None and (
+                    not isinstance(value, str) or _fold(value) != _fold(wanted)):
+                return None, f"not the {key} the request says"
+        place = args.get("place") or "tab"
+        if place not in PLACES or place != (want.get("place") or "tab"):
+            return None, "not the side the request says"
+        out.update({k: v for k, v in (("prompt", prompt), ("resume", want.get("resume")),
+                                      ("model", want.get("model")),
+                                      ("place", want.get("place"))) if v is not None})
+        return Action(name, out), ""
+    if not _same_session(args.get("session"), want.get("session"), dirs):
+        return None, "not the session the request names there"
     if name == "wait":
-        session = _session(args.get("session"), request_text, launched, dirs)
-        state = args.get("for")
-        if session is None or state not in STATES:
-            return Refusal(name, "not a session the request names, or not idle/waiting")
-        if not _WAIT_WORD.search(request_text):
-            return Refusal(name, "no wait word")
-        words = _IDLE_WORD if state == "idle" else _WAITING_WORD
-        if not words.search(request_text):
-            return Refusal(name, f"the request doesn't say to wait until it's {state}")
-        out = {"session": session, "for": state}
+        if args.get("for") != want.get("for"):
+            return None, f"the request waits until it is {want.get('for')}"
         timeout = args.get("timeout")
-        if timeout is not None:
-            said = _timeout(request_text)
-            if not isinstance(timeout, int) or said != timeout:
-                return Refusal(name, "the timeout is not the one the request says")
-            out["timeout"] = timeout
-        return Action(name, out)
-    # tell
-    session = _session(args.get("session"), request_text, launched, dirs)
-    text = args.get("text")
-    if session is None:
-        return Refusal(name, "not a session the request names")
-    if not isinstance(text, str) or not text.strip() or _fold(text) not in request_text:
-        return Refusal(name, "the message is not the request's own words")
-    if "\n" in text or len(text.encode()) > 1024:
-        return Refusal(name, "a message is one line of at most 1024 bytes")
-    if not _TELL_WORD.search(_cut(request_text, _fold(text))):
-        return Refusal(name, "no telling verb")
-    out = {"session": session, "text": _fold(text)}
-    if args.get("wait") is True:
-        if not (_WAIT_WORD.search(request_text) and _IDLE_WORD.search(request_text)):
-            return Refusal(name, "the request doesn't say to wait first")
+        if want.get("timeout") is None and timeout is not None or want.get("timeout") is not None \
+                and (type(timeout) is not int or timeout != want.get("timeout")):
+            return None, "not the time limit the request says"
+        out = {"session": want.get("session"), "for": want.get("for")}
+        if want.get("timeout") is not None:
+            out["timeout"] = want.get("timeout")
+        return Action(name, out), ""
+    text, why = payload("text")
+    if not text:
+        return None, why or "a message needs its text"
+    if len(text.encode()) > 1024:
+        return None, "a message is at most 1024 bytes"
+    flag = args.get("wait")
+    if flag not in (None, True, False) or bool(flag) != bool(want.get("wait")):
+        return None, ("the request says to wait until it is done first" if want.get("wait")
+                      else "the request doesn't say to wait first")
+    out = {"session": want.get("session"), "text": text}
+    if want.get("wait"):
         out["wait"] = True
-    return Action(name, out)
+    return Action(name, out), ""
 
 
-def _timeout(text: str) -> int | None:
-    if re.search(r"\bhalf an? hour\b", text):
-        return 1800
-    match = re.search(r"\b(\d+|" + "|".join(map(re.escape, _NUMBERS)) + r")\s+(" +
-                      "|".join(_UNIT) + r")\b", text)
-    if not match:
+def _why_not(request: str) -> str:
+    low = _lower(request)
+    for pattern, reason in _REFUSE:
+        if pattern.search(low):
+            return reason
+    if re.search(r"[.!;]\s+\S", low.rstrip(" .!")):
+        return "the request says more than one sentence"
+    return "the request isn't a launch, wait or message this job can read"
+
+
+def parse(request: str, dirs: dict | None = FIXTURE_DIRS) -> list | None:
+    """The actions the request states, as Want tuples, or None."""
+    text = normalize(request)
+    if re.search(r"[\x00-\x08\x0a-\x1f\x7f]", text):
         return None
-    count = int(match[1]) if match[1].isdigit() else _NUMBERS[match[1]]
-    return int(count * _UNIT[match[2]])
-
-
-def said_dirs(request: str, calls: list) -> dict:
-    """Production: each directory a call names, when the request says those
-    words, is its own name (the runner resolves it on disk); "here" and its
-    kin are one name."""
-    text = _fold(request)
-    table = {"here": list(FIXTURE_DIRS["here"])}
-    for call in calls:
-        args = call.get("arguments") if isinstance(call, dict) else None
-        if not isinstance(args, dict):
-            continue
-        values = [args.get("dir")] + [str(args.get("session") or "").partition("@")[2]]
-        for value in values:
-            if isinstance(value, str) and value.strip() and _said(_fold(value), text) \
-                    and _fold(value) not in table["here"]:
-                table[_fold(value)] = [_fold(value)]
-    return table
+    text = " ".join(text.split())
+    if len(text) > MAX_REQUEST:
+        return None
+    got = _Reader(text, dirs).read() if text else None
+    return list(got) if got else None
 
 
 def interpret(request: str, calls: list, dirs: dict | None = None) -> list:
@@ -405,22 +707,28 @@ def interpret(request: str, calls: list, dirs: dict | None = None) -> list:
     Without one, the directories the request itself says are the names.
     """
     calls = calls if isinstance(calls, list) else []
-    dirs = said_dirs(request, calls) if dirs is None else dirs
-    reading = read(request, calls, dirs)
-    text = _fold(request)
     results = []
-    launched: set = set()
     for call in calls:
         name = call.get("name") if isinstance(call, dict) else None
-        args = call.get("arguments") if isinstance(call, dict) else None
-        if name not in TOOL_NAMES or not isinstance(args, dict):
+        if name not in TOOL_NAMES or not isinstance(call.get("arguments"), dict):
             results.append(Refusal(str(name), "not a kilix-needle agents action"))
-            continue
-        if reading.refusal:
-            results.append(Refusal(name, reading.refusal))
-            continue
-        result = _admit(name, args, text, launched, dirs)
-        if isinstance(result, Action) and result.kind == "agent":
-            launched.add(f"{result.args['agent']}@{result.args['dir']}")
-        results.append(result)
-    return results
+    if results or not calls:
+        return results + [Refusal(str(c.get("name") if isinstance(c, dict) else None),
+                                  "refused with the rest of the request")
+                          for c in calls if isinstance(c, dict) and c.get("name") in TOOL_NAMES
+                          and isinstance(c.get("arguments"), dict)]
+    wants = parse(request, dirs)
+    if wants is None:
+        reason = _why_not(request)
+        return [Refusal(call["name"], reason) for call in calls]
+    if len(wants) != len(calls):
+        reason = (f"the request states {len(wants)} action{'s' * (len(wants) != 1)}, "
+                  f"not {len(calls)}")
+        return [Refusal(call["name"], reason) for call in calls]
+    admitted = []
+    for call, want in zip(calls, wants):
+        action, why = _match(call, want, dirs)
+        if action is None:
+            return [Refusal(c["name"], why) for c in calls]
+        admitted.append(action)
+    return admitted

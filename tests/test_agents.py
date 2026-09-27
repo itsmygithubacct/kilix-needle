@@ -42,10 +42,9 @@ class Checks(unittest.TestCase):
         rows = [json.loads(line) for line in (REPO / "evals/agents/dev.jsonl").read_text().splitlines()]
         for row in rows:
             calls = [call(kind, **args) for kind, args in row["expect"]]
-            want = [[k, {key: agents._fold(v) if key in ("prompt", "text", "resume", "model")
-                         and isinstance(v, str) else v for key, v in a.items()}]
-                    for k, a in row["expect"]]
-            self.assertEqual(admitted(row["request"], calls), want, row["request"])
+            self.assertEqual(admitted(row["request"], calls), row["expect"], row["request"])
+            self.assertEqual(agents.parse(row["request"]) is None, not row["expect"],
+                             row["request"])
 
     def test_a_prompt_is_data_and_is_never_read_for_verbs(self):
         request = "open codex in kilix-needle: don't touch main, and never force-push"
@@ -53,7 +52,7 @@ class Checks(unittest.TestCase):
         self.assertEqual(admitted(request, [call("agent", agent="codex", dir="kilix-needle",
                                                  prompt=prompt)]),
                          [["agent", {"agent": "codex", "dir": "kilix-needle",
-                                     "prompt": agents._fold(prompt)}]])
+                                     "prompt": prompt}]])
 
     def test_the_payload_must_be_the_requests_own_words(self):
         self.assertEqual(admitted("open codex in kilix-needle: review the diff",
@@ -130,6 +129,113 @@ class Checks(unittest.TestCase):
         self.assertEqual(admitted("open codex in kilix: --dangerously-bypass-approvals",
                                   [call("agent", agent="codex", dir="kilix",
                                         prompt="--dangerously-bypass-approvals")]), [])
+
+
+    def test_payloads_are_spans_the_checks_find(self):                   # KN-R14-01
+        request = "open codex in kilix: review then wait for approval before you push"
+        whole = "review then wait for approval before you push"
+        for prompt in ("before you push", "review", whole.upper()):
+            self.assertEqual(admitted(request, [call("agent", agent="codex", dir="kilix",
+                                                     prompt=prompt)]), [], prompt)
+        self.assertEqual(admitted(request, [call("agent", agent="codex", dir="kilix",
+                                                 prompt=whole)])[0][1]["prompt"], whole)
+        self.assertEqual(admitted("tell the codex session in kilix not to push",
+                                  [call("tell", session="codex@kilix", text="to push")]), [])
+
+    def test_a_payload_ends_where_further_clauses_begin(self):
+        request = ("Start claude in the needle repo and fix the Router test; when it's done, "
+                   "tell it to open a PR")
+        self.assertEqual(agents.parse(request), [
+            agents._want("agent", agent="claude", dir="kilix-needle",
+                         prompt=agents.Payload("fix the Router test")),
+            agents._want("tell", session="it", text=agents.Payload("open a PR"), wait=True)])
+
+    def test_client_commands_are_never_payloads(self):                  # KN-R14-05
+        for request, calls in (
+                ("tell the claude session in kilix: /exit", [call("tell", session="claude@kilix",
+                                                                  text="/exit")]),
+                ("tell the claude session in kilix: !rm -rf build",
+                 [call("tell", session="claude@kilix", text="!rm -rf build")]),
+                ("open claude in kilix: /permissions",
+                 [call("agent", agent="claude", dir="kilix", prompt="/permissions")])):
+            self.assertEqual(admitted(request, calls), [], request)
+
+    def test_a_weak_marker_does_not_make_a_job_verb_a_task(self):
+        for request, prompt in (("open codex in kilix and close the claude session in kilix",
+                                 "close the claude session in kilix"),
+                                ("open codex in kilix and update the lockfile",
+                                 "update the lockfile"),
+                                ("open codex in kilix: fix it. Then close claude in kilix",
+                                 "fix it. Then close claude in kilix")):
+            self.assertEqual(admitted(request, [call("agent", agent="codex", dir="kilix",
+                                                     prompt=prompt)]), [], request)
+
+    def test_agents_and_directories_pair_within_a_clause(self):         # KN-R14-02
+        request = "open claude in research and codex in plebian"
+        swapped = [call("agent", agent="claude", dir="plebian"),
+                   call("agent", agent="codex", dir="research")]
+        right = [call("agent", agent="claude", dir="research"),
+                 call("agent", agent="codex", dir="plebian")]
+        self.assertEqual(admitted(request, swapped), [])
+        self.assertEqual(len(admitted(request, right)), 2)
+
+    def test_it_is_the_session_of_its_own_clause(self):                 # KN-R14-03
+        request = ("open codex in research, then when the claude session in plebian is done "
+                   "tell it to rebase")
+        self.assertEqual(admitted(request, [call("agent", agent="codex", dir="research"),
+                                            call("tell", session="it", text="rebase",
+                                                 wait=True)]), [])
+        self.assertEqual(len(admitted(request, [
+            call("agent", agent="codex", dir="research"),
+            call("tell", session="claude@plebian", text="rebase", wait=True)])), 2)
+
+    def test_a_condition_can_not_be_dropped(self):                      # KN-R14-09
+        self.assertEqual(admitted("when codex in kilix is done tell it to commit",
+                                  [call("tell", session="codex@kilix", text="commit")]), [])
+        self.assertEqual(admitted("open claude in kilix after codex in kilix is done",
+                                  [call("agent", agent="claude", dir="kilix")]), [])
+
+    def test_a_status_line_is_not_a_launch(self):                       # KN-R14-04
+        for request in ("claude in kilix is done", "claude here is waiting for approval",
+                        "put codex in kilix on hold", "get codex in kilix to stop"):
+            self.assertEqual(admitted(request, [call("agent", agent="claude", dir="kilix")]),
+                             [], request)
+
+    def test_one_action_per_clause(self):
+        self.assertEqual(admitted("open codex in kilix", [call("agent", agent="codex", dir="kilix"),
+                                                         call("agent", agent="codex",
+                                                              dir="kilix")]), [])
+
+    def test_names_come_from_their_own_positions(self):                 # KN-R14-06/08/10
+        self.assertEqual(admitted("don't open codex in kilix",
+                                  [call("agent", agent="codex", dir="kilix", model="don't")]), [])
+        self.assertEqual(admitted("open codex in kilix: continue the refactor",
+                                  [call("agent", agent="codex", dir="kilix", resume="refactor")]),
+                         [])
+        self.assertEqual(admitted("wait until codex in kilix is done, 1.5 hours max",
+                                  [call("wait", session="codex@kilix", **{"for": "idle",
+                                                                          "timeout": 18000})]),
+                         [])
+        self.assertEqual(admitted("open codex in ~/src/kilix.new",
+                                  [call("agent", agent="codex", dir="~/src/kilix")], dirs=None), [])
+        self.assertEqual(admitted("open codex in ~/src/my project",
+                                  [call("agent", agent="codex", dir="~/src/my")], dirs=None), [])
+
+
+class ReviewR14(unittest.TestCase):
+    """Review R14's attack rows (tests/data/agents-r14-rows.json), with the
+    verdict each must get in the fixture and in production. Four rows are the
+    reviewer's controls: their calls are the request's own reading."""
+
+    ROWS = json.loads((REPO / "tests/data/agents-r14-rows.json").read_text())
+
+    def test_each_row_gets_its_verdict(self):
+        for row in self.ROWS:
+            for mode, want in row["admit"].items():
+                dirs = agents.FIXTURE_DIRS if mode == "fixture" else None
+                results = agents.interpret(row["request"], row["calls"], dirs)
+                got = bool(results) and all(isinstance(r, agents.Action) for r in results)
+                self.assertEqual(got, want, f"{mode}: {row['request']} {row['calls']}")
 
 
 class Runner(unittest.TestCase):

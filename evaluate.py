@@ -85,12 +85,8 @@ def _rules(job: str):
         # Every launch and message changes something; a wait does not.
         import agents
 
-        def expected_agents(expect):
-            return [[k, {key: agents._fold(v) if key in ("prompt", "text", "resume", "model")
-                         and isinstance(v, str) else v for key, v in a.items()}]
-                    for k, a in expect]
         return ((lambda request, calls: agents.interpret(request, calls, agents.FIXTURE_DIRS)),
-                expected_agents, lambda r: isinstance(r, agents.Action),
+                lambda expect: [[k, dict(a)] for k, a in expect], lambda r: isinstance(r, agents.Action),
                 lambda a, want: a[0] in ("agent", "tell") and a not in want)
     if job == "apps":
         import apps

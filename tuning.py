@@ -333,15 +333,14 @@ def cap_share(rows: list[dict], share: float, seed: int) -> tuple[list[dict], di
 
 def _labels(job: str, actions: list) -> list:
     """The labelled actions as the job's checks admit them (the agents job
-    folds its payloads and the directory words)."""
+    admits "here" and its kin as "here"; everything else as written)."""
     if job != "agents":
         return actions
     import agents
     here = set(agents.FIXTURE_DIRS["here"])
 
     def place(value):
-        value = agents._fold(value)
-        return "here" if value in here else value
+        return "here" if agents._fold(value) in here else value
 
     def label(key, value):
         if not isinstance(value, str):
@@ -351,7 +350,7 @@ def _labels(job: str, actions: list) -> list:
         if key == "session" and "@" in value:
             agent, _, where = value.partition("@")
             return f"{agent}@{place(where)}"
-        return agents._fold(value) if key in ("prompt", "text", "resume", "model") else value
+        return value
     return [[kind, {key: label(key, value) for key, value in args.items()}]
             for kind, args in actions]
 
