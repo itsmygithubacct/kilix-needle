@@ -87,8 +87,31 @@ def _rules(job: str):
         # Every launch and message changes something; a wait does not.
         import agents
 
-        return ((lambda request, calls: agents.interpret(request, calls, agents.FIXTURE_DIRS)),
-                lambda expect: [[k, dict(a)] for k, a in expect], lambda r: isinstance(r, agents.Action),
+        def fold(pairs):
+            # "Wait until S is idle, then tell S" and one message to S that
+            # waits first do the same thing, and the checks admit either
+            # (agents._readings); score them as one form.
+            out, i = [], 0
+            while i < len(pairs):
+                kind, args = pairs[i]
+                nxt = pairs[i + 1] if i + 1 < len(pairs) else None
+                if kind == "wait" and args.get("for") == "idle" and "timeout" not in args \
+                        and nxt and nxt[0] == "tell" and not nxt[1].get("wait") \
+                        and nxt[1].get("session") == args.get("session"):
+                    out.append(["tell", {**nxt[1], "wait": True}])
+                    i += 2
+                    continue
+                out.append([kind, dict(args)])
+                i += 1
+            return out
+
+        def check(request, calls):
+            results = agents.interpret(request, calls, agents.FIXTURE_DIRS)
+            if not all(isinstance(r, agents.Action) for r in results):
+                return results
+            return [agents.Action(k, a) for k, a in fold([[r.kind, r.args] for r in results])]
+
+        return (check, fold, lambda r: isinstance(r, agents.Action),
                 lambda a, want: a[0] in ("agent", "tell") and a not in want)
     if job == "apps":
         import apps
