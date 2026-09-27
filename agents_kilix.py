@@ -12,11 +12,14 @@
   after an optional wait for idle. It is held only while the session is
   `waiting` on an approval or a menu, where a submitted line could answer
   it. Steering while working is allowed only for readers that distinguish
-  `waiting` (Claude, Grok and Codex); other clients take messages only idle.
+  `waiting` from events seen in real transcripts (Claude, Grok); others (Codex
+  until its approval events are seen with approvals on, qwen-omp, Kimi) take
+  messages only idle.
 
 Directories resolve to exactly one existing directory: an explicit path, the
-caller's directory ("here"), or a repository name found under the usual
-source roots. Scanned names shorter than three characters and names that are
+caller's directory ("here"), a name or alias in ~/.config/kilix-needle/dirs.json,
+or a repository name found under ~/gpu_terminal (never ~/research, never a
+generic name). Scanned names shorter than three characters and names that are
 not unique across every scanned depth refuse. Sessions resolve to exactly one
 live agent pane in that directory. Ambiguity refuses; nothing is created.
 """
@@ -33,14 +36,25 @@ import kilix
 
 HERE = ("here", "this repo", "this directory", "the current folder", "this folder",
         "the current directory", "this project")
-ROOTS = ("gpu_terminal", "research")
+# Only the source tree is scanned for a bare name: ~/research holds review
+# seats, reference clones and test checkouts whose names are generic ("base",
+# "checkout"), so it is reached by path or dirs.json (review R14 round 4, 54).
+ROOTS = ("gpu_terminal",)
+# Names too generic to pick a checkout by, whatever the scan finds.
+_GENERIC_NAMES = frozenset(("base", "checkout", "repo", "repository", "src", "source", "main",
+                            "master", "test", "tests", "work", "code", "project", "app", "lib",
+                            "tmp", "temp", "old", "new", "copy", "clone", "review", "seat",
+                            "reference", "refs", "agents", "docs"))
 PROVIDER_AGENT = {"claude": "claude", "codex": "codex", "grok": "grok", "omp": "qwen-omp",
                   "kimi": "kimi"}
 _SCAN_SKIP = frozenset(("node_modules", "venv", "virtualenv", "env", "scratch",
                         "scratch-workers", "worktree", "worktrees"))
 _DIR_SCAN_CACHE: dict[Path, tuple[float, tuple[tuple[str, Path, int], ...]]] = {}
 _DIR_SCAN_TTL = 60.0
-_WORKING_STEER_AGENTS = frozenset(("claude", "codex", "grok"))
+# Codex's approval events are read (008c8d6) but not yet seen live with
+# approvals on, and codex has other modals the reader doesn't cover; until a
+# live check, codex takes messages only when idle (R14 round 4, 55).
+_WORKING_STEER_AGENTS = frozenset(("claude", "grok"))
 
 
 class AgentsError(RuntimeError):
@@ -153,7 +167,7 @@ def resolve_dir(said: str, *, cwd: str | None = None, home: Path | None = None) 
     if configured is not None:
         return configured
 
-    found = [] if len(name) < 3 else sorted({path for repo_name, path, _depth
+    found = [] if len(name) < 3 or name.casefold() in _GENERIC_NAMES else sorted({path for repo_name, path, _depth
                                              in _git_directories(home)
                                              if repo_name == name})
     if len(found) != 1:

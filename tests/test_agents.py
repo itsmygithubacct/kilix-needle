@@ -333,12 +333,13 @@ class Runner(unittest.TestCase):
             home = Path(home)
             repo = home / "gpu_terminal" / "kilix-apps" / "kilix-needle"
             (repo / ".git").mkdir(parents=True)
-            shallow = home / "research" / "kilix-needle"
+            shallow = home / "gpu_terminal" / "old" / "kilix-needle"
             (shallow / ".git").mkdir(parents=True)
             with self.assertRaises(agents_kilix.AgentsError) as raised:
                 agents_kilix.resolve_dir("the kilix-needle repo", home=home)
             self.assertIn(str(repo), str(raised.exception))
             self.assertIn(str(shallow), str(raised.exception))
+            (home / "research").mkdir()
             self.assertEqual(agents_kilix.resolve_dir("here", cwd=str(home / "research"),
                                                       home=home), (home / "research").resolve())
             other = home / "gpu_terminal" / "kilix-needle"
@@ -413,11 +414,11 @@ class Runner(unittest.TestCase):
             return agents_kilix.perform(actions, cwd=cwd, dry_run=dry_run), sent
 
     def test_steering_a_working_session_is_allowed_but_an_approval_holds(self):
-        tell = agents.Action("tell", {"session": "codex@kilix", "text": "also run the suite"})
+        tell = agents.Action("tell", {"session": "claude@kilix", "text": "also run the suite"})
         for activity, outcome in (("working", "done"), ("idle", "done"), ("waiting", "failed")):
             panes = {"panes": [{"pane_id": 3, "activity": activity,
                                 "broker": {"session_id": "c" * 16},
-                                "coding_session": {"provider": "codex", "cwd": "/w/kilix"}}]}
+                                "coding_session": {"provider": "claude", "cwd": "/w/kilix"}}]}
             results, sent = self.run_actions([tell], panes)
             self.assertEqual(results[0]["outcome"], outcome, activity)
             delivered = [a for a in sent if a[:2] == ["agent-control", "send"]]
@@ -646,3 +647,30 @@ class ReviewR14Round3(unittest.TestCase):
         self.assertEqual(admitted("open codex in kilix: review the diff, or should we wait",
                                   [call("agent", agent="codex", dir="kilix",
                                         prompt="review the diff, or should we wait")]), [])
+
+
+class ReviewR14Round4(unittest.TestCase):
+    """Review R14 round 4: waits and conditions never hide in a payload (53),
+    plain messages that mention waiting stay messages (57), no stray "and
+    then" (60), and N19's close/install guard."""
+
+    READINGS = {
+        "open codex in kilix: review the diff. Wait for it to finish.": None,
+        "open codex in kilix: review the diff. When it's done, tell it to push": None,
+        "open codex in kilix: review the diff and let me know when it finishes": None,
+        "open codex in kilix to review the diff, and also wait for it to finish": 2,
+        "tell codex in kilix to rebase and after that run the suite": 1,
+        "tell codex in kilix to fix the tests, then wait for CI": 1,
+        "open codex in kilix to review the diff and then, when it's done, tell it to push": 2,
+        "open codex in kilix: uninstall grok": None,
+    }
+
+    def test_readings(self):
+        for request, count in self.READINGS.items():
+            wants = agents.parse(request)
+            self.assertEqual(len(wants) if wants else None, count, request)
+
+    def test_no_stray_connective_in_the_prompt(self):
+        wants = agents.parse("open codex in kilix to review the diff and then, when it's done, "
+                             "tell it to push")
+        self.assertEqual(wants[0].get("prompt").text, "review the diff")

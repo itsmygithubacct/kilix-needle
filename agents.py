@@ -149,12 +149,20 @@ _PREAMBLE = re.compile(
 _TRAILER = re.compile(r"(?:[.!]*,? (?:thanks|thank you|thx|ty|cheers|please|pls))?"
                       r"(?P<mark>[.!?]*) *$")
 _SEP = re.compile(r"(?:,? and then |, then |; |,? and |, | then )")
-_PAYLOAD_END = re.compile(r"(?:; |, (?:and )?then |,? and |, | then )")
+_PAYLOAD_END = re.compile(r"(?:; |, (?:and )?then,? |,? and (?:then,? )?|, | then,? )")
 # After ":" a payload also ends before a wait or a "when … is done" clause
 # ("…: review the diff, and when it's done tell it to push"), which speak
 # about sessions, not to one (KN-R14-45).
 _WAIT_OR_WHEN = re.compile(r"(?:wait|block|hold on|hang on|when|once|after|as soon as)\b")
-_SEQUENCE = re.compile(r"(?:; |, (?:and )?then )")
+_CLAUSE_LEAD = re.compile(r"(?:(?:and|then|also|please|pls|just|meanwhile|so|now|next|"
+                          r"afterwards),? )*")
+_SESSION_CLAUSE = re.compile(
+    r"(?:wait|block|hold on|hang on)\b[^,;.]*?\b(?:it|its|it's|them|session|"
+    + _alternation(_AGENT_ALIAS) + r")\b"
+    r"|(?:when|once|after|as soon as) (?:it|it's|its|they|the \w+(?: \w+)? session|"
+    + _alternation(_AGENT_ALIAS) + r")\b"
+    r"|(?:let me know|notify me|tell me|ping me|alert me) (?:when|once|if|as soon as)\b")
+_SEQUENCE = re.compile(r"(?:; |, (?:and )?then,? )")
 _SUBORDINATE = re.compile(r"\b(?:if|when|whenever|once|unless|until|till|before|after|in case|"
                           r"as soon as|while)\b")
 _DET = re.compile(r"(?:(?:a|an|the|another|one more|new|fresh|blank|second|separate|me a|"
@@ -173,7 +181,7 @@ _NOTE = r"(?: this| this note| this message| this input| the message| a message|
         r" a quick message| a quick note)"
 _TITLED = re.compile(r" (?:titled|called|named) (?P<t>[\w.-]+(?: [\w.-]+){0,5}?)"
                      r"(?= (?:in|at|inside|within|here|using|with|on|split|to)\b|,|:|[.!]*$)")
-_THEN = re.compile(r"(?:then |and then )?(?:(?:immediately|also|now|next|afterwards) )?")
+_THEN = re.compile(r"(?:then,? |and then,? )?(?:(?:immediately|also|now|next|afterwards) )?")
 _COND = re.compile(r"(?:when|once|after|as soon as) ")
 _PLACE = [
     (re.compile(r",? (?:in a |as a )?(?:new )?split(?: pane)? (?:to the |on the )?"
@@ -800,9 +808,14 @@ def _payload_ok(payload: Payload, weak: str | None, tell: bool = False) -> bool:
                               for m in re.finditer(r"(?:^|[,;] ?(?:and |then |and then )?| and (?:then )?| then )",
                                                   low)):
         return False            # "and codex in research" is another clause, not a task
-    if (weak or tell) and any(_WAIT_OR_WHEN.match(low, m.end()) for m in re.finditer(
-            r"[,;] ?(?:and |then |and then )?| and (?:then )?| then ", low)):
-        return False            # "…, and wait for it to finish" left over from a clause
+    # A wait on a session, a "when it is done" or a "let me know when" in any
+    # later part of any payload is a clause for this tool, left over: the
+    # request has no single reading (review R14 round 4, KN-R14-53).
+    for m in re.finditer(r"[,;.!?] ?(?:and |then |and then )?| and (?:then )?| then |"
+                         r"(?<=[.!?])\s+", low):
+        rest = _CLAUSE_LEAD.match(low, m.end()).end()
+        if _SESSION_CLAUSE.match(low, rest):
+            return False
     if weak or tell:
         for segment in re.split(r"[,;] ?(?:and |then |and then )?| and (?:then )?| then ", low)[1:]:
             words = re.findall(r"[a-z][a-z']*", segment)

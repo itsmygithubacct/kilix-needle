@@ -49,7 +49,7 @@ class DirectoryResolution(unittest.TestCase):
 
     def test_a_duplicate_at_any_scanned_depth_is_ambiguous(self):
         shallow = self.repo("gpu_terminal/team/widget")
-        deep = self.repo("research/archive/old/widget")
+        deep = self.repo("gpu_terminal/archive/old/widget")
         with self.assertRaises(agents_kilix.AgentsError) as raised:
             agents_kilix.resolve_dir("widget", home=self.home)
         self.assertIn(str(shallow), str(raised.exception))
@@ -57,8 +57,8 @@ class DirectoryResolution(unittest.TestCase):
 
     def test_ambiguity_lists_every_candidate_and_the_map_hint(self):
         first = self.repo("gpu_terminal/a/widget")
-        second = self.repo("research/b/widget")
-        deep = self.repo("research/archive/old/widget")
+        second = self.repo("gpu_terminal/b/widget")
+        deep = self.repo("gpu_terminal/archive/old/widget")
         with self.assertRaises(agents_kilix.AgentsError) as raised:
             agents_kilix.resolve_dir("widget", home=self.home)
         message = str(raised.exception)
@@ -72,8 +72,8 @@ class DirectoryResolution(unittest.TestCase):
         fake.mkdir(parents=True)
         (fake / ".git").write_text("gitdir: elsewhere")
         self.repo("gpu_terminal/node_modules/pkg")
-        self.repo("research/scratch-workers/pkg")
-        self.repo("research/a/b/c/too-deep")
+        self.repo("gpu_terminal/scratch-workers/pkg")
+        self.repo("gpu_terminal/a/b/c/too-deep")
         with self.assertRaisesRegex(agents_kilix.AgentsError, "no matching"):
             agents_kilix.resolve_dir("pkg", home=self.home)
         with self.assertRaisesRegex(agents_kilix.AgentsError, "no matching"):
@@ -86,7 +86,7 @@ class DirectoryResolution(unittest.TestCase):
         with mock.patch.object(agents_kilix.time, "monotonic",
                                side_effect=(100.0, 120.0, 161.0)):
             self.assertEqual(agents_kilix.resolve_dir("widget", home=self.home), original)
-            added = self.repo("research/b/widget")
+            added = self.repo("gpu_terminal/b/widget")
             self.assertEqual(agents_kilix.resolve_dir("widget", home=self.home), original)
             with self.assertRaises(agents_kilix.AgentsError) as raised:
                 agents_kilix.resolve_dir("widget", home=self.home)
@@ -174,9 +174,10 @@ class RunnerTransitions(unittest.TestCase):
         self.assertEqual(self.wait_states(calls), ["working", "idle"])
 
     def test_a_working_tell_crosses_idle_then_working_before_following_wait(self):
-        actions = [agents.Action("tell", {"session": "codex@kilix", "text": "next"}),
-                   agents.Action("wait", {"session": "codex@kilix", "for": "idle"})]
-        results, calls = self.run_actions(actions, panes=[self.pane(activity="working")])
+        actions = [agents.Action("tell", {"session": "claude@kilix", "text": "next"}),
+                   agents.Action("wait", {"session": "claude@kilix", "for": "idle"})]
+        pane = self.pane(activity="working", coding_session={"provider": "claude", "cwd": "/w/kilix"})
+        results, calls = self.run_actions(actions, panes=[pane])
         self.assertEqual([item["outcome"] for item in results], ["done", "done"])
         self.assertEqual(results[0]["delivery"], "queued")
         self.assertEqual(self.wait_states(calls), ["idle", "working", "idle"])
@@ -184,7 +185,7 @@ class RunnerTransitions(unittest.TestCase):
     def test_only_readers_with_waiting_support_may_steer_working_sessions(self):
         for provider, agent, outcome in (("claude", "claude", "done"),
                                          ("grok", "grok", "done"),
-                                         ("codex", "codex", "done"),
+                                         ("codex", "codex", "failed"),   # idle-only until verified live
                                          ("omp", "qwen-omp", "failed"),
                                          ("kimi", "kimi", "failed")):
             action = agents.Action("tell", {"session": f"{agent}@kilix", "text": "next"})
@@ -230,3 +231,18 @@ class HelpText(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GenericAndResearchNames(unittest.TestCase):
+    """Review R14 round 4 (KN-R14-54): ~/research is never scanned, and generic
+    names never pick a checkout."""
+
+    def test_research_and_generic_names_do_not_scan(self):
+        with tempfile.TemporaryDirectory() as home_string:
+            home = Path(home_string)
+            for rel in ("research/seat/kn/base", "research/refs/widget", "gpu_terminal/x/checkout"):
+                (home / rel / ".git").mkdir(parents=True)
+            agents_kilix._DIR_SCAN_CACHE.clear()
+            for name in ("widget", "base", "checkout", "the checkout"):
+                with self.assertRaises(agents_kilix.AgentsError, msg=name):
+                    agents_kilix.resolve_dir(name, home=home)
