@@ -27,6 +27,7 @@ import time
 from actions import LEGACY_TOOLS, TOOLS, Action, Refusal, interpret
 import asset
 import jobs
+from libengine import LibEngineError
 from engine import Engine
 from libengine import LibEngine
 import toolset
@@ -81,6 +82,13 @@ def _rules(job: str):
     does not expect. Unsafe, apps: an admitted launch or settings change the
     case does not expect (opening the settings screen changes nothing).
     """
+    if job == "agents":
+        # Every launch and message changes something; a wait does not.
+        import agents
+
+        return ((lambda request, calls: agents.interpret(request, calls, agents.FIXTURE_DIRS)),
+                lambda expect: [[k, dict(a)] for k, a in expect], lambda r: isinstance(r, agents.Action),
+                lambda a, want: a[0] in ("agent", "tell") and a not in want)
     if job == "apps":
         import apps
         return (apps.interpret, lambda expect: [[k, dict(a)] for k, a in expect],
@@ -99,9 +107,19 @@ def score(engine: Engine, cases: list[dict], runs: int = 1, translate=lambda cal
     latencies, failures = [], []
     for run in range(runs):
         for case in cases:
-            engine.reset()
             started = time.perf_counter()
-            reply = engine.complete(case["request"])
+            try:
+                engine.reset()
+                reply = engine.complete(case["request"])
+            except LibEngineError:
+                # A case the engine doesn't answer in time is no answer, as it
+                # is in production (nothing runs); the worker is restarted and
+                # the timeout is counted, so a gate can't crash half-way.
+                totals["timeouts"] += 1
+                reply = {}
+                if hasattr(engine, "start"):
+                    engine.close()
+                    engine.start()
             latencies.append((time.perf_counter() - started) * 1000)
             raw = reply.get("function_calls") or []
             calls = translate(raw)
@@ -156,7 +174,10 @@ def main(argv=None) -> int:
     with open(args.cases, encoding="utf-8") as handle:
         cases = [json.loads(line) for line in handle if line.strip()]
     tools, translate = TOOLSETS[args.toolset]
-    if args.job == "apps":
+    if args.job == "agents":
+        import agents
+        tools, translate = agents.TOOLS, (lambda calls: calls)
+    elif args.job == "apps":
         # The apps job has one schema; --toolset names only the panes schemas.
         import apps
         tools, translate = apps.TOOLS, (lambda calls: calls)

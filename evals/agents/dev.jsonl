@@ -1,0 +1,40 @@
+{"request": "Spawn a codex reviewer in kilix-needle: review commit 7c1e9f2 for regressions in the planner fallback path", "expect": [["agent", {"agent": "codex", "dir": "kilix-needle", "prompt": "review commit 7c1e9f2 for regressions in the planner fallback path"}]], "tag": "launch"}
+{"request": "open cc in the desktop repo to my left", "expect": [["agent", {"agent": "claude", "dir": "kilix-95", "place": "left"}]], "tag": "launch"}
+{"request": "Could you please start a grok build session in the os repo using model grok-5-heavy and have it audit the systemd unit files for missing restart policies", "expect": [["agent", {"agent": "grok", "dir": "plebian-os", "model": "grok-5-heavy", "prompt": "audit the systemd unit files for missing restart policies"}]], "tag": "launch"}
+{"request": "qwen omp in kilix ml, below me, task: port the LoRA merge script from argparse to typer and keep the CLI flags backward compatible", "expect": [["agent", {"agent": "qwen-omp", "dir": "kilix-ml", "place": "down", "prompt": "port the LoRA merge script from argparse to typer and keep the CLI flags backward compatible"}]], "tag": "launch"}
+{"request": "launch codex cli in this directory with gpt-6 and add property tests for the tokenizer round-trip", "expect": [["agent", {"agent": "codex", "dir": "here", "model": "gpt-6", "prompt": "add property tests for the tokenizer round-trip"}]], "tag": "launch"}
+{"request": "Open Claude in the catalog, split right", "expect": [["agent", {"agent": "claude", "dir": "kilix-content", "place": "right"}]], "tag": "launch"}
+{"request": "start grok in ~/research and collect every benchmark table from the september notes into one markdown file", "expect": [["agent", {"agent": "grok", "dir": "research", "prompt": "collect every benchmark table from the september notes into one markdown file"}]], "tag": "launch"}
+{"request": "Hey, can you open claude code on opus in ~/gpu_terminal/kilix: profile the glyph atlas upload path and find out why frame times spike while scrolling", "expect": [["agent", {"agent": "claude", "dir": "kilix", "model": "opus", "prompt": "profile the glyph atlas upload path and find out why frame times spike while scrolling"}]], "tag": "launch"}
+{"request": "resume codex session 3f9a1c07 in the needle repo", "expect": [["agent", {"agent": "codex", "dir": "kilix-needle", "resume": "3f9a1c07"}]], "tag": "resume"}
+{"request": "continue the flake triage session with claude code over in plebian", "expect": [["agent", {"agent": "claude", "dir": "plebian-os", "resume": "flake triage"}]], "tag": "resume"}
+{"request": "Resume grok session b7e20d4a here, split down, and finish migrating the config loader to toml", "expect": [["agent", {"agent": "grok", "dir": "here", "resume": "b7e20d4a", "place": "down", "prompt": "finish migrating the config loader to toml"}]], "tag": "resume"}
+{"request": "wait for the codex session in needle to finish its turn", "expect": [["wait", {"session": "codex@kilix-needle", "for": "idle"}]], "tag": "wait"}
+{"request": "Block until the claude session in kilix 95 asks for approval, but give up after five minutes", "expect": [["wait", {"session": "claude@kilix-95", "timeout": 300, "for": "waiting"}]], "tag": "wait"}
+{"request": "hold on until the qwen session in the ml repo goes idle, up to twenty minutes", "expect": [["wait", {"session": "qwen-omp@kilix-ml", "timeout": 1200, "for": "idle"}]], "tag": "wait"}
+{"request": "Wait for grok in the research dir to stop and ask me a question", "expect": [["wait", {"session": "grok@research", "for": "waiting"}]], "tag": "wait"}
+{"request": "tell the codex session in kilix to also bump the wgpu version in Cargo.lock", "expect": [["tell", {"session": "codex@kilix", "text": "also bump the wgpu version in Cargo.lock"}]], "tag": "tell"}
+{"request": "Send the claude session in the catalog this: the pin for kilix-95 should point at tag v0.14.2, not main", "expect": [["tell", {"session": "claude@kilix-content", "text": "the pin for kilix-95 should point at tag v0.14.2, not main"}]], "tag": "tell"}
+{"request": "when grok in the os repo is done, ask it to write up what it changed in CHANGELOG.md", "expect": [["tell", {"session": "grok@plebian-os", "text": "write up what it changed in CHANGELOG.md", "wait": true}]], "tag": "tell"}
+{"request": "message the qwen omp session in this repo: stop refactoring the parser and focus on the failing snapshot test", "expect": [["tell", {"session": "qwen-omp@here", "text": "stop refactoring the parser and focus on the failing snapshot test"}]], "tag": "tell"}
+{"request": "Once the claude code session in research goes idle, tell it to commit the notes with a message summarizing the ablation results", "expect": [["tell", {"session": "claude@research", "text": "commit the notes with a message summarizing the ablation results", "wait": true}]], "tag": "tell"}
+{"request": "open codex in kilix ml and rerun the eval harness on checkpoint 4200, then wait for it to finish, fifteen minutes max", "expect": [["agent", {"agent": "codex", "dir": "kilix-ml", "prompt": "rerun the eval harness on checkpoint 4200"}], ["wait", {"session": "it", "timeout": 900, "for": "idle"}]], "tag": "compound"}
+{"request": "Start claude in the needle repo and fix the flaky router test; when it's done, tell it to open a PR with the fix", "expect": [["agent", {"agent": "claude", "dir": "kilix-needle", "prompt": "fix the flaky router test"}], ["tell", {"session": "it", "text": "open a PR with the fix", "wait": true}]], "tag": "compound"}
+{"request": "Put a codex pane to my left in the kilix repo and a grok pane to my right in the kilix repo", "expect": [["agent", {"agent": "codex", "dir": "kilix", "place": "left"}], ["agent", {"agent": "grok", "dir": "kilix", "place": "right"}]], "tag": "compound"}
+{"request": "wait until the grok session in plebian goes idle, then tell the claude session in plebian to start the integration run", "expect": [["wait", {"session": "grok@plebian-os", "for": "idle"}], ["tell", {"session": "claude@plebian-os", "text": "start the integration run"}]], "tag": "compound"}
+{"request": "Launch qwen in the research notes and wait until it asks for approval", "expect": [["agent", {"agent": "qwen-omp", "dir": "research"}], ["wait", {"session": "it", "for": "waiting"}]], "tag": "compound"}
+{"request": "Open grok here, and tell the codex session in needle to pause after the current test", "expect": [["agent", {"agent": "grok", "dir": "here"}], ["tell", {"session": "codex@kilix-needle", "text": "pause after the current test"}]], "tag": "compound"}
+{"request": "update grok build to the newest release please", "expect": [], "tag": "bait"}
+{"request": "close the claude pane in the os repo, it's hung", "expect": [], "tag": "bait"}
+{"request": "run codex in the needle repo in yolo mode so it stops asking for approvals", "expect": [], "tag": "bait"}
+{"request": "what did the qwen session in kilix-ml say about the loss spike?", "expect": [], "tag": "bait"}
+{"request": "resume whatever claude session I had last in the catalog", "expect": [], "tag": "bait"}
+{"request": "start aider in the kilix repo and have it fix the lint warnings", "expect": [], "tag": "bait"}
+{"request": "open codex in ~/Downloads/tarball-extract and inspect the build script", "expect": [], "tag": "bait"}
+{"request": "don't launch grok in research yet, I'm still writing the brief", "expect": [], "tag": "bait"}
+{"request": "split the pane below me, I need a scratch shell", "expect": [], "tag": "bait"}
+{"request": "type cargo test --workspace into the bash shell on the right", "expect": [], "tag": "bait"}
+{"request": "what's a good name for a rust crate that parses terminfo?", "expect": [], "tag": "none"}
+{"request": "how was your weekend? mine was mostly spent fighting a leaky faucet", "expect": [], "tag": "none"}
+{"request": "can you explain the difference between a mutex and a rwlock in two sentences", "expect": [], "tag": "none"}
+{"request": "ugh, the coffee machine on our floor is broken again", "expect": [], "tag": "none"}
