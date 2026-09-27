@@ -265,6 +265,22 @@ def _want(kind, **args) -> Want:
     return Want(kind, tuple(sorted((k, v) for k, v in args.items() if v is not None)))
 
 
+def _dir_forms(table: dict) -> dict:
+    """Every way the request may say each directory: its names, with "the"
+    in front and "repo" (or kin) after."""
+    variants = []
+    for key, names in table.items():
+        for name in {_fold(key), *map(_fold, names)}:
+            forms = [name]
+            if not name.startswith(("the ", "this ", "~", "/")):
+                forms.append("the " + name)
+            for form in list(forms):
+                if not form.endswith(_DIR_SUFFIX):
+                    forms += [f"{form} {s}" for s in _DIR_SUFFIX]
+            variants += [(f, key) for f in forms]
+    return dict(variants)
+
+
 class _Reader:
     def __init__(self, request: str, dirs: dict | None):
         self.org = request
@@ -273,18 +289,7 @@ class _Reader:
         self.n = len(request)
         self.polite = False
         self.dead = set()               # (pos, state) where the rest has no reading
-        variants = []
-        table = dirs if dirs is not None else {"here": list(_HERE)}
-        for key, names in table.items():
-            for name in {_fold(key), *map(_fold, names)}:
-                forms = [name]
-                if not name.startswith(("the ", "this ", "~", "/")):
-                    forms.append("the " + name)
-                for form in list(forms):
-                    if not form.endswith(_DIR_SUFFIX):
-                        forms += [f"{form} {s}" for s in _DIR_SUFFIX]
-                variants += [(f, key) for f in forms]
-        self.dir_key = dict(variants)
+        self.dir_key = _dir_forms(dirs if dirs is not None else {"here": list(_HERE)})
         self.dir_re = re.compile(rf"(?:{_alternation(self.dir_key)}){_END}")
 
     # -- names ------------------------------------------------------------
@@ -589,8 +594,7 @@ def _same_dir(value, want: str, dirs: dict | None) -> bool:
     if not isinstance(value, str) or not value.strip():
         return False
     if dirs is not None:
-        return _resolve_name(dirs, value) == want or _resolve_name(
-            dirs, _dir_norm(value)) == want and want != "here"
+        return _dir_forms(dirs).get(_fold(value)) == want
     if want == "here":
         return _fold(value) in map(_fold, ("here", *_HERE))
     if want.startswith(("~", "/", ".")):
@@ -640,6 +644,9 @@ def _match(call: dict, want: Want, dirs) -> tuple[Action | None, str]:
             return None, why
         for key in ("resume", "model"):
             wanted, value = want.get(key), args.get(key)
+            if key == "resume" and isinstance(value, str):
+                # "the flake triage session" names the session "flake triage".
+                value = _fold(value).removeprefix("the ").removesuffix(" session")
             if wanted is None and not empty(key) or wanted is not None and (
                     not isinstance(value, str) or _fold(value) != _fold(wanted)):
                 return None, f"not the {key} the request says"
