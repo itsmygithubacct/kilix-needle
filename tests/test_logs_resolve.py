@@ -64,6 +64,39 @@ class ResolveTests(unittest.TestCase):
             resolve_source("23", tree=self.tree)
         self.assertEqual(raised.exception.code, "source_unavailable")
 
+    def test_missing_claude_path_uses_exact_unique_session_filename(self):
+        import json
+        session = "12345678-1234-1234-1234-123456789abc"
+        project = self.root / "projects" / "synthetic-project"
+        project.mkdir(parents=True)
+        path = project / (session + ".jsonl")
+        path.write_text(json.dumps({"type": "user", "sessionId": session,
+                                   "message": {"role": "user", "content": "Read this."}}) + "\n")
+        self.pane["coding_session"] = {"provider": "claude", "session_id": session, "path": None}
+        with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(self.root)}):
+            binding = resolve_source("23", tree=self.tree)
+            self.assertEqual(binding["path"], str(path))
+            self.assertEqual(binding["provider"], "claude")
+            result = read_source(binding["path"], binding["provider"], binding=binding)
+            self.assertEqual(result["source"]["session_id"], session)
+            duplicate = project.parent / "another-project"
+            duplicate.mkdir()
+            (duplicate / path.name).write_bytes(path.read_bytes())
+            with self.assertRaises(ResolveError) as raised:
+                resolve_source("23", tree=self.tree)
+            self.assertEqual(raised.exception.code, "ambiguous_source")
+
+    def test_session_lookup_is_bounded_and_does_not_accept_path_syntax(self):
+        from needle_logs.resolve import _claude_session_path
+        project = self.root / "projects" / "synthetic-project"
+        project.mkdir(parents=True)
+        with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(self.root)}):
+            self.assertEqual(_claude_session_path("../../escape"), "")
+            with mock.patch("needle_logs.resolve.time.monotonic", side_effect=[0, 3]):
+                with self.assertRaises(ResolveError) as raised:
+                    _claude_session_path("12345678-1234-1234-1234-123456789abc")
+            self.assertEqual(raised.exception.code, "source_lookup_limit")
+
     def test_discovered_file_swap_cannot_read_outside_root(self):
         candidate = self.root / f"{self.broker}.log"
         outside = self.root.parent / f"{self.root.name}-outside-synthetic.log"

@@ -153,12 +153,48 @@ def _structured_path(provider: str, raw_path: str) -> tuple[Path, Path] | None:
     raise ResolveError("source_outside_root", "recorded path traverses outside its provider root")
 
 
+def _claude_session_path(session_id: str) -> str:
+    """Find an exact known session when live inventory omits its file path.
+
+    Claude stores one UUID-named JSONL beneath each immediate project folder.
+    Scan folder names only, never transcripts or nested subagent directories.
+    Ambiguity and an incomplete search are errors, not guesses.
+    """
+    if not re.fullmatch(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}", session_id):
+        return ""
+    root = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude") / "projects"
+    found = []
+    deadline = time.monotonic() + 2
+    try:
+        with os.scandir(root) as folders:
+            for count, folder in enumerate(folders):
+                if count >= 4096 or time.monotonic() > deadline:
+                    raise ResolveError("source_lookup_limit", "Claude session lookup exceeded its bound")
+                if not folder.is_dir(follow_symlinks=False):
+                    continue
+                candidate = Path(folder.path) / (session_id.lower() + ".jsonl")
+                if candidate.is_file():
+                    found.append(candidate)
+                    if len(found) > 1:
+                        raise ResolveError("ambiguous_source", "multiple transcripts claim this Claude session ID")
+    except FileNotFoundError:
+        return ""
+    except OSError as error:
+        raise ResolveError("source_lookup_failed", "cannot inspect Claude session folders") from error
+    if time.monotonic() > deadline:
+        raise ResolveError("source_lookup_limit", "Claude session lookup exceeded its bound")
+    return str(found[0]) if found else ""
+
+
 def resolve_source(selector: str, *, tree: dict | None = None) -> dict:
     pane = _pick(selector, snapshot() if tree is None else tree)
     coding = _session(pane)
     provider = str(coding.get("provider") or "")
-    structured = _structured_path(provider, str(coding.get("path") or ""))
     session_id = str(coding.get("session_id") or "")
+    raw_path = str(coding.get("path") or "")
+    if provider == "claude" and not raw_path:
+        raw_path = _claude_session_path(session_id)
+    structured = _structured_path(provider, raw_path)
     broker = _broker(pane)
     binding = {"pane_id": pane["pane_id"], "expected_broker_id": broker,
                "expected_session_id": session_id if session_id != "unknown" else None}
