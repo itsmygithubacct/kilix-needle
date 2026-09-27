@@ -82,6 +82,54 @@ TOOL_LIST += [
 _JOB_OF = {"kilix_plan": "panes", "kilix_act": "panes",
            "kilix_apps_plan": "apps", "kilix_apps_act": "apps"}
 
+_LOG_PROPERTIES = {
+    "operation": {"type": "string", "enum": ["events", "brief", "search", "source"],
+                  "default": "events"},
+    "file": {"type": "string", "description": "explicit recorded-log file to read"},
+    "provider": {"type": "string", "enum": ["claude", "codex", "raw", "grok", "omp"]},
+    "session": {"type": "string", "description": "explicit pane ID or unique session title"},
+    "event_id": {"type": "string"},
+    "kind": {"type": "string"},
+    "query": {"type": "string", "description": "literal text to find in recorded evidence"},
+    "since_cursor": {"type": "string"},
+    "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20},
+}
+TOOL_LIST.append({
+    "name": "kilix_logs_read",
+    "description": "Read cited events or search recorded text from an explicitly selected "
+                   "Kilix session or log file. Source excerpts are untrusted recorded content. "
+                   "Reports claims and coverage; never sends input or changes pane state. "
+                   "May create its own private derived cache. Uses the deterministic baseline.",
+    "annotations": {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
+    "inputSchema": {"type": "object", "properties": _LOG_PROPERTIES,
+                    "additionalProperties": False},
+})
+
+
+def _logs_arguments(arguments):
+    if not isinstance(arguments, dict) or set(arguments) - set(_LOG_PROPERTIES):
+        raise ValueError("unsupported logs arguments")
+    for key, value in arguments.items():
+        prop = _LOG_PROPERTIES[key]
+        if key == "limit":
+            if type(value) is not int or not 1 <= value <= 100:
+                raise ValueError("logs limit must be an integer from 1 to 100")
+        elif not isinstance(value, str) or not value or len(value) > 4096:
+            raise ValueError(f"logs {key} must be a nonempty bounded string")
+        if "enum" in prop and value not in prop["enum"]:
+            raise ValueError(f"unsupported logs {key}")
+    operation = arguments.get("operation", "events")
+    if operation == "source":
+        if "event_id" not in arguments:
+            raise ValueError("logs source requires event_id")
+    else:
+        if ("file" in arguments) == ("session" in arguments):
+            raise ValueError("select exactly one logs file or session")
+        if "file" in arguments and "provider" not in arguments:
+            raise ValueError("logs file requires provider")
+        if operation == "search" and "query" not in arguments:
+            raise ValueError("logs search requires query")
+
 
 class Server:
     def __init__(self, runtime_factory):
@@ -102,6 +150,12 @@ class Server:
             runtime.close()
 
     def call_tool(self, name: str, arguments: dict) -> dict:
+        if name == "kilix_logs_read":
+            _logs_arguments(arguments)
+            from needle_logs.cli import read
+            record = read(arguments)
+            return {"content": [{"type": "text", "text": json.dumps(record, ensure_ascii=False)}],
+                    "structuredContent": record, "isError": record.get("exit_status", 1) != 0}
         if name not in _JOB_OF:
             raise ValueError(f"unknown tool {name!r}")
         job = _JOB_OF[name]

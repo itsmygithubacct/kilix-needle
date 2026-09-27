@@ -68,7 +68,9 @@ class Worker(unittest.TestCase):
         process = engine._process
         with self.assertRaisesRegex(libengine.LibEngineError, "did not answer"):
             engine.complete("hello")
-        self.assertIsNotNone(process.wait(timeout=5))          # R25: killed, not leaked
+        self.assertIsNotNone(process.returncode)              # reaped by the runtime itself
+        self.assertTrue(process.stdin.closed)
+        self.assertTrue(process.stdout.closed)
 
     def test_base_weights_answer(self):
         with libengine.LibEngine(self.lib, []) as engine:

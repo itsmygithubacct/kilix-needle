@@ -70,6 +70,9 @@ class LibEngine:
             ready, _, _ = select.select([process.stdout], [], [], self.timeout)
             if not ready:
                 process.kill()
+                process.wait()
+                process.stdin.close()
+                process.stdout.close()
                 self._process = None
                 raise LibEngineError(f"the Needle library did not answer in {self.timeout:g} s")
             line = process.stdout.readline()

@@ -4,3 +4,6 @@
 [submodule "third_party/kilix-ml"]
 	path = third_party/kilix-ml
 	url = https://github.com/itsmygithubacct/kilix-ml.git
+[submodule "third_party/kilix-tui-utils"]
+	path = third_party/kilix-tui-utils
+	url = https://github.com/itsmygithubacct/kilix-tui-utils.git

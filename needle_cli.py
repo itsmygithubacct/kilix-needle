@@ -434,6 +434,9 @@ def _image(args, *, may_install: bool = False):
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["logs"]:
+        from needle_logs.cli import main as logs_main
+        return logs_main(argv[1:])
     if argv[:1] in (["contract"], ["bridge"]):
         import domain_bridge
         return domain_bridge.main(argv)
