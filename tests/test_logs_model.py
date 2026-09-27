@@ -176,12 +176,22 @@ class ChunkGuards(unittest.TestCase):
         self.assertFalse(empty["micro"]["precision_defined"])
         self.assertFalse(empty["micro"]["recall_defined"])
 
-    def test_evaluator_malformed_ids_and_gold_do_not_crash(self):
+    def test_evaluator_malformed_prediction_ids_keep_gold_denominator(self):
         r = record("Finished")
-        score = evaluate([{"records": [r, {"record_id": []}],
-                           "gold": [{"kind": [], "evidence": []}, {"kind": "completion", "evidence": []}],
+        chunk = chunk_records([r])["chunks"][0]
+        gold = validate([r], [{"kind": "completion", "candidate": "c1"}], chunk=chunk)["events"]
+        score = evaluate([{"records": [r], "gold": gold,
                            "result": {"events": [{"kind": "completion", "evidence":
                                        [{"record_id": [], "start": 0, "end": 1}]}], "complete": True}}])
         self.assertEqual(score["micro"]["predicted"], 1)
-        self.assertEqual(score["micro"]["gold"], 0)
+        self.assertEqual(score["micro"]["gold"], 1)
         self.assertEqual(score["failures"]["false_positives"], 1)
+
+    def test_invalid_gold_refuses_scoring_instead_of_removing_denominator(self):
+        r = record("Finished")
+        chunk = chunk_records([r])["chunks"][0]
+        good = validate([r], [{"kind": "completion", "candidate": "c1"}], chunk=chunk)["events"][0]
+        bad = {**good, "evidence": [{**good["evidence"][0], "end": 999}]}
+        with self.assertRaisesRegex(ValueError, "invalid gold event"):
+            evaluate([{"records": [r], "gold": [good, bad],
+                       "result": {"events": [good], "complete": True}}])

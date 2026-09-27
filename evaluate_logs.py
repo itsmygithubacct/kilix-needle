@@ -55,25 +55,30 @@ def _overlap(a, b):
 
 
 def evaluate(cases: list[dict]) -> dict:
+    if not isinstance(cases, list):
+        raise ValueError("evaluation cases must be a list")
     by_kind = {kind: Counter() for kind in sorted(KINDS)}
     totals = Counter()
     failures = Counter()
     critical = []
     for ci, case in enumerate(cases):
-        rows = case.get("records", []) if isinstance(case, dict) else []
-        if not isinstance(rows, list):
-            rows = []
-            failures["invalid_records"] += 1
-        records = {r["record_id"]: r for r in rows if isinstance(r, dict) and type(r.get("record_id")) is str}
-        gold = case.get("gold", []) if isinstance(case, dict) else []
-        if not isinstance(gold, list):
-            gold = []
-            failures["invalid_gold"] += 1
-        gold = [g for g in gold if isinstance(g, dict) and type(g.get("kind")) is str
-                and g["kind"] in by_kind and _valid(g, records)]
+        if not isinstance(case, dict) or not isinstance(case.get("records"), list):
+            raise ValueError(f"invalid evaluation fixture in case {ci}")
+        rows = case["records"]
+        if any(not isinstance(r, dict) or type(r.get("record_id")) is not str
+               or not isinstance(r.get("text"), str) for r in rows):
+            raise ValueError(f"invalid canonical record in case {ci}")
+        records = {r["record_id"]: r for r in rows}
         if len(records) != len(rows):
-            failures["invalid_records"] += 1
-        result = case.get("result") or {} if isinstance(case, dict) else {}
+            raise ValueError(f"duplicate canonical record in case {ci}")
+        gold = case.get("gold")
+        if not isinstance(gold, list):
+            raise ValueError(f"gold must be a list in case {ci}")
+        for gi, event in enumerate(gold):
+            if (not isinstance(event, dict) or type(event.get("kind")) is not str
+                    or event["kind"] not in by_kind or not _valid(event, records)):
+                raise ValueError(f"invalid gold event {gi} in case {ci}; scoring refused")
+        result = case.get("result") or {}
         if not isinstance(result, dict):
             result = {}
             failures["invalid_result"] += 1
