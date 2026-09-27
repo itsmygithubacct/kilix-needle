@@ -40,7 +40,8 @@ def chunk_records(records: list[dict], *, max_chars: int = MAX_CHARS,
     Character limits are a conservative transport bound, not a tokenizer claim.
     Excluded source records are never handed to the model.
     """
-    if not 1 <= max_chars <= 8192 or not 1 <= max_chunks <= 1024:
+    if (type(max_chars) is not int or type(max_chunks) is not int
+            or not 1 <= max_chars <= 8192 or not 1 <= max_chunks <= 1024):
         raise ValueError("invalid chunk limits")
     ids = [r["record_id"] for r in records]
     if len(ids) != len(set(ids)):
@@ -56,10 +57,11 @@ def chunk_records(records: list[dict], *, max_chars: int = MAX_CHARS,
         expected = _cursor(records, start_index, start_offset, max_chars)
         if type(start_offset) is not int or start_offset < 0 or start_offset > len(records[start_index]["text"]) or cursor != expected:
             raise ValueError("cursor_invalid")
-    chunks, pending, excluded = [], [], []
+    chunks, excluded = [], []
+    next_cursor = None
     for i in range(start_index, len(records)):
         r = records[i]
-        if r.get("role") == "system" or r.get("channel") not in ("message", "tool_request", "tool_result", "lifecycle"):
+        if r.get("role") in ("system", "developer") or r.get("channel") not in ("message", "tool_request", "tool_result", "lifecycle"):
             excluded.append({"record_id": r["record_id"], "reason": "excluded_role_or_channel"})
             continue
         text = r["text"]
@@ -67,18 +69,19 @@ def chunk_records(records: list[dict], *, max_chars: int = MAX_CHARS,
             if i == start_index and b <= start_offset:
                 continue
             a = max(a, start_offset) if i == start_index else a
-            pending.append({"record_id": r["record_id"], "start": a, "end": b,
-                            "text": text[a:b]})
-    for n, part in enumerate(pending[:max_chunks]):
-        chunks.append({"chunk_id": f"chunk-{start_index+n}", "extractable": [part],
+            if len(chunks) == max_chunks:
+                next_cursor = _cursor(records, i, a, max_chars)
+                break
+            part = {"record_id": r["record_id"], "start": a, "end": b,
+                    "text": text[a:b], "role": r.get("role"), "channel": r.get("channel"),
+                    "quality": r.get("quality"), "sequence": r.get("sequence")}
+            chunks.append({"chunk_id": f"chunk-{i}-{a}", "extractable": [part],
                        "context": [], "source_id": records[0]["source_id"] if records else None,
                        "session_id": records[0]["session_id"] if records else None,
                        "generation": records[0]["generation"] if records else None})
-    next_cursor = None
-    if len(pending) > max_chunks:
-        next_part = pending[max_chunks]
-        next_cursor = _cursor(records, ids.index(next_part["record_id"]), next_part["start"], max_chars)
+        if next_cursor is not None:
+            break
     return {"chunks": chunks, "next_cursor": next_cursor,
             "coverage": {"complete": next_cursor is None, "owned_fragments": len(chunks),
-                         "remaining_fragments": max(0, len(pending) - max_chunks),
+                         "remaining_fragments": 0 if next_cursor is None else None,
                          "excluded": excluded}}

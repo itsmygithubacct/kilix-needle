@@ -1,7 +1,7 @@
 import unittest
 
 from needle_logs.chunks import chunk_records
-from needle_logs.extract import validate, extract_chunk, candidates
+from needle_logs.extract import validate, extract_chunk, candidates, prompt
 from evaluate_logs import evaluate
 
 
@@ -128,3 +128,60 @@ class ChunkGuards(unittest.TestCase):
         reply = {"type":"call","function_calls":[{"name":"extract_events",
                  "arguments":{"events":[{"kind":"completion","candidate":"c1","start":True}]}}]}
         self.assertFalse(extract_chunk([r], chunk, FakeModel(reply))["complete"])
+
+    def test_metadata_and_exclusion_survive_subdivision(self):
+        import json
+        from needle_logs.extract import extract_all
+        r = {**record("First sentence. Second sentence.", role="assistant"),
+             "quality": "approximate", "sequence": 7}
+        chunk = chunk_records([r])["chunks"][0]
+        row = json.loads(prompt(chunk).split("\n", 1)[1])[0]
+        self.assertEqual((row["role"], row["channel"], row["quality"], row["sequence"]),
+                         ("assistant", "message", "approximate", 7))
+        self.assertEqual(validate([r], [{"kind": "answer", "candidate": "c1"}], chunk=chunk)["events"][0]["evidence_class"],
+                         "unattributed_text")
+        class Saturating(FakeModel):
+            def complete(self, text):
+                for candidate in json.loads(text.split("\n", 1)[1]):
+                    self_outer.assertEqual(candidate["quality"], "approximate")
+                return self.reply
+        self_outer = self
+        reply = {"type": "call", "function_calls": [{"name": "extract_events", "arguments":
+                 {"events": [{"kind": "answer", "candidate": "c1"}] * 4}}]}
+        extract_all([r], Saturating(reply), max_depth=1)
+        forbidden = [{**record("secret", "sys", "system")},
+                     {**record("secret", "dev", "developer")},
+                     {**record("secret", "reason"), "channel": "reasoning"}]
+        self.assertEqual(chunk_records(forbidden)["chunks"], [])
+
+    def test_limits_and_unknown_remaining(self):
+        for kwargs in ({"max_chars": True}, {"max_chunks": False}, {"max_chunks": 1.0}):
+            with self.assertRaises(ValueError):
+                chunk_records([record("abc")], **kwargs)
+        view = chunk_records([record("abcdef")], max_chars=1, max_chunks=1)
+        self.assertEqual(view["coverage"]["remaining_fragments"], None)
+        self.assertIsNotNone(view["next_cursor"])
+
+    def test_evaluator_unknown_and_forged_class(self):
+        r = record("Finished")
+        event = validate([r], [{"kind": "completion", "candidate": "c1"}],
+                         chunk=chunk_records([r])["chunks"][0])["events"][0]
+        forged = {**event, "evidence_class": "structured_fact"}
+        score = evaluate([{"records": [r], "gold": [event], "result":
+                           {"events": [forged, {"kind": []}, {"kind": "new"}], "complete": True}}])
+        self.assertEqual(score["micro"]["predicted"], 3)
+        self.assertEqual(score["micro"]["precision"], 0)
+        self.assertEqual(score["failures"]["false_positives"], 3)
+        empty = evaluate([{"records": [r], "gold": [], "result": {"events": []}}])
+        self.assertFalse(empty["micro"]["precision_defined"])
+        self.assertFalse(empty["micro"]["recall_defined"])
+
+    def test_evaluator_malformed_ids_and_gold_do_not_crash(self):
+        r = record("Finished")
+        score = evaluate([{"records": [r, {"record_id": []}],
+                           "gold": [{"kind": [], "evidence": []}, {"kind": "completion", "evidence": []}],
+                           "result": {"events": [{"kind": "completion", "evidence":
+                                       [{"record_id": [], "start": 0, "end": 1}]}], "complete": True}}])
+        self.assertEqual(score["micro"]["predicted"], 1)
+        self.assertEqual(score["micro"]["gold"], 0)
+        self.assertEqual(score["failures"]["false_positives"], 1)

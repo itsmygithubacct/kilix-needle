@@ -8,7 +8,7 @@ from __future__ import annotations
 import argparse
 import json
 from collections import Counter
-from needle_logs.extract import KINDS
+from needle_logs.extract import KINDS, _class
 
 
 def _span(event):
@@ -28,14 +28,18 @@ def _valid(event, records):
     if span is None:
         return False
     rid, start, end = span
+    if type(rid) is not str or type(start) is not int or type(end) is not int:
+        return False
     r = records.get(rid)
-    if r is None or type(start) is not int or type(end) is not int or not (0 <= start < end <= len(r["text"])):
+    if r is None or not isinstance(r.get("text"), str) or not (0 <= start < end <= len(r["text"])):
         return False
     if event["evidence"][0].get("quote") != r["text"][start:end]:
         return False
     for key in ("source_id", "session_id", "generation", "sequence", "timestamp"):
         if event.get(key) != r.get(key):
             return False
+    if event.get("evidence_class") != _class(r):
+        return False
     return True
 
 
@@ -56,9 +60,23 @@ def evaluate(cases: list[dict]) -> dict:
     failures = Counter()
     critical = []
     for ci, case in enumerate(cases):
-        records = {r["record_id"]: r for r in case["records"]}
-        gold = list(case.get("gold", []))
-        result = case.get("result") or {}
+        rows = case.get("records", []) if isinstance(case, dict) else []
+        if not isinstance(rows, list):
+            rows = []
+            failures["invalid_records"] += 1
+        records = {r["record_id"]: r for r in rows if isinstance(r, dict) and type(r.get("record_id")) is str}
+        gold = case.get("gold", []) if isinstance(case, dict) else []
+        if not isinstance(gold, list):
+            gold = []
+            failures["invalid_gold"] += 1
+        gold = [g for g in gold if isinstance(g, dict) and type(g.get("kind")) is str
+                and g["kind"] in by_kind and _valid(g, records)]
+        if len(records) != len(rows):
+            failures["invalid_records"] += 1
+        result = case.get("result") or {} if isinstance(case, dict) else {}
+        if not isinstance(result, dict):
+            result = {}
+            failures["invalid_result"] += 1
         predicted = result.get("events", [])
         if not isinstance(predicted, list):
             predicted = []
@@ -75,6 +93,7 @@ def evaluate(cases: list[dict]) -> dict:
             kind = pred.get("kind") if isinstance(pred, dict) else None
             if not isinstance(kind, str) or kind not in by_kind:
                 failures["unknown_kind"] += 1
+                failures["false_positives"] += 1
                 continue
             by_kind[kind]["predicted"] += 1
             if valid[pi]:
@@ -87,15 +106,15 @@ def evaluate(cases: list[dict]) -> dict:
                         totals["exact_spans"] += 1
                     continue
             span = _span(pred)
-            cited = records.get(span[0]) if span is not None else None
+            cited = records.get(span[0]) if span is not None and type(span[0]) is str else None
             cross_source = cited is None or any(pred.get(key) != cited.get(key)
                                                   for key in ("source_id", "session_id", "generation"))
+            failures["false_positives"] += 1
             if kind in ("decision", "completion", "test_result", "blocker") or cross_source:
                 critical.append({"case": ci, "prediction": pi, "kind": kind,
                                  "reason": "cross_source_attribution" if cross_source else "unmatched_or_invalid_evidence"})
         for g in gold:
-            if g.get("kind") in by_kind:
-                by_kind[g["kind"]]["gold"] += 1
+            by_kind[g["kind"]]["gold"] += 1
     scores = {}
     for kind, c in by_kind.items():
         p = c["tp"] / c["predicted"] if c["predicted"] else 0.0
@@ -104,14 +123,16 @@ def evaluate(cases: list[dict]) -> dict:
                         "precision": p, "recall": r, "f1": 2*p*r/(p+r) if p+r else 0.0}
     supported = [s for s in scores.values() if s["gold"]]
     tp = sum(s["tp"] for s in scores.values())
-    pred = sum(s["predicted"] for s in scores.values())
+    pred = totals["predictions"]
     gold_count = sum(s["gold"] for s in scores.values())
     p = tp/pred if pred else 0.0
     r = tp/gold_count if gold_count else 0.0
     return {"schema": "kilix.logs.eval/v1", "cases": len(cases),
             "evidence": {"valid": totals["valid_evidence"], "total": totals["predictions"],
                          "validity": totals["valid_evidence"]/totals["predictions"] if totals["predictions"] else 1.0},
-            "micro": {"precision": p, "recall": r, "f1": 2*p*r/(p+r) if p+r else 0.0},
+            "micro": {"tp": tp, "predicted": pred, "gold": gold_count,
+                      "precision": p, "recall": r, "f1": 2*p*r/(p+r) if p+r else 0.0,
+                      "precision_defined": pred > 0, "recall_defined": gold_count > 0},
             "macro_f1": sum(s["f1"] for s in supported)/len(supported) if supported else 0.0,
             "exact_span_matches": totals["exact_spans"],
             "per_kind": scores, "failures": dict(failures), "critical_misattributions": critical}

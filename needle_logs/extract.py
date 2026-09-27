@@ -29,12 +29,15 @@ def candidates(chunk: dict) -> list[dict]:
             if a < b:
                 found.append({"candidate": f"c{len(found)+1}", "record": part["record_id"],
                               "start": part["start"]+a, "end": part["start"]+b,
-                              "text": text[a:b]})
+                              "text": text[a:b], "role": part.get("role"),
+                              "channel": part.get("channel"), "quality": part.get("quality"),
+                              "sequence": part.get("sequence")})
     return found
 
 
 def prompt(chunk: dict) -> str:
-    rows = [{"candidate": c["candidate"], "text": c["text"]} for c in candidates(chunk)]
+    rows = [{key: c[key] for key in ("candidate", "text", "role", "channel", "quality", "sequence")}
+            for c in candidates(chunk)]
     return ("Label stated events in recorded text. Use candidate IDs only. "
             "Call extract_events once.\n" + json.dumps(rows, ensure_ascii=False))
 
@@ -42,7 +45,7 @@ def prompt(chunk: dict) -> str:
 def _class(r):
     if r.get("role") == "user" and r.get("quality") == "structured":
         return "user_statement"
-    if r.get("role") == "assistant":
+    if r.get("role") == "assistant" and r.get("quality") == "structured":
         return "assistant_claim"
     if r.get("role") == "tool" and r.get("quality") == "structured":
         return "structured_fact"
