@@ -321,3 +321,41 @@ class RunnerSurvivors(unittest.TestCase):
         self.assertEqual(len(sends), 1)
         self.assertEqual(results[-1]["outcome"], "failed")
         self.assertIn("message was sent", results[-1]["reason"])
+
+
+class GateSurvivesAHungCase(unittest.TestCase):
+    """A case the engine doesn't answer is scored as no answer, the worker is
+    restarted, and the timeout is counted (the first agents gate crashed on one)."""
+
+    def test_timeout_is_no_answer_and_the_engine_restarts(self):
+        import evaluate
+        import libengine
+
+        class Engine:
+            def __init__(self):
+                self.starts, self.calls = 0, 0
+
+            def reset(self):
+                pass
+
+            def complete(self, text):
+                self.calls += 1
+                if self.calls == 1:
+                    raise libengine.LibEngineError("did not answer")
+                return {"function_calls": [{"name": "agent",
+                                            "arguments": {"agent": "codex", "dir": "kilix"}}]}
+
+            def close(self):
+                pass
+
+            def start(self):
+                self.starts += 1
+
+        engine = Engine()
+        cases = [{"request": "open codex in kilix", "expect": [["agent", {"agent": "codex",
+                                                                           "dir": "kilix"}]],
+                  "tag": "launch"}] * 2
+        report = evaluate.score(engine, cases, 1, job="agents")
+        self.assertEqual(engine.starts, 1)
+        self.assertEqual(report["totals"]["timeouts"], 1)
+        self.assertEqual(report["totals"]["exact"], 1)
