@@ -7,7 +7,7 @@ import hashlib
 import json
 import re
 
-from .index import Index, SCHEMA_VERSION
+from .index import Index, SCHEMA_VERSION, consistent_read
 
 MAX_LIMIT = 100
 MAX_QUERY = 256
@@ -29,6 +29,16 @@ def clean(text: str) -> str:
 
 def _slice(text: str, maximum: int) -> str:
     return text if len(text) <= maximum else text[:maximum] + " [truncated]"
+
+
+def _render_slice(text: str) -> str:
+    # Reserve one byte for print's trailing newline; marker is part of the cap.
+    raw = text.encode("utf-8")
+    maximum = MAX_RENDER - 1
+    if len(raw) <= maximum:
+        return text
+    marker = b" [truncated]"
+    return raw[:maximum - len(marker)].decode("utf-8", errors="ignore") + marker.decode()
 
 
 def _token(payload: dict) -> str:
@@ -78,6 +88,7 @@ def _envelope(index: Index, source_id: str) -> dict:
             "snapshot": {"checkpoint": snap["checkpoint"]}}
 
 
+@consistent_read
 def list_events(index: Index, source_id: str, *, limit: int = 20, kind: str | None = None,
                 query: str | None = None, since_cursor: str | None = None) -> dict:
     _validate(limit, kind, query)
@@ -107,6 +118,7 @@ def list_events(index: Index, source_id: str, *, limit: int = 20, kind: str | No
             "coverage": snap["coverage"], "pipeline": {"config": snap["config"], "schema_version": SCHEMA_VERSION}, "snapshot": {"checkpoint": snap["checkpoint"]}})
 
 
+@consistent_read
 def source_event(index: Index, event_id: str) -> dict:
     if not isinstance(event_id, str) or len(event_id) > 128:
         raise QueryError("invalid_input", "invalid event ID")
@@ -125,6 +137,7 @@ def source_event(index: Index, event_id: str) -> dict:
     return bounded({"event": event, "records": records, "source": {k: snap[k] for k in ("source_id", "session_id", "generation", "path", "provider")}, "coverage": snap["coverage"]})
 
 
+@consistent_read
 def search(index: Index, source_id: str, term: str, *, limit: int = 20) -> dict:
     _validate(limit, None, term)
     result = _envelope(index, source_id)
@@ -152,6 +165,7 @@ def search(index: Index, source_id: str, term: str, *, limit: int = 20) -> dict:
     return bounded(result)
 
 
+@consistent_read
 def brief(index: Index, source_id: str, *, limit: int = 20) -> dict:
     _validate(limit, None, None)
     result = _envelope(index, source_id)
@@ -189,9 +203,9 @@ def render(result: dict, operation: str) -> str:
         lines.append("Coverage: " + ("complete" if result["coverage"].get("complete", False) else "partial; see JSON coverage for gaps"))
         if result["omitted_events"]:
             lines.append(f"Omitted {result['omitted_events']} older indexed event(s); increase limit or search for earlier evidence.")
-        return _slice(clean("\n".join(lines)), MAX_RENDER)
+        return _render_slice(clean("\n".join(lines)))
     if operation == "source":
-        return _slice(clean("\n".join(record["text"] for record in result["records"])), MAX_RENDER)
+        return _render_slice(clean("\n".join(record["text"] for record in result["records"])))
     lines = []
     for event in result.get("events", []):
         ref = event["evidence"][0]
@@ -203,4 +217,4 @@ def render(result: dict, operation: str) -> str:
             lines.append(f"Record ({match['role']}/{match['channel']}) [{match['record_id']}:{match['start']}]: {clean(match['quote'])}")
     if not lines:
         lines.append("No matching events in indexed view.")
-    return _slice(clean("\n".join(lines)), MAX_RENDER)
+    return _render_slice(clean("\n".join(lines)))

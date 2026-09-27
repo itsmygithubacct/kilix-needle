@@ -5,6 +5,8 @@ import json
 import os
 import sqlite3
 import stat
+from contextlib import contextmanager
+from functools import wraps
 from pathlib import Path
 
 SCHEMA_VERSION = 1
@@ -15,6 +17,15 @@ CLASSES = {"structured_fact", "user_statement", "assistant_claim", "unattributed
 
 class IndexCorrupt(ValueError):
     code = "index_corrupt"
+
+
+def consistent_read(function):
+    """Keep metadata, evidence, and cursor basis in the same SQLite snapshot."""
+    @wraps(function)
+    def wrapped(index, *args, **kwargs):
+        with index.read_transaction():
+            return function(index, *args, **kwargs)
+    return wrapped
 
 
 def default_path() -> Path:
@@ -86,6 +97,7 @@ class Index:
             self.db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         self.db.execute("PRAGMA foreign_keys=ON")
         self.db.execute("PRAGMA busy_timeout=5000")
+        self.db.execute("PRAGMA journal_mode=WAL")
         self.db.executescript("""
             CREATE TABLE IF NOT EXISTS sources (
               source_id TEXT PRIMARY KEY, path TEXT NOT NULL, provider TEXT NOT NULL,
@@ -126,6 +138,17 @@ class Index:
 
     def __exit__(self, *_):
         self.close()
+
+    @contextmanager
+    def read_transaction(self):
+        owned = not self.db.in_transaction
+        if owned:
+            self.db.execute("BEGIN")
+        try:
+            yield
+        finally:
+            if owned:
+                self.db.rollback()
 
     def put(self, result: dict, events: list[dict], config: str = "baseline-1") -> None:
         source = result["source"]
@@ -251,6 +274,7 @@ class Index:
         except (ValueError, TypeError, KeyError) as error:
             raise IndexCorrupt("cached event contradicts canonical evidence") from error
 
+    @consistent_read
     def events(self, source_id: str, *, kind: str | None = None, query: str | None = None, after: tuple[int, str] | None = None, limit: int = 20) -> list[dict]:
         snap = self.snapshot(source_id)
         if not snap:
@@ -274,6 +298,7 @@ class Index:
         args.append(limit)
         return [self._read_event(row, snap) for row in self.db.execute(sql, args)]
 
+    @consistent_read
     def recent_events(self, source_id: str, limit: int) -> tuple[list[dict], int]:
         snap = self.snapshot(source_id)
         if not snap:
@@ -283,6 +308,7 @@ class Index:
         rows = self.db.execute("SELECT * FROM events WHERE source_id=? AND generation=? AND config=? ORDER BY sequence DESC,event_id DESC LIMIT ?", args + (limit,))
         return list(reversed([self._read_event(row, snap) for row in rows])), max(0, count - limit)
 
+    @consistent_read
     def event(self, event_id: str) -> tuple[dict, dict] | None:
         row = self.db.execute("SELECT e.* FROM events e JOIN sources s ON s.source_id=e.source_id WHERE e.event_id=? LIMIT 1", (event_id,)).fetchone()
         if not row:
@@ -290,6 +316,7 @@ class Index:
         snap = self.snapshot(row["source_id"])
         return self._read_event(row, snap), snap
 
+    @consistent_read
     def search_records(self, source_id: str, term: str, limit: int) -> list[dict]:
         snap = self.snapshot(source_id)
         if not snap:
@@ -302,6 +329,7 @@ class Index:
         )
         return [self._read_record(row, snap) for row in rows]
 
+    @consistent_read
     def record(self, source_id: str, record_id: str) -> dict | None:
         snap = self.snapshot(source_id)
         if not snap:
@@ -309,6 +337,7 @@ class Index:
         row = self.db.execute("SELECT * FROM records WHERE source_id=? AND generation=? AND config=? AND record_id=?", (source_id, snap["generation"], snap["config"], record_id)).fetchone()
         return self._read_record(row, snap) if row else None
 
+    @consistent_read
     def status(self) -> list[dict]:
         rows = self.db.execute("SELECT source_id FROM sources ORDER BY source_id LIMIT 1000").fetchall()
         return [self.snapshot(row[0]) for row in rows]

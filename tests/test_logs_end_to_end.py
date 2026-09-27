@@ -13,6 +13,8 @@ import support  # noqa: F401
 import mcp_server
 import needle_cli
 from needle_logs import cli
+from needle_logs import facts, query, sources
+from needle_logs.index import Index
 
 
 class LogsEndToEndTests(unittest.TestCase):
@@ -130,6 +132,38 @@ class LogsEndToEndTests(unittest.TestCase):
         self.assertEqual(found["event_matches"][0]["kind"], "answer")
         self.assertIn("cache-target", found["matches"][0]["quote"])
         self.assertLess(len(json.dumps(found).encode()), 32768)
+
+    def test_concurrent_writer_cannot_mix_snapshot_metadata_and_events(self):
+        old = sources.read_source(str(self.path), "claude")
+        with self.path.open("a") as stream:
+            stream.write(json.dumps({"type": "user", "sessionId": "session-one",
+                                    "message": {"role": "user", "content": "New question?"}}) + "\n")
+        new = sources.read_source(str(self.path), "claude")
+        with Index(self.cache) as reader, Index(self.cache) as writer:
+            reader.put(old, facts.extract(old["records"]))
+            original = reader.snapshot
+            wrote = False
+
+            def interleaved(source_id):
+                nonlocal wrote
+                snap = original(source_id)
+                if not wrote:
+                    wrote = True
+                    writer.put(new, facts.extract(new["records"]))
+                return snap
+
+            with mock.patch.object(reader, "snapshot", side_effect=interleaved):
+                result = query.list_events(reader, old["source"]["source_id"])
+            self.assertTrue(wrote)
+            self.assertEqual(result["source"]["digest"], old["source"]["digest"])
+            self.assertEqual(len(result["events"]), 3)
+            self.assertNotIn("New question?", json.dumps(result))
+            self.assertEqual(reader.snapshot(old["source"]["source_id"])["digest"], new["source"]["digest"])
+
+    def test_human_render_bound_includes_utf8_and_marker(self):
+        rendered = query.render({"records": [{"text": "雪" * 12000}]}, "source")
+        self.assertLessEqual(len((rendered + "\n").encode("utf-8")), query.MAX_RENDER)
+        self.assertTrue(rendered.endswith(" [truncated]"))
 
 
 if __name__ == "__main__":
