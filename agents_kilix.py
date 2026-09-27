@@ -5,7 +5,9 @@
   It records the client's trust for exactly that directory
   (`--trust-folder`), and adds an approval skip only when Kilix's
   coding-yolo setting is on (`--coding-yolo`; the request never decides).
-- A wait is `kilix panes wait PANE --for idle|waiting`.
+- A wait is `kilix panes wait PANE --for idle|waiting`. After a message from
+  idle, or before an idle wait on a resumed session, the runner first observes
+  `working` so a stale idle snapshot cannot satisfy the wait.
 - A message is `kilix agent-control send PANE --expect-broker B --submit`,
   after an optional wait for idle. It is held only while the session is
   `waiting` on an approval or a menu, where a submitted line could answer
@@ -21,7 +23,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import json
-import os
 from pathlib import Path
 import subprocess
 
@@ -33,6 +34,9 @@ HERE = ("here", "this repo", "this directory", "the current folder", "this folde
 ROOTS = ("gpu_terminal", "research")
 PROVIDER_AGENT = {"claude": "claude", "codex": "codex", "grok": "grok", "omp": "qwen-omp",
                   "kimi": "kimi"}
+_SCAN_SKIP = frozenset(("node_modules", "venv", "virtualenv", "env", "scratch",
+                        "scratch-workers", "worktree", "worktrees"))
+_DIR_SCAN_CACHE: dict[Path, tuple[tuple[str, Path, int], ...]] = {}
 
 
 class AgentsError(RuntimeError):
@@ -50,9 +54,55 @@ def _run(argv: list[str], timeout: float = 30) -> str:
     return done.stdout
 
 
+def _skip_scan_dir(name: str) -> bool:
+    low = name.casefold()
+    return (name.startswith(".") or low in _SCAN_SKIP or low.startswith(("scratch-", "worktree-"))
+            or low.endswith(("-scratch", "-worktree", "-worktrees")))
+
+
+def _git_directories(home: Path) -> tuple[tuple[str, Path, int], ...]:
+    """Cached, bounded index of checkout roots below the two source roots."""
+    key = home.resolve()
+    if key in _DIR_SCAN_CACHE:
+        return _DIR_SCAN_CACHE[key]
+    found = []
+    for root in ROOTS:
+        base = key / root
+        if not base.is_dir() or base.is_symlink():
+            continue
+        pending = [(base, 0)]
+        while pending:
+            candidate, depth = pending.pop()
+            # A directory-valued .git marks a top-level checkout. Do not walk
+            # into it: nested .git files are submodules/worktrees, not another
+            # checkout for name resolution.
+            if (candidate / ".git").is_dir():
+                found.append((candidate.name, candidate.resolve(), depth))
+                continue
+            if depth >= 3:
+                continue
+            try:
+                children = candidate.iterdir()
+                directories = [child for child in children
+                               if child.is_dir() and not child.is_symlink()
+                               and not _skip_scan_dir(child.name)]
+            except OSError:
+                continue
+            pending.extend((child, depth + 1) for child in directories)
+    answer = tuple(found)
+    _DIR_SCAN_CACHE[key] = answer
+    return answer
+
+
 def resolve_dir(said: str, *, cwd: str | None = None, home: Path | None = None) -> Path:
     """Exactly one existing directory for the words the request used."""
     home = home or Path.home()
+    raw = said.strip()
+    if raw.startswith(("~/", "/")):
+        path = ((home / raw[2:]) if raw.startswith("~/") else Path(raw)).resolve()
+        if not path.is_dir():
+            raise AgentsError(f"{said} is not an existing directory")
+        return path
     folded = agents._fold(said)
     if folded in HERE:
         if not cwd:
@@ -61,13 +111,7 @@ def resolve_dir(said: str, *, cwd: str | None = None, home: Path | None = None) 
         if not path.is_dir():
             raise AgentsError(f"the calling pane's directory is not available: {cwd}")
         return path
-    if said.strip().startswith(("~/", "/")):
-        path = Path(os.path.expanduser(said.strip())).resolve()
-        if not path.is_dir():
-            raise AgentsError(f"{said} is not an existing directory")
-        return path
-
-    name = said.strip()
+    name = raw
     if name.casefold().startswith("the "):
         name = name[4:]
     for suffix in agents._DIR_SUFFIX:          # the words the checks take after a name
@@ -92,22 +136,17 @@ def resolve_dir(said: str, *, cwd: str | None = None, home: Path | None = None) 
                 raise AgentsError(f"directory map entry {name!r} is not an existing directory")
             return path
 
-    found = set()
-    for root in ROOTS:
-        base = home / root
-        if not base.is_dir() or base.is_symlink():
-            continue
-        for current, directories, _files in os.walk(base, followlinks=False):
-            directories[:] = [item for item in directories
-                              if not item.startswith(".") and not (Path(current) / item).is_symlink()]
-            candidate = Path(current)
-            if candidate.name == name and (candidate / ".git").exists():
-                found.add(candidate.resolve())
-            directories[:] = [item for item in directories if item != ".git"]
+    matches = [(path, depth) for repo_name, path, depth in _git_directories(home)
+               if repo_name == name]
+    if matches:
+        shallowest = min(depth for _path, depth in matches)
+        found = sorted({path for path, depth in matches if depth == shallowest})
+    else:
+        found = []
     if len(found) != 1:
         raise AgentsError(f"{said}: {'no' if not found else len(found)} matching directories"
-                          f"{'' if not found else ' (' + ', '.join(map(str, sorted(found))) + ')'}")
-    return found.pop()
+                          f"{'' if not found else ' (' + ', '.join(map(str, found)) + ')'}")
+    return found[0]
 
 
 def _listing(argv: list[str]) -> dict:
@@ -149,7 +188,9 @@ def find_session(agent: str, directory: Path, *, caller_pane: int | None = None)
     for pane in snapshot.get("panes", []):
         if not isinstance(pane, dict) or pane.get("pane_id") == caller_pane:
             continue
-        coding = pane.get("coding_session") or {}
+        coding = pane.get("coding_session")
+        if not isinstance(coding, dict):
+            continue
         provider = PROVIDER_AGENT.get(str(coding.get("provider") or ""))
         cwd = coding.get("cwd") or pane.get("cwd") or ""
         if provider == agent and cwd and Path(cwd).resolve() == directory:
@@ -216,6 +257,7 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
     launched: dict[str, dict] = {}
     last = None
     caller_cache = None
+    resumed = set()
 
     def get_caller():
         nonlocal caller_cache
@@ -228,6 +270,10 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
         results.append(entry)
         try:
             if action.kind == "agent":
+                prompt = action.args.get("prompt")
+                if prompt is not None and (not isinstance(prompt, str)
+                                           or len(prompt.encode("utf-8")) > 1024):
+                    raise AgentsError("a launch prompt is at most 1024 bytes")
                 directory = resolve_dir(action.args["dir"], cwd=cwd)
                 pane, broker, _caller_cwd = get_caller()
                 argv = launch_argv(action, directory, pane, broker)
@@ -243,6 +289,8 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
                     raise AgentsError("kilix agent-control returned no launched pane")
                 last = {"pane_id": pane_result["pane_id"], "agent": action.args["agent"]}
                 launched[f"{action.args['agent']}@{action.args['dir']}"] = last
+                if action.args.get("resume"):
+                    resumed.add(last["pane_id"])
                 entry.update(outcome="done", pane=last["pane_id"],
                              folder_trust=result.get("folder_trust"))
                 continue
@@ -267,6 +315,10 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
                 if dry_run:
                     entry.update(outcome="would", argv=argv)
                     continue
+                if action.args["for"] == "idle" and pane_id in resumed:
+                    _run(["panes", "wait", str(pane_id), "--for", "working", "--json",
+                          "--timeout", "30"], timeout=60)
+                    resumed.discard(pane_id)
                 _run(argv, timeout=wait_timeout + 30)
                 entry.update(outcome="done", pane=pane_id)
                 continue
@@ -274,6 +326,10 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
             waited = bool(action.args.get("wait"))
             wait_timeout = action.args.get("timeout") or 3600
             if waited and not dry_run:
+                if pane_id in resumed:
+                    _run(["panes", "wait", str(pane_id), "--for", "working", "--json",
+                          "--timeout", "30"], timeout=60)
+                    resumed.discard(pane_id)
                 _run(["panes", "wait", str(pane_id), "--for", "idle", "--json", "--timeout",
                       str(wait_timeout)], timeout=wait_timeout + 30)
             if dry_run and isinstance(pane_id, str) and pane_id.startswith("<new pane"):
@@ -289,7 +345,9 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
                 if pane is None:
                     raise AgentsError(f"pane {pane_id} is gone")
                 activity = pane.get("activity")
-                coding = pane.get("coding_session") or {}
+                coding = pane.get("coding_session")
+                if not isinstance(coding, dict):
+                    raise AgentsError("the target is not a live coding-agent pane")
                 observed_agent = PROVIDER_AGENT.get(str(coding.get("provider") or ""), "")
                 if not observed_agent and target != "it":
                     raise AgentsError("the target is not a live coding-agent pane")
@@ -309,7 +367,16 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
                 entry.update(outcome="would", argv=argv)
                 continue
             _run(argv)
-            entry.update(outcome="done", delivery="not confirmed", pane=pane_id)
+            if activity == "idle":
+                try:
+                    _run(["panes", "wait", str(pane_id), "--for", "working", "--json",
+                          "--timeout", "30"], timeout=60)
+                except AgentsError as error:
+                    raise AgentsError(f"delivery not confirmed: {error}") from error
+                delivery = "delivered"
+            else:
+                delivery = "not confirmed"
+            entry.update(outcome="done", delivery=delivery, pane=pane_id)
         except (AgentsError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
             entry.update(outcome="failed", reason=str(error))
             break

@@ -560,8 +560,14 @@ def main(argv: list[str] | None = None) -> int:
     elif argv[:1] == ["agents"]:
         # Launch, wait for and message coding-agent sessions (the agents job).
         job, argv = "agents", argv[1:]
+    agents_help = ("Directory resolution order: an explicit ~/ or absolute path; 'here' "
+                   "(the calling pane's directory); exact entries in "
+                   "~/.config/kilix-needle/dirs.json; then the shallowest exact checkout "
+                   "name under ~/gpu_terminal or ~/research (to depth 3). dirs.json is a "
+                   "JSON object mapping request names to absolute directory paths.")
     parser = argparse.ArgumentParser(prog=f"kilix-needle {job}" if job != "panes" else "kilix-needle",
                                      description=__doc__,
+                                     epilog=agents_help if job == "agents" else None,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("request", nargs="*", help="what to do; omit for a prompt loop")
     parser.add_argument("--dry-run", action="store_true", help="show the plan and run nothing")
