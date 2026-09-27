@@ -116,6 +116,7 @@ timeout time limit longer than max maximum up
 tell ask send message ping know instruct say notify have saying saying: telling
 right left below above down beside next side vertical horizontal
 task turn goes go gets becomes hold block put give after but work working stop
+own under underneath top needs input
 """.split())
 _NUMBER_WORDS = frozenset("""one two three four five six seven eight nine ten eleven twelve
 fifteen twenty thirty forty forty-five fifty sixty ninety a an half""".split())
@@ -147,15 +148,16 @@ _POLITE_ASK = re.compile(r"^(?:(?:please|pls|ok|okay|hey|hi)\s+)*(?:can|could|wo
 _LAUNCH_VERB = re.compile(r"\b(?:open|start|launch|spawn|fire|spin|run|bring|kick|get|boot|"
                           r"create|resume|continue|reopen|pick|put)\b")
 _RESUME_WORD = re.compile(r"\b(?:resume|continue|reopen|pick\b.*\bback|back)\b")
-_WAIT_WORD = re.compile(r"\b(?:wait|until|till|when|once)\b")
+_WAIT_WORD = re.compile(r"\b(?:wait|until|till|when|once|after)\b")
 _TELL_WORD = re.compile(r"\b(?:tell|ask|send|message|ping|let\b.*\bknow|instruct|say|notify|"
-                        r"have)\b")
+                        r"have|give\b.*\binput)\b")
 _IDLE_WORD = re.compile(r"\b(?:done|finished|finishes|finish|idle|complete|completes|"
                         r"completed|ready)\b")
-_WAITING_WORD = re.compile(r"\b(?:asks|asking|question|questions|needs input|approval|"
+_WAITING_WORD = re.compile(r"\b(?:asks|asking|question|questions|needs|approval|"
                            r"waiting|blocked)\b")
 _PLACE_WORDS = {"right": r"\bright\b", "left": r"\bleft\b",
-                "down": r"\b(?:below|down|under(?:neath)?)\b", "up": r"\b(?:above|up)\b(?! to)"}
+                "down": r"\b(?:below|down|under(?:neath)?)\b",
+                "up": r"\b(?:above|up|on top)\b(?! to)"}
 _SPLIT_WORD = re.compile(r"\b(?:split|beside|next to|side)\b")
 _UNIT = {"second": 1, "seconds": 1, "sec": 1, "secs": 1, "minute": 60, "minutes": 60,
          "min": 60, "mins": 60, "hour": 3600, "hours": 3600}
@@ -368,6 +370,8 @@ def _admit(name: str, args: dict, request_text: str, launched: set, dirs: dict):
 
 
 def _timeout(text: str) -> int | None:
+    if re.search(r"\bhalf an? hour\b", text):
+        return 1800
     match = re.search(r"\b(\d+|" + "|".join(map(re.escape, _NUMBERS)) + r")\s+(" +
                       "|".join(_UNIT) + r")\b", text)
     if not match:

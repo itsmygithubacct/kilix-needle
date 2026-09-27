@@ -185,6 +185,18 @@ class Runner(unittest.TestCase):
             delivered = [a for a in sent if a[:2] == ["agent-control", "send"]]
             self.assertEqual(bool(delivered), outcome == "done", activity)
 
+    def test_unknown_states_and_a_busy_omp_hold_the_message(self):               # KX-R13-16
+        tell = agents.Action("tell", {"session": "qwen-omp@kilix", "text": "also run the suite"})
+        for provider, activity, outcome in (("omp", "working", "failed"), ("omp", "idle", "done"),
+                                            ("codex", "unknown", "failed"),
+                                            ("codex", "agent", "failed")):
+            panes = {"panes": [{"pane_id": 3, "activity": activity, "broker": "c" * 16,
+                                "coding_session": {"provider": provider, "cwd": "/w/kilix"}}]}
+            action = tell if provider == "omp" else agents.Action(
+                "tell", {"session": "codex@kilix", "text": "x y"})
+            results, _ = self.run_actions([action], panes)
+            self.assertEqual(results[0]["outcome"], outcome, (provider, activity))
+
     def test_it_is_the_pane_this_request_launched(self):
         actions = [agents.Action("agent", {"agent": "codex", "dir": "kilix"}),
                    agents.Action("wait", {"session": "it", "for": "idle"})]

@@ -196,9 +196,20 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
                         None)
             if pane is None:
                 raise AgentsError(f"pane {pane_id} is gone")
-            if pane.get("activity") == "waiting":
+            activity = pane.get("activity")
+            agent = PROVIDER_AGENT.get(str((pane.get("coding_session") or {}).get("provider")
+                                           or ""), "")
+            if activity == "waiting":
                 raise AgentsError("the session is waiting on an approval or a menu; the "
                                   "message is held so it can't answer that")
+            if activity in ("unknown", "agent", None):
+                raise AgentsError("the session's state can't be read, so the message is held; "
+                                  "ask to wait until it is done first")
+            if agent == "qwen-omp" and activity != "idle":
+                # omp's files can't show an approval prompt (review R13, KX-R13-16):
+                # only an idle omp session takes a message.
+                raise AgentsError("a qwen-omp session takes a message only when idle; ask to "
+                                  "wait until it is done first")
             broker = pane.get("broker") or ""
             argv = ["agent-control", "send", str(pane_id), "--expect-broker", broker,
                     "--text", action.args["text"], "--submit"]
