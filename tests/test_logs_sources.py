@@ -143,3 +143,85 @@ class BoundaryTests(unittest.TestCase):
             out = read_source(str(path), "claude")
             self.assertEqual(out["source"]["session_id"], "")
             self.assertEqual(out["records"][0]["session_id"], "")
+
+
+class ReviewRegressionTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = Path(self.tmp.name) / "source.jsonl"
+
+    def rows(self, *items):
+        self.path.write_bytes(b"".join(json.dumps(item).encode() + b"\n" for item in items))
+
+    def test_conflicting_and_late_identities(self):
+        def user(text, identity=None):
+            return {"type": "user", "sessionId": identity,
+                    "message": {"role": "user", "content": text}}
+        self.rows(user("A", "A"), user("B", "B"))
+        out = read_source(self.path, "claude")
+        self.assertEqual([r["text"] for r in out["records"]], ["A"])
+        self.assertEqual(out["errors"][0]["code"], "session_conflict")
+        self.rows(user("unknown"), user("B", "B"))
+        out = read_source(self.path, "claude")
+        self.assertEqual([r["session_id"] for r in out["records"]], ["B"])
+        self.assertEqual([r["text"] for r in out["records"]], ["B"])
+        self.assertIn("identity_unknown", {gap["code"] for gap in out["coverage"]["gaps"]})
+        self.rows({"type": "session_meta", "payload": {"id": "A"}},
+                  {"type": "session_meta", "payload": {"id": "B"}})
+        self.assertEqual(read_source(self.path, "codex")["errors"][0]["code"], "session_conflict")
+
+    def test_generation_changes_for_rewrite_and_append(self):
+        self.path.write_bytes(b"PASS\n")
+        first = read_source(self.path, "raw")
+        self.path.write_bytes(b"FAIL\n")
+        second = read_source(self.path, "raw")
+        self.assertNotEqual(first["source"]["generation"], second["source"]["generation"])
+        self.assertNotEqual(first["records"][0]["record_id"], second["records"][0]["record_id"])
+        with self.path.open("ab") as stream:
+            stream.write(b"MORE\n")
+        third = read_source(self.path, "raw")
+        self.assertNotEqual(second["source"]["generation"], third["source"]["generation"])
+
+    def test_raw_gaps_cover_unread_suffix(self):
+        for data in (b"good\n\xff\nlater\n", "good\n\u009bfake\nlater\n".encode()):
+            self.path.write_bytes(data)
+            out = read_source(self.path, "raw")
+            self.assertEqual(out["coverage"]["gaps"][0]["byte_end"], len(data))
+
+    def test_plain_archive_is_rejected(self):
+        path = self.path.with_suffix(".zst")
+        path.write_bytes(b"NOT AN ARCHIVE\n")
+        with self.assertRaises(SourceError) as raised:
+            read_source(path, "raw")
+        self.assertEqual(raised.exception.code, "invalid_archive")
+
+    def test_malformed_row_keeps_other_records(self):
+        self.rows({"type": "user", "sessionId": "A", "message": {"role": "user", "content": "before"}},
+                  {"type": []},
+                  {"type": "user", "sessionId": "A", "message": {"role": "user", "content": "after"}})
+        out = read_source(self.path, "claude")
+        self.assertEqual([r["text"] for r in out["records"]], ["before", "after"])
+        self.assertEqual(out["errors"][0]["code"], "unsupported_record")
+        self.assertFalse(out["coverage"]["complete"])
+
+    def test_invalid_source_arguments_have_source_errors(self):
+        for path, provider in (([], "raw"), (self.path, [])):
+            with self.subTest(path=path, provider=provider):
+                with self.assertRaises(SourceError):
+                    read_source(path, provider)
+
+    def test_normalization_deadline_covers_adapter(self):
+        self.rows({"type": "user", "sessionId": "A", "message": {"role": "user", "content": "one"}},
+                  {"type": "user", "sessionId": "A", "message": {"role": "user", "content": "two"}})
+        from needle_logs.sources import _readers
+        real = _readers()
+        clock = [0.0]
+        def slow(provider, row):
+            clock[0] += 31
+            return real(provider, row)
+        with patch("needle_logs.sources.time.monotonic", side_effect=lambda: clock[0]), patch("needle_logs.sources._readers", return_value=slow):
+            out = read_source(self.path, "claude")
+        self.assertEqual(out["records"], [])
+        self.assertEqual(out["errors"][0]["code"], "source_timeout")
+        self.assertEqual(out["coverage"]["gaps"][0]["byte_end"], len(self.path.read_bytes()))

@@ -90,8 +90,11 @@ def read(arguments: dict) -> dict:
                     return _error("invalid_input", "search requires query", 2)
                 # This path is intentionally explicit; coordinator adds session resolution.
                 from .sources import read_source
-                source_result = read_source(path, provider)
-                if source_result["source"]["provider"] != provider or Path(source_result["source"]["path"]).resolve() != Path(path).resolve():
+                source_result = (read_source(path, provider, binding=resolved)
+                                 if session and "root" in resolved else read_source(path, provider))
+                if (source_result["source"]["provider"] != provider or
+                        (source_result["source"]["path"] != str(Path(path).absolute()) if session
+                         else Path(source_result["source"]["path"]).resolve() != Path(path).resolve())):
                     return _error("source_mismatch", "reader returned another source", 1)
                 if expected_session and source_result["source"]["session_id"] != expected_session:
                     return _error("source_mismatch", "resolved session does not match source", 1)

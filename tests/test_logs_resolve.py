@@ -6,6 +6,7 @@ import unittest
 from unittest import mock
 
 from needle_logs.resolve import ResolveError, resolve_source, check_binding
+from needle_logs.sources import SourceError, read_source
 
 
 class ResolveTests(unittest.TestCase):
@@ -62,6 +63,64 @@ class ResolveTests(unittest.TestCase):
         with self.assertRaises(ResolveError) as raised:
             resolve_source("23", tree=self.tree)
         self.assertEqual(raised.exception.code, "source_unavailable")
+
+    def test_discovered_file_swap_cannot_read_outside_root(self):
+        candidate = self.root / f"{self.broker}.log"
+        outside = self.root.parent / f"{self.root.name}-outside-synthetic.log"
+        outside.write_bytes(b"OUTSIDE ROOT SYNTHETIC\n")
+        self.addCleanup(outside.unlink)
+        parked = self.root / "parked.log"
+        binding = resolve_source("23", tree=self.tree)
+        real_open = os.open
+        swapped = [False]
+        def race(path, flags, *args, **kwargs):
+            if path == candidate.name and kwargs.get("dir_fd") is not None and not swapped[0]:
+                swapped[0] = True
+                candidate.rename(parked)
+                candidate.symlink_to(outside)
+            return real_open(path, flags, *args, **kwargs)
+        try:
+            with mock.patch("needle_logs.sources.os.open", side_effect=race):
+                with self.assertRaises(SourceError) as raised:
+                    read_source(binding["path"], binding["provider"], binding=binding)
+            self.assertEqual(raised.exception.code, "source_changed")
+            self.assertTrue(swapped[0])
+        finally:
+            if candidate.is_symlink():
+                candidate.unlink()
+            if parked.exists():
+                parked.rename(candidate)
+        with mock.patch("needle_logs.resolve.snapshot", return_value=self.tree):
+            check_binding(binding)
+
+    def test_cli_passes_discovered_root_binding(self):
+        from needle_logs.cli import read
+        candidate = self.root / f"{self.broker}.log"
+        outside = self.root.parent / f"{self.root.name}-outside-cli-synthetic.log"
+        outside.write_bytes(b"OUTSIDE ROOT SYNTHETIC\n")
+        self.addCleanup(outside.unlink)
+        parked = self.root / "parked-cli.log"
+        real_open = os.open
+        swapped = [False]
+        def race(path, flags, *args, **kwargs):
+            if path == candidate.name and kwargs.get("dir_fd") is not None and not swapped[0]:
+                swapped[0] = True
+                candidate.rename(parked)
+                candidate.symlink_to(outside)
+            return real_open(path, flags, *args, **kwargs)
+        try:
+            with mock.patch("needle_logs.resolve.snapshot", return_value=self.tree), \
+                 mock.patch("needle_logs.sources.os.open", side_effect=race):
+                result = read({"operation": "events", "session": "23",
+                               "cache_path": str(self.root / "cache" / "index.sqlite3")})
+            self.assertTrue(swapped[0])
+            self.assertEqual(result["status"], "error")
+            self.assertEqual(result["errors"][0]["code"], "source_changed")
+        finally:
+            if candidate.is_symlink():
+                candidate.unlink()
+            if parked.exists():
+                parked.rename(candidate)
 
 
 if __name__ == "__main__":

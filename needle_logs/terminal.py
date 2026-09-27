@@ -15,15 +15,15 @@ def plain_lines(data: bytes):
         end = offset + len(raw)
         if not raw.endswith(b"\n"):
             return lines, [{"code": "partial_eof", "byte_start": offset,
-                            "byte_end": end, "message": "unfinished raw line"}]
+                            "byte_end": len(data), "message": "unfinished raw line; suffix omitted"}]
         try:
             text = raw[:-1].decode("utf-8")
         except UnicodeDecodeError:
             return lines, [{"code": "invalid_utf8", "byte_start": offset,
-                            "byte_end": end, "message": "invalid UTF-8 raw line"}]
+                            "byte_end": len(data), "message": "invalid UTF-8 raw line; suffix omitted"}]
         if any(0x7f <= ord(char) <= 0x9f or 0x202a <= ord(char) <= 0x202e or 0x2066 <= ord(char) <= 0x2069 for char in text):
             return lines, [{"code": "terminal_controls", "byte_start": offset,
-                            "byte_end": end, "message": "Unicode terminal controls require replay"}]
+                            "byte_end": len(data), "message": "Unicode terminal controls require replay; suffix omitted"}]
         lines.append((offset, end, text))
         offset = end
     return lines, []

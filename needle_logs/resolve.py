@@ -116,7 +116,22 @@ def _inside(path: Path, roots: list[Path]) -> bool:
     return any(real.is_relative_to(root.expanduser().resolve()) for root in roots)
 
 
-def _structured_path(provider: str, raw_path: str) -> Path | None:
+def _bound(path: Path, root: Path) -> dict:
+    """Capture the identities that the reader must open again by descriptor."""
+    path = path.absolute()
+    root = root.absolute()
+    try:
+        relative = path.relative_to(root)
+        root_stat = root.stat()
+        source_stat = path.stat()
+    except (OSError, ValueError) as exc:
+        raise ResolveError("source_changed", "recording binding changed") from exc
+    return {"path": str(path), "root": str(root), "relative_path": str(relative),
+            "root_device": root_stat.st_dev, "root_inode": root_stat.st_ino,
+            "source_device": source_stat.st_dev, "source_inode": source_stat.st_ino}
+
+
+def _structured_path(provider: str, raw_path: str) -> tuple[Path, Path] | None:
     home = Path.home()
     roots = {
         "claude": [Path(os.environ.get("CLAUDE_CONFIG_DIR") or home / ".claude") / "projects"],
@@ -132,20 +147,24 @@ def _structured_path(provider: str, raw_path: str) -> Path | None:
         raise ResolveError("source_outside_root", "recorded session path is outside its provider root")
     if not path.is_file():
         return None
-    return path
+    for root in roots[provider]:
+        if path.absolute().is_relative_to(root.expanduser().absolute()):
+            return path, root.expanduser()
+    raise ResolveError("source_outside_root", "recorded path traverses outside its provider root")
 
 
 def resolve_source(selector: str, *, tree: dict | None = None) -> dict:
     pane = _pick(selector, snapshot() if tree is None else tree)
     coding = _session(pane)
     provider = str(coding.get("provider") or "")
-    path = _structured_path(provider, str(coding.get("path") or ""))
+    structured = _structured_path(provider, str(coding.get("path") or ""))
     session_id = str(coding.get("session_id") or "")
     broker = _broker(pane)
     binding = {"pane_id": pane["pane_id"], "expected_broker_id": broker,
                "expected_session_id": session_id if session_id != "unknown" else None}
-    if path is not None:
-        return binding | {"path": str(path), "provider": provider, "source_kind": "structured"}
+    if structured is not None:
+        path, root = structured
+        return binding | _bound(path, root) | {"provider": provider, "source_kind": "structured"}
     if not re.fullmatch(r"[0-9a-f]{16,64}", broker):
         raise ResolveError("source_unavailable", "pane has no verified recording identity")
     base = Path(os.environ.get("GPU_TERMINAL_HOME") or Path.home() / ".local/gpu_terminal")
@@ -156,13 +175,14 @@ def resolve_source(selector: str, *, tree: dict | None = None) -> dict:
         if candidate.is_file():
             if not _inside(candidate, [root]):
                 raise ResolveError("source_outside_root", "pane recording escapes its transcript root")
-            return binding | {"path": str(candidate), "provider": "raw", "source_kind": "raw"}
+            return binding | _bound(candidate, root) | {"provider": "raw", "source_kind": "raw"}
     raise ResolveError("source_unavailable", "pane has no available structured or raw recording")
 
 
 def check_binding(binding: dict) -> None:
     """After a read, ensure the pane still denotes the inspected recording."""
     current = resolve_source(str(binding["pane_id"]))
-    keys = ("path", "provider", "expected_broker_id", "expected_session_id")
+    keys = ("path", "provider", "expected_broker_id", "expected_session_id",
+            "root", "root_device", "root_inode", "relative_path", "source_device", "source_inode")
     if any(current.get(key) != binding.get(key) for key in keys):
         raise ResolveError("source_changed", "pane source changed during the read; retry")

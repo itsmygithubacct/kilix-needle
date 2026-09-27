@@ -5,6 +5,17 @@ adapt_record = _readers()
 
 
 class AdapterTests(unittest.TestCase):
+    def test_pinned_reader_ignores_unrelated_installed_module(self):
+        import sys
+        import types
+        from unittest.mock import patch
+        unrelated = types.ModuleType("kilix_rollout.records")
+        unrelated.adapt_record = lambda *_: {"records": [{"text": "UNRELATED"}], "excluded": [], "errors": []}
+        with patch.dict(sys.modules, {"kilix_rollout.records": unrelated}):
+            reader = _readers()
+            out = reader("claude", {"type": "user", "message": {"role": "user", "content": "pinned"}})
+        self.assertEqual(out["records"][0]["text"], "pinned")
+
     def test_codex_roles_and_exclusions(self):
         rows = [
             {"type": "response_item", "payload": {"type": "message", "role": "developer", "content": [{"type": "input_text", "text": "private"}]}},
