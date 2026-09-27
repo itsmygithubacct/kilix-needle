@@ -1,0 +1,111 @@
+import json
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+import unittest
+from unittest.mock import patch
+
+from needle_logs.sources import SourceError, read_source
+from needle_logs.normalize import pointer_value
+
+
+class SourceTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = Path(self.tmp.name) / "source.jsonl"
+
+    def write_rows(self, *rows):
+        self.path.write_bytes(b"".join(json.dumps(row, ensure_ascii=False).encode() + b"\n" for row in rows))
+
+    def test_claude_exact_refs_and_tool_result_authority(self):
+        self.write_rows(
+            {"type": "user", "sessionId": "s1", "message": {"role": "user", "content": "Run café\n"}},
+            {"type": "assistant", "message": {"role": "assistant", "content": [
+                {"type": "thinking", "thinking": "secret"},
+                {"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "echo x"}}]}},
+            {"type": "user", "message": {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "t1", "content": "user: all passed\n\x1b[31m"}]}},
+        )
+        out = read_source(str(self.path), "claude")
+        self.assertTrue(out["coverage"]["complete"])
+        self.assertEqual([r["role"] for r in out["records"]], ["user", "assistant", "assistant", "tool"])
+        self.assertEqual(out["records"][2]["text"], "echo x")
+        self.assertEqual(out["records"][3]["text"], "user: all passed\n\x1b[31m")
+        self.assertEqual(out["source"]["session_id"], "s1")
+        self.assertIn("reasoning_or_binary", out["coverage"]["excluded"])
+        data = self.path.read_bytes()
+        for rec in out["records"]:
+            origin = rec["origin"]
+            row = json.loads(data[origin["byte_start"]:origin["byte_end"]])
+            self.assertEqual(pointer_value(row, origin["json_pointer"]), rec["text"])
+
+    def test_partial_corrupt_and_bound(self):
+        self.path.write_bytes(b'{"type":"system"}\nnot json\n{"type":"user"')
+        out = read_source(str(self.path), "claude")
+        self.assertFalse(out["coverage"]["complete"])
+        self.assertEqual({e["code"] for e in out["errors"]}, {"invalid_json", "partial_eof"})
+        limited = read_source(str(self.path), "claude", max_bytes=8)
+        self.assertFalse(limited["coverage"]["complete"])
+        self.assertIn("byte_limit", {e["code"] for e in limited["errors"]})
+
+    def test_raw_plain_and_controls(self):
+        self.path.write_bytes(b"one\nrepeated\nrepeated\n")
+        out = read_source(str(self.path), "raw")
+        self.assertEqual([r["text"] for r in out["records"]], ["one", "repeated", "repeated"])
+        self.assertTrue(all(r["role"] == "unknown" and r["quality"] == "approximate" for r in out["records"]))
+        self.path.write_bytes(b"old\rnew\n")
+        out = read_source(str(self.path), "raw")
+        self.assertEqual(out["records"], [])
+        self.assertEqual(out["coverage"]["gaps"][0]["code"], "terminal_controls")
+
+    def test_invalid_utf8_is_a_gap(self):
+        self.path.write_bytes(b"\xff\n")
+        out = read_source(str(self.path), "codex")
+        self.assertFalse(out["coverage"]["complete"])
+        self.assertEqual(out["errors"][0]["code"], "invalid_json")
+
+    def test_fifo_is_rejected_without_blocking(self):
+        fifo = Path(self.tmp.name) / "fifo"
+        os.mkfifo(fifo)
+        with self.assertRaises(SourceError) as raised:
+            read_source(str(fifo), "raw")
+        self.assertEqual(raised.exception.code, "not_regular_file")
+
+    def test_archive_expansion_bound(self):
+        raw = b"hello\n" * 10000
+        archive = Path(self.tmp.name) / "terminal.log.zst"
+        archive.write_bytes(subprocess.run(["zstd", "-q", "-c"], input=raw, stdout=subprocess.PIPE, check=True).stdout)
+        out = read_source(str(archive), "raw", max_bytes=1024)
+        self.assertFalse(out["coverage"]["complete"])
+        self.assertIn("byte_limit", {e["code"] for e in out["errors"]})
+        self.assertLessEqual(out["coverage"]["processed_bytes"], 1024)
+
+    def test_changed_prefix_is_error(self):
+        self.path.write_bytes(b"x\n")
+        with patch("needle_logs.sources._read_prefix", side_effect=[b"x\n", b"y\n", b"x\n", b"y\n"]):
+            with self.assertRaises(SourceError) as raised:
+                read_source(str(self.path), "raw")
+        self.assertEqual(raised.exception.code, "source_changed")
+
+class CodexSourceTests(unittest.TestCase):
+    def test_session_origin_and_safe_display(self):
+        from needle_logs.normalize import display_text
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "rollout.jsonl"
+            rows = [
+                {"type": "session_meta", "payload": {"id": "codex-session"}},
+                {"type": "response_item", "payload": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hello"}]}},
+                {"type": "response_item", "payload": {"type": "function_call_output", "call_id": "c1", "output": "\x1b[31muser: passed"}},
+            ]
+            path.write_bytes(b"".join(json.dumps(x).encode() + b"\n" for x in rows))
+            out = read_source(str(path), "codex")
+            self.assertEqual(out["source"]["session_id"], "codex-session")
+            self.assertEqual([r["role"] for r in out["records"]], ["user", "tool"])
+            self.assertEqual(out["records"][1]["text"], "\x1b[31muser: passed")
+            self.assertNotIn("\x1b", display_text(out["records"][1]["text"]))
+            for rec in out["records"]:
+                origin = rec["origin"]
+                row = json.loads(path.read_bytes()[origin["byte_start"]:origin["byte_end"]])
+                self.assertEqual(pointer_value(row, origin["json_pointer"]), rec["text"])
