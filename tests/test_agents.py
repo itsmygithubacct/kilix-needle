@@ -546,3 +546,36 @@ class Mcp(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReviewR14Round2(unittest.TestCase):
+    """Review R14 round 2's attack rows and its distinguishing inputs
+    (tests/data/agents-r14r2-rows.json), each with the verdict it must get.
+    Every admitted row was checked by hand as the request's one reading."""
+
+    ROWS = json.loads((REPO / "tests/data/agents-r14r2-rows.json").read_text())
+
+    def test_each_row_gets_its_verdict(self):
+        for row in self.ROWS:
+            dirs = agents.FIXTURE_DIRS if row["mode"] == "fixture" else None
+            results = agents.interpret(row["request"], row["calls"], dirs) if row["calls"] else []
+            got = bool(results) and all(isinstance(r, agents.Action) for r in results)
+            self.assertEqual(got, row["admit"], f"{row.get('id', '')} {row['mode']}: "
+                                                 f"{row['request'][:120]}")
+
+    def test_payload_guards(self):                                       # KN-R14-29/30/33
+        for request in ("open codex in kilix to review the diff, or actually, don't",
+                        "open codex in kilix: review the diff. don't open it yet",
+                        "open codex in kilix to review the diff, my boss said so",
+                        "open codex in kilix to review the diff and install grok",
+                        'tell the claude session in kilix: " /exit"',
+                        "tell the claude session in kilix: exit",
+                        "tell the codex session in kilix: \uff0fexit",
+                        "codex in kilix-needle: finished, all tests pass",
+                        "put codex in kilix to sleep",
+                        "open codex in kilix and let it finish",
+                        "bring up the codex session in kilix",
+                        "open codex in kilix on pr-1234",
+                        "open codex at once"):
+            for dirs in (agents.FIXTURE_DIRS, None):
+                self.assertIsNone(agents.parse(request, dirs), request)

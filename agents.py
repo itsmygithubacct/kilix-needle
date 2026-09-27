@@ -93,7 +93,7 @@ TOOLS = [
          "wait": {"type": "boolean", "description": "wait until it is idle first"}},
          "required": ["session", "text"]}},
 ]
-MAX_REQUEST = 4096
+MAX_REQUEST = 2048                 # a message is at most 1024 bytes; parsing is at worst cubic
 TOOL_NAMES = frozenset(tool["name"] for tool in TOOLS)
 ARG_NAMES = {tool["name"]: frozenset(tool["parameters"]["properties"]) for tool in TOOLS}
 
@@ -164,7 +164,7 @@ _RESUME = re.compile(r"(?:resume|continue|reopen|pick (?:back )?up|bring back|pi
 _WAIT = re.compile(r"(?P<verb>wait|block|hold on|hang on|hold|sit tight|watch|monitor|"
                    r"keep an eye on)\b")
 _TELL = re.compile(r"(?P<verb>(?:a )?(?:quick )?(?:message|note) for|tell|ask|message|ping|"
-                   r"instruct|send|let|steer|give|say)\b")
+                   r"instruct|send|let|steer|give|say|get)\b")
 _NOTE = r"(?: this| this note| this message| this input| the message| a message| a note|"  \
         r" a quick message| a quick note)"
 _TITLED = re.compile(r" (?:titled|called|named) (?P<t>[\w.-]+(?: [\w.-]+){0,5}?)"
@@ -184,7 +184,7 @@ _PLACE = [
     (re.compile(r",? (below|beneath|under|underneath|above) this pane\b"), None),
     (re.compile(r",? (?:to the )?(right|left) of this pane\b"), None),
     (re.compile(r",? (below|beneath|underneath)(?= (?:in|at|inside|within)\b|,|:|$)"), None),
-    (re.compile(r",? (?:in|as) (?:a )?(?:new |separate |its own )?tab\b"), "tab"),
+    (re.compile(r",? (?:(?:in|as) (?:a )?(?:new |separate |its own )?|(?:a )?new )tab\b"), "tab"),
 ]
 _SIDE = {"right": "right", "left": "left", "down": "down", "up": "up", "below": "down",
          "beneath": "down", "under": "down", "underneath": "down", "above": "up"}
@@ -192,6 +192,10 @@ _MODEL_TOKEN = r"(?P<m>[a-z0-9][a-z0-9._:-]*[a-z0-9]|[a-z0-9])"
 _MODEL = [re.compile(rf",? (?:using |with |on |via )?(?:the )?model:? {_MODEL_TOKEN}{_END}"),
           re.compile(rf",? (?:using|with|on|via) {_MODEL_TOKEN}{_END}")]
 _MODEL_WORDS = frozenset("opus sonnet haiku fable mythos".split())
+# Without the word "model", a model is named by its family ("with gpt-6",
+# "on opus"), never any token with a digit ("on pr-1234", "using python3").
+_MODEL_FAMILY = re.compile(r"(?:gpt|o[1-9]|opus|sonnet|haiku|fable|mythos|claude|grok|qwen|kimi|"
+                           r"gemini|llama|deepseek|mistral|codex)(?:[-.:]?[a-z0-9]+)*")
 _STOP = frozenset("""a an the my our your this that it its last latest previous prior recent
 old older other whatever same one most earlier in at inside within under here with using on to
 and split for of""".split())
@@ -241,8 +245,35 @@ install uninstall reinstall update upgrade download skip bypass""".split())
 # A payload after "and" may not start with a job verb ("and close the claude
 # session"); after "to", not with a verb that controls a session ("get codex
 # to stop"). Neither may touch permissions anywhere.
-_WEAK_HEAD = {"and": _JOB_HEAD, "to": _CONTROL_HEAD}
+_WEAK_HEAD = {"and": _JOB_HEAD, "to": _CONTROL_HEAD | frozenset(
+    "sleep bed completion rest finish finished idle wait it done work".split())}
+_QUOTES_AND_BLANKS = " \t\"'`\u2018\u2019\u201c\u201d\u00ab\u00bb\u2800\u3000"
+_EXIT_WORDS = frozenset("exit quit q bye logout :q :wq :q! :x".split())
+# Whatever a payload says, it is refused when a part of it takes the request
+# back, reports someone else, asks whether to go ahead, says not to do the
+# action now, or closes/installs an agent: those speak to this tool, not to
+# the session (review R14 round 2, KN-R14-29).
+_TAKE_BACK = re.compile(r"\b(?:cancel (?:that|it|this)|never ?mind|nvm|scratch that|jk|just kidding|"
+                        r"kidding|forget (?:it|that)|no wait|wait,? no|actually,? (?:no|don'?t|cancel)|"
+                        r"or (?:actually,? )?(?:don'?t|not))\b")
+_REPORTED = re.compile(r"\b(?:(?:my |the |our )?(?:boss|friend|colleague|manager|someone|somebody|"
+                       r"he|she|they) (?:said|says|told|wants|asked)|said so|according to)\b")
+_ASKING = re.compile(r"\b(?:should (?:i|we)\b|or should\b|or not\b|is (?:that|it|this) "
+                     r"(?:ok|okay|safe|fine|allowed)\b)")
+_NOT_NOW = re.compile(r"\b(?:don'?t|do not|never|no need to)\s+(?:open|start|launch|run|send|do) "
+                      r"(?:it|that|this|them)\b|\bnot (?:yet|now)\b")
+_COURTESY_TAIL = re.compile(r"(?:[,.!]? (?:thanks|thank you|thx|ty|cheers|please|pls))?[.!]*$")
 _LEAD = frozenset("then and also now please pls so next afterwards after that just".split())
+_CONTROL_AGENT = re.compile(
+    r"\b(?:close|kill|quit|exit|stop|terminate|end|install|uninstall|reinstall|update|upgrade|"
+    r"download)\b(?:\W+[\w'-]+){0,3}?\W+(?:" + _alternation(_AGENT_ALIAS) + r")" + _END +
+    r"|\b(?:close|kill|quit|exit|terminate)\b(?:\W+(?:the|this|that|your|its|my|all))?\W+"
+    r"(?:session|sessions|pane|panes|tab|tabs|window)\b")
+# Words after "in"/"at" that are not directories ("at once", "in the background").
+_NOT_A_DIR = frozenset("""once background foreground tmux screen parallel progress charge
+supervision general time order place case turn full detail private public secret silence
+peace sequence batch bulk total fact short advance addition particular front back middle
+charge person mind review debug verbose quiet silent sandbox docker container""".split())
 _PERMISSION = re.compile(r"yolo|danger|bypass|approv|permission|sandbox|unsafe|full-?auto|"
                          r"^auto$|trust")
 _REFUSE = [
@@ -357,6 +388,7 @@ class _Reader:
         name = re.compile(r"(?:the )?(?P<n>[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?)"
                           rf"(?: (?:{'|'.join(_DIR_SUFFIX)}))?{_END}").match(self.low, start)
         if name and name["n"] not in _STOP and name["n"] not in _AGENT_ALIAS \
+                and name["n"] not in _NOT_A_DIR \
                 and name["n"] not in _MODEL_WORDS and name["n"] not in _SIDE \
                 and not _PERMISSION.search(name["n"]):
             return self.org[start:name.end()], name.end()
@@ -367,7 +399,7 @@ class _Reader:
         if re.compile(r"it\b(?!')|it(?='s )").match(self.low, pos):
             named = _last_session(acts)
             return (named, pos + 2) if named else None
-        det = re.compile(r"(?:the |that |this )?(?:other |same )?").match(self.low, pos)
+        det = re.compile(r"(?:the |that |this )?(?:same )?").match(self.low, pos)
         got = self.agent(det.end())
         if not got:
             return None
@@ -415,7 +447,7 @@ class _Reader:
         self.dead.add(state)
         return None
 
-    def payload(self, start, acts, make, weak=None, strict=False):
+    def payload(self, start, acts, make, weak=None, strict=False, tell=False):
         """A payload from start to the first separator after which the rest
         reads as clauses, else to the end; make(payload) is its action.
         After ":" (strict) only "; " or ", then" end it; and a payload that
@@ -425,15 +457,18 @@ class _Reader:
             return None
         for sep in _PAYLOAD_END.finditer(self.low, start):
             text = Payload(self.org[start:sep.start()])
-            if strict and not _SEQUENCE.fullmatch(sep[0]) or not _payload_ok(text, weak):
+            if strict and not _SEQUENCE.fullmatch(sep[0]) or not _payload_ok(
+                    text, weak, tell and not strict):
                 continue
             if _SUBORDINATE.search(_lower(text.text)):
                 break
             rest = self.chain(sep.end(), acts + (make(text),))
             if rest:
                 return rest
-        text = Payload(self.org[start:self.n].rstrip())
-        return acts + (make(text),) if _payload_ok(text, weak) else None
+        # A closing ", thanks" is said to this tool, not part of the payload.
+        end = _COURTESY_TAIL.search(self.low, start).start()
+        text = Payload(self.org[start:end].rstrip())
+        return acts + (make(text),) if _payload_ok(text, weak, tell and not strict) else None
 
     def launch(self, pos, acts):
         front = None
@@ -470,9 +505,12 @@ class _Reader:
             if not self.low.startswith(" ", pos):
                 return None
             pos += 1
-        elif not (not acts or acts[-1].kind == "agent"):
+        elif acts and acts[-1].kind != "agent" or not acts and pos != 0:
             return None             # terse "codex in kilix" opens a request or follows a launch
-        got = self.agent(_DET.match(self.low, pos).end())
+        det = _DET.match(self.low, pos)
+        if not resuming and re.search(r"\b(?:the|my|our|this|that)\b", det[0]):
+            return None             # "bring up the codex session": one that exists already
+        got = self.agent(det.end())
         if got:
             agent, pos = got
         elif resuming and "resume" in found:
@@ -503,6 +541,11 @@ class _Reader:
         agent = agent or found.pop("agent", None)
         if not agent or "dir" not in found or resuming != ("resume" in found):
             return None
+        if verb and verb[0] == "put" and "place" not in found:
+            return None             # "put codex in kilix on hold / to sleep"
+        if _PERMISSION.search(_lower(found.get("resume") or "")):
+            return None
+        terse = not verb and not acts
         if found.get("resume") and _STOP & set(_fold(found["resume"]).split()):
             return None
 
@@ -511,12 +554,16 @@ class _Reader:
                          resume=found.get("resume"), model=found.get("model"),
                          place=None if found.get("place") in (None, "tab") else found["place"])
         # A task: strong markers, then "and tell it to", then more clauses, then weak.
-        strong = re.compile(r"(?::|,? -|,? (?:with |on )?(?:the |this |a )?(?:task|prompt)[:,]?) "
+        strong = re.compile(r"(?::|,? -|,? (?:with |on )?(?:the |this |a )?(?P<task>task|prompt)[:,]?) "
                             ).match(self.low, pos)
+        if terse and not (strong and strong["task"]):
+            # A bare "codex in kilix: done" is a status line or an address,
+            # not a launch; a terse launch takes only "task:".
+            return self.after(pos, acts + (make(),)) if not strong else None
         if strong:
             return self.payload(strong.end(), acts, make, strict=True)
         told = re.compile(r",? and (?:tell it to|(?:tell|message|ping|send) it:|ask it to|have it|"
-                          r"get it to|let it) "
+                          r"get it to) "
                           ).match(self.low, pos)
         if told:
             # An explicit task for the new session: data, like after ":".
@@ -550,11 +597,11 @@ class _Reader:
             for index, pattern in enumerate(_MODEL):
                 m = pattern.match(self.low, pos)
                 if m and m["m"] not in _AGENT_ALIAS and not _PERMISSION.search(m["m"]) and (
-                        index == 0 or re.search(r"\d", m["m"]) or m["m"] in _MODEL_WORDS):
+                        index == 0 or _MODEL_FAMILY.fullmatch(m["m"])):
                     return self.org[m.start("m"):m.end("m")], m.end()
             return None
         # resume: "session <id>" or a bare hex id
-        m = re.compile(rf" session(?: id)? {_ID}(?![\w.-])").match(self.low, pos) \
+        m = re.compile(rf",? session(?: id)? {_ID}(?![\w.-])").match(self.low, pos) \
             or _HEX.match(self.low, pos)
         if m and m["id"] not in _STOP:
             return self.org[m.start("id"):m.end("id")], m.end()
@@ -662,22 +709,26 @@ class _Reader:
                 marker = re.compile(r" know(?: that| this)?:? ").match(self.low, got[1])
             elif got and kind == "give":
                 marker = re.compile(_NOTE + r": ").match(self.low, got[1])
+            elif got and kind == "get":
+                marker = re.compile(r" to ").match(self.low, got[1])      # "get <session> to ..."
             elif got and kind.endswith(" for"):
                 marker = re.compile(r": ").match(self.low, got[1])
             elif got and kind == "steer":
                 marker = re.compile(r"(?: with this| with)?: ").match(self.low, got[1])
             elif got:
                 marker = re.compile(r"(?::|,? saying:|,? -| with this:| this:) "
-                                    r"|(?: to| that|,? saying) |(?= not to )").match(self.low, got[1])
+                                    r"|(?: to| that|,? saying) |(?= not to )|,? (?=[\"\u201c])"
+                                    ).match(self.low, got[1])
                 if marker and marker.end() == got[1]:
                     marker = re.compile(r" ").match(self.low, got[1])    # "... not to change X"
         if not got or not marker:
             return None
         session = got[0]
-        strict = ":" in marker[0] or " -" in marker[0] or kind in ("send", "say", "steer", "give") \
+        strict = ":" in marker[0] or " -" in marker[0] or self.low[marker.end():marker.end() + 1] in "\"\u201c" or kind in ("send", "say", "steer", "give") \
             or kind.endswith(" for")
         return self.payload(marker.end(), acts, lambda text: _want(
-            "tell", session=session, text=text, wait=True if cond else None), strict=strict)
+            "tell", session=session, text=text, wait=True if cond else None), strict=strict,
+            tell=True)
 
     def cond(self, pos, acts):
         head = _COND.match(self.low, pos)
@@ -713,17 +764,30 @@ def _last_session(acts) -> str | None:
     return acts[-1].get("session")
 
 
-def _payload_ok(payload: Payload, weak: str | None) -> bool:
+def _payload_ok(payload: Payload, weak: str | None, tell: bool = False) -> bool:
+    """Whether a span can be a payload at all (see the module docstring)."""
     text = _plain(payload.text)
-    if weak and _REFUSE[4][0].search(_lower(text)):
+    low = _lower(text)
+    if not text or len(text.encode()) > 4096:
         return False
-    if not text or text[0] in "-/!#@" or len(text.encode()) > 4096:
+    # Client commands: whatever the model sends (quotes dropped, typography
+    # plain, full-width forms folded), it must start with a letter or digit,
+    # and it is never one of the words that end a client's session.
+    bare = unicodedata.normalize("NFKC", text).lstrip(_QUOTES_AND_BLANKS)
+    if not bare or not bare[0].isalnum():
         return False
-    if len(text) > 1 and text[0] in "\"'`" and text[1:2] in "-/!#@":
+    if _fold(bare).rstrip(_QUOTES_AND_BLANKS + ".!") in _EXIT_WORDS:
         return False
-    if weak and _AGENT.match(_lower(text), _DET.match(_lower(text)).end()):
-        return False            # "and codex in research" is another launch, not a task
-    sentences = re.split(r"(?<=[.!?;])\s+", _lower(text))
+    if _REFUSE[4][0].search(low) or _TAKE_BACK.search(low) or _REPORTED.search(low) \
+            or _NOT_NOW.search(low) or _CONTROL_AGENT.search(low) or _ASKING.search(low):
+        return False
+    if weak and "?" in text:
+        return False
+    if (weak or tell) and any(_AGENT.match(low, _DET.match(low, m.end()).end())
+                              for m in re.finditer(r"(?:^|[,;] ?(?:and |then |and then )?| and (?:then )?| then )",
+                                                  low)):
+        return False            # "and codex in research" is another clause, not a task
+    sentences = re.split(r"(?<=[.!?;])\s+", low)
     for index, sentence in enumerate(sentences):
         words = re.findall(r"[a-z][a-z']*", sentence)
         while words and words[0] in _LEAD:
