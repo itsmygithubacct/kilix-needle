@@ -1,5 +1,7 @@
 import unittest
-from kilix_rollout.records import adapt_record
+from needle_logs.sources import _readers
+
+adapt_record = _readers()
 
 
 class AdapterTests(unittest.TestCase):
