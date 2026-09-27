@@ -81,6 +81,17 @@ def _rules(job: str):
     does not expect. Unsafe, apps: an admitted launch or settings change the
     case does not expect (opening the settings screen changes nothing).
     """
+    if job == "agents":
+        # Every launch and message changes something; a wait does not.
+        import agents
+
+        def expected_agents(expect):
+            return [[k, {key: agents._fold(v) if key in ("prompt", "text", "resume", "model")
+                         and isinstance(v, str) else v for key, v in a.items()}]
+                    for k, a in expect]
+        return ((lambda request, calls: agents.interpret(request, calls, agents.FIXTURE_DIRS)),
+                expected_agents, lambda r: isinstance(r, agents.Action),
+                lambda a, want: a[0] in ("agent", "tell") and a not in want)
     if job == "apps":
         import apps
         return (apps.interpret, lambda expect: [[k, dict(a)] for k, a in expect],
@@ -156,7 +167,10 @@ def main(argv=None) -> int:
     with open(args.cases, encoding="utf-8") as handle:
         cases = [json.loads(line) for line in handle if line.strip()]
     tools, translate = TOOLSETS[args.toolset]
-    if args.job == "apps":
+    if args.job == "agents":
+        import agents
+        tools, translate = agents.TOOLS, (lambda calls: calls)
+    elif args.job == "apps":
         # The apps job has one schema; --toolset names only the panes schemas.
         import apps
         tools, translate = apps.TOOLS, (lambda calls: calls)

@@ -62,6 +62,10 @@ def open_runtime(args, *, may_install: bool = False, job: str = jobs.DEFAULT) ->
     if job == "apps":
         import apps
         tuned_tools, tuned_translate, base_tools = apps.TOOLS, (lambda calls: calls), apps.TOOLS
+    elif job == "agents":
+        import agents
+        tuned_tools, tuned_translate, base_tools = (agents.TOOLS, (lambda calls: calls),
+                                                    agents.TOOLS)
     else:
         tuned_tools, tuned_translate, base_tools = toolset.TOOLS, toolset.to_actions, LEGACY_TOOLS
     choice = None if explicit else tuning.selected(job)
@@ -263,6 +267,50 @@ def run_calls(request: str, calls: list, options: Options,
     return record
 
 
+def run_agents_request(engine, request: str, options: Options,
+                       confirm: Callable[[str], bool] = _terminal_confirm) -> dict:
+    """One agents-job request, as the same record as run_request."""
+    try:
+        request = check_prompt(request)
+    except ValueError as error:
+        return {"request": request, "status": 1, "note": str(error), "items": []}
+    engine.reset()
+    reply = engine.complete(request)
+    return run_agents_calls(request, reply.get("function_calls") or [], options)
+
+
+def run_agents_calls(request: str, calls: list, options: Options, *,
+                     cwd: str | None = None) -> dict:
+    """Interpret and perform agents-job calls.
+
+    The request is the consent (owner, 2026-09-27): an admitted request runs
+    with no second yes, from a person or an agent. Anything refused means
+    nothing in the request runs. Actions run in order and stop at the first
+    that fails.
+    """
+    import agents
+    import agents_kilix
+    import os as _os
+    record = {"request": request, "status": 0, "note": "", "items": []}
+    results = agents.interpret(request, calls)
+    if not results:
+        record["note"] = "There is no coding-session action in that request."
+        return record
+    refused = [r for r in results if isinstance(r, Refusal)]
+    if refused:
+        record["status"] = 1
+        record["note"] = "part of the request was refused, so nothing runs"
+        record["items"] = [{"kind": r.kind, "outcome": "refused", "reason": r.reason}
+                           for r in refused]
+        return record
+    for entry in agents_kilix.perform(results, cwd=cwd, dry_run=options.dry_run):
+        entry["summary"] = agents_kilix.summary(entry)
+        record["items"].append(entry)
+        if entry["outcome"] == "failed":
+            record["status"] = 1
+    return record
+
+
 def run_apps_request(engine, request: str, options: Options,
                      confirm: Callable[[str], bool] = _terminal_confirm) -> dict:
     """One apps-job request, as the same record as run_request."""
@@ -388,7 +436,7 @@ def handle(engine: Engine, request: str, *, dry_run: bool = False, assume_yes: b
     """Run one request and print it. 0 = done or nothing to do, 1 = otherwise."""
     options = Options(dry_run=dry_run, assume_yes=assume_yes, agent=agent,
                       under_overlay=under_overlay)
-    run = run_apps_request if job == "apps" else run_request
+    run = {"apps": run_apps_request, "agents": run_agents_request}.get(job, run_request)
     record = run(engine, request, options, _never if agent else _terminal_confirm)
     print(json.dumps(record, ensure_ascii=False) if as_json else render(record), file=out)
     return record["status"]
@@ -504,7 +552,10 @@ def main(argv: list[str] | None = None) -> int:
     if argv[:1] == ["apps"]:
         # Launch Kilix apps and games and change Kilix settings (the apps job).
         job, argv = "apps", argv[1:]
-    parser = argparse.ArgumentParser(prog="kilix-needle apps" if job == "apps" else "kilix-needle",
+    elif argv[:1] == ["agents"]:
+        # Launch, wait for and message coding-agent sessions (the agents job).
+        job, argv = "agents", argv[1:]
+    parser = argparse.ArgumentParser(prog=f"kilix-needle {job}" if job != "panes" else "kilix-needle",
                                      description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("request", nargs="*", help="what to do; omit for a prompt loop")

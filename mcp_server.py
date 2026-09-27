@@ -9,6 +9,9 @@ Two tools per job, so a harness's own approval setting can tell them apart:
 - kilix_act    do it, as an agent: every check still applies, the caller's
                own pane and tab can never be closed, and closing, typing or
                starting a program runs only with confirm_risky=true
+- kilix_agents_plan / kilix_agents_act   the agents job: start, wait for and
+               message claude/codex/grok/qwen-omp sessions; the request is
+               the consent
 - kilix_apps_plan / kilix_apps_act   the same for the apps job: launching
                Kilix apps and games and changing Kilix settings, each only
                with confirm_risky=true and a plainly stated request; nothing
@@ -79,8 +82,33 @@ TOOL_LIST += [
                                           "installed, or a plainly stated settings change"}},
          "required": ["request"], "additionalProperties": False}},
 ]
+_AGENTS_REQUEST = {"type": "string",
+                   "description": "a plain request about coding-agent sessions (claude, codex, "
+                                  "grok, qwen-omp), e.g. 'open codex in kilix-needle: review "
+                                  "commit a42973f', 'wait until it is done', 'tell the claude "
+                                  "session in the os repo to also run the suite'"}
+TOOL_LIST += [
+    {"name": "kilix_agents_plan",
+     "description": "Show what a request would do to coding-agent sessions: which agent starts "
+                    "in which directory with which task, what is waited for, what message "
+                    "goes where. Runs nothing.",
+     "inputSchema": {"type": "object", "properties": {"request": _AGENTS_REQUEST},
+                     "required": ["request"], "additionalProperties": False}},
+    {"name": "kilix_agents_act",
+     "description": "Carry out a request on coding-agent sessions: start claude, codex, grok "
+                    "or qwen-omp in a directory (new tab or split, optional task, model or "
+                    "resume; the folder is trusted for that client), wait until a session is "
+                    "idle or asks something, or send a session a message (steering a working "
+                    "session is allowed; a message is held while the session waits on an "
+                    "approval). The request is the consent: no confirmation is needed. "
+                    "Approval skips follow Kilix's coding-yolo setting only. Anything the "
+                    "request says that no action accounts for refuses the whole request.",
+     "inputSchema": {"type": "object", "properties": {"request": _AGENTS_REQUEST},
+                     "required": ["request"], "additionalProperties": False}},
+]
 _JOB_OF = {"kilix_plan": "panes", "kilix_act": "panes",
-           "kilix_apps_plan": "apps", "kilix_apps_act": "apps"}
+           "kilix_apps_plan": "apps", "kilix_apps_act": "apps",
+           "kilix_agents_plan": "agents", "kilix_agents_act": "agents"}
 
 
 class Server:
@@ -118,7 +146,8 @@ class Server:
                     "isError": True}
         options = needle_cli.Options(dry_run=name.endswith("_plan"),
                                      assume_yes=name.endswith("_act") and confirm, agent=True)
-        run = needle_cli.run_apps_request if job == "apps" else needle_cli.run_request
+        run = {"apps": needle_cli.run_apps_request,
+               "agents": needle_cli.run_agents_request}.get(job, needle_cli.run_request)
         record = run(engine, request, options, needle_cli._never)
         return {"content": [{"type": "text", "text": json.dumps(record, ensure_ascii=False)}],
                 "structuredContent": record, "isError": False}
