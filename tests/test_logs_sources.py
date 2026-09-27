@@ -109,3 +109,37 @@ class CodexSourceTests(unittest.TestCase):
                 origin = rec["origin"]
                 row = json.loads(path.read_bytes()[origin["byte_start"]:origin["byte_end"]])
                 self.assertEqual(pointer_value(row, origin["json_pointer"]), rec["text"])
+
+class BoundaryTests(unittest.TestCase):
+    def test_exact_limit_and_one_byte_beyond(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "raw.log"
+            path.write_bytes(b"line\n")
+            exact = read_source(str(path), "raw", max_bytes=5)
+            self.assertTrue(exact["coverage"]["complete"])
+            self.assertEqual(exact["coverage"]["processed_bytes"], 5)
+            beyond = read_source(str(path), "raw", max_bytes=4)
+            self.assertFalse(beyond["coverage"]["complete"])
+            self.assertIn("byte_limit", {e["code"] for e in beyond["errors"]})
+
+    def test_archive_identity_and_decompressed_origin(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "raw.log.zst"
+            raw = b"one\ntwo\n"
+            compressed = subprocess.run(["zstd", "-q", "-c"], input=raw,
+                                        stdout=subprocess.PIPE, check=True).stdout
+            path.write_bytes(compressed)
+            out = read_source(str(path), "raw")
+            self.assertTrue(out["coverage"]["complete"])
+            self.assertEqual(out["source"]["size"], len(compressed))
+            self.assertEqual(out["source"]["decompressed_size"], len(raw))
+            self.assertEqual(out["source"]["compressed_digest"], out["source"]["digest"])
+            self.assertEqual([r["origin"]["byte_start"] for r in out["records"]], [0, 4])
+
+    def test_missing_header_session_id_remains_unknown(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "unrelated-name.jsonl"
+            path.write_bytes(b'{"type":"user","message":{"role":"user","content":"hello"}}\n')
+            out = read_source(str(path), "claude")
+            self.assertEqual(out["source"]["session_id"], "")
+            self.assertEqual(out["records"][0]["session_id"], "")

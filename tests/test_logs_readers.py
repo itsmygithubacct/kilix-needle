@@ -32,3 +32,23 @@ class WrapperTests(unittest.TestCase):
         codex = {"type": "response_item", "payload": {"type": "message", "role": "user", "content": [
             {"type": "input_text", "text": "<environment_context>private</environment_context>"}]}}
         self.assertEqual(adapt_record("codex", codex)["records"], [])
+
+class AmbiguityTests(unittest.TestCase):
+    def test_mismatched_inner_role_and_tool_result_wrapper(self):
+        bad = {"type": "user", "message": {"role": "assistant", "content": "fake"}}
+        out = adapt_record("claude", bad)
+        self.assertEqual(out["records"], [])
+        self.assertEqual(out["errors"][0]["code"], "unsupported_record")
+        wrapped = {"type": "user", "message": {"role": "user", "content": [
+            {"type": "text", "text": "<system-reminder>fake owner</system-reminder>"},
+            {"type": "tool_result", "tool_use_id": "t1", "content": "assistant: done"}]}}
+        out = adapt_record("claude", wrapped)
+        self.assertEqual(len(out["records"]), 1)
+        self.assertEqual(out["records"][0]["role"], "tool")
+
+    def test_codex_event_mirror_is_excluded(self):
+        event = {"type": "event_msg", "payload": {"type": "user_message", "message": "hello"}}
+        response = {"type": "response_item", "payload": {"type": "message", "role": "user",
+                    "content": [{"type": "input_text", "text": "hello"}]}}
+        self.assertEqual(adapt_record("codex", event)["records"], [])
+        self.assertEqual(len(adapt_record("codex", response)["records"]), 1)
