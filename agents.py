@@ -788,9 +788,11 @@ _SESSION_WORD = (r"(?:it|its|it's|them|they|session|the (?:reviewer|worker|helpe
 _ANY_WAIT = (r"(?:" + _WAIT.pattern.replace("(?P<verb>", "(?:") +
              r"|pause|stand by|hang tight|sleep|poll|check back|check in)")
 _SESSION_CLAUSE = re.compile(
-    _ANY_WAIT + r"\b[^,;.()]{0,80}?\b(?:" + _SESSION_WORD[3:-1] + r")\b"
+    _ANY_WAIT + r"\b[^,;.()]{0,400}?\b(?:" + _SESSION_WORD[3:-1] + r")\b"
+    r"|" + _ANY_WAIT + r"\b[^,;.()]{0,400}?\b(?:until|till) (?:(?:the|its) (?:review|run|job|turn|task|session|work) )?"
+    r"(?:is |it's |gets |has )?(?:done|finished|complete|completed|idle|over|through)\b"
     r"|(?:when|once|after|as soon as|by the time) (?:it|it's|its|they|that|that's|this|"
-    r"(?:the )?\w+ (?:session|review|run)|" + _alternation(_AGENT_ALIAS) + r")\b[^,;.()]{0,80}?\b"
+    r"(?:the )?\w+ (?:session|review|run)|" + _alternation(_AGENT_ALIAS) + r")\b[^,;.()]{0,400}?\b"
     r"(?:done|finish\w*|complete\w*|idle|ready|through|asks?|waiting|blocked|needs?)\b"
     r"|(?:sit tight|hang on|hold on|hold|wait|block|stand by|hang tight)(?=\s*(?:[,;.!)]|$))"
     r"|give (?:it|them|" + _alternation(_AGENT_ALIAS) + r"|the \w+ session) (?:\w+ )?"
@@ -804,7 +806,7 @@ _SESSION_CLAUSE = re.compile(
 
 # Before a later clause that will run, "wait a bit" / "give it five minutes"
 # is a wait too, and the clause after it must not run at once.
-_TIMED_WAIT = re.compile(_ANY_WAIT + r"\b[^,;.()]{0,80}?\b(?:a bit|a while|a moment|a minute|a sec\w*|"
+_TIMED_WAIT = re.compile(_ANY_WAIT + r"\b[^,;.()]{0,400}?\b(?:a bit|a while|a moment|a minute|a sec\w*|"
                          r"(?:\d+|" + _alternation(_NUMBERS) + r") (?:seconds?|secs?|minutes?|mins?|"
                          r"hours?))\b")
 
@@ -812,9 +814,11 @@ _TIMED_WAIT = re.compile(_ANY_WAIT + r"\b[^,;.()]{0,80}?\b(?:a bit|a while|a mom
 # A wait on a session or a condition on its turn (the first alternatives of
 # _SESSION_CLAUSE), anywhere in a payload.
 _WAIT_COND = re.compile(
-    _ANY_WAIT + r"\b[^,;.()]{0,80}?\b(?:" + _SESSION_WORD[3:-1] + r")\b"
+    _ANY_WAIT + r"\b[^,;.()]{0,400}?\b(?:" + _SESSION_WORD[3:-1] + r")\b"
+    r"|" + _ANY_WAIT + r"\b[^,;.()]{0,400}?\b(?:until|till) (?:(?:the|its) (?:review|run|job|turn|task|session|work) )?"
+    r"(?:is |it's |gets |has )?(?:done|finished|complete|completed|idle|over|through)\b"
     r"|(?:when|once|after|as soon as|by the time) (?:it|it's|its|they|that|that's|this|"
-    r"(?:the )?\w+ (?:session|review|run)|" + _alternation(_AGENT_ALIAS) + r")\b[^,;.()]{0,80}?\b"
+    r"(?:the )?\w+ (?:session|review|run)|" + _alternation(_AGENT_ALIAS) + r")\b[^,;.()]{0,400}?\b"
     r"(?:done|finish\w*|complete\w*|idle|ready|through|asks?|waiting|blocked|needs?)\b")
 
 

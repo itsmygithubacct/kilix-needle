@@ -777,6 +777,12 @@ class ReviewR14Round8(unittest.TestCase):
         "open codex in kilix to review the diff and wait for the tab to finish": None,
         "open codex in kilix: review the diff and wait until codex is done": None,
         "open codex in kilix: review the diff and hold until it's done": None,
+        # KN-R14-77/78: a wait until the turn ends, and a long wait phrase before a tell.
+        "open codex in kilix: review the diff and wait until done": None,
+        "open codex in kilix: review the diff and wait until the review is complete": None,
+        "open codex in kilix to review the diff, wait for the extremely thorough and careful and "
+        "complete and exhaustive review of every single changed file by it, then tell it to push":
+            None,
     }
 
     def test_readings(self):
