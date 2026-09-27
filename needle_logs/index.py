@@ -4,9 +4,17 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import stat
 from pathlib import Path
 
 SCHEMA_VERSION = 1
+APPLICATION_ID = 0x4b4c4f47  # KLOG
+KINDS = {"request", "decision", "change", "test_result", "error", "blocker", "question", "completion", "answer"}
+CLASSES = {"structured_fact", "user_statement", "assistant_claim", "unattributed_text"}
+
+
+class IndexCorrupt(ValueError):
+    code = "index_corrupt"
 
 
 def default_path() -> Path:
@@ -18,32 +26,64 @@ def _private_dir(path: Path) -> None:
     # Do not chmod existing directories: a user may have selected a source root.
     missing = []
     cursor = path
-    while not cursor.exists():
+    while not cursor.exists() and not cursor.is_symlink():
         missing.append(cursor)
         cursor = cursor.parent
     for item in reversed(missing):
         item.mkdir(mode=0o700)
-    if path.is_symlink() or path.stat().st_mode & 0o077:
+    info = path.lstat()
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
         raise ValueError("cache directory must be private (mode 0700)")
 
 
 class Index:
-    def __init__(self, path: str | Path | None = None):
+    def __init__(self, path: str | Path | None = None, *, source_path: str | Path | None = None):
         self.path = Path(path) if path is not None else default_path()
+        if source_path is not None:
+            source = Path(source_path)
+            if source.resolve() == self.path.resolve():
+                raise ValueError("source is the cache database")
+            if source.exists() and self.path.exists() and os.path.samefile(source, self.path):
+                raise ValueError("source is the cache database")
         _private_dir(self.path.parent)
-        if self.path.exists() and (self.path.is_symlink() or not self.path.is_file()):
-            raise ValueError("cache path must be a regular file")
-        if self.path.exists() and self.path.stat().st_mode & 0o077:
-            raise ValueError("cache file must be private (mode 0600)")
-        if self.path.exists() and self.path.stat().st_size:
-            with self.path.open("rb") as handle:
-                if handle.read(16) != b"SQLite format 3\x00":
-                    raise ValueError("cache path contains a non-SQLite file")
-        if not self.path.exists():
-            fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
+        created = False
+        try:
+            fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+            created = True
+        except FileExistsError:
+            fd = os.open(self.path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        try:
+            info = os.fstat(fd)
+            if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or
+                    info.st_nlink != 1 or info.st_mode & 0o077):
+                raise ValueError("cache must be an owned, private, single-link regular file")
+            if source_path is not None and Path(source_path).exists() and os.path.samefile(source_path, self.path):
+                raise ValueError("source is the cache database")
+            if not created:
+                if info.st_size == 0 or os.read(fd, 16) != b"SQLite format 3\x00":
+                    raise ValueError("existing cache is not a marked logs database")
+            current = self.path.lstat()
+            if (current.st_dev, current.st_ino) != (info.st_dev, info.st_ino):
+                raise ValueError("cache path changed during opening")
+        finally:
             os.close(fd)
         self.db = sqlite3.connect(self.path)
         self.db.row_factory = sqlite3.Row
+        if not created:
+            try:
+                app = self.db.execute("PRAGMA application_id").fetchone()[0]
+                version = self.db.execute("PRAGMA user_version").fetchone()[0]
+                if (app, version) != (APPLICATION_ID, SCHEMA_VERSION):
+                    raise ValueError("existing cache is not a supported logs database")
+                names = {row[0] for row in self.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                if not {"sources", "generations", "records", "events", "evidence"} <= names:
+                    raise ValueError("existing cache lacks logs schema")
+            except Exception:
+                self.db.close()
+                raise
+        else:
+            self.db.execute(f"PRAGMA application_id={APPLICATION_ID}")
+            self.db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         self.db.execute("PRAGMA foreign_keys=ON")
         self.db.execute("PRAGMA busy_timeout=5000")
         self.db.executescript("""
@@ -96,9 +136,11 @@ class Index:
         ids = set()
         previous = -1
         for record in records:
+            if record.get("schema") != "kilix.logs.record/v1" or record.get("quality") not in ("structured", "approximate"):
+                raise ValueError("invalid record metadata")
             if (record["source_id"], record["generation"], record["session_id"]) != (sid, gen, source["session_id"]):
                 raise ValueError("foreign record")
-            if record["record_id"] in ids or not isinstance(record["sequence"], int) or record["sequence"] <= previous:
+            if record["record_id"] in ids or type(record["sequence"]) is not int or record["sequence"] <= previous:
                 raise ValueError("duplicate or unordered record")
             ids.add(record["record_id"])
             previous = record["sequence"]
@@ -108,13 +150,30 @@ class Index:
                 raise ValueError("foreign event")
             if not event.get("evidence") or event.get("schema") != "kilix.logs.event/v1":
                 raise ValueError("invalid event")
+            if event.get("kind") not in KINDS or event.get("evidence_class") not in CLASSES:
+                raise ValueError("invalid event kind or evidence class")
             anchor = by_id.get(event["evidence"][0]["record_id"])
-            if anchor is None or event["sequence"] != anchor["sequence"] or event.get("timestamp") != anchor.get("timestamp"):
+            if anchor is None or type(event.get("sequence")) is not int or event["sequence"] != anchor["sequence"] or event.get("timestamp") != anchor.get("timestamp"):
                 raise ValueError("event metadata does not match evidence")
+            expected_class = ("user_statement" if anchor["quality"] == "structured" and anchor["role"] == "user" else
+                              "assistant_claim" if anchor["quality"] == "structured" and anchor["role"] == "assistant" else
+                              "structured_fact" if anchor["quality"] == "structured" and anchor["role"] == "tool" else
+                              "unattributed_text")
+            if event["evidence_class"] != expected_class:
+                raise IndexCorrupt("event evidence class contradicts canonical record")
             for item in event["evidence"]:
                 record = by_id.get(item["record_id"])
-                if record is None or not (0 <= item["start"] < item["end"] <= len(record["text"])) or record["text"][item["start"]:item["end"]] != item["quote"]:
+                if (record is None or type(item.get("start")) is not int or type(item.get("end")) is not int or
+                        not (0 <= item["start"] < item["end"] <= len(record["text"])) or
+                        record["text"][item["start"]:item["end"]] != item.get("quote") or
+                        (record["source_id"], record["generation"], record["session_id"]) != (sid, gen, source["session_id"])):
                     raise ValueError("invalid evidence")
+                item_class = ("user_statement" if record["quality"] == "structured" and record["role"] == "user" else
+                              "assistant_claim" if record["quality"] == "structured" and record["role"] == "assistant" else
+                              "structured_fact" if record["quality"] == "structured" and record["role"] == "tool" else
+                              "unattributed_text")
+                if item_class != event["evidence_class"]:
+                    raise IndexCorrupt("event evidence class contradicts canonical record")
         with self.db:
             old = self.db.execute("SELECT path,session_id FROM sources WHERE source_id=?", (sid,)).fetchone()
             if old and (old["path"], old["session_id"]) != (source["path"], source["session_id"]):
@@ -154,6 +213,15 @@ class Index:
         sql += " ORDER BY e.sequence,e.event_id LIMIT ?"
         args.append(limit)
         return [json.loads(row["payload"]) for row in self.db.execute(sql, args)]
+
+    def recent_events(self, source_id: str, limit: int) -> tuple[list[dict], int]:
+        snap = self.snapshot(source_id)
+        if not snap:
+            return [], 0
+        args = (source_id, snap["generation"], snap["config"])
+        count = self.db.execute("SELECT count(*) FROM events WHERE source_id=? AND generation=? AND config=?", args).fetchone()[0]
+        rows = self.db.execute("SELECT payload FROM events WHERE source_id=? AND generation=? AND config=? ORDER BY sequence DESC,event_id DESC LIMIT ?", args + (limit,))
+        return list(reversed([json.loads(row[0]) for row in rows])), max(0, count - limit)
 
     def event(self, event_id: str) -> tuple[dict, dict] | None:
         row = self.db.execute("SELECT e.payload,s.source_id FROM events e JOIN sources s ON s.source_id=e.source_id WHERE e.event_id=? LIMIT 1", (event_id,)).fetchone()

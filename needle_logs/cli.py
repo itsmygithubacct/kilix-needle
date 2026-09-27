@@ -10,31 +10,50 @@ from . import facts, query
 from .index import Index
 
 SCHEMA = "kilix.logs.read/v1"
+ARGUMENTS = {"operation", "file", "provider", "session", "cache_path", "event_id", "session_id",
+             "since_cursor", "mode", "limit", "kind", "query"}
 
 
 def _error(code: str, message: str, status: int) -> dict:
     return {"schema": SCHEMA, "status": "error", "exit_status": status,
-            "events": [], "errors": [{"code": code, "message": message}]}
+            "events": [], "errors": [{"code": code, "message": message[:1024]}]}
 
 
 def read(arguments: dict) -> dict:
     """Return a JSON-compatible result; import source readers only when needed."""
     if not isinstance(arguments, dict):
         return _error("invalid_input", "arguments must be an object", 2)
+    unknown = set(arguments) - ARGUMENTS
+    if unknown:
+        return _error("invalid_input", "unknown argument key", 2)
     operation = arguments.get("operation", "events")
     if operation not in ("events", "brief", "search", "source", "cache_status", "cache_clear"):
         return _error("invalid_input", "unknown operation", 2)
+    applicable = {"events": {"file", "provider", "session", "cache_path", "mode", "limit", "kind", "since_cursor"},
+                  "brief": {"file", "provider", "session", "cache_path", "mode", "limit"},
+                  "search": {"file", "provider", "session", "cache_path", "mode", "limit", "query"},
+                  "source": {"event_id", "cache_path"}, "cache_status": {"cache_path"},
+                  "cache_clear": {"cache_path", "session_id"}}
+    if set(arguments) - applicable[operation] - {"operation"}:
+        return _error("invalid_input", "argument does not apply to operation", 2)
     path = arguments.get("file")
     provider = arguments.get("provider")
     try:
         for key, maximum in (("file", 4096), ("provider", 32), ("session", 256),
                              ("cache_path", 4096), ("event_id", 128), ("session_id", 256),
-                             ("since_cursor", 4096), ("config", 256)):
+                             ("since_cursor", 4096), ("query", query.MAX_QUERY),
+                             ("kind", 64), ("mode", 32)):
             value = arguments.get(key)
             if value is not None and (not isinstance(value, str) or not value or len(value) > maximum):
                 return _error("invalid_input", f"invalid {key}", 2)
         if arguments.get("mode", "baseline") != "baseline":
             return _error("mode_unavailable", "only baseline mode is implemented", 2)
+        if "limit" in arguments and (type(arguments["limit"]) is not int or not 1 <= arguments["limit"] <= query.MAX_LIMIT):
+            return _error("invalid_input", "invalid limit", 2)
+        if operation in ("events", "brief", "search"):
+            query._validate(arguments.get("limit", 20), arguments.get("kind"), arguments.get("query") if operation == "search" else None)
+            if operation == "search" and arguments.get("query") is None:
+                return _error("invalid_input", "search requires query", 2)
         if operation in ("events", "brief", "search"):
             session = arguments.get("session")
             if bool(path) == bool(session):
@@ -53,9 +72,9 @@ def read(arguments: dict) -> dict:
                 return _error("invalid_input", "source is the cache database", 2)
             if Path(path).exists() and cache_path.exists() and Path(path).stat().st_dev == cache_path.stat().st_dev and Path(path).stat().st_ino == cache_path.stat().st_ino:
                 return _error("invalid_input", "source and cache are the same file", 2)
-        with Index(arguments.get("cache_path")) as index:
+        with Index(arguments.get("cache_path"), source_path=path if operation in ("events", "brief", "search") else None) as index:
             if operation == "cache_status":
-                return {"schema": SCHEMA, "status": "ok", "exit_status": 0, "sources": index.status(), "errors": []}
+                return query.bounded({"schema": SCHEMA, "status": "ok", "exit_status": 0, "sources": index.status(), "errors": []})
             if operation == "cache_clear":
                 count = index.clear(arguments.get("session_id"))
                 return {"schema": SCHEMA, "status": "ok", "exit_status": 0, "cleared": count, "errors": []}
@@ -79,9 +98,7 @@ def read(arguments: dict) -> dict:
                 if session:
                     check_binding(resolved)
                 events = facts.extract(source_result["records"])
-                config = arguments.get("config", facts.VERSION)
-                if not isinstance(config, str) or len(config) > 256:
-                    return _error("invalid_input", "invalid configuration", 2)
+                config = facts.VERSION + ":record-v1:" + str(source_result["source"].get("provider", provider))
                 index.put(source_result, events, config=config)
                 source_id = source_result["source"]["source_id"]
                 limit = arguments.get("limit", 20)
@@ -99,9 +116,9 @@ def read(arguments: dict) -> dict:
                 result["errors"] = source_result.get("errors", [])
             coverage = result.get("coverage", {})
             partial = bool(result.get("errors")) or not coverage.get("complete", False)
-            return {"schema": SCHEMA, "status": "partial" if partial else "ok",
+            return query.bounded({"schema": SCHEMA, "status": "partial" if partial else "ok",
                     "exit_status": 1 if partial else 0, **result,
-                    "errors": result.get("errors", []), "operation": operation}
+                    "errors": result.get("errors", []), "operation": operation})
     except query.QueryError as exc:
         return _error(exc.code, str(exc), 2 if exc.code in ("invalid_input", "cursor_invalid") else 1)
     except (ValueError, TypeError, KeyError) as exc:

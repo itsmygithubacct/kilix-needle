@@ -33,10 +33,11 @@ def extract(records: list[dict]) -> list[dict]:
         if not isinstance(text, str) or not text or record.get("role") == "system":
             continue
         role, channel = record.get("role"), record.get("channel")
+        quality = record.get("quality")
         if role == "user" and channel == "message":
             kind = "question" if text.rstrip().endswith("?") else "request"
-            events.append(_event(record, kind, 0, len(text), "user_statement", VERSION))
-        elif role == "tool" and channel == "tool_result":
+            events.append(_event(record, kind, 0, len(text), "user_statement" if quality == "structured" else "unattributed_text", VERSION))
+        elif role == "tool" and channel == "tool_result" and quality == "structured":
             for match in _TEST.finditer(text):
                 events.append(_event(record, "test_result", match.start(), match.end(), "structured_fact", VERSION + ":test-output"))
             if _TEST.search(text):
@@ -46,9 +47,6 @@ def extract(records: list[dict]) -> list[dict]:
             for match in _ERROR.finditer(text):
                 events.append(_event(record, "error", match.start(), match.end(), "structured_fact", VERSION + ":error-line"))
         elif role == "assistant" and channel == "message":
-            # Precise text remains a claim. These cues do not establish success.
-            for pattern, kind in ((r"(?im)^.{0,120}\b(?:blocked|blocker|cannot proceed)\b.{0,160}$", "blocker"),
-                                  (r"(?im)^.{0,120}\b(?:completed|finished|done)\b.{0,160}$", "completion")):
-                for match in re.finditer(pattern, text):
-                    events.append(_event(record, kind, match.start(), match.end(), "assistant_claim", VERSION + ":claim"))
+            events.append(_event(record, "answer", 0, len(text),
+                                 "assistant_claim" if quality == "structured" else "unattributed_text", VERSION))
     return events

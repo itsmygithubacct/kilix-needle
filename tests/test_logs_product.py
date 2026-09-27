@@ -2,6 +2,7 @@
 import contextlib
 import io
 import os
+import sqlite3
 import stat
 import sys
 import tempfile
@@ -49,7 +50,7 @@ class ProductTests(unittest.TestCase):
     def test_facts_keep_provenance_and_later_failure(self):
         events = facts.extract(self.data["records"])
         self.assertEqual([e["kind"] for e in events],
-                         ["question", "test_result", "test_result", "blocker", "test_result", "test_result"])
+                         ["question", "test_result", "test_result", "answer", "test_result", "test_result"])
         self.assertEqual(events[3]["evidence_class"], "assistant_claim")
         self.assertEqual(events[-1]["evidence_class"], "structured_fact")
         self.assertFalse(any(e["kind"] == "decision" for e in events))
@@ -75,7 +76,7 @@ class ProductTests(unittest.TestCase):
             view = query.source_event(index, events[3]["event_id"])
             self.assertEqual(view["records"][0]["text"], self.data["records"][2]["text"])
             briefing = query.brief(index, "src-1")
-            self.assertEqual(len(briefing["sections"]["reported_issues"]), 1)
+            self.assertEqual(len(briefing["sections"]["results"]), 5)
             self.assertIn("Assistant reported", query.render(briefing, "brief"))
             self.assertFalse(self.cache.stat().st_mode & (stat.S_IRWXG | stat.S_IRWXO))
             self.assertFalse(self.cache.parent.stat().st_mode & (stat.S_IRWXG | stat.S_IRWXO))
@@ -152,6 +153,75 @@ class ProductTests(unittest.TestCase):
         with Index(self.cache) as index:
             self.assertEqual(index.status(), [])
         self.assertEqual(cli.read({"operation": "events", "mode": "tuned"})["errors"][0]["code"], "mode_unavailable")
+
+    def test_unrelated_cache_files_are_untouched(self):
+        private = self.root / "private"
+        private.mkdir(mode=0o700)
+        for name, setup in (("empty", lambda p: p.touch(mode=0o600)),
+                            ("sqlite", lambda p: sqlite3.connect(p).execute("CREATE TABLE unrelated(x)").connection.close())):
+            path = private / name
+            setup(path)
+            path.chmod(0o600)
+            before = path.read_bytes()
+            with self.assertRaises(ValueError):
+                Index(path)
+            self.assertEqual(path.read_bytes(), before)
+        alias = private / "alias"
+        alias.symlink_to(private / "sqlite")
+        with self.assertRaises(OSError):
+            Index(alias)
+        self.assertEqual((private / "sqlite").read_bytes(), before)
+        hard = private / "hard"
+        os.link(private / "sqlite", hard)
+        original = hard.read_bytes()
+        with self.assertRaises(ValueError):
+            Index(hard)
+        self.assertEqual(hard.read_bytes(), original)
+
+    def test_approximate_role_and_forged_class(self):
+        data = fixture(self.source)
+        data["records"][0]["quality"] = "approximate"
+        data["records"][2]["text"] = "Work is not completed."
+        events = facts.extract(data["records"])
+        self.assertEqual(events[0]["evidence_class"], "unattributed_text")
+        self.assertIn("answer", [e["kind"] for e in events])
+        self.assertNotIn("completion", [e["kind"] for e in events])
+        with Index(self.cache) as index:
+            forged = [dict(events[0], evidence_class="user_statement")]
+            with self.assertRaisesRegex(ValueError, "evidence class"):
+                index.put(data, forged)
+            for changed in (dict(events[0], kind="invented"),
+                            dict(events[0], evidence=[dict(events[0]["evidence"][0], start=True)])):
+                with self.assertRaises(ValueError):
+                    index.put(data, [changed])
+
+    def test_recent_brief_cursor_and_cli_validation(self):
+        events = facts.extract(self.data["records"])
+        with Index(self.cache) as index:
+            index.put(self.data, events)
+            brief = query.brief(index, "src-1", limit=2)
+            self.assertEqual(brief["events"], events[-2:])
+            self.assertEqual(brief["omitted_events"], len(events)-2)
+            cursor = query.list_events(index, "src-1", limit=1)["next_cursor"]
+            decoded = query._decode(cursor)
+            self.assertEqual(decoded["schema_version"], 1)
+            decoded["sequence"] = True
+            with self.assertRaises(query.QueryError):
+                query.list_events(index, "src-1", since_cursor=query._token(decoded))
+        base = {"operation": "events", "file": str(self.source), "provider": "fake"}
+        for extra in ({"config": "model-v9"}, {"surprise": 1}, {"limit": True}, {"query": "irrelevant"}):
+            self.assertEqual(cli.read(base | extra)["errors"][0]["code"], "invalid_input")
+
+    def test_envelope_bound_includes_coverage_and_errors(self):
+        data = fixture(self.source)
+        data["coverage"]["gaps"] = [{"reason": "x" * query.MAX_JSON_TEXT}]
+        fake = types.ModuleType("needle_logs.sources")
+        fake.read_source = lambda path, provider: data
+        with patch.dict(sys.modules, {"needle_logs.sources": fake}):
+            result = cli.read({"operation": "events", "file": str(self.source), "provider": "fake",
+                               "cache_path": str(self.cache)})
+        self.assertEqual(result["errors"][0]["code"], "result_too_large")
+        self.assertIn("[truncated]", query.render({"records": [{"text": "x" * (query.MAX_RENDER + 1)}]}, "source"))
 
 
 if __name__ == "__main__":
