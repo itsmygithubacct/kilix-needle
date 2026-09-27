@@ -562,9 +562,10 @@ def main(argv: list[str] | None = None) -> int:
         job, argv = "agents", argv[1:]
     agents_help = ("Directory resolution order: an explicit ~/ or absolute path; 'here' "
                    "(the calling pane's directory); exact entries in "
-                   "~/.config/kilix-needle/dirs.json; then the shallowest exact checkout "
-                   "name under ~/gpu_terminal or ~/research (to depth 3). dirs.json is a "
-                   "JSON object mapping request names to absolute directory paths.")
+                   "~/.config/kilix-needle/dirs.json; then a unique exact checkout name "
+                   "across all scanned depths under ~/gpu_terminal or ~/research (to depth "
+                   "3). Names shorter than 3 characters are not scanned. dirs.json is a "
+                   "JSON object mapping request names and aliases to absolute paths.")
     parser = argparse.ArgumentParser(prog=f"kilix-needle {job}" if job != "panes" else "kilix-needle",
                                      description=__doc__,
                                      epilog=agents_help if job == "agents" else None,

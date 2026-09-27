@@ -335,16 +335,19 @@ class Runner(unittest.TestCase):
             (repo / ".git").mkdir(parents=True)
             shallow = home / "research" / "kilix-needle"
             (shallow / ".git").mkdir(parents=True)
-            self.assertEqual(agents_kilix.resolve_dir("the kilix-needle repo", home=home),
-                             shallow.resolve())
+            with self.assertRaises(agents_kilix.AgentsError) as raised:
+                agents_kilix.resolve_dir("the kilix-needle repo", home=home)
+            self.assertIn(str(repo), str(raised.exception))
+            self.assertIn(str(shallow), str(raised.exception))
             self.assertEqual(agents_kilix.resolve_dir("here", cwd=str(home / "research"),
                                                       home=home), (home / "research").resolve())
             other = home / "gpu_terminal" / "kilix-needle"
             (other / ".git").mkdir(parents=True)
             agents_kilix._DIR_SCAN_CACHE.clear()
-            with self.assertRaisesRegex(agents_kilix.AgentsError,
-                                        rf"2 matching.*{other}.*{shallow}"):
+            with self.assertRaises(agents_kilix.AgentsError) as raised:
                 agents_kilix.resolve_dir("kilix-needle", home=home)
+            for candidate in (repo, shallow, other):
+                self.assertIn(str(candidate), str(raised.exception))
             with self.assertRaises(agents_kilix.AgentsError):
                 agents_kilix.resolve_dir("nowhere", home=home)
 

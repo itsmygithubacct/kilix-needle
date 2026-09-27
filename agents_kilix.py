@@ -5,19 +5,20 @@
   It records the client's trust for exactly that directory
   (`--trust-folder`), and adds an approval skip only when Kilix's
   coding-yolo setting is on (`--coding-yolo`; the request never decides).
-- A wait is `kilix panes wait PANE --for idle|waiting`. After a message from
-  idle, or before an idle wait on a resumed session, the runner first observes
-  `working` so a stale idle snapshot cannot satisfy the wait.
+- A wait is `kilix panes wait PANE --for idle|waiting`. Prompted and resumed
+  launches first observe `working`. A message sent while working must cross
+  idle then working before a following wait, because panes/v1 has no turn id.
 - A message is `kilix agent-control send PANE --expect-broker B --submit`,
   after an optional wait for idle. It is held only while the session is
   `waiting` on an approval or a menu, where a submitted line could answer
-  it (the builder's rule, which the owner can overrule; steering a working
-  session is allowed).
+  it. Steering while working is allowed only for readers that distinguish
+  `waiting` (Claude, Grok and Codex); other clients take messages only idle.
 
 Directories resolve to exactly one existing directory: an explicit path, the
 caller's directory ("here"), or a repository name found under the usual
-source roots. Sessions resolve to exactly one live agent pane in that
-directory. Ambiguity refuses; nothing is created.
+source roots. Scanned names shorter than three characters and names that are
+not unique across every scanned depth refuse. Sessions resolve to exactly one
+live agent pane in that directory. Ambiguity refuses; nothing is created.
 """
 from __future__ import annotations
 
@@ -25,6 +26,7 @@ from dataclasses import dataclass, field
 import json
 from pathlib import Path
 import subprocess
+import time
 
 import agents
 import kilix
@@ -36,7 +38,9 @@ PROVIDER_AGENT = {"claude": "claude", "codex": "codex", "grok": "grok", "omp": "
                   "kimi": "kimi"}
 _SCAN_SKIP = frozenset(("node_modules", "venv", "virtualenv", "env", "scratch",
                         "scratch-workers", "worktree", "worktrees"))
-_DIR_SCAN_CACHE: dict[Path, tuple[tuple[str, Path, int], ...]] = {}
+_DIR_SCAN_CACHE: dict[Path, tuple[float, tuple[tuple[str, Path, int], ...]]] = {}
+_DIR_SCAN_TTL = 60.0
+_WORKING_STEER_AGENTS = frozenset(("claude", "codex", "grok"))
 
 
 class AgentsError(RuntimeError):
@@ -61,10 +65,12 @@ def _skip_scan_dir(name: str) -> bool:
 
 
 def _git_directories(home: Path) -> tuple[tuple[str, Path, int], ...]:
-    """Cached, bounded index of checkout roots below the two source roots."""
+    """Briefly cached, bounded index of checkout roots below the source roots."""
     key = home.resolve()
-    if key in _DIR_SCAN_CACHE:
-        return _DIR_SCAN_CACHE[key]
+    now = time.monotonic()
+    cached = _DIR_SCAN_CACHE.get(key)
+    if cached is not None and now - cached[0] < _DIR_SCAN_TTL:
+        return cached[1]
     found = []
     for root in ROOTS:
         base = key / root
@@ -90,8 +96,32 @@ def _git_directories(home: Path) -> tuple[tuple[str, Path, int], ...]:
                 continue
             pending.extend((child, depth + 1) for child in directories)
     answer = tuple(found)
-    _DIR_SCAN_CACHE[key] = answer
+    _DIR_SCAN_CACHE[key] = (now, answer)
     return answer
+
+
+def _directory_map(home: Path, names: tuple[str, ...]) -> Path | None:
+    """Resolve one exact configured name or alias."""
+    map_file = home / ".config" / "kilix-needle" / "dirs.json"
+    if not map_file.exists():
+        return None
+    try:
+        mapped = json.loads(map_file.read_text())
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise AgentsError(f"cannot read directory map {map_file}: {error}") from error
+    if not isinstance(mapped, dict):
+        raise AgentsError(f"directory map {map_file} must be a JSON object")
+    for name in names:
+        if name not in mapped:
+            continue
+        value = mapped[name]
+        if not isinstance(value, str) or not Path(value).is_absolute():
+            raise AgentsError(f"directory map entry {name!r} must be an absolute path")
+        path = Path(value).resolve()
+        if not path.is_dir():
+            raise AgentsError(f"directory map entry {name!r} is not an existing directory")
+        return path
+    return None
 
 
 def resolve_dir(said: str, *, cwd: str | None = None, home: Path | None = None) -> Path:
@@ -119,33 +149,19 @@ def resolve_dir(said: str, *, cwd: str | None = None, home: Path | None = None) 
             name = name[:-len(suffix) - 1]
             break
 
-    map_file = home / ".config" / "kilix-needle" / "dirs.json"
-    if map_file.exists():
-        try:
-            mapped = json.loads(map_file.read_text())
-        except (OSError, UnicodeError, json.JSONDecodeError) as error:
-            raise AgentsError(f"cannot read directory map {map_file}: {error}") from error
-        if not isinstance(mapped, dict):
-            raise AgentsError(f"directory map {map_file} must be a JSON object")
-        if name in mapped:
-            value = mapped[name]
-            if not isinstance(value, str) or not Path(value).is_absolute():
-                raise AgentsError(f"directory map entry {name!r} must be an absolute path")
-            path = Path(value).resolve()
-            if not path.is_dir():
-                raise AgentsError(f"directory map entry {name!r} is not an existing directory")
-            return path
+    configured = _directory_map(home, tuple(dict.fromkeys((raw, name))))
+    if configured is not None:
+        return configured
 
-    matches = [(path, depth) for repo_name, path, depth in _git_directories(home)
-               if repo_name == name]
-    if matches:
-        shallowest = min(depth for _path, depth in matches)
-        found = sorted({path for path, depth in matches if depth == shallowest})
-    else:
-        found = []
+    found = [] if len(name) < 3 else sorted({path for repo_name, path, _depth
+                                             in _git_directories(home)
+                                             if repo_name == name})
     if len(found) != 1:
-        raise AgentsError(f"{said}: {'no' if not found else len(found)} matching directories"
-                          f"{'' if not found else ' (' + ', '.join(map(str, found)) + ')'}")
+        candidates = "none" if not found else ", ".join(map(str, found))
+        raise AgentsError(
+            f"{said}: {'no' if not found else len(found)} matching directories; "
+            f"candidates: {candidates}; add the intended name or alias to "
+            "~/.config/kilix-needle/dirs.json")
     return found[0]
 
 
@@ -257,13 +273,26 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
     launched: dict[str, dict] = {}
     last = None
     caller_cache = None
-    resumed = set()
+    # A pane may need a turn edge before a later wait can be trusted. New
+    # prompted/resumed panes must first become working. A message queued while
+    # already working must cross idle and then working, since panes/v1 exposes
+    # no monotonic turn counter.
+    transitions: dict[object, str] = {}
 
     def get_caller():
         nonlocal caller_cache
         if caller_cache is None:
             caller_cache = caller_info()
         return caller_cache
+
+    def observe_transition(pane_id, timeout: float) -> None:
+        transition = transitions.pop(pane_id, None)
+        if transition == "idle-working":
+            _run(["panes", "wait", str(pane_id), "--for", "idle", "--json",
+                  "--timeout", str(timeout)], timeout=timeout + 30)
+        if transition in ("working", "idle-working"):
+            _run(["panes", "wait", str(pane_id), "--for", "working", "--json",
+                  "--timeout", "30"], timeout=60)
 
     for action in actions:
         entry = {"kind": action.kind, "args": dict(action.args)}
@@ -289,8 +318,8 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
                     raise AgentsError("kilix agent-control returned no launched pane")
                 last = {"pane_id": pane_result["pane_id"], "agent": action.args["agent"]}
                 launched[f"{action.args['agent']}@{action.args['dir']}"] = last
-                if action.args.get("resume"):
-                    resumed.add(last["pane_id"])
+                if action.args.get("resume") or prompt:
+                    transitions[last["pane_id"]] = "working"
                 entry.update(outcome="done", pane=last["pane_id"],
                              folder_trust=result.get("folder_trust"))
                 continue
@@ -315,10 +344,7 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
                 if dry_run:
                     entry.update(outcome="would", argv=argv)
                     continue
-                if action.args["for"] == "idle" and pane_id in resumed:
-                    _run(["panes", "wait", str(pane_id), "--for", "working", "--json",
-                          "--timeout", "30"], timeout=60)
-                    resumed.discard(pane_id)
+                observe_transition(pane_id, wait_timeout)
                 _run(argv, timeout=wait_timeout + 30)
                 entry.update(outcome="done", pane=pane_id)
                 continue
@@ -326,10 +352,7 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
             waited = bool(action.args.get("wait"))
             wait_timeout = action.args.get("timeout") or 3600
             if waited and not dry_run:
-                if pane_id in resumed:
-                    _run(["panes", "wait", str(pane_id), "--for", "working", "--json",
-                          "--timeout", "30"], timeout=60)
-                    resumed.discard(pane_id)
+                observe_transition(pane_id, wait_timeout)
                 _run(["panes", "wait", str(pane_id), "--for", "idle", "--json", "--timeout",
                       str(wait_timeout)], timeout=wait_timeout + 30)
             if dry_run and isinstance(pane_id, str) and pane_id.startswith("<new pane"):
@@ -355,11 +378,12 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
                     raise AgentsError("the target coding agent changed; the message is held")
             if activity not in ("idle", "working"):
                 raise AgentsError("the session is not idle or working; the message is held")
-            if target_agent == "qwen-omp" and activity != "idle":
-                # omp's files can't show an approval prompt (review R13, KX-R13-16):
-                # only an idle omp session takes a message.
-                raise AgentsError("a qwen-omp session takes a message only when idle; ask to "
-                                  "wait until it is done first")
+            if target_agent not in _WORKING_STEER_AGENTS and activity != "idle":
+                # Only readers which can distinguish approval/menu waits may
+                # steer a working turn. OMP and Kimi expose no safe waiting
+                # state, so they take messages only while idle.
+                raise AgentsError(f"a {target_agent} session takes a message only when idle; "
+                                  "ask to wait until it is done first")
             broker = _broker_id(pane)
             argv = ["agent-control", "send", str(pane_id), "--expect-broker", broker,
                     "--text", action.args["text"], "--submit"]
@@ -375,7 +399,8 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
                     raise AgentsError(f"delivery not confirmed: {error}") from error
                 delivery = "delivered"
             else:
-                delivery = "not confirmed"
+                transitions[pane_id] = "idle-working"
+                delivery = "queued"
             entry.update(outcome="done", delivery=delivery, pane=pane_id)
         except (AgentsError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
             entry.update(outcome="failed", reason=str(error))

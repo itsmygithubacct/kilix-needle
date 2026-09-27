@@ -35,20 +35,27 @@ class DirectoryResolution(unittest.TestCase):
         here.mkdir()
         mapped = self.home / "elsewhere" / "mapped"
         mapped.mkdir(parents=True)
+        aliased = self.home / "elsewhere" / "plebian-os"
+        aliased.mkdir()
         config = self.home / ".config" / "kilix-needle"
         config.mkdir(parents=True)
-        (config / "dirs.json").write_text(json.dumps({"Needle": str(mapped)}))
+        (config / "dirs.json").write_text(json.dumps({
+            "Needle": str(mapped), "the os repo": str(aliased)}))
 
         self.assertEqual(agents_kilix.resolve_dir("~/explicit", home=self.home), explicit)
         self.assertEqual(agents_kilix.resolve_dir("here", cwd=str(here), home=self.home), here)
         self.assertEqual(agents_kilix.resolve_dir("Needle", home=self.home), mapped)
+        self.assertEqual(agents_kilix.resolve_dir("the os repo", home=self.home), aliased)
 
-    def test_the_unique_shallowest_checkout_wins(self):
+    def test_a_duplicate_at_any_scanned_depth_is_ambiguous(self):
         shallow = self.repo("gpu_terminal/team/widget")
-        self.repo("research/archive/old/widget")
-        self.assertEqual(agents_kilix.resolve_dir("widget", home=self.home), shallow)
+        deep = self.repo("research/archive/old/widget")
+        with self.assertRaises(agents_kilix.AgentsError) as raised:
+            agents_kilix.resolve_dir("widget", home=self.home)
+        self.assertIn(str(shallow), str(raised.exception))
+        self.assertIn(str(deep), str(raised.exception))
 
-    def test_ambiguity_at_the_shallowest_depth_lists_only_those_candidates(self):
+    def test_ambiguity_lists_every_candidate_and_the_map_hint(self):
         first = self.repo("gpu_terminal/a/widget")
         second = self.repo("research/b/widget")
         deep = self.repo("research/archive/old/widget")
@@ -57,7 +64,8 @@ class DirectoryResolution(unittest.TestCase):
         message = str(raised.exception)
         self.assertIn(str(first), message)
         self.assertIn(str(second), message)
-        self.assertNotIn(str(deep), message)
+        self.assertIn(str(deep), message)
+        self.assertIn("~/.config/kilix-needle/dirs.json", message)
 
     def test_scan_is_bounded_and_skips_non_top_level_and_work_directories(self):
         fake = self.home / "gpu_terminal" / "fake"
@@ -73,11 +81,24 @@ class DirectoryResolution(unittest.TestCase):
         with self.assertRaisesRegex(agents_kilix.AgentsError, "no matching"):
             agents_kilix.resolve_dir("too-deep", home=self.home)
 
-    def test_checkout_index_is_cached_for_the_process(self):
+    def test_checkout_index_expires_after_sixty_seconds(self):
         original = self.repo("gpu_terminal/a/widget")
-        self.assertEqual(agents_kilix.resolve_dir("widget", home=self.home), original)
-        self.repo("research/b/widget")
-        self.assertEqual(agents_kilix.resolve_dir("widget", home=self.home), original)
+        with mock.patch.object(agents_kilix.time, "monotonic",
+                               side_effect=(100.0, 120.0, 161.0)):
+            self.assertEqual(agents_kilix.resolve_dir("widget", home=self.home), original)
+            added = self.repo("research/b/widget")
+            self.assertEqual(agents_kilix.resolve_dir("widget", home=self.home), original)
+            with self.assertRaises(agents_kilix.AgentsError) as raised:
+                agents_kilix.resolve_dir("widget", home=self.home)
+        self.assertIn(str(added), str(raised.exception))
+
+    def test_one_and_two_character_names_never_scan(self):
+        self.repo("gpu_terminal/a/os")
+        with mock.patch.object(agents_kilix, "_git_directories") as scan, \
+                self.assertRaises(agents_kilix.AgentsError) as raised:
+            agents_kilix.resolve_dir("os", home=self.home)
+        scan.assert_not_called()
+        self.assertIn("dirs.json", str(raised.exception))
 
 
 class RunnerTransitions(unittest.TestCase):
@@ -143,6 +164,34 @@ class RunnerTransitions(unittest.TestCase):
         results, calls = self.run_actions(actions, panes=[])
         self.assertEqual([item["outcome"] for item in results], ["done", "done"])
         self.assertEqual(self.wait_states(calls), ["working", "idle"])
+
+    def test_a_prompted_launch_observes_working_before_idle(self):
+        actions = [agents.Action("agent", {"agent": "codex", "dir": "kilix",
+                                            "prompt": "run the suite"}),
+                   agents.Action("wait", {"session": "it", "for": "idle"})]
+        results, calls = self.run_actions(actions, panes=[])
+        self.assertEqual([item["outcome"] for item in results], ["done", "done"])
+        self.assertEqual(self.wait_states(calls), ["working", "idle"])
+
+    def test_a_working_tell_crosses_idle_then_working_before_following_wait(self):
+        actions = [agents.Action("tell", {"session": "codex@kilix", "text": "next"}),
+                   agents.Action("wait", {"session": "codex@kilix", "for": "idle"})]
+        results, calls = self.run_actions(actions, panes=[self.pane(activity="working")])
+        self.assertEqual([item["outcome"] for item in results], ["done", "done"])
+        self.assertEqual(results[0]["delivery"], "queued")
+        self.assertEqual(self.wait_states(calls), ["idle", "working", "idle"])
+
+    def test_only_readers_with_waiting_support_may_steer_working_sessions(self):
+        for provider, agent, outcome in (("claude", "claude", "done"),
+                                         ("grok", "grok", "done"),
+                                         ("codex", "codex", "done"),
+                                         ("omp", "qwen-omp", "failed"),
+                                         ("kimi", "kimi", "failed")):
+            action = agents.Action("tell", {"session": f"{agent}@kilix", "text": "next"})
+            pane = self.pane(activity="working",
+                             coding_session={"provider": provider, "cwd": "/w/kilix"})
+            results, _calls = self.run_actions([action], panes=[pane])
+            self.assertEqual(results[0]["outcome"], outcome, provider)
 
     def test_a_waiting_tell_after_resume_observes_the_resume_transition(self):
         actions = [agents.Action("agent", {"agent": "codex", "dir": "kilix",

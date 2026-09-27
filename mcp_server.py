@@ -100,7 +100,9 @@ TOOL_LIST += [
                     "resume; the folder is trusted for that client), wait until a session is "
                     "idle or asks something, or send a session a message (steering a working "
                     "session is allowed; a message is held while the session waits on an "
-                    "approval). The request is the consent: no confirmation is needed. "
+                    "approval). Only Claude, Grok and Codex can be steered while working; "
+                    "other readers take messages only while idle. The request is the "
+                    "consent: no confirmation is needed. "
                     "Approval skips follow Kilix's coding-yolo setting only. Anything the "
                     "request says that no action accounts for refuses the whole request.",
      "inputSchema": {"type": "object", "properties": {"request": _AGENTS_REQUEST},
