@@ -51,12 +51,13 @@ PLACES = ("tab", "right", "left", "down", "up")
 STATES = ("idle", "waiting")
 # The eval sets' fixture workspace; production resolves names on disk.
 FIXTURE_DIRS = {
-    "kilix": ["kilix", "the kilix repo", "~/gpu_terminal/kilix"],
+    "kilix": ["kilix", "the kilix repo", "~/gpu_terminal/kilix", "kilix terminal"],
     "kilix-needle": ["kilix-needle", "kilix needle", "needle", "the needle repo"],
-    "kilix-content": ["kilix-content", "kilix content", "the catalog", "content"],
-    "kilix-95": ["kilix-95", "kilix 95", "the desktop repo"],
-    "plebian-os": ["plebian-os", "plebian os", "the os repo", "plebian"],
-    "kilix-ml": ["kilix-ml", "kilix ml", "the ml repo"],
+    "kilix-content": ["kilix-content", "kilix content", "the catalog", "content", "catalog",
+                      "content catalog"],
+    "kilix-95": ["kilix-95", "kilix 95", "the desktop repo", "desktop"],
+    "plebian-os": ["plebian-os", "plebian os", "the os repo", "plebian", "os"],
+    "kilix-ml": ["kilix-ml", "kilix ml", "the ml repo", "ml"],
     "research": ["research", "~/research", "the research dir", "research notes"],
     "here": ["here", "this repo", "this directory", "the current folder", "this folder",
              "the current directory", "this project"],
@@ -148,17 +149,24 @@ _PREAMBLE = re.compile(
 _TRAILER = re.compile(r"(?:[.!]*,? (?:thanks|thank you|thx|ty|cheers|please|pls))?"
                       r"(?P<mark>[.!?]*) *$")
 _SEP = re.compile(r"(?:,? and then |, then |; |,? and |, | then )")
-_PAYLOAD_END = re.compile(r"(?:; |, (?:and )?then |, and )")
-_DET = re.compile(r"(?:(?:a|an|the|another|one more|new|fresh|second|separate|me a|us a|"
-                  r"my|our) )*")
+_PAYLOAD_END = re.compile(r"(?:; |, (?:and )?then |,? and |, )")
+_SEQUENCE = re.compile(r"(?:; |, (?:and )?then )")
+_SUBORDINATE = re.compile(r"\b(?:if|when|whenever|once|unless|until|till|before|after|in case|"
+                          r"as soon as|while)\b")
+_DET = re.compile(r"(?:(?:a|an|the|another|one more|new|fresh|blank|second|separate|me a|"
+                  r"us a|my|our) )*")
 _ROLE = re.compile(r" (?P<role>session|instance|agent|reviewer|review|worker|helper|pane|"
-                   r"window|tab|one)\b")
+                   r"window|tab|one|run)\b")
 _PREP = r"(?:(?:over |right |up |down )?(?:in|at|inside|within|under) )"
 _LAUNCH = re.compile(r"(?:open(?: up)?|start(?: up)?|launch|spawn|fire up|spin up|bring up|"
-                     r"boot(?: up)?|kick off|run|create|put)\b")
-_RESUME = re.compile(r"(?:resume|continue|reopen|pick (?:back )?up)\b")
-_WAIT = re.compile(r"(?:wait|block|hold on|hang on|hold|sit tight)\b")
-_TELL = re.compile(r"(?P<verb>tell|ask|message|ping|instruct|send|let)\b")
+                     r"boot(?: up)?|kick off|run|create|put|give me|get me)\b")
+_RESUME = re.compile(r"(?:resume|continue|reopen|pick (?:back )?up|bring back)\b")
+_WAIT = re.compile(r"(?P<verb>wait|block|hold on|hang on|hold|sit tight|watch|monitor|"
+                   r"keep an eye on)\b")
+_TELL = re.compile(r"(?P<verb>tell|ask|message|ping|instruct|send|let|steer)\b")
+_TITLED = re.compile(r" (?:titled|called|named) (?P<t>[\w.-]+(?: [\w.-]+){0,5}?)"
+                     r"(?= (?:in|at|inside|within|here|using|with|on|split|to)\b|,|:|[.!]*$)")
+_THEN = re.compile(r"(?:then |and then )?(?:(?:immediately|also|now|next|afterwards) )?")
 _COND = re.compile(r"(?:when|once|after|as soon as) ")
 _PLACE = [
     (re.compile(r",? (?:in a |as a )?(?:new )?split(?: pane)? (?:to the |on the )?"
@@ -209,7 +217,12 @@ _AMOUNT = (r"(?P<half>half an hour)|(?P<n>\d+(?![.,]\d)|" + _alternation(_NUMBER
 _TIMEOUT = [re.compile(r",? (?:but )?(?:give up after|(?:for )?up to|(?:for )?at most|"
                        r"no (?:longer|more) than|with a timeout of|timeout(?: of)?|within|"
                        r"max(?:imum)?(?: of)?) (?:" + _AMOUNT + ")"),
-            re.compile(r",? (?:" + _AMOUNT + r") (?:max|maximum|at most|tops)\b")]
+            re.compile(r",? (?:" + _AMOUNT + r") (?:max|maximum|at most|tops)\b"),
+            re.compile(r",? with an? (?:" + _AMOUNT + r") (?:time )?(?:limit|timeout|cap)\b")]
+_FRONT_TIMEOUT = re.compile(r"(?:for )?(?:at most|up to|no (?:longer|more) than) (?:" + _AMOUNT +
+                            r"),? ")
+_BARE_TIMEOUT = re.compile(r" (?:" + _AMOUNT + r")(?= (?:for|until|till)\b)")
+_GIVE_TIMEOUT = re.compile(r" (?:up to|at most) (?:" + _AMOUNT + r")")
 # A payload after a weak marker ("and", "to") may not start with these: "open
 # codex in kilix and close the claude session" is not a task for codex.
 _JOB_HEAD = frozenset("""open start launch spawn fire spin bring boot kick create put resume
@@ -311,11 +324,14 @@ class _Reader:
         if not self.low.startswith(" ", pos):
             return None
         m = re.compile(r" " + _PREP).match(self.low, pos)
-        start = m.end() if m else pos + 1
+        return self.place_named(m.end() if m else pos + 1, bool(m), bare_ok)
+
+    def place_named(self, start, prepped, bare_ok=False):
+        """The directory named at start, after its preposition (or bare "here")."""
         hit = self.dir_re.match(self.low, start)
-        if hit and (m or bare_ok and self.dir_key[hit[0]] == "here"):
+        if hit and (prepped or bare_ok and self.dir_key[hit[0]] == "here"):
             return self.dir_key[hit[0]], hit.end()
-        if self.dirs is not None or not m:
+        if self.dirs is not None or not prepped:
             return None
         path = re.compile(r"~?/[^\s,;:'\"`]*").match(self.low, start)
         if path:
@@ -336,8 +352,8 @@ class _Reader:
     def session(self, pos, acts):
         """A session phrase at pos (after a space): 'it' or agent@dir."""
         if re.compile(r"it\b(?!')|it(?='s )").match(self.low, pos):
-            launches = [a for a in acts if a.kind == "agent"]
-            return ("it", pos + 2) if len(launches) == 1 else None
+            named = _last_session(acts)
+            return (named, pos + 2) if named else None
         det = re.compile(r"(?:the |that |this )?(?:other |same )?").match(self.low, pos)
         got = self.agent(det.end())
         if not got:
@@ -374,10 +390,11 @@ class _Reader:
         # "it" has exactly one launch to name, and whether a verbless launch
         # may follow; a failure there is remembered, so a long request can't
         # make the search explode.
-        launches = sum(a.kind == "agent" for a in acts)
-        state = (pos, min(launches, 2), not acts or acts[-1].kind == "agent")
+        state = (pos, _last_session(acts), not acts or acts[-1].kind == "agent")
         if state in self.dead:
             return None
+        if acts:
+            pos = _THEN.match(self.low, pos).end()
         for clause in (self.launch, self.wait, self.tell, self.cond):
             got = clause(pos, acts)
             if got:
@@ -385,15 +402,20 @@ class _Reader:
         self.dead.add(state)
         return None
 
-    def payload(self, start, acts, make, weak=False):
+    def payload(self, start, acts, make, weak=False, strict=False):
         """A payload from start to the first separator after which the rest
-        reads as clauses, else to the end; make(payload) is its action."""
+        reads as clauses, else to the end; make(payload) is its action.
+        After ":" (strict) only "; " or ", then" end it; and a payload that
+        says if/when/unless/before/after is never cut, since what follows may
+        be its condition's ("tell claude here: if tests fail, open codex")."""
         if start >= self.n or self.low[start] == " ":
             return None
         for sep in _PAYLOAD_END.finditer(self.low, start):
             text = Payload(self.org[start:sep.start()])
-            if not _payload_ok(text, weak):
+            if strict and not _SEQUENCE.fullmatch(sep[0]) or not _payload_ok(text, weak):
                 continue
+            if _SUBORDINATE.search(_lower(text.text)):
+                break
             rest = self.chain(sep.end(), acts + (make(text),))
             if rest:
                 return rest
@@ -401,7 +423,17 @@ class _Reader:
         return acts + (make(text),) if _payload_ok(text, weak) else None
 
     def launch(self, pos, acts):
+        front = None
+        lead = re.compile(r"(?:over )?(?:in|at|inside|within) ").match(self.low, pos)
+        if lead:
+            # "In the ml repo, open codex ..."
+            got = self.place_named(lead.end(), True)
+            if not got or not self.low.startswith(", ", got[1]):
+                return None
+            front, pos = got[0], got[1] + 2
         verb = _LAUNCH.match(self.low, pos) or _RESUME.match(self.low, pos)
+        if front and not verb:
+            return None
         resuming = bool(verb) and bool(_RESUME.match(self.low, pos))
         title = None
         if verb:
@@ -424,9 +456,14 @@ class _Reader:
         agent, pos = got
         role = _ROLE.match(self.low, pos)
         found = {"resume": title} if title else {}
+        if front:
+            found["dir"] = front
         if role:
             pos = role.end()
-            if resuming and not title and role["role"] == "session":
+            titled = _TITLED.match(self.low, pos)
+            if resuming and not title and titled and not _STOP & set(titled["t"].split()):
+                found["resume"], pos = self.org[titled.start("t"):titled.end("t")], titled.end()
+            elif resuming and not title and role["role"] in ("session", "run"):
                 ident = re.compile(rf" (?:id )?{_ID}(?![\w.-])").match(self.low, pos)
                 if ident and ident["id"] not in _STOP:
                     found["resume"], pos = self.org[ident.start("id"):ident.end("id")], ident.end()
@@ -453,7 +490,7 @@ class _Reader:
         strong = re.compile(r"(?::|,? -|,? (?:with the |with )?(?:task|prompt)[:,]?) "
                             ).match(self.low, pos)
         if strong:
-            return self.payload(strong.end(), acts, make)
+            return self.payload(strong.end(), acts, make, strict=True)
         told = re.compile(r",? and (?:tell it to|tell it:|ask it to|have it|get it to|let it) "
                           ).match(self.low, pos)
         if told:
@@ -461,7 +498,7 @@ class _Reader:
         plain = self.after(pos, acts + (make(),))
         if plain:
             return plain
-        weak = re.compile(r"(?:,? and| to) ").match(self.low, pos)
+        weak = re.compile(r",? (?:and|to) ").match(self.low, pos)
         if weak:
             return self.payload(weak.end(), acts, make, weak=True)
         return None
@@ -493,29 +530,50 @@ class _Reader:
         for pattern in _TIMEOUT:
             m = pattern.match(self.low, pos)
             if m:
-                if m["half"]:
-                    return 1800, m.end()
-                count = int(m["n"]) if m["n"].isdigit() else _NUMBERS[m["n"]]
-                seconds = count * _UNIT[m["u"]]
-                return (seconds, m.end()) if 0 < seconds <= 86400 else None
+                seconds = _seconds(m)
+                return (seconds, m.end()) if seconds else None
         return None
 
     def wait(self, pos, acts):
+        limit = None
+        front = _FRONT_TIMEOUT.match(self.low, pos)          # "For at most 45 seconds, wait ..."
+        if front:
+            limit, pos = _seconds(front), front.end()
+            if not limit:
+                return None
+        give = re.compile(r"give ").match(self.low, pos)
+        if give and limit is None:
+            # "Give the claude session in the os repo up to five minutes to become idle"
+            got = self.session(give.end(), acts)
+            span = got and _GIVE_TIMEOUT.match(self.low, got[1])
+            if not span or not _seconds(span):
+                return None
+            return self.state(span.end(), acts, got[0], _seconds(span))
         verb = _WAIT.match(self.low, pos)
         if not verb:
             return None
         pos = verb.end()
-        limit = None
-        early = self.timeout(pos)
-        if early:
-            limit, pos = early
+        if limit is None:
+            early = self.timeout(pos) or (lambda m: m and _seconds(m) and (_seconds(m), m.end()))(
+                _BARE_TIMEOUT.match(self.low, pos))
+            if early:
+                limit, pos = early
+        if verb["verb"] in ("watch", "monitor", "keep an eye on"):
+            # "Watch grok in the ml repo until it is waiting for approval"
+            got = self.low.startswith(" ", pos) and self.session(pos + 1, acts)
+            until = got and re.compile(r" until it(?=\b|')").match(self.low, got[1])
+            if not until:
+                return None
+            return self.state(until.end(), acts, got[0], limit)
         until = re.compile(r" (?:until|till|for|on) ").match(self.low, pos)
         if not until:
             return None
         got = self.session(until.end(), acts)
         if not got:
             return None
-        session, pos = got
+        return self.state(got[1], acts, got[0], limit)
+
+    def state(self, pos, acts, session, limit):
         idle, waiting = _IDLE_STATE.match(self.low, pos), _WAITING_STATE.match(self.low, pos)
         if bool(idle) == bool(waiting):
             return None
@@ -527,34 +585,52 @@ class _Reader:
         return self.after(pos, acts + (_want("wait", session=session, **{"for": state},
                                              timeout=limit),))
 
+    def target(self, pos, acts, cond):
+        """The session a message goes to. After "when <session> is done", only
+        that session ("it", or its name again)."""
+        if cond:
+            it = re.compile(r"it\b").match(self.low, pos)
+            got = (cond, it.end()) if it else self.session(pos, acts)
+            return got if got and got[0] == cond else None
+        return self.session(pos, acts)
+
     def tell(self, pos, acts, cond=None):
         verb = _TELL.match(self.low, pos)
-        if not verb:
+        if not verb or not self.low.startswith((" ", ":"), verb.end()):
             return None
-        if not self.low.startswith(" ", verb.end()):
-            return None
-        if cond:
-            # "when <session> is done, tell it ...": the message goes to that
-            # session, once it is idle; naming another session is refused.
-            it = re.compile(r"it\b").match(self.low, verb.end() + 1)
-            got = (cond, it.end()) if it else self.session(verb.end() + 1, acts)
-            if got and got[0] != cond:
-                return None
+        kind, pos = verb["verb"], verb.end()
+        marker = None
+        if kind == "send":
+            to = re.compile(r" (?:this|this message|this note|the following|a message|a note) "
+                            r"to ").match(self.low, pos)
+            bare = cond and re.compile(r"(?: it)?(?: this| this note| this message)?: "
+                                       ).match(self.low, pos)
+            if to:
+                got = self.target(to.end(), acts, cond)
+                marker = got and re.compile(r": ").match(self.low, got[1])
+            elif bare:
+                got, marker = (cond, bare.end()), bare
+            else:
+                got = self.target(pos + 1, acts, cond)
+                marker = got and re.compile(r"(?: this| this note| this message| the message|"
+                                            r" a message| a note)?: ").match(self.low, got[1])
         else:
-            got = self.session(verb.end() + 1, acts)
-        if not got:
+            got = self.target(pos + 1, acts, cond)
+            if got and kind == "let":
+                marker = re.compile(r" know(?: that|:)? ").match(self.low, got[1])
+            elif got and kind == "steer":
+                marker = re.compile(r"(?: with this| with)?: ").match(self.low, got[1])
+            elif got:
+                marker = re.compile(r"(?::|,? saying:|,? -) |(?: to| that|,? saying) "
+                                    r"|(?= not to )").match(self.low, got[1])
+                if marker and marker.end() == got[1]:
+                    marker = re.compile(r" ").match(self.low, got[1])    # "... not to change X"
+        if not got or not marker:
             return None
-        session, pos = got
-        if verb["verb"] == "let":
-            marker = re.compile(r" know(?: that|:)? ").match(self.low, pos)
-        elif verb["verb"] == "send":
-            marker = re.compile(r" (?:this|the message|a message|a note)?: ").match(self.low, pos)
-        else:
-            marker = re.compile(r"(?::| to| that|,? saying:?| -) ").match(self.low, pos)
-        if not marker:
-            return None
+        session = got[0]
+        strict = ":" in marker[0] or " -" in marker[0] or kind in ("send", "steer")
         return self.payload(marker.end(), acts, lambda text: _want(
-            "tell", session=session, text=text, wait=True if cond else None))
+            "tell", session=session, text=text, wait=True if cond else None), strict=strict)
 
     def cond(self, pos, acts):
         head = _COND.match(self.low, pos)
@@ -571,12 +647,33 @@ class _Reader:
         return self.tell(sep.end(), acts, cond=session)
 
 
+def _seconds(m) -> int | None:
+    """The seconds a timeout phrase says (half an hour, 5 minutes), up to a day."""
+    if m["half"]:
+        return 1800
+    count = int(m["n"]) if m["n"].isdigit() else _NUMBERS[m["n"]]
+    seconds = count * _UNIT[m["u"]]
+    return seconds if 0 < seconds <= 86400 else None
+
+
+def _last_session(acts) -> str | None:
+    """What "it" names: the session of the latest clause -- the launch, when
+    it is the only one, or the session a wait or message named."""
+    if not acts:
+        return None
+    if acts[-1].kind == "agent":
+        return "it" if sum(a.kind == "agent" for a in acts) == 1 else None
+    return acts[-1].get("session")
+
+
 def _payload_ok(payload: Payload, weak: bool) -> bool:
     text = _plain(payload.text)
     if not text or text[0] in "-/!#@" or len(text.encode()) > 4096:
         return False
     if len(text) > 1 and text[0] in "\"'`" and text[1:2] in "-/!#@":
         return False
+    if weak and _AGENT.match(_lower(text), _DET.match(_lower(text)).end()):
+        return False            # "and codex in research" is another launch, not a task
     sentences = re.split(r"(?<=[.!?;])\s+", _lower(text))
     for index, sentence in enumerate(sentences):
         words = re.findall(r"[a-z][a-z']*", sentence)
@@ -738,14 +835,38 @@ def interpret(request: str, calls: list, dirs: dict | None = None) -> list:
     if wants is None:
         reason = _why_not(request)
         return [Refusal(call["name"], reason) for call in calls]
-    if len(wants) != len(calls):
-        reason = (f"the request states {len(wants)} action{'s' * (len(wants) != 1)}, "
-                  f"not {len(calls)}")
-        return [Refusal(call["name"], reason) for call in calls]
-    admitted = []
-    for call, want in zip(calls, wants):
-        action, why = _match(call, want, dirs)
-        if action is None:
-            return [Refusal(c["name"], why) for c in calls]
-        admitted.append(action)
-    return admitted
+    why = ""
+    for reading in _readings(wants):
+        if len(reading) != len(calls):
+            why = why or (f"the request states {len(reading)} action"
+                          f"{'s' * (len(reading) != 1)}, not {len(calls)}")
+            continue
+        admitted = []
+        for call, want in zip(calls, reading):
+            action, why = _match(call, want, dirs)
+            if action is None:
+                break
+            admitted.append(action)
+        else:
+            return admitted
+    return [Refusal(call["name"], why) for call in calls]
+
+
+def _readings(wants: list) -> list:
+    """The reading, and the same reading with "wait until S is idle, then tell
+    S" written as one message that waits first (and the other way round):
+    the spec's writers use both, and they do the same thing."""
+    out = [wants]
+    for i in range(len(wants)):
+        want = wants[i]
+        if want.kind == "tell" and want.get("wait"):
+            wait = _want("wait", session=want.get("session"), **{"for": "idle"})
+            tell = _want("tell", session=want.get("session"), text=want.get("text"))
+            out.append(wants[:i] + [wait, tell] + wants[i + 1:])
+        nxt = wants[i + 1] if i + 1 < len(wants) else None
+        if want.kind == "wait" and want.get("for") == "idle" and want.get("timeout") is None \
+                and nxt and nxt.kind == "tell" and not nxt.get("wait") \
+                and nxt.get("session") == want.get("session"):
+            tell = _want("tell", session=nxt.get("session"), text=nxt.get("text"), wait=True)
+            out.append(wants[:i] + [tell] + wants[i + 2:])
+    return out

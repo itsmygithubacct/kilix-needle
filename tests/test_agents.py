@@ -238,6 +238,66 @@ class Checks(unittest.TestCase):
             self.assertIsNone(agents.parse(request), repr(request))
 
 
+    def test_it_is_the_latest_clauses_session(self):
+        request = "Tell omp in the catalog to validate every URL, then wait for it to ask for input"
+        self.assertEqual(len(admitted(request, [
+            call("tell", session="qwen-omp@kilix-content", text="validate every URL"),
+            call("wait", session="qwen-omp@kilix-content", **{"for": "waiting"})])), 2)
+        self.assertIsNone(agents.parse("open claude in kilix and codex in research and wait "
+                                       "for it to finish"))
+
+    def test_waiting_then_telling_is_one_message_that_waits(self):
+        request = "Wait until codex here is finished, then tell it to update the changelog entry"
+        as_two = [call("wait", session="codex@here", **{"for": "idle"}),
+                  call("tell", session="codex@here", text="update the changelog entry")]
+        as_one = [call("tell", session="codex@here", text="update the changelog entry",
+                       wait=True)]
+        self.assertEqual(len(admitted(request, as_two)), 2)
+        self.assertEqual(admitted(request, as_one),
+                         [["tell", {"session": "here" and "codex@here",
+                                    "text": "update the changelog entry", "wait": True}]])
+        self.assertEqual(admitted(request, [call("tell", session="codex@here",
+                                                 text="update the changelog entry")]), [])
+
+    def test_more_ways_to_say_it(self):
+        cases = {
+            "In the ml repo, open codex cli with gpt-6 to compare the two tokenizer configs":
+                [call("agent", agent="codex", dir="kilix-ml", model="gpt-6",
+                      prompt="compare the two tokenizer configs")],
+            "Resume the codex session titled sidebar cleanup in kilix 95 using gpt-6":
+                [call("agent", agent="codex", dir="kilix-95", resume="sidebar cleanup",
+                      model="gpt-6")],
+            "Bring back Codex run a03d77cc in the current folder below me":
+                [call("agent", agent="codex", dir="here", resume="a03d77cc", place="down")],
+            "For at most 45 seconds, wait for qwen in research to need input":
+                [call("wait", session="qwen-omp@research", **{"for": "waiting", "timeout": 45})],
+            "Give the claude session in the os repo up to five minutes to become idle":
+                [call("wait", session="claude@plebian-os", **{"for": "idle", "timeout": 300})],
+            "Watch grok in the ml repo until it is waiting for approval":
+                [call("wait", session="grok@kilix-ml", **{"for": "waiting"})],
+            "Send this to Claude in the OS repo: keep the compatibility shim for now":
+                [call("tell", session="claude@plebian-os",
+                      text="keep the compatibility shim for now")],
+            "After CC here finishes, send: add a regression test before wrapping up":
+                [call("tell", session="claude@here", text="add a regression test before "
+                      "wrapping up", wait=True)],
+            "Spawn codex here to clean up the test fixture and grok here to review that fixture":
+                [call("agent", agent="codex", dir="here", prompt="clean up the test fixture"),
+                 call("agent", agent="grok", dir="here", prompt="review that fixture")],
+        }
+        for request, calls in cases.items():
+            self.assertEqual(len(admitted(request, calls)), len(calls), request)
+
+
+    def test_a_condition_in_a_payload_keeps_what_follows(self):
+        for request in ("tell claude here: if tests fail, open codex in kilix",
+                        "open codex in kilix to review, and if it fails, tell claude here to fix",
+                        "tell claude here: review the diff, open codex in kilix"):
+            self.assertEqual(len(agents.parse(request)), 1, request)
+        self.assertEqual(len(agents.parse("tell claude here: fix it; then open codex in kilix")),
+                         2)
+
+
 class ReviewR14(unittest.TestCase):
     """Review R14's attack rows (tests/data/agents-r14-rows.json), with the
     verdict each must get in the fixture and in production. Four rows are the
