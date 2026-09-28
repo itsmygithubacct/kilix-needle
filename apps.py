@@ -530,9 +530,13 @@ def _context_ok(segment: str) -> bool:
     or time there was ignored), name no app, item, stat, section or game (so a
     thing is never said both ways across sentences), and speak of nobody else
     and no message, note or example."""
-    body = segment.strip(" .!?")
-    if not body or _refusal(body) or _OTHERS.search(body) or _names_something(body) \
-            or _DAYS.search(body):
+    body = segment.strip(" .!")
+    # Only everyday scene words, and no question (review R15 round 2,
+    # KN-R15-11/12: "What follows is a joke. Open doom.", "Should I? Open doom."
+    # were admitted by a list of words to refuse; this list says what may be).
+    if not body or "?" in body or any(w not in _SCENE_WORDS for w in re.findall(r"[a-z']+", body)):
+        return False
+    if _refusal(body) or _names_something(body):
         return False
     # "The date display is cluttering the top bar": a statement, whatever
     # words it holds, unless it starts with an instruction verb.
@@ -544,6 +548,26 @@ def _context_ok(segment: str) -> bool:
     return True
 
 
+# The only words a closing purpose may use: "so I can check these numbers".
+_PURPOSE_WORDS = frozenset("""
+i we can could take a look check see it this that these those some something things numbers
+work relax play my our the quick document file files page pages sheet
+""".split())
+# The only words a scene-setting sentence before an instruction may use.
+_SCENE_WORDS = frozenset("""
+i i'm im i've ive i am was we we're were it it's its is so just really very too quite pretty
+a an the my our bit little kind of some
+bored tired sleepy cold chilly freezing hot warm late early raining rainy snowing sunny windy
+quiet busy free back home done ready stressed hungry relaxed restless stuck
+long day week night break need needed want wanted fancy feel feeling like
+time to relax chill unwind rest quick one no rush
+work working have got getting going do doing things stuff lot of out outside there here
+jot something down
+browse folders find misplaced lost looking for data plot make beat music would help graphics
+five ten minutes spare running watching leaks keep losing track sort organise organize some
+numbers sums write jot down fun game games play playing
+hmm ok okay alright right well now phew ugh yay nice great
+""".split())
 # "Only on Friday. Open doom.": a day is a when (review R15).
 _DAYS = re.compile(r"\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|weekend|morning|"
                    r"afternoon|evening|night|once|first|then|later|soon)\b")
@@ -571,6 +595,8 @@ def _without_purpose(sentence: str) -> str:
     if not match:
         return sentence
     why = match["why"].strip(" .!")
+    if any(w not in _PURPOSE_WORDS for w in re.findall(r"[a-z']+", why)):
+        return sentence             # "for a fake request", "to a new desktop" (R15 round 2)
     if len(why.split()) > 8 or _refusal(match.group(0)) or _OTHERS.search(why) \
             or _names_something(why) or _has_verb(why) or _opening(why) is not None \
             or _PLACED.search(match.group(0)) or re.search(r"[,;:]|\b(?:then|and|or|but)\b", why) \

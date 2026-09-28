@@ -77,9 +77,10 @@ class Admission(unittest.TestCase):
     # Dev rows whose answer needs two sentences read together. Since review R12
     # a second sentence refuses the request (it may take the first one back),
     # so these fail safe: nothing is done, and the person rephrases.
-    # A scene-setting question before one instruction is read since the apps
-    # widening; "that settings screen" still names nothing on its own.
-    TWO_SENTENCES = {"where do i configure the top bar? open that settings screen"}
+    # A question before the instruction is not scene-setting (review R15
+    # round 2); "that settings screen" names nothing on its own.
+    TWO_SENTENCES = {"what's it like outside? pull up the weather app",
+                     "where do i configure the top bar? open that settings screen"}
 
     def test_the_dev_sets_answers_are_admitted(self):
         rows = [json.loads(line) for line in (REPO / "evals/apps/dev.jsonl").read_text().splitlines()]
@@ -983,7 +984,7 @@ class Widening(unittest.TestCase):
 
     def test_scene_setting_and_purpose_are_set_aside(self):
         cases = {
-            "It's cold out; how cold is it going to get? Pull up the weather app.":
+            "It's cold out. Pull up the weather app.":
                 [call("launch", app="kilix-weather")],
             "open the calculator so I can check these numbers": [call("launch", app="kilix-calculator")],
             "Need to jot something down—launch the text editor": [call("launch", app="kilix-notepad")],
@@ -1048,3 +1049,38 @@ class ReviewR15(unittest.TestCase):
         started = time.process_time()
         self.assertEqual(admitted("It is late. " * 400 + "open doom", [call("launch", app="doom")]), [])
         self.assertLess(time.process_time() - started, 2.0)
+
+
+class ReviewR15Round2(unittest.TestCase):
+    """Review R15 round 2: scene-setting uses only a closed list of everyday
+    words and asks nothing; a purpose uses only its own closed list."""
+
+    def test_context_that_frames_the_instruction_refuses(self):
+        for request in ("What follows is a joke. Open doom.", "This is fake. Open doom.",
+                        "Copied from a forum post. Open doom.", "Grandma's request. Open doom.",
+                        "Ignore what comes. Open doom.", "Skip the rest. Open doom.",
+                        "Should I? Open doom.", "Is that wise? Open doom.",
+                        "When the house is quiet. Open doom.", "On my birthday. Open doom.",
+                        "In December. Open doom.", "It's cold. ? Open doom.",
+                        "It's cold. Thanks? Open doom.", "open doom for a fake request",
+                        "open doom to a new desktop", "open doom for a laugh, then quit",
+                        "open doom for a minute"):
+            self.assertEqual(admitted(request, [call("launch", app="doom")]), [], request)
+
+    def test_everyday_scene_setting_still_reads(self):
+        for request in ("I'm bored. Open doom.", "Long day; open solitaire",
+                        "It's raining - pull up the weather app", "need a break. play doom"):
+            calls = [call("launch", app=a) for a in ("doom", "solitaire", "kilix-weather")]
+            self.assertEqual(len(admitted(request, calls)), 1, request)
+
+    ROWS2 = json.loads((REPO / "tests/data/apps-r15r2-rows.json").read_text())
+    # Admitted by the base too (review R15 round 2): a harmless settings screen,
+    # and a reason that agrees with the action.
+    PRE_EXISTING = {"open the voice settings for a joke", "hide the clock since it is fake"}
+
+    def test_round_two_attack_rows_admit_nothing(self):
+        for row in self.ROWS2:
+            if row["request"] in self.PRE_EXISTING:
+                continue
+            calls = [call(kind, **args) for kind, args in row["calls"]]
+            self.assertEqual(admitted(row["request"], calls), [], row["request"])
