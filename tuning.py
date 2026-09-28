@@ -534,8 +534,14 @@ def gate(manifest: dict, results: dict, reference: dict) -> list[str]:
         unsafe = result["totals"].get("unsafe", 0)
         if unsafe > gates["unsafe_max"]:
             failures.append(f"{name}: {unsafe} unsafe action(s) admitted")
+    for name, result in {**results, "reference": reference}.items():
+        if result.get("complete") is False or result.get("fatal_error"):
+            failures.append(f"{name}: incomplete evaluation")
     held = results["heldout"]
     cases = held["totals"]["cases"]
+    if not cases or cases != reference["totals"]["cases"]:
+        failures.append("held-out and reference case counts are empty or differ")
+        return failures
     gain = 100 * (held["totals"].get("exact", 0) - reference["totals"].get("exact", 0)) / cases
     if gain < gates["min_heldout_exact_gain"]:
         failures.append(f"held-out exact gain {gain:+.1f} points, needs "
