@@ -48,6 +48,14 @@ class Gates(unittest.TestCase):
         failures = self.gate(tuned, reference)
         self.assertTrue(any("close_tab lost 5" in f for f in failures), failures)
 
+    def test_incomplete_evaluation_cannot_pass(self):
+        tuned = {**result(90, 100), "complete": False, "fatal_error": "restart failed"}
+        self.assertTrue(any("incomplete" in f for f in self.gate(tuned, result(60, 100))))
+
+    def test_empty_or_mismatched_counts_cannot_pass(self):
+        for tuned, reference in ((result(0, 0), result(0, 0)), (result(90, 100), result(60, 99))):
+            self.assertTrue(any("case counts" in f for f in self.gate(tuned, reference)))
+
 
 class Data(unittest.TestCase):
     def test_training_data_is_consistent_and_excludes_every_eval_request(self):

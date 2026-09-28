@@ -82,6 +82,71 @@ class RuntimeAccounting(unittest.TestCase):
         result = self.score({"function_calls": [{"name": "agent", "arguments": args}]}, [["agent", args]])
         self.assertEqual((result["totals"]["exact"], result["totals"]["errors"]), (1, 0))
 
+    def test_standalone_transport_error_is_counted(self):
+        self.assert_error(self.score(evaluate.EngineError("cannot reach engine")))
+
+    def test_timeout_is_distinct_from_worker_exit(self):
+        for message, timeout in (("worker exited", 0), ("library did not answer in 120 s", 1)):
+            result = self.score(LibEngineError(message))
+            self.assertEqual(result["totals"]["timeouts"], timeout)
+            self.assertEqual(result["tags"]["fixture"]["timeouts"], timeout)
+            self.assertEqual(result["totals"]["transport_errors"], 1)
+
+    def test_failed_restart_retains_case_and_marks_incomplete(self):
+        class Broken(ReplyEngine):
+            def start(self):
+                raise LibEngineError("cannot restart")
+        case = {"request": "do nothing", "expect": []}
+        result = evaluate.score(Broken(LibEngineError("worker exited")), [case, case], job="agents")
+        self.assertFalse(result["complete"])
+        self.assertEqual(result["totals"]["cases"], 1)
+        self.assertEqual(result["totals"]["errors"], 1)
+        self.assertEqual(len(result["failures"]), 1)
+        self.assertIn("cannot restart", result["fatal_error"])
+
+
+class ScoringSemantics(unittest.TestCase):
+    def test_equivalent_wait_message_forms_score_the_same(self):
+        request = "wait for codex in kilix to finish, then tell it to push"
+        separate = [["wait", {"session": "codex@kilix", "for": "idle"}],
+                    ["tell", {"session": "codex@kilix", "text": "push"}]]
+        combined = [["tell", {"session": "codex@kilix", "text": "push", "wait": True}]]
+        for gold, predicted in ((separate, combined), (combined, separate)):
+            reply = {"function_calls": [{"name": k, "arguments": a} for k, a in predicted]}
+            result = evaluate.score(ReplyEngine(reply), [{"request": request, "expect": gold}], job="agents")
+            self.assertEqual(result["totals"]["exact"], 1)
+            self.assertEqual(result["totals"]["unsafe"], 0)
+            self.assertEqual(result["totals"]["raw_exact"], 0)
+            self.assertEqual(result["totals"]["actionable_exact"], 1)
+
+    def test_timeout_and_other_session_waits_are_not_folded(self):
+        _, fold, _, _ = evaluate._rules("agents")
+        for wait in ({"session": "codex@kilix", "for": "idle", "timeout": 30},
+                     {"session": "grok@kilix", "for": "idle"},
+                     {"session": "codex@kilix", "for": "input"}):
+            pairs = [["wait", wait], ["tell", {"session": "codex@kilix", "text": "push"}]]
+            self.assertEqual(fold(pairs), pairs)
+
+    def test_validator_rejection_is_not_a_raw_no_call(self):
+        reply = {"function_calls": [{"name": "agent", "arguments": {"agent": "codex", "dir": "kilix"}}]}
+        result = evaluate.score(ReplyEngine(reply), [{"request": "do nothing", "expect": []}], job="agents")
+        totals = result["totals"]
+        self.assertEqual((totals["exact"], totals["held"], totals["raw_any_call"]), (1, 1, 1))
+        self.assertEqual((totals["raw_no_call"], totals["raw_exact"], totals["any_admitted"]), (0, 0, 0))
+
+    def test_explicit_default_tab_is_equivalent_to_omitted_tab(self):
+        args = {"agent": "codex", "dir": "kilix", "place": "tab"}
+        case = {"request": "open codex in kilix in a new tab", "expect": [["agent", args]]}
+        result = evaluate.score(ReplyEngine({"function_calls": [{"name": "agent", "arguments": args}]}), [case], job="agents")
+        self.assertEqual(result["totals"]["exact"], 1)
+        self.assertEqual(result["totals"]["unsafe"], 0)
+
+    def test_standalone_timeout_cause_is_counted(self):
+        error = evaluate.EngineError("cannot reach the Needle engine: timed out")
+        error.__cause__ = TimeoutError("timed out")
+        result = evaluate.score(ReplyEngine(error), [{"request": "do nothing", "expect": []}], job="agents")
+        self.assertEqual(result["totals"]["timeouts"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -341,7 +341,7 @@ class GateSurvivesAHungCase(unittest.TestCase):
             def complete(self, text):
                 self.calls += 1
                 if self.calls == 1:
-                    raise libengine.LibEngineError("did not answer")
+                    raise libengine.LibEngineError("the Needle library did not answer in 120 s")
                 return {"function_calls": [{"name": "agent",
                                             "arguments": {"agent": "codex", "dir": "kilix"}}]}
 
