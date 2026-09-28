@@ -247,3 +247,28 @@ class Round3(unittest.TestCase):
                     ("game", {"game": "doom", "available": True}),
                     ("game", {"game": "kilix-pong", "available": True})])
         self.assertEqual(admitted("I want doom and pong"), [])
+
+
+class Round4(unittest.TestCase):
+    """Review R16 round 4: list scope from games only; places."""
+
+    def test_an_unrelated_continuation_lends_no_list_scope(self):         # KN-R16-401
+        for request in ("I want doom, and the games list screenshot",
+                        "I want doom and a screenshot of the games list",
+                        "I need doom and a screenshot of the games list"):
+            with self.subTest(request=request):
+                self.assertFalse([a for a in admitted(request) if a[0] == "game"])
+        self.assertEqual(len(admitted("I don't want doom and pong in the games list")), 2)
+
+    def test_places_take_possessives_directions_and_a_closing_word(self):  # KN-R16-402
+        for request in ("hide the clock on our top bar", "hide the clock in the upper right corner",
+                        "hide the clock from the top right corner",
+                        "hide the clock from the top bar completely",
+                        "hide the clock on the top bar permanently"):
+            with self.subTest(request=request):
+                self.assertEqual(admitted(request), [("show", {"item": "clock", "on": False})])
+
+    def test_place_words_do_not_run_together(self):                        # KN-R16-404
+        for request in ("hide the clock in the thememenu", "hide the clock on terminalstatus"):
+            with self.subTest(request=request):
+                self.assertEqual(admitted(request), [])

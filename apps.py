@@ -439,7 +439,9 @@ _OBJECT_END = re.compile(
     r"instead|right|for good)$")
 
 
-_MASK = "\x00"          # never in a request after _plain_words' normalisation
+# Masks when-phrases. A NUL never reaches the checks: engine.check_prompt
+# refuses control characters in every CLI and MCP request (review KN-R16-4).
+_MASK = "\x00"
 
 
 @functools.lru_cache(maxsize=4096)
@@ -452,10 +454,11 @@ def _without_when(clause: str) -> str:
 # Where a widget is: after "on", "in", "from"... only these may follow, so
 # "the clock icon on the poster" names no indicator (review KN-R16-303).
 _PLACE = re.compile(
-    r"(?:(?:the|my|a|an|each|every|all|of|kilix|kilix's|top|bottom|status|task|menu|title|"
+    r"(?:(?:the|my|our|your|a|an|each|every|all|of|kilix|kilix's|top|bottom|upper|lower|"
+    r"left|right|status|task|menu|title|"
     r"pane|panes|bar|taskbar|panel|screen|header|headers|desktop|corner|tray|tab|tabs|"
     r"button|buttons|list|area|row|strip|toolbar|window|windows|terminal|here|there|"
-    r"controls?|icons?|indicators?|widgets?|at|in|on|for|me|us)\s*)+")
+    r"controls?|icons?|indicators?|widgets?|topbar|statusbar|at|in|on|for|me|us)(?:\s+|$))+")
 _PREPOSITION = re.compile(r"(?:on|in|from|at|into|onto|to|out of|off of|off)$")
 # The object of these is what they describe: "pictures of the clock", "files
 # about the clock" (review KN-R16-303).
@@ -488,7 +491,13 @@ def _names_the_item(clause: str, match: re.Match) -> bool:
             place = re.match(r"\s*(.*?)\s*(?:[,;:.!?](?:\s|$)|$|" + _MASK + r"|\b(?:and|then|"
                              r"but|please|too|now|again|so|when|while)\b)", after)
             words = place.group(1) if place else after
-            return not words or bool(_PLACE.fullmatch(words + " "))
+            # "from the top bar completely": a word that ends an object may
+            # close the place too (review KN-R16-402).
+            tail = words.split()
+            while tail and _OBJECT_END.match(tail[-1]) and not _PLACE.fullmatch(tail[-1]):
+                tail.pop()
+            words = " ".join(tail)
+            return not words or bool(_PLACE.fullmatch(words))
         return bool(_OBJECT_END.match(word))
 
 
@@ -966,9 +975,12 @@ def _admit(name: str, args: dict, reading: Reading) -> Action | Refusal:
             # (reviews KN-R16-03, KN-R16-201).
             wish = (re.search(_NEGATED_WANT, part.verb)
                     or any(re.search(pattern, part.verb) for pattern in _WISH))
-            # A list named anywhere in the coordinated group scopes all of it:
-            # "I want doom and pong in the games list" (review KN-R16-304).
-            group = " ".join(p.text for p in parts if p.verb == part.verb)
+            # A list named by a game in the coordinated group scopes all of
+            # its games: "I want doom and pong in the games list" (review
+            # KN-R16-304); "and a screenshot of the games list" names no game,
+            # so it scopes nothing (review KN-R16-401).
+            group = " ".join(p.text for p in parts if p.verb == part.verb
+                             and any(_mentions(LAUNCH_NAMES, g, p.text) for g in AVAILABILITY))
             list_scope = re.search(
                 r"\b(?:in|on|from|off|into|out of) (?:the |my |our |this |that )?"
                 r"(?:games? )?(?:list|picker|menu)\b|\bgames? (?:list|picker|menu)\b",
