@@ -550,7 +550,7 @@ def _context_ok(segment: str) -> bool:
 
 # The only closing purposes: "so I can check these numbers", "for this document".
 _PURPOSE_SHAPE = re.compile(r"(?:so (?:that )?(?:i|we) can (?:take a look|have a look|check (?:something|"
-                            r"it|this|these numbers|the numbers|my numbers)|see (?:it|them|what's there))"
+                            r"it|this|these numbers|the numbers|my numbers)|see (?:it|what's there))"
                             r"|for (?:this|my|our) (?:document|file|files|work|sums))")
 # The only scene-setting sentences: a state of the speaker or the weather, and
 # a few fixed phrases.
@@ -560,7 +560,7 @@ _SCENE_STATE = (r"bored|tired|sleepy|cold|chilly|freezing|hot|warm|raining|snowi
 _SCENE = re.compile(rf"(?:(?:ok|okay|alright|well|so|phew|ugh|hmm)[, ]+)?"
                     rf"(?:(?:i'?m|i am|it'?s|it is|i feel|feeling|we'?re|we are)(?: (?:so|really|a bit|"
                     rf"a little|pretty|quite|very|too|kind of))? (?:{_SCENE_STATE})(?: out| outside)?"
-                    rf"|long day|what a day|need a break|i need a break|quick one|phew|ugh)")
+                    rf"|long day|what a day|need a break|quick one|phew|ugh)")
 # "Only on Friday. Open doom.": a day is a when (review R15).
 _DAYS = re.compile(r"\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|weekend|morning|"
                    r"afternoon|evening|night|once|first|then|later|soon)\b")
@@ -590,6 +590,11 @@ def _without_purpose(sentence: str) -> str:
     why = match["why"].strip(" .!")
     if not _PURPOSE_SHAPE.fullmatch(match.group(0).strip(" .!")):
         return sentence             # only the fixed purposes (review R15 rounds 2 and 3)
+    # Only after opening something: "hide the clock so I can see it" says
+    # both ways (review R15 round 4, KN-R15-23).
+    head = _body(sentence[:match.start()])
+    if not (_OPEN.match(head) or _NAV.match(head)) or _polarity(sentence[:match.start()]) is False:
+        return sentence
     if len(why.split()) > 8 or _refusal(match.group(0)) or _OTHERS.search(why) \
             or _names_something(why) or _has_verb(why) or _opening(why) is not None \
             or _PLACED.search(match.group(0)) or re.search(r"[,;:]|\b(?:then|and|or|but)\b", why) \

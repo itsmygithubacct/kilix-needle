@@ -1103,3 +1103,25 @@ class ReviewR15Round2(unittest.TestCase):
                                ("open doom so i can play", [call("launch", app="doom")])):
             self.assertEqual(admitted(request, calls), [], request)
         self.assertEqual(len(admitted("I'm so bored. Open doom.", [call("launch", app="doom")])), 1)
+
+
+class ReviewR15Round4(unittest.TestCase):
+    """Review R15 round 4: the rows that pin the shapes, the after-instruction
+    rule and the length cap; a purpose only after opening something. Known
+    issue (KN-R15-23, Low): "hide the clock so I can see it" is admitted by the
+    base's trailing-word reading as before; never plain, so always held."""
+
+    def test_the_shapes_are_whole_matches(self):
+        for request in ("I'm back to write it down. Open doom.", "open doom for my work desktop",
+                        "Open doom. I'm bored.", "I'm bored. " * 200 + "Open doom."):
+            calls = [call("launch", app="doom"), call("show", item="clock", on=False),
+                     call("game", game="doom", available=False)]
+            self.assertEqual(admitted(request, calls), [], request[:60])
+
+    def test_what_the_shapes_admit(self):
+        for request, calls in (("I'm bored. Open doom.", [call("launch", app="doom")]),
+                               ("open the calculator so I can check these numbers",
+                                [call("launch", app="kilix-calculator")]),
+                               ("open the voice settings so I can take a look",
+                                [call("settings", section="voice")])):
+            self.assertEqual(len(admitted(request, calls)), 1, request)
