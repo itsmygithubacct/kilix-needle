@@ -1,6 +1,6 @@
 # kilix-needle
 
-Drive Kilix panes and tabs from plain requests, using
+Drive Kilix panes, tabs, apps and coding-agent sessions from plain requests, using
 [Needle 2](https://huggingface.co/Cactus-Compute/needle2), a 45M-parameter
 tool-calling model that runs on the CPU in about 45 MB of RAM.
 
@@ -11,6 +11,8 @@ kilix-needle make it a grid
 kilix-needle                    # a prompt loop, one request per line
 kilix-needle --dry-run close this pane
 kilix-needle --yes close tab 2  # no question; for scripts and agents
+kilix-needle agents "open codex in kilix-needle: review the diff"
+kilix-needle agents --dry-run "open grok here in a split on the right"
 ```
 
 Requires Python 3.11+ on Linux x86-64, run inside Kilix. It has no Python
@@ -244,8 +246,15 @@ backslash is refused.
 
 ## Jobs
 
-kilix-needle does one job today, `panes` (Kilix panes and tabs). Each job has
-its own eval sets, gate and selected model (`jobs.py`). Selecting a tuned
+kilix-needle has three action jobs:
+
+| Job | CLI | Scope |
+| --- | --- | --- |
+| `panes` (default) | `kilix-needle REQUEST` | Kilix panes and tabs |
+| `apps` | `kilix-needle apps REQUEST` | Apps, games and settings |
+| `agents` | `kilix-needle agents REQUEST` | Launch, resume, wait for and message coding-agent sessions |
+
+Each job has its own eval sets, gate and selected model (`jobs.py`). Selecting a tuned
 model for one job never changes another job's model, and a model gated for
 one job can't be selected for another.
 
@@ -259,6 +268,7 @@ or tuned, any Needle generation. The criteria, in order:
 kilix-needle tune --status                    # every job's model in use
 kilix-needle tune --job panes --select RUN    # a gated run, for that job only
 kilix-needle tune --job panes --deselect      # that job back to its base model
+kilix-needle tune --job agents --select RUN   # a gated coding-session model
 ```
 
 A selection saved before jobs existed is read as the `panes` selection.
@@ -327,6 +337,49 @@ The model sees five tools: `launch`, `show`, `pane_stat`, `game` and
 **Accuracy.** Stock Needle 2 gets 29 of 40 dev and 58 of 90 test requests
 exactly right on this schema, with 0 unsafe. A tuned model for this job is
 next; the bench decides the job's default (see Jobs).
+
+## The agents job
+
+`kilix-needle agents "…"` starts Claude Code, Codex, Grok or Qwen OMP
+(`qwen-omp`) in an existing directory, waits for a session, or sends it a
+message. Launches open a new tab by default; a request can choose a split,
+model, task or session to resume.
+
+```sh
+kilix-needle agents "open codex in kilix-needle: review the diff"
+kilix-needle agents --dry-run "open grok here in a split on the right"
+kilix-needle agents "resume codex session 01a0dab8 in kilix"  # use your session ID
+kilix-needle agents "wait until the codex session in kilix is idle"
+kilix-needle agents "tell the codex session in kilix not to push"
+```
+
+The MCP tools are `kilix_agents_plan` and `kilix_agents_act`. The plan tool
+and CLI `--dry-run` resolve the request without performing its actions.
+The model sees three tools: `agent`, `wait` and `tell`.
+
+**Consent and checks.** An admitted agents request is itself permission to
+run; it needs neither a second confirmation nor `--yes` or `confirm_risky`.
+The checks require every proposed action and argument to match the request,
+including the directory, client, model, resume target and exact message or
+task text. If any part is refused, nothing runs. Actions execute in order
+and stop on the first failure. Starting a client records trust for that
+directory. Approval skipping follows Kilix's coding-yolo setting; a request
+cannot turn it on.
+
+**Directories and sessions.** Use an absolute path, `~/…`, or `here` for
+the calling pane's directory. Named aliases come from
+`~/.config/kilix-needle/dirs.json`, a JSON object mapping names to absolute
+paths. Otherwise a unique exact checkout name is resolved under
+`~/gpu_terminal`, scanning to depth three. Short or generic names and
+ambiguous matches are refused. Research directories need an explicit path
+or configured alias. A session reference must identify one live coding
+session; `it` refers to the session launched earlier in the same request.
+
+**Waiting and messaging.** Waits can target idle (turn finished) or waiting
+(the client asks something). Messages are held when a session is waiting
+on an approval or menu. The current runner permits steering working Claude
+and Grok sessions; Codex and Qwen OMP must be idle before receiving a
+message. These are session controls, not arbitrary keystrokes into a pane.
 
 ## Fine-tuning
 
@@ -530,6 +583,9 @@ real shape, including window groups.
 | `actions.py` | the fourteen actions, and the checks between the model's calls and anything that runs |
 | `toolset.py` | the five-tool schema the tuned model sees, translated onto those actions |
 | `kilix.py` | resolution against `kilix @ ls`, and the argv that performs each action |
+| `agents.py` | the coding-session tool schema, request grammar and checks |
+| `agents_kilix.py` | directory/session resolution and coding-session execution through Kilix |
+| `jobs.py` | per-job evaluation sets and model-selection boundaries |
 | `engine.py` | the `needle` binary as a private loopback server |
 | `libengine.py` | `libneedle.so` in a worker, for tuned weights |
 | `asset.py` | admitting installed assets or pinned local copies; the first-use install |
