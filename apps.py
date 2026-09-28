@@ -419,19 +419,24 @@ _NOT_AN_ITEM = re.compile(r"(?<![\w])(?:(?:all|most|some|much|half|part|none) of
                           r"time to time|any ?time|every ?time|some ?time|this time|next time|"
                           r"last time|in time|on time|the whole time|full time|part time|"
                           r"up to date|out of date|to date)(?![\w])")
-# An item's name followed by a noun names that noun, not the item: "temp
-# files", "network traffic", "the windows close button" (review KN-R16-02).
-# What may follow a name that is the item itself:
-_AFTER_ITEM = re.compile(
+# An item's name counts only as the whole object of its clause: the name,
+# then any widget nouns ("the clock icon", "the battery percentage"), then
+# the end of the clause or a word that ends the object. "temp files",
+# "network status page", "the clock 2 files" name something else (reviews
+# KN-R16-02, KN-R16-202).
+_WIDGET_NOUN = re.compile(
+    r"(?:buttons?|icons?|indicators?|widgets?|controls?|toggles?|symbols?|badges?|labels?|"
+    r"readouts?|meters?|displays?|gauges?|sliders?|applets?|percentage|status|list|size|"
+    r"figures?|numbers?|counters?|tiles?|things?|ones?|bits?|pieces?|stuff|info|information|"
+    r"panes?|bar)$")
+_OBJECT_END = re.compile(
     r"(?:and|or|nor|on|off|back|in|into|onto|from|to|at|for|too|again|please|pls|now|then|also|"
     r"but|so|while|when|if|as|with|without|is|are|be|was|were|the|a|an|my|our|this|that|it|"
-    r"visible|hidden|shown|gone|removed|away|always|never|auto|automatically|anymore|any|more|"
-    r"buttons?|icons?|indicators?|widgets?|bar|panes?|display|readout|meter|applet|percentage|"
-    r"status|section|settings?|list|things?|ones?|size|toggles?|symbols?|badges?|labels?|"
-    r"gauges?|sliders?|figures?|numbers?|counters?|graphs?|charts?|monitors?|tiles?|boxes|box|"
-    r"info|information|reading|bits?|pieces?|stuff|area|corner|tray|"
-    r"showing|shown|displayed|displaying|appear|appears|disappear|there|here|"
-    r"top|bottom|up|down|thanks|thank|[a-z]+ly)$")
+    r"visible|hidden|shown|showing|displayed|displaying|appear|appears|disappear|gone|removed|"
+    r"available|unavailable|enabled|disabled|active|inactive|"
+    r"away|out|always|never|auto|automatically|anymore|any|more|there|here|top|bottom|up|down|"
+    r"thanks|thank|completely|entirely|altogether|permanently|fully|totally|immediately|"
+    r"instead|right|for good)$")
 
 
 @functools.lru_cache(maxsize=4096)
@@ -442,8 +447,18 @@ def _without_when(clause: str) -> str:
 
 
 def _names_the_item(clause: str, match: re.Match) -> bool:
-    following = re.match(r"\s+([a-z']+)", clause[match.end():])
-    return following is None or bool(_AFTER_ITEM.match(following.group(1)))
+    rest = clause[match.end():]
+    while True:
+        if not rest.strip() or re.match(r"\s*[,;:.!?#]", rest):
+            return True                     # the clause, or the object, ends
+        token = re.match(r"\s+([a-z']+)(?![\w/])", rest)
+        if token is None:
+            return False                    # a number, a path, a symbol
+        word = token.group(1)
+        if _WIDGET_NOUN.match(word):
+            rest = rest[token.end():]       # "the clock icon ..."
+            continue
+        return bool(_OBJECT_END.match(word))
 
 
 def _mentions(table: dict, key: str, clause: str) -> re.Match | None:
@@ -904,12 +919,20 @@ def _admit(name: str, args: dict, reading: Reading) -> Action | Refusal:
                 named = True
             if part.bare and not _names_kind(LAUNCH_NAMES, AVAILABILITY, part.verb):
                 continue
-            # "I don't want mines; open mines" wants no game, and changes no
-            # games list (found by apps.propose on the training data): a
-            # wish not to have a game is about the games list only when it says so.
-            wish_only = re.search(_NEGATED_WANT, part.text) and not (
+            # A wish for a game ("I want mines", "I don't want mines; open
+            # mines") requests no availability change unless it says where:
+            # the games list, picker or menu. Bare continuations carry their
+            # verb's wish: "I don't need doom and pong" changes neither
+            # (reviews KN-R16-03, KN-R16-201).
+            wish = (re.search(_NEGATED_WANT, part.verb)
+                    or any(re.search(pattern, part.verb) for pattern in _WISH))
+            list_scope = re.search(
+                r"\b(?:in|on|from|off|into|out of) (?:the |my |our |this |that )?"
+                r"(?:games? )?(?:list|picker|menu)\b|\bgames? (?:list|picker|menu)\b",
+                part.verb + " " + part.text)
+            wish_only = wish and not (
                 _GAME_VERB.search(part.verb) or _GAME_VERB.search(part.text)
-                or re.search(r"\bgames? (?:list|picker|menu)\b|\b(?:list|picker|menu)\b", part.text))
+                or list_scope)
             if named and part.on is available and not wish_only:
                 return Action(name, {"game": game, "available": available}, at=index)
         return Refusal(name, f"no part of the request makes {game} "

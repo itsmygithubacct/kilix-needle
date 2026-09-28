@@ -363,6 +363,10 @@ def run_apps_calls(request: str, calls: list, options: Options,
         record["status"] = 1
     if hold and actions:
         record["note"] = "part of the request was refused, so nothing runs without a yes"
+    elif unplain:
+        # A proposal keeps only what the checks admit, so part of the request
+        # may go unaccounted for: a plan says so too (review KN-R16-204).
+        record["note"] = f"a person's confirmation is required: {unplain}"
     broken = False
     for action in actions:
         entry = {"kind": action.kind, "args": dict(action.args)}

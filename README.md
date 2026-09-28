@@ -303,7 +303,7 @@ WORKLOG):
 | dev | 38/40 | 35/40 |
 | test | 80/90 | 73/90 |
 | held-out v3 | 102/150 | 90/150 |
-| held-out v4 | 107/146 | 93/146 |
+| held-out v4 | 111/146 | 93/146 |
 
 Neither admits any unsafe action on any of these sets. A request takes tens of
 milliseconds, and no model is loaded. `KILIX_NEEDLE_ENGINE` (or `--engine`) still runs
@@ -350,10 +350,15 @@ Every call passes `apps.py`'s checks:
   next to something they admit ("disable doom and open doom") proposes only
   the admitted part. No refusal is shown for the rest. `plain()` still holds
   that part for a person, even with `--yes`.
-- Known issue: an item's name counts only when what follows it belongs to the
-  item ("the clock icon", "the battery thing"), not another noun ("temp files",
-  "network traffic"). That list is closed, so some ways of naming a widget are
-  refused and fall to a person.
+- An item's name counts only as the whole object of its clause: the name,
+  then widget words ("the clock icon", "the battery control"), then the end of
+  the object. "temp files", "network status page" and "the clock 2 files" name
+  no indicator. The word lists are closed. Known issue: some ways of naming a
+  widget are refused, and those requests go to a person.
+- A wish ("I want mines", "I don't need doom and pong") changes a games list
+  only when it names the list, picker or menu.
+- Known issue: held-out v4 was read during review. The next change to what
+  the checks read needs a fresh blind set.
 
 **Left out on purpose:**
 - power;
