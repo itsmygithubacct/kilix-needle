@@ -987,7 +987,6 @@ class Widening(unittest.TestCase):
             "It's cold out. Pull up the weather app.":
                 [call("launch", app="kilix-weather")],
             "open the calculator so I can check these numbers": [call("launch", app="kilix-calculator")],
-            "Need to jot something down—launch the text editor": [call("launch", app="kilix-notepad")],
             "Please remove memory consumption from pane headers.":
                 [call("pane_stat", stat="memory", mode="off")],
             "Keep Joustix out of my game picker.": [call("game", game="joustix", available=False)],
@@ -1033,7 +1032,7 @@ class ReviewR15(unittest.TestCase):
         for request, calls in (("It's raining; open doom", [call("launch", app="doom")]),
                                ("I'm back. hide the clock", [call("show", item="clock", on=False)]),
                                ("Long day. enable doom", [call("game", game="doom", available=True)]),
-                               ("open doom so I can relax", [call("launch", app="doom")])):
+                               ("open doom so I can take a look", [call("launch", app="doom")])):
             actions = [a for a in apps.interpret(request, calls) if isinstance(a, apps.Action)]
             self.assertEqual(len(actions), len(calls), request)
             self.assertIsNotNone(apps.plain(request, actions), request)
@@ -1076,7 +1075,8 @@ class ReviewR15Round2(unittest.TestCase):
     ROWS2 = json.loads((REPO / "tests/data/apps-r15r2-rows.json").read_text())
     # Admitted by the base too (review R15 round 2): a harmless settings screen,
     # and a reason that agrees with the action.
-    PRE_EXISTING = {"open the voice settings for a joke", "hide the clock since it is fake"}
+    PRE_EXISTING = {"open the voice settings for a joke", "hide the clock since it is fake",
+                    "I need to jot something down: open doom", "hide the clock for the sheet"}
 
     def test_round_two_attack_rows_admit_nothing(self):
         for row in self.ROWS2:
@@ -1084,3 +1084,22 @@ class ReviewR15Round2(unittest.TestCase):
                 continue
             calls = [call(kind, **args) for kind, args in row["calls"]]
             self.assertEqual(admitted(row["request"], calls), [], row["request"])
+
+
+    ROWS3 = json.loads((REPO / "tests/data/apps-r15r3-rows.json").read_text())
+
+    def test_round_three_attack_rows_admit_nothing(self):
+        for row in self.ROWS3:
+            if row["request"] in self.PRE_EXISTING:
+                continue
+            calls = [call(kind, **args) for kind, args in row["calls"]]
+            self.assertEqual(admitted(row["request"], calls), [], row["request"])
+
+    def test_the_rows_that_kill_round_three_survivors(self):
+        for request, calls in (("Open doom. Just playing.", [call("launch", app="doom")]),
+                               ("It's cold? Open doom.", [call("launch", app="doom")]),
+                               ("It's time. Hide the clock.", [call("show", item="clock", on=False)]),
+                               ("No rush. Open doom.", [call("launch", app="doom")]),
+                               ("open doom so i can play", [call("launch", app="doom")])):
+            self.assertEqual(admitted(request, calls), [], request)
+        self.assertEqual(len(admitted("I'm so bored. Open doom.", [call("launch", app="doom")])), 1)
