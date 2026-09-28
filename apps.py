@@ -67,7 +67,8 @@ LAUNCH_NAMES = {
     "kilix-settings-center": ["settings center", "settings centre", "settings app"],
     "kilix-software-center": ["software center", "software centre", "software store",
                               "app store"],
-    "kilix-session-center": ["session center", "session centre"],
+    "kilix-session-center": ["session center", "session centre", "session tools center",
+                             "session tools centre"],
     "kilix-model-store": ["model store", "models store"],
     "kilix-camera-wall": ["camera wall"],
     "kilix-region-painter": ["region painter", "mask painter", "mask editor"],
@@ -77,7 +78,8 @@ LAUNCH_NAMES = {
     "kilix-weather": ["weather app", "weather"],
     "kilix-calculator": ["calculator", "calc"],
     "kilix-music-control": ["music control", "music controls", "music remote"],
-    "kilix-chawan": ["chawan", "text browser", "web browser", "text-mode browser"],
+    "kilix-chawan": ["chawan", "text browser", "web browser", "text-mode browser",
+                     "text web browser", "terminal web browser"],
     "kilix-rollout-resume": ["rollout resume", "rollout-resume"],
     "kilix-character-map": ["character map", "charmap", "char map"],
     "kilix-notepad": ["notepad", "text editor"],
@@ -91,10 +93,12 @@ LAUNCH_NAMES = {
     "kilix-object-detect": ["object detect", "object detection", "object detector"],
     "kilix-tmux-manager": ["tmux manager", "tmux"],
     "kilix-graphs": ["kilix graphs", "graphs", "graph", "charts"],
-    "kilix-techno": ["techno", "music workstation", "sequencer", "drum machine"],
+    "kilix-techno": ["techno", "music workstation", "sequencer", "drum machine",
+                     "sequencer workstation"],
     "launcher": ["launcher", "app menu", "application menu", "applications menu"],
-    "temps": ["temps", "temperatures", "temperature"],
-    "memory": ["memory usage", "ram usage", "memory", "ram"],
+    "temps": ["temps", "temperatures", "temperature", "temperatures view", "temperature view"],
+    "memory": ["memory usage", "ram usage", "memory", "ram", "ram usage view", "memory usage view",
+               "memory view"],
     "mixer": ["volume mixer", "sound mixer", "audio mixer", "mixer"],
     "transcripts": ["transcripts", "transcript list", "pane transcripts"],
 }
@@ -126,14 +130,16 @@ ITEM_GROUPS = {"split buttons": ("split_left", "split_right", "split_up", "split
                "font buttons": ("font_increase", "font_decrease"),
                "font size buttons": ("font_increase", "font_decrease")}
 STAT_NAMES = {"cpu": ["cpu", "processor"], "memory": ["memory", "ram", "mem"]}
-MODE_NAMES = {"always": ["always", "all the time", "permanently", "at all times", "constantly"],
+MODE_NAMES = {"always": ["always", "all the time", "permanently", "at all times", "constantly",
+                         "continuously", "on screen", "visible at all times", "visible"],
               "off": ["off", "never", "hide", "hidden", "disable", "stop showing", "no longer",
                       "don't need", "do not need", "anymore"],
               "auto": ["auto", "automatic", "automatically", "only when busy", "when busy",
-                       "when needed", "only when needed"]}
+                       "when needed", "only when needed", "let kilix decide"]}
 SECTION_NAMES = {"top-bar": ["top bar", "top-bar", "topbar", "status bar", "bar at the top"],
                  "pane-buttons": ["pane buttons", "pane-buttons", "pane button",
-                                  "buttons on panes", "buttons on the panes"],
+                                  "buttons on panes", "buttons on the panes", "pane controls",
+                                  "buttons shown on panes"],
                  "voice": ["voice", "speech", "dictation", "text to speech"],
                  "games": ["games", "game"],
                  "tools": ["tools", "tool"]}
@@ -208,7 +214,7 @@ _GAP = r"(?:\s+[\w']+){0,6}?\s+"      # "put the clock back", "turn the text to 
 # "never show cpu on panes"; not "I don't want to play doom".
 _NEGATED_WANT = r"\b(?:don'?t|do not|no longer|never)\s+(?:show|want|need|display)\b(?!\s+to\b)"
 _ON = [rf"\b(?:turn|switch){_GAP}on\b", rf"\b(?:put|bring|add){_GAP}back\b",
-       rf"\bmake{_GAP}available\b", r"\bturn on\b", r"\bswitch on\b", r"\bput back\b",
+       rf"\bmake{_GAP}available\b", rf"\bmake{_GAP}visible\b", rf"\bput{_GAP}on\b", r"\bturn on\b", r"\bswitch on\b", r"\bput back\b",
        r"\bbring back\b", r"\bshow\b(?!\s+me\b)", r"\bdisplay\b", r"\bre ?enable\b",
        r"\benable\b", r"\bunhide\b", r"\brestore\b", r"\breveal\b", r"\b(?:want|like) to see\b",
        r"\ballow\b", r"\bunblock\b", rf"\badd{_GAP}to\b",
@@ -219,6 +225,7 @@ _ON = [rf"\b(?:turn|switch){_GAP}on\b", rf"\b(?:put|bring|add){_GAP}back\b",
 _WISH = [r"\bi (?:want|need)\b(?!\s+to\b)", r"\bi'?d like\b(?!\s+to\b)",
          r"\bi would like\b(?!\s+to\b)"]
 _OFF = [rf"\b(?:turn|switch){_GAP}off\b", rf"\bmake{_GAP}unavailable\b",
+        rf"\bmake{_GAP}(?:invisible|hidden)\b", rf"\bkeep{_GAP}out of\b",
         rf"\btake{_GAP}(?:off|away|out)\b", rf"\bput{_GAP}away\b", r"\bturn off\b",
         r"\bswitch off\b", r"\bget rid of\b", r"\bstop showing\b", _NEGATED_WANT, r"\bhide\b",
         r"\bremove\b", r"\bdisable\b", r"\bdrop\b", r"\bditch\b", r"\blose\b", r"\bblock\b"]
@@ -252,9 +259,9 @@ _OPEN = re.compile(r"(?:open|pop open|launch|start|run|play|fire up|boot up|boot
 # Offers that may end in a question mark: "up for a round of chess?"
 _INVITE = re.compile(r"^(?:anyone |who'?s |i'?m )?(?:up for|how about|fancy|feel like)\b")
 _SET_VERB = re.compile(r"(?:always |only |never )?(?:set|change|make|put|pin|turn|switch|show|"
-                       r"display|hide|keep|stop showing)\b")
-_NAV = re.compile(r"(?:open|show me|show|go (?:straight )?(?:to|into)|take me (?:to|into)|bring up|"
-                  r"pull up|jump (?:to|into)|navigate to|switch to|head (?:over )?to|"
+                       r"display|hide|keep|leave|let|use|stop showing)\b")
+_NAV = re.compile(r"(?:open|show me|show|go (?:straight )?(?:to|into)|take me (?:straight )?(?:to|into)|"
+                  r"bring up|pull up|jump (?:straight )?(?:to|into)|navigate(?: settings)? to|switch to|head (?:over )?to|"
                   r"get me (?:to|into)|get into|display|configure|change|adjust|tweak|edit|"
                   r"i (?:need|want)(?: to see)?)\b")
 # "where are the games settings": a question that only asks the way.
@@ -263,7 +270,8 @@ _WAY_QUESTION = re.compile(r"^(?:where (?:are|is|can i|do i)|how (?:do|can) i (?
 _GAME_VERB = re.compile(r"\b(?:enable|disable|re ?enable|available|unavailable|allow|block|"
                         r"unblock)\b")
 # What may stand between a launch verb and the name, and what may follow it.
-_FILLER = r"(?:(?:the|a|an|my|me|us|some|of|up|round|game|quick|little|new|our|this|that)\s+)*"
+_FILLER = r"(?:(?:the|a|an|my|me|us|some|of|up|round|game|quick|little|new|our|this|that|full|"\
+          r"overall)\s+)*"
 _TAIL = re.compile(r"(?:please|pls|now|right now|right away|for me|for a bit|for a while|again|"
                    r"thanks|thank you|quickly|real quick|quick|up|too|asap|game|app|tool|program|"
                    r"in (?:a |another |its own )?(?:new )?tab)\b")
@@ -351,7 +359,7 @@ _TERSE_SETTINGS = re.compile(rf"(?:(?:the )?(?:settings|options|preferences) for
                              rf"(?:settings|options|preferences|section|page))(?: please)?")
 
 
-_CLAUSE_SPLIT = re.compile(r"\s*(?:,|;|:|\band then\b|\bthen\b|\band\b)\s*")
+_CLAUSE_SPLIT = re.compile(r"\s*(?:,|;|:|\band then\b|\bthen\b|\bfollowed by\b|\band\b)\s*")
 
 
 def _plain_words(text: str) -> str:
@@ -516,15 +524,102 @@ def _refusal(text: str) -> str | None:
     return None
 
 
-def _read(request: str) -> Reading:
+def _context_ok(segment: str) -> bool:
+    """A sentence that says why or sets the scene, and asks for nothing: no
+    instruction verb, nothing reported, cancelled, conditional or timed, and a
+    negation only where it names nothing ("no graphics needed", "I don't use
+    it"; not "I don't want doom")."""
+    body = segment.strip(" .!?")
+    if not body:
+        return False
+    # "The date display is cluttering the top bar": a statement, whatever
+    # words it holds, unless it starts with an instruction verb.
+    statement = bool(_FINITE.search(body)) and not (
+        _OPEN.match(_body(body)) or _SET_VERB.match(_body(body)) or _NAV.match(_body(body))
+        or _PARTICLE_VERB.match(_body(body)))
+    if not statement and (_has_verb(body) or _opening(body) is not None):
+        return False
+    if _REPORTED.search(body) or _CANCEL.search(body) or _CONDITION.search(body) \
+            or _WHEN.search(body) or _INSTALL.search(body) or _CONTRAST.search(body) \
+            or _LEVEL.search(body) or _EITHER.search(body):
+        return False
+    if _NEGATION.search(body) and _names_something(body):
+        return False
+    return True
+
+
+# Where a request ends in why ("... so I can check these numbers", "... for
+# this document"): the reason, when it names nothing and asks for nothing.
+_PURPOSE = re.compile(r"\s+(?:so (?:that )?(?:i|we)\b|because\b|since\b|as i\b|(?:for|to) "
+                      r"(?:this|these|that|those|my|our|some|a|an)\b)(?P<why>.*)$")
+
+
+def _without_purpose(sentence: str) -> str:
+    match = _PURPOSE.search(sentence)
+    if not match:
+        return sentence
+    why = match["why"]
+    if _names_something(why) or _has_verb(why) or _opening(why.strip()) is not None \
+            or _REPORTED.search(why) or _CANCEL.search(why) or _CONDITION.search(why):
+        return sentence
+    return sentence[:match.start()]
+
+
+def _segments(request: str) -> list[str]:
+    """Sentences, and the part before a dash that sets the scene ("Need to jot
+    something down - launch the text editor"), each in plain words."""
+    return [_plain_words(p) for p in _pieces(request) if p and _plain_words(p).strip(" .!?")]
+
+
+def _pieces(request: str) -> list[str]:
+    raw = str(request).replace("\u037e", "?")
+    parts = re.split(r"\s*[\u2014\u2013\u2012\u2015]\s*|\s+-{1,2}\s+|(?<=\w)-{2,}(?=\w)", raw)
+    out = []
+    for part in parts:
+        out += re.split(r"(?<=[.!?;])\s+|\s*;\s*", normalize(part))
+    return [p for p in out if p and p.strip()]
+
+
+_FROM_LIST = re.compile(r"\b(?:from|off|out of) (?:the |my )?available games\b")
+
+
+def _read(request: str, widen: bool = False) -> Reading:
     text = _plain_words(request)
+    if widen:
+        text = _FROM_LIST.sub("from the games list", text)
     sentences = [s for s in re.split(r"(?<=[.!?])\s+", text) if s.strip(" .!?")]
     asked = [s for s in sentences if not _COURTESY.fullmatch(s)]
+    if widen and len(asked) > 1 or widen and len(_segments(request)) > 1:
+        # Scene-setting sentences around one instruction are set aside
+        # ("It's cold out; what's the weather doing? Pull up the weather app").
+        # Every question mark stays with words that are not the instruction or
+        # courtesy ("? open doom", "open doom. ?", "can you open doom? thanks?"
+        # are still questions), and a negation is a reason only before the
+        # instruction ("no graphics needed; start the text browser"), never a
+        # take-back after it ("hide the clock - no, don't").
+        pieces = _pieces(request)
+        segments = [_plain_words(p) for p in pieces]
+        if any("?" in p and not _plain_words(p).strip(" .!?") for p in pieces) \
+                or any("?" in s and _COURTESY.fullmatch(s.rstrip(" ?")) for s in segments):
+            return Reading(refusal="the request is a question, not an instruction")
+        segments = [s for s in segments if s.strip(" .!?") and not _COURTESY.fullmatch(s)]
+        kinds = [_context_ok(s) for s in segments]
+        instructions = [s for s, context in zip(segments, kinds) if not context]
+        if len(instructions) == 1:
+            at = segments.index(instructions[0])
+            if any(_NEGATION.search(s) for s in segments[at + 1:]):
+                return Reading(refusal="the request says not to, or not what: say just what to do")
+            asked = instructions
+            text = instructions[0]
+        elif not instructions:
+            return Reading()
     if len(asked) > 1:
         return Reading(refusal="the request says more than one sentence: one instruction at a time")
     if not asked:
         return Reading()
     sentence = asked[0]
+    if widen:
+        sentence = _without_purpose(sentence)
     polite = _POLITE_IF.fullmatch(sentence)
     if polite:
         sentence = polite["ask"]
@@ -599,6 +694,10 @@ def _admit(name: str, args: dict, reading: Reading) -> Action | Refusal:
         if reading.placed:
             return Refusal(name, "where a program opens in a pane is the panes job; "
                                  "this job opens it in a new tab")
+        # "I don't want doom; open doom": another part turns this app off.
+        if any(part.on is False and _mentions(LAUNCH_NAMES, app, part.text)
+               and not any(_mentions_item(item, part.text) for item in ITEMS) for part in parts):
+            return Refusal(name, f"the request says {app} both ways")
         for index, part in enumerate(parts):
             if part.bare:
                 if _opening(part.verb) is not None and _object(part.text, LAUNCH_NAMES, app) \
@@ -670,6 +769,8 @@ def _admit(name: str, args: dict, reading: Reading) -> Action | Refusal:
             said = modes(part.text)
             if not said and part.bare:
                 said = modes(part.verb)
+            if not said and part.on is False and not _particle(part.text) == "both":
+                said = {"off"}              # "remove memory consumption from pane headers"
             # "..., switch it off": the next clause says the mode of this one.
             if not said and index + 1 < len(parts) and re.search(r"\bit\b", parts[index + 1].text) \
                     and not _mentions(STAT_NAMES, other, parts[index + 1].text):
@@ -767,7 +868,7 @@ def _key(action: Action) -> tuple:
 
 def interpret(request: str, calls: list) -> list[Action | Refusal]:
     """Turn the engine's calls into admitted actions or named refusals."""
-    reading = _read(request)
+    reading = _read(request, widen=True)
     results: list[Action | Refusal] = []
     seen = set()
     for call in calls if isinstance(calls, list) else []:

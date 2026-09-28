@@ -77,8 +77,9 @@ class Admission(unittest.TestCase):
     # Dev rows whose answer needs two sentences read together. Since review R12
     # a second sentence refuses the request (it may take the first one back),
     # so these fail safe: nothing is done, and the person rephrases.
-    TWO_SENTENCES = {"what's it like outside? pull up the weather app",
-                     "where do i configure the top bar? open that settings screen"}
+    # A scene-setting question before one instruction is read since the apps
+    # widening; "that settings screen" still names nothing on its own.
+    TWO_SENTENCES = {"where do i configure the top bar? open that settings screen"}
 
     def test_the_dev_sets_answers_are_admitted(self):
         rows = [json.loads(line) for line in (REPO / "evals/apps/dev.jsonl").read_text().splitlines()]
@@ -973,3 +974,47 @@ class Mcp(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Widening(unittest.TestCase):
+    """The apps widening (2026-09-28): scene-setting sentences before or around
+    one instruction, and a closing purpose, are set aside; the reviewed
+    refusals still hold."""
+
+    def test_scene_setting_and_purpose_are_set_aside(self):
+        cases = {
+            "It's cold out; what's the weather doing? Pull up the weather app.":
+                [call("launch", app="kilix-weather")],
+            "open the calculator so I can check these numbers": [call("launch", app="kilix-calculator")],
+            "No graphics needed; start the text web browser.": [call("launch", app="kilix-chawan")],
+            "Need to jot something down—launch the text editor": [call("launch", app="kilix-notepad")],
+            "The date display is cluttering the top bar—hide the calendar.":
+                [call("show", item="calendar", on=False)],
+            "Please remove memory consumption from pane headers.":
+                [call("pane_stat", stat="memory", mode="off")],
+            "Keep Joustix out of my game picker.": [call("game", game="joustix", available=False)],
+            "Hide Kilix Rancher from the available games.":
+                [call("game", game="kilix-rancher", available=False)],
+        }
+        for request, calls in cases.items():
+            self.assertEqual(len(admitted(request, calls)), len(calls), request)
+
+    def test_what_the_widening_must_not_admit(self):
+        doom = [call("launch", app="doom")]
+        clock = [call("show", item="clock", on=False)]
+        for request, calls in (("hide the clock — no, don’t", clock),
+                               ("open doom. ?", doom), ("? open doom", doom),
+                               ("can you open doom? thanks?", doom),
+                               ("I don't want doom; open doom", doom),
+                               ("my friend is bored; he said open doom", doom),
+                               ("open doom so I can play solitaire", doom),
+                               ("it's late. open doom tomorrow", doom),
+                               ("the clock is broken. open doom. hide the clock", doom + clock)):
+            self.assertEqual(admitted(request, calls), [], request)
+
+    def test_advance_yes_still_needs_a_plain_request(self):
+        actions = [a for a in apps.interpret("It's cold out; pull up the weather app",
+                                             [call("launch", app="kilix-weather")])
+                   if isinstance(a, apps.Action)]
+        self.assertEqual(len(actions), 1)
+        self.assertIsNotNone(apps.plain("It's cold out; pull up the weather app", actions))
