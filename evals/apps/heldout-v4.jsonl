@@ -1,0 +1,146 @@
+{"request":"Open the file browser for me.","expect":[["launch",{"app":"kilix-file"}]],"tag":"launch"}
+{"request":"I need a quick calculation—bring up the calculator.","expect":[["launch",{"app":"kilix-calculator"}]],"tag":"launch"}
+{"request":"Let's play a round of solitaire.","expect":[["launch",{"app":"solitaire"}]],"tag":"launch"}
+{"request":"Launch the PDF-to-Markdown converter.","expect":[["launch",{"app":"kilix-pdf-conversion"}]],"tag":"launch"}
+{"request":"Can you open the app menu?","expect":[["launch",{"app":"launcher"}]],"tag":"launch"}
+{"request":"Pull up the system overview so I can check CPU and storage.","expect":[["launch",{"app":"kilix-system-center"}]],"tag":"launch"}
+{"request":"Start the text web browser.","expect":[["launch",{"app":"kilix-chawan"}]],"tag":"launch"}
+{"request":"Open the Unicode character map, please.","expect":[["launch",{"app":"kilix-character-map"}]],"tag":"launch"}
+{"request":"I'd like to watch the camera feeds; open the camera wall.","expect":[["launch",{"app":"kilix-camera-wall"}]],"tag":"launch"}
+{"request":"Bring up the settings center.","expect":[["launch",{"app":"kilix-settings-center"}]],"tag":"launch"}
+{"request":"Fire up the music workstation.","expect":[["launch",{"app":"kilix-techno"}]],"tag":"launch"}
+{"request":"Open the pane transcript reader.","expect":[["launch",{"app":"kilix-session-log"}]],"tag":"launch"}
+{"request":"Show me today's weather in the weather app.","expect":[["launch",{"app":"kilix-weather"}]],"tag":"launch"}
+{"request":"Let's play the lunar lander game.","expect":[["launch",{"app":"terminal-lander"}]],"tag":"launch"}
+{"request":"Start the MS-DOS prompt.","expect":[["launch",{"app":"dosbox"}]],"tag":"launch"}
+{"request":"I want to edit some text, so open Notepad.","expect":[["launch",{"app":"kilix-notepad"}]],"tag":"launch"}
+{"request":"Bring up the RAM usage view.","expect":[["launch",{"app":"memory"}]],"tag":"launch"}
+{"request":"Open the AI and speech model store.","expect":[["launch",{"app":"kilix-model-store"}]],"tag":"launch"}
+{"request":"Play Kilix Pong.","expect":[["launch",{"app":"kilix-pong"}]],"tag":"launch"}
+{"request":"Could you launch the volume mixer?","expect":[["launch",{"app":"mixer"}]],"tag":"launch"}
+{"request":"Put the clock back in the top bar.","expect":[["show",{"item":"clock","on":true}]],"tag":"show"}
+{"request":"Hide the calendar indicator.","expect":[["show",{"item":"calendar","on":false}]],"tag":"show"}
+{"request":"I don't need the battery icon up top; remove it.","expect":[["show",{"item":"battery","on":false}]],"tag":"show"}
+{"request":"Please show network status in the top bar.","expect":[["show",{"item":"network","on":true}]],"tag":"show"}
+{"request":"Turn off the temperature indicator.","expect":[["show",{"item":"temperature","on":false}]],"tag":"show"}
+{"request":"Make the top-bar volume indicator visible.","expect":[["show",{"item":"volume","on":true}]],"tag":"show"}
+{"request":"Get rid of the windows indicator at the top.","expect":[["show",{"item":"windows","on":false}]],"tag":"show"}
+{"request":"Enable the read-aloud pane button.","expect":[["show",{"item":"speak","on":true}]],"tag":"show"}
+{"request":"Take the dictation button off the pane controls.","expect":[["show",{"item":"dictate","on":false}]],"tag":"show"}
+{"request":"Show the split-left control on panes.","expect":[["show",{"item":"split_left","on":true}]],"tag":"show"}
+{"request":"Hide the split-right pane button.","expect":[["show",{"item":"split_right","on":false}]],"tag":"show"}
+{"request":"Can I have the split-up button visible?","expect":[["show",{"item":"split_up","on":true}]],"tag":"show"}
+{"request":"Remove the split-down control from my pane buttons.","expect":[["show",{"item":"split_down","on":false}]],"tag":"show"}
+{"request":"Show the maximize button on each pane.","expect":[["show",{"item":"maximize","on":true}]],"tag":"show"}
+{"request":"Please hide the pane close button.","expect":[["show",{"item":"close","on":false}]],"tag":"show"}
+{"request":"Make the synchronized-input control available.","expect":[["show",{"item":"synchronize_input","on":true}]],"tag":"show"}
+{"request":"Let Kilix decide automatically when to show pane CPU usage.","expect":[["pane_stat",{"stat":"cpu","mode":"auto"}]],"tag":"pane_stat"}
+{"request":"Always display CPU usage on panes.","expect":[["pane_stat",{"stat":"cpu","mode":"always"}]],"tag":"pane_stat"}
+{"request":"Turn the per-pane CPU readout off.","expect":[["pane_stat",{"stat":"cpu","mode":"off"}]],"tag":"pane_stat"}
+{"request":"Set pane memory stats to automatic.","expect":[["pane_stat",{"stat":"memory","mode":"auto"}]],"tag":"pane_stat"}
+{"request":"Keep memory usage visible on every pane all the time.","expect":[["pane_stat",{"stat":"memory","mode":"always"}]],"tag":"pane_stat"}
+{"request":"Don't show the per-pane memory readout anymore.","expect":[["pane_stat",{"stat":"memory","mode":"off"}]],"tag":"pane_stat"}
+{"request":"CPU stats on panes should appear only when Kilix deems them useful.","expect":[["pane_stat",{"stat":"cpu","mode":"auto"}]],"tag":"pane_stat"}
+{"request":"Pin the pane CPU meter so it never disappears.","expect":[["pane_stat",{"stat":"cpu","mode":"always"}]],"tag":"pane_stat"}
+{"request":"Lose the CPU stat shown inside panes.","expect":[["pane_stat",{"stat":"cpu","mode":"off"}]],"tag":"pane_stat"}
+{"request":"Use auto mode for each pane's RAM statistic.","expect":[["pane_stat",{"stat":"memory","mode":"auto"}]],"tag":"pane_stat"}
+{"request":"I want a permanent memory meter on my panes.","expect":[["pane_stat",{"stat":"memory","mode":"always"}]],"tag":"pane_stat"}
+{"request":"Disable memory statistics in panes.","expect":[["pane_stat",{"stat":"memory","mode":"off"}]],"tag":"pane_stat"}
+{"request":"Have the CPU pane indicator manage its own visibility.","expect":[["pane_stat",{"stat":"cpu","mode":"auto"}]],"tag":"pane_stat"}
+{"request":"No matter what, show CPU consumption on each pane.","expect":[["pane_stat",{"stat":"cpu","mode":"always"}]],"tag":"pane_stat"}
+{"request":"Switch the pane RAM display to adaptive mode.","expect":[["pane_stat",{"stat":"memory","mode":"auto"}]],"tag":"pane_stat"}
+{"request":"Remove RAM usage figures from panes.","expect":[["pane_stat",{"stat":"memory","mode":"off"}]],"tag":"pane_stat"}
+{"request":"Make Minesweeper available in the game list.","expect":[["game",{"game":"minesweeper","available":true}]],"tag":"game"}
+{"request":"Hide Solitaire from Kilix's games.","expect":[["game",{"game":"solitaire","available":false}]],"tag":"game"}
+{"request":"Enable Doom in my game list.","expect":[["game",{"game":"doom","available":true}]],"tag":"game"}
+{"request":"I don't want Bashed Earth listed as a game.","expect":[["game",{"game":"bashed-earth","available":false}]],"tag":"game"}
+{"request":"Add Kilix J-Pak back to the available games.","expect":[["game",{"game":"kilix-jpak","available":true}]],"tag":"game"}
+{"request":"Make Kilix Rancher unavailable in the games menu.","expect":[["game",{"game":"kilix-rancher","available":false}]],"tag":"game"}
+{"request":"Show Kilix Pong in the game selection.","expect":[["game",{"game":"kilix-pong","available":true}]],"tag":"game"}
+{"request":"Remove Kilix Lights from the games list.","expect":[["game",{"game":"kilix-lights","available":false}]],"tag":"game"}
+{"request":"Allow Super Kilix to appear among my games.","expect":[["game",{"game":"super-kilix","available":true}]],"tag":"game"}
+{"request":"Disable Joustix in the game catalog.","expect":[["game",{"game":"joustix","available":false}]],"tag":"game"}
+{"request":"Put Chess Bash in the available game list.","expect":[["game",{"game":"chess-bash","available":true}]],"tag":"game"}
+{"request":"Hide the Kilix fish tank game.","expect":[["game",{"game":"kilix-fishtank","available":false}]],"tag":"game"}
+{"request":"Enable the terminal lander game.","expect":[["game",{"game":"terminal-lander","available":true}]],"tag":"game"}
+{"request":"Kitty Brokeout shouldn't be available in my games.","expect":[["game",{"game":"kitty-brokeout","available":false}]],"tag":"game"}
+{"request":"Make Kilix Land selectable again in the games list.","expect":[["game",{"game":"kilix-land","available":true}]],"tag":"game"}
+{"request":"Take DOSBox out of Kilix's game list.","expect":[["game",{"game":"dosbox","available":false}]],"tag":"game"}
+{"request":"Open the top-bar section of Kilix settings.","expect":[["settings",{"section":"top-bar"}]],"tag":"settings"}
+{"request":"Take me to pane-button settings.","expect":[["settings",{"section":"pane-buttons"}]],"tag":"settings"}
+{"request":"I'd like to adjust voice options; open that settings page.","expect":[["settings",{"section":"voice"}]],"tag":"settings"}
+{"request":"Show me the games section in settings.","expect":[["settings",{"section":"games"}]],"tag":"settings"}
+{"request":"Go to the tools settings screen.","expect":[["settings",{"section":"tools"}]],"tag":"settings"}
+{"request":"Where I can configure the top bar, please.","expect":[["settings",{"section":"top-bar"}]],"tag":"settings"}
+{"request":"Bring up the settings page for controls shown on panes.","expect":[["settings",{"section":"pane-buttons"}]],"tag":"settings"}
+{"request":"Open voice settings for me.","expect":[["settings",{"section":"voice"}]],"tag":"settings"}
+{"request":"Jump straight to game settings.","expect":[["settings",{"section":"games"}]],"tag":"settings"}
+{"request":"I need the settings section that manages tools.","expect":[["settings",{"section":"tools"}]],"tag":"settings"}
+{"request":"Let's change what's on the upper bar—take me to its settings.","expect":[["settings",{"section":"top-bar"}]],"tag":"settings"}
+{"request":"Navigate to the pane controls section of settings.","expect":[["settings",{"section":"pane-buttons"}]],"tag":"settings"}
+{"request":"Could you take me directly to speech and voice settings?","expect":[["settings",{"section":"voice"}]],"tag":"settings"}
+{"request":"Open the settings screen for managing individual games.","expect":[["settings",{"section":"games"}]],"tag":"settings"}
+{"request":"Take me to Kilix's tool configuration page.","expect":[["settings",{"section":"tools"}]],"tag":"settings"}
+{"request":"I want to customize the top bar; open the right settings section.","expect":[["settings",{"section":"top-bar"}]],"tag":"settings"}
+{"request":"Open the PDF viewer, then show the clock.","expect":[["launch",{"app":"kilix-pdf"}],["show",{"item":"clock","on":true}]],"tag":"compound"}
+{"request":"Hide the battery indicator and launch the weather app.","expect":[["show",{"item":"battery","on":false}],["launch",{"app":"kilix-weather"}]],"tag":"compound"}
+{"request":"Set pane CPU stats to always, then bring up the temperature view.","expect":[["pane_stat",{"stat":"cpu","mode":"always"}],["launch",{"app":"temps"}]],"tag":"compound"}
+{"request":"Make Doom available in the games list and then play it.","expect":[["game",{"game":"doom","available":true}],["launch",{"app":"doom"}]],"tag":"compound"}
+{"request":"Open voice settings, and after that enable the dictation button.","expect":[["settings",{"section":"voice"}],["show",{"item":"dictate","on":true}]],"tag":"compound"}
+{"request":"Launch the session center before opening the list of pane transcripts.","expect":[["launch",{"app":"kilix-session-center"}],["launch",{"app":"transcripts"}]],"tag":"compound"}
+{"request":"Turn off the calendar up top, then keep pane memory stats visible.","expect":[["show",{"item":"calendar","on":false}],["pane_stat",{"stat":"memory","mode":"always"}]],"tag":"compound"}
+{"request":"Take me to game settings and hide Joustix from the game list.","expect":[["settings",{"section":"games"}],["game",{"game":"joustix","available":false}]],"tag":"compound"}
+{"request":"Start the music player, then open its remote control.","expect":[["launch",{"app":"kilix-amp"}],["launch",{"app":"kilix-music-control"}]],"tag":"compound"}
+{"request":"Show both the font increase and font decrease pane buttons.","expect":[["show",{"item":"font_increase","on":true}],["show",{"item":"font_decrease","on":true}]],"tag":"compound"}
+{"request":"First disable the pane CPU readout; afterward open the graph-drawing app.","expect":[["pane_stat",{"stat":"cpu","mode":"off"}],["launch",{"app":"kilix-graphs"}]],"tag":"compound"}
+{"request":"Show the network indicator, hide the volume indicator, and open the mixer.","expect":[["show",{"item":"network","on":true}],["show",{"item":"volume","on":false}],["launch",{"app":"mixer"}]],"tag":"compound"}
+{"request":"Bring up pane-button settings, then remove the maximize control.","expect":[["settings",{"section":"pane-buttons"}],["show",{"item":"maximize","on":false}]],"tag":"compound"}
+{"request":"Open the camera manager and then the NVR camera recorder.","expect":[["launch",{"app":"kilix-camera-manager"}],["launch",{"app":"kilix-nvr"}]],"tag":"compound"}
+{"request":"Enable Kitty Brokeout in the list; once that's done, launch it.","expect":[["game",{"game":"kitty-brokeout","available":true}],["launch",{"app":"kitty-brokeout"}]],"tag":"compound"}
+{"request":"Show the speak button and set pane memory display to auto.","expect":[["show",{"item":"speak","on":true}],["pane_stat",{"stat":"memory","mode":"auto"}]],"tag":"compound"}
+{"request":"Open the model store, followed by the speech-tools studio.","expect":[["launch",{"app":"kilix-model-store"}],["launch",{"app":"kilix-voice-studio"}]],"tag":"compound"}
+{"request":"Hide Kilix Lights from games, then take me to the tools settings page.","expect":[["game",{"game":"kilix-lights","available":false}],["settings",{"section":"tools"}]],"tag":"compound"}
+{"request":"Display the pane close button, open Notepad, and show the top-bar temperature indicator.","expect":[["show",{"item":"close","on":true}],["launch",{"app":"kilix-notepad"}],["show",{"item":"temperature","on":true}]],"tag":"compound"}
+{"request":"Launch the file finder and afterward turn off pane memory stats.","expect":[["launch",{"app":"kilix-find-files"}],["pane_stat",{"stat":"memory","mode":"off"}]],"tag":"compound"}
+{"request":"Shut the computer down now.","expect":[],"tag":"bait"}
+{"request":"Could you reboot Kilix for me?","expect":[],"tag":"bait"}
+{"request":"Log me out of this session.","expect":[],"tag":"bait"}
+{"request":"Suspend the machine until I get back.","expect":[],"tag":"bait"}
+{"request":"Install Firefox from the software catalog.","expect":[],"tag":"bait"}
+{"request":"Please uninstall the calculator app.","expect":[],"tag":"bait"}
+{"request":"Update every installed application.","expect":[],"tag":"bait"}
+{"request":"Download the English speech model.","expect":[],"tag":"bait"}
+{"request":"Remove the old AI model from my system.","expect":[],"tag":"bait"}
+{"request":"Switch the text-to-speech engine to Piper.","expect":[],"tag":"bait"}
+{"request":"Use my USB headset as the microphone device.","expect":[],"tag":"bait"}
+{"request":"Set the volume to exactly 30 percent.","expect":[],"tag":"bait"}
+{"request":"Mute all sound on this computer.","expect":[],"tag":"bait"}
+{"request":"Increase the transcript budget to 50 megabytes.","expect":[],"tag":"bait"}
+{"request":"Turn session logging off entirely.","expect":[],"tag":"bait"}
+{"request":"Enable every game at once.","expect":[],"tag":"bait"}
+{"request":"Hide all games from the game list.","expect":[],"tag":"bait"}
+{"request":"Show every pane control.","expect":[],"tag":"bait"}
+{"request":"Disable all top-bar indicators.","expect":[],"tag":"bait"}
+{"request":"Quit Doom.","expect":[],"tag":"bait"}
+{"request":"Close the calculator application.","expect":[],"tag":"bait"}
+{"request":"Open a new terminal tab.","expect":[],"tag":"bait"}
+{"request":"Close tab number two.","expect":[],"tag":"bait"}
+{"request":"Move this pane to the left.","expect":[],"tag":"bait"}
+{"request":"Change Kilix to a dark theme.","expect":[],"tag":"bait"}
+{"request":"Set my wallpaper to the beach photo.","expect":[],"tag":"bait"}
+{"request":"Use Fira Code as the terminal font family.","expect":[],"tag":"bait"}
+{"request":"Launch Firefox.","expect":[],"tag":"bait"}
+{"request":"Open Spotify so I can hear my playlist.","expect":[],"tag":"bait"}
+{"request":"Start Steam.","expect":[],"tag":"bait"}
+{"request":"Don't open Doom.","expect":[],"tag":"bait"}
+{"request":"My friend told me to launch Solitaire.","expect":[],"tag":"bait"}
+{"request":"I already opened the file browser.","expect":[],"tag":"bait"}
+{"request":"How has your day been?","expect":[],"tag":"none"}
+{"request":"Thanks for helping me earlier.","expect":[],"tag":"none"}
+{"request":"Can you explain what a prime number is?","expect":[],"tag":"none"}
+{"request":"Write a haiku about autumn rain.","expect":[],"tag":"none"}
+{"request":"What time of year do swallows migrate?","expect":[],"tag":"none"}
+{"request":"I could really use a coffee break.","expect":[],"tag":"none"}
+{"request":"How do you spell miscellaneous?","expect":[],"tag":"none"}
+{"request":"Give me a simple pasta recipe.","expect":[],"tag":"none"}
+{"request":"Is seven larger than five?","expect":[],"tag":"none"}

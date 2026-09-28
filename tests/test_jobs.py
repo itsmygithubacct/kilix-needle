@@ -493,7 +493,7 @@ class AppsTuning(unittest.TestCase):
 
     def test_the_apps_recipe_is_its_own(self):                                     # R12 M21
         manifest = tuning.recipe(tuning.load_manifest(tuning.library_path("apps")), "apps")
-        self.assertEqual(manifest["gates"]["heldout"], "evals/apps/heldout-v3.jsonl")
+        self.assertEqual(manifest["gates"]["heldout"], "evals/apps/heldout-v4.jsonl")
         self.assertFalse(manifest["data"].get("supplements"))
         self.assertEqual(manifest["data"]["toolset"], "apps")
         evals = {str(p.relative_to(tuning.REPO)) for p in (tuning.REPO / "evals").rglob("*.jsonl")}

@@ -23,7 +23,7 @@ JOBS = {
     "panes": Job("panes", "Kilix panes and tabs", "evals",
                  "evals/dev.jsonl", "evals/test.jsonl", "evals/heldout-v8.jsonl"),
     "apps": Job("apps", "Kilix apps, games and settings", "evals/apps",
-                "evals/apps/dev.jsonl", "evals/apps/test.jsonl", "evals/apps/heldout-v3.jsonl"),
+                "evals/apps/dev.jsonl", "evals/apps/test.jsonl", "evals/apps/heldout-v4.jsonl"),
     "agents": Job("agents", "coding-agent sessions: launch, wait, message", "evals/agents",
                   "evals/agents/dev.jsonl", "evals/agents/test.jsonl",
                   "evals/agents/heldout-v1.jsonl"),
