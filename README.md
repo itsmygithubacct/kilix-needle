@@ -288,8 +288,9 @@ kilix-needle apps --dry-run "take me to the voice settings"
 
 No model answers apps requests. The job has five tools: `launch`, `show`,
 `pane_stat`, `game` and `settings`. `apps.propose` offers every call those tools
-can make, and keeps the calls the request's own reading supports, in the
-request's order. The checks below are the same ones that screened a model's
+can make, and keeps the calls the request's own reading supports. They run in the
+order of the clauses that admit them: "open calculator, enable pong, launch pong"
+opens the calculator, enables Pong, then launches it. The checks below are the same ones that screened a model's
 calls. They hold against a caller that may call anything, so offering them every
 call admits nothing more than such a caller could get admitted. What changes is
 that a name is never misspelled and no supported call is missed.
@@ -302,10 +303,10 @@ WORKLOG):
 | dev | 38/40 | 35/40 |
 | test | 80/90 | 73/90 |
 | held-out v3 | 102/150 | 90/150 |
-| held-out v4 | 111/146 | 93/146 |
+| held-out v4 | 107/146 | 93/146 |
 
-Neither admits any unsafe action on any of these sets. A request takes about
-60 ms and no model is loaded. `KILIX_NEEDLE_ENGINE` (or `--engine`) still runs
+Neither admits any unsafe action on any of these sets. A request takes tens of
+milliseconds, and no model is loaded. `KILIX_NEEDLE_ENGINE` (or `--engine`) still runs
 a model on the apps tools, for benchmarks.
 
 Every call passes `apps.py`'s checks:
@@ -345,6 +346,14 @@ Every call passes `apps.py`'s checks:
   install switch off.
 - Known issue: a launched program that exits at once still records `done`
   (the tab opened).
+- Known issue (KN-R16-04): a request that says something the checks refuse
+  next to something they admit ("disable doom and open doom") proposes only
+  the admitted part. No refusal is shown for the rest. `plain()` still holds
+  that part for a person, even with `--yes`.
+- Known issue: an item's name counts only when what follows it belongs to the
+  item ("the clock icon", "the battery thing"), not another noun ("temp files",
+  "network traffic"). That list is closed, so some ways of naming a widget are
+  refused and fall to a person.
 
 **Left out on purpose:**
 - power;

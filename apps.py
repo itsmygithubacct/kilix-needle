@@ -16,6 +16,7 @@ volume levels, and closing apps (that is the panes job).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import functools
 import re
 
 from actions import Refusal, normalize
@@ -188,6 +189,9 @@ SIDE_EFFECT_KINDS = frozenset({"launch", "show", "pane_stat", "game"})
 class Action:
     kind: str
     args: dict = field(default_factory=dict)
+    # The clause of the request that admitted it (apps.propose orders by it;
+    # review KN-R16-01). Not part of what the action is.
+    at: int = field(default=-1, compare=False, repr=False)
 
     @property
     def risky(self) -> bool:
@@ -363,6 +367,7 @@ _TERSE_SETTINGS = re.compile(rf"(?:(?:the )?(?:settings|options|preferences) for
 _CLAUSE_SPLIT = re.compile(r"\s*(?:,|;|:|\band then\b|\bthen\b|\bfollowed by\b|\band\b)\s*")
 
 
+@functools.lru_cache(maxsize=65536)
 def _plain_words(text: str) -> str:
     """Lower case, hyphens and underscores as spaces, backticks as apostrophes, single spaces."""
     # U+037E is the Greek question mark: NFKC makes it ";", a clause separator
@@ -409,9 +414,36 @@ def _is_name(table: dict, key: str, text: str) -> bool:
 # Phrases that say when, holding an item's name: "all the time" names no
 # clock (found by apps.propose on held-out v1: "I want memory usage visible on
 # panes all the time" admitted showing the clock to any caller that asked).
-_NOT_AN_ITEM = re.compile(r"(?<![\w])(?:all the time|at all times|any ?time|every ?time|"
-                          r"some ?time|this time|next time|last time|in time|on time|"
-                          r"the whole time|full time|part time)(?![\w])")
+_NOT_AN_ITEM = re.compile(r"(?<![\w])(?:(?:all|most|some|much|half|part|none) of the time|"
+                          r"all the time|half the time|at all times|at times|from time to time|"
+                          r"time to time|any ?time|every ?time|some ?time|this time|next time|"
+                          r"last time|in time|on time|the whole time|full time|part time|"
+                          r"up to date|out of date|to date)(?![\w])")
+# An item's name followed by a noun names that noun, not the item: "temp
+# files", "network traffic", "the windows close button" (review KN-R16-02).
+# What may follow a name that is the item itself:
+_AFTER_ITEM = re.compile(
+    r"(?:and|or|nor|on|off|back|in|into|onto|from|to|at|for|too|again|please|pls|now|then|also|"
+    r"but|so|while|when|if|as|with|without|is|are|be|was|were|the|a|an|my|our|this|that|it|"
+    r"visible|hidden|shown|gone|removed|away|always|never|auto|automatically|anymore|any|more|"
+    r"buttons?|icons?|indicators?|widgets?|bar|panes?|display|readout|meter|applet|percentage|"
+    r"status|section|settings?|list|things?|ones?|size|toggles?|symbols?|badges?|labels?|"
+    r"gauges?|sliders?|figures?|numbers?|counters?|graphs?|charts?|monitors?|tiles?|boxes|box|"
+    r"info|information|reading|bits?|pieces?|stuff|area|corner|tray|"
+    r"showing|shown|displayed|displaying|appear|appears|disappear|there|here|"
+    r"top|bottom|up|down|thanks|thank|[a-z]+ly)$")
+
+
+@functools.lru_cache(maxsize=4096)
+def _without_when(clause: str) -> str:
+    """The clause with its when-phrases blanked, the same length, so every
+    position still points into it."""
+    return _NOT_AN_ITEM.sub(lambda m: "#" * len(m.group()), clause)
+
+
+def _names_the_item(clause: str, match: re.Match) -> bool:
+    following = re.match(r"\s+([a-z']+)", clause[match.end():])
+    return following is None or bool(_AFTER_ITEM.match(following.group(1)))
 
 
 def _mentions(table: dict, key: str, clause: str) -> re.Match | None:
@@ -419,10 +451,11 @@ def _mentions(table: dict, key: str, clause: str) -> re.Match | None:
     shorter name inside a longer one of another key ('chess' in 'chess bash' is
     chess bash; 'browser' in 'file browser' is the file browser)."""
     if table is ITEM_NAMES:
-        # the same length, so every position still points into the clause
-        clause = _NOT_AN_ITEM.sub(lambda m: "#" * len(m.group()), clause)
+        clause = _without_when(clause)
     for phrase in _names(table, key):
         match = _said(phrase, clause)
+        if match and table is ITEM_NAMES and not _names_the_item(clause, match):
+            match = None
         if match:
             longer = [other for other in table if other != key
                       for p in _names(table, other)
@@ -765,19 +798,19 @@ def _admit(name: str, args: dict, reading: Reading) -> Action | Refusal:
             if part.bare:
                 if _opening(part.verb) is not None and _object(part.text, LAUNCH_NAMES, app) \
                         and _names_kind(LAUNCH_NAMES, LAUNCHABLE, part.verb):
-                    return Action(name, {"app": app})
+                    return Action(name, {"app": app}, at=index)
                 continue
             rest = _opening(part.text)
             if rest is None:
                 continue
             if _object(rest, LAUNCH_NAMES, app):
-                return Action(name, {"app": app})
+                return Action(name, {"app": app}, at=index)
             # "enable joustix, then launch it": "it" is the app the clause
             # before named, and only that one.
             it = re.match(r"(?:it|that one|that game|that app)(?!\w)\s*", rest)
             if it and index and (it.end() == len(rest) or _TAIL.match(rest, it.end())) \
                     and _mentions(LAUNCH_NAMES, app, parts[index - 1].text):
-                return Action(name, {"app": app})
+                return Action(name, {"app": app}, at=index)
         return Refusal(name, f"no part of the request asks to open {app}")
     if name == "show":
         item, on = args.get("item"), args.get("on")
@@ -787,7 +820,7 @@ def _admit(name: str, args: dict, reading: Reading) -> Action | Refusal:
         # "...: clock hidden, battery shown" admitted hiding the battery).
         if _both_ways(parts, lambda text: _mentions_item(item, text)):
             return Refusal(name, f"the request says {item} both ways")
-        for part in parts:
+        for index, part in enumerate(parts):
             # The widget word may be in the verb's clause or its continuations
             # ("remove the read aloud and wifi icons from the top bar").
             # A widget word that is part of another item's name ("the close
@@ -807,7 +840,7 @@ def _admit(name: str, args: dict, reading: Reading) -> Action | Refusal:
             if part.bare and not any(_mentions_item(other, part.verb) for other in ITEMS):
                 continue
             if _mentions_item(item, part.text) and part.on is on:
-                return Action(name, {"item": item, "on": on})
+                return Action(name, {"item": item, "on": on}, at=index)
         return Refusal(name, f"no part of the request asks to {'show' if on else 'hide'} {item}")
     if name == "pane_stat":
         stat, mode = args.get("stat"), args.get("mode")
@@ -853,7 +886,7 @@ def _admit(name: str, args: dict, reading: Reading) -> Action | Refusal:
                     break
                 following.append(later.text)
             if not any(modes(text) - {mode} for text in following):
-                return Action(name, {"stat": stat, "mode": mode})
+                return Action(name, {"stat": stat, "mode": mode}, at=index)
         return Refusal(name, f"no part of the request sets pane {stat} to {mode}")
     if name == "game":
         game = _resolve(LAUNCH_NAMES, AVAILABILITY, args.get("game"))
@@ -876,22 +909,22 @@ def _admit(name: str, args: dict, reading: Reading) -> Action | Refusal:
             # wish not to have a game is about the games list only when it says so.
             wish_only = re.search(_NEGATED_WANT, part.text) and not (
                 _GAME_VERB.search(part.verb) or _GAME_VERB.search(part.text)
-                or re.search(r"\b(?:list|picker|menu|games)\b", part.text))
+                or re.search(r"\bgames? (?:list|picker|menu)\b|\b(?:list|picker|menu)\b", part.text))
             if named and part.on is available and not wish_only:
-                return Action(name, {"game": game, "available": available})
+                return Action(name, {"game": game, "available": available}, at=index)
         return Refusal(name, f"no part of the request makes {game} "
                              f"{'available' if available else 'unavailable'}")
     # settings
     section = args.get("section")
     if section not in SECTIONS:
         return Refusal(name, "not a settings section")
-    for part in parts:
+    for index, part in enumerate(parts):
         asks = _NAV.match(_body(part.verb)) or reading.way or _TERSE_SETTINGS.fullmatch(part.text)
         if asks and _mentions(SECTION_NAMES, section, part.text) \
                 and _SETTINGS_WORD.search(part.text) \
                 and (reading.way or not _FINITE.search(part.text)) \
                 and "center" not in part.text and "centre" not in part.text:
-            return Action(name, {"section": section})
+            return Action(name, {"section": section}, at=index)
     return Refusal(name, f"no part of the request opens the {section} settings")
 
 
@@ -1100,15 +1133,6 @@ CANDIDATE_CALLS = tuple(
        for game in AVAILABILITY for available in (True, False)]
     + [{"name": "settings", "arguments": {"section": section}} for section in SECTIONS])
 
-# Two actions on one name ("enable pong in the games list and then launch
-# it") keep the order their verbs have in the request.
-_ORDER_VERB = {
-    "launch": re.compile(r"(?<![\w])(?:open|launch|start|run|play|fire up|boot|bring up|"
-                         r"pull up|load)(?![\w])"),
-    "game": re.compile(r"(?<![\w])(?:enable|disable|allow|block|available|unavailable|"
-                       r"games list)(?![\w])"),
-    "settings": re.compile(r"(?<![\w])settings?(?![\w])"),
-}
 
 
 def _object_names(call: dict) -> list[str]:
@@ -1125,12 +1149,14 @@ def _object_names(call: dict) -> list[str]:
     return _names(SECTION_NAMES, args["section"])
 
 
-def _order(text: str, call: dict) -> tuple:
-    """Where the request first names the call's object, then its verb."""
+def _order(reading: Reading, action: Action, call: dict) -> tuple:
+    """The clause that admitted the call, then where that clause names its
+    object: "open calculator, enable pong, launch pong" runs in that order
+    (review KN-R16-01: ordering by first mention launched pong before
+    enabling it)."""
+    text = reading.parts[action.at].text if 0 <= action.at < len(reading.parts) else ""
     starts = [m.start() for m in (_said(name, text) for name in _object_names(call)) if m]
-    verb = _ORDER_VERB.get(call["name"])
-    said = verb.search(text) if verb else None
-    return (min(starts, default=len(text) + 1), said.start() if said else 0)
+    return (action.at, min(starts, default=len(text) + 1))
 
 
 def propose(request: str) -> list[dict]:
@@ -1150,13 +1176,14 @@ def propose(request: str) -> list[dict]:
         for call in CANDIDATE_CALLS:
             if reading.way and call["name"] != "settings":
                 continue
-            if isinstance(_admit(call["name"], call["arguments"], reading), Action):
-                supported.append(call)
+            action = _admit(call["name"], call["arguments"], reading)
+            if isinstance(action, Action):
+                supported.append((_order(reading, action, call), call))
     if supported:
-        return sorted(supported, key=lambda call: _order(text, call))
+        return [call for _key, call in sorted(supported, key=lambda pair: pair[0])]
     named = [call for call in CANDIDATE_CALLS
              if any(_said(name, text) for name in _object_names(call))]
-    return sorted(named, key=lambda call: _order(text, call))[:1]
+    return named[:1]
 
 
 class Proposer:

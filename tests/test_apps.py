@@ -1214,3 +1214,84 @@ class ProposerFindings(unittest.TestCase):
             self.assertEqual(len(admitted(request, [call("game", game="doom" if "doom" in request
                                                           else "kilix-pong", available=False)])),
                              1, request)
+
+
+class ReviewR16(unittest.TestCase):
+    """Review R16: the grammar route's order and the checks' name binding."""
+
+    ORDERS = (("open calculator, enable pong, launch pong",
+               [("launch", "kilix-calculator"), ("game", "kilix-pong"), ("launch", "kilix-pong")]),
+              ("open calculator, enable pong, then launch it",
+               [("launch", "kilix-calculator"), ("game", "kilix-pong"), ("launch", "kilix-pong")]),
+              ("enable doom, open calculator, launch doom",
+               [("game", "doom"), ("launch", "kilix-calculator"), ("launch", "doom")]),
+              ("launch pong and enable it in the games list",
+               [("launch", "kilix-pong"), ("game", "kilix-pong")]))
+
+    def test_calls_come_in_the_order_of_the_clauses_that_admit_them(self):   # KN-R16-01
+        for request, want in self.ORDERS:
+            got = [(c["name"], next(iter(c["arguments"].values())))
+                   for c in apps.propose(request)]
+            self.assertEqual(got, want, request)
+
+    def test_they_run_in_that_order_from_the_cli_and_mcp(self):              # KN-R16-01
+        request = "open calculator, enable pong, launch pong"
+        for route in ("cli", "mcp"):
+            done = []
+            with mock.patch.object(apps_kilix, "_ready", return_value=True), \
+                    mock.patch.object(apps_kilix, "perform",
+                                      side_effect=lambda step, install=False: done.append(
+                                          step.summary)), \
+                    mock.patch.dict(os.environ, {}, clear=False):
+                os.environ.pop("KILIX_NEEDLE_ENGINE", None)
+                args = type("A", (), {"engine": None, "root": None})()
+                if route == "cli":
+                    record = needle_cli.run_apps_request(
+                        needle_cli.open_runtime(args, job="apps"), request,
+                        needle_cli.Options(assume_yes=True, agent=True), needle_cli._never)
+                else:
+                    server = mcp_server.Server(lambda job="panes": needle_cli.open_runtime(
+                        args, job=job))
+                    record = server.call_tool("kilix_apps_act", {
+                        "request": request, "confirm_risky": True})["structuredContent"]
+                    server.close()
+            self.assertEqual([i["outcome"] for i in record["items"]], ["done"] * 3, route)
+            self.assertEqual(len(done), 3, route)
+            self.assertIn("calculator", done[0].casefold(), route)
+            self.assertIn("pong", done[1].casefold(), route)
+            self.assertIn("pong", done[2].casefold(), route)
+            self.assertNotEqual(done[1], done[2], route)
+
+    def test_a_name_inside_another_noun_or_a_when_phrase_is_no_item(self):   # KN-R16-02
+        for request, calls in (
+                ("I want memory usage visible on panes all of the time",
+                 [call("show", item="clock", on=True)]),
+                ("show cpu on panes from time to time", [call("show", item="clock", on=True)]),
+                ("show cpu on panes most of the time", [call("show", item="clock", on=True)]),
+                ("I want the memory stats on panes up to date",
+                 [call("show", item="calendar", on=True)]),
+                ("hide temp files", [call("show", item="temperature", on=False)]),
+                ("hide network traffic", [call("show", item="network", on=False)]),
+                ("show the windows close button", [call("show", item="windows", on=True)])):
+            self.assertEqual(admitted(request, calls), [], request)
+        for request, calls in (
+                ("show the time", [call("show", item="clock", on=True)]),
+                ("show the date", [call("show", item="calendar", on=True)]),
+                ("show the time on the top bar at all times", [call("show", item="clock", on=True)]),
+                ("show the windows close button", [call("show", item="close", on=True)]),
+                ("hide the decrease font size button",
+                 [call("show", item="font_decrease", on=False)]),
+                ("get rid of the battery thing up top", [call("show", item="battery", on=False)]),
+                ("show the windows list", [call("show", item="windows", on=True)]),
+                ("hide the clock completely", [call("show", item="clock", on=False)]),
+                ("I want memory usage visible on panes all of the time",
+                 [call("pane_stat", stat="memory", mode="always")])):
+            self.assertEqual(len(admitted(request, calls)), 1, request)
+
+    def test_games_in_a_wish_is_not_the_games_list(self):                     # KN-R16-03
+        for request, game in (("I don't want games like mines; open mines", "minesweeper"),
+                              ("I don't need games like doom", "doom")):
+            self.assertEqual(admitted(request, [call("game", game=game, available=False)]), [],
+                             request)
+        self.assertEqual(len(admitted("I don't want doom in the games list",
+                                      [call("game", game="doom", available=False)])), 1)
