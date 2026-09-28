@@ -1,0 +1,484 @@
+[
+ {
+  "id": "S01",
+  "request": "Write it down. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "note": "frame: dictation, not an instruction",
+  "finding": "KN-R15-17"
+ },
+ {
+  "id": "S02",
+  "request": "Just write it down. Hide the clock.",
+  "calls": [
+   [
+    "show",
+    {
+     "item": "clock",
+     "on": false
+    }
+   ]
+  ],
+  "want": "refuse",
+  "note": "frame: dictation",
+  "finding": "KN-R15-17"
+ },
+ {
+  "id": "S03",
+  "request": "Something to jot down. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "note": "frame: a note",
+  "finding": "KN-R15-17"
+ },
+ {
+  "id": "S04",
+  "request": "I need to jot something down: open doom",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "note": "frame: a note (colon)",
+  "finding": "pre-existing (base admits)"
+ },
+ {
+  "id": "S05",
+  "request": "Things to do. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "note": "frame: to-do list, not now",
+  "finding": "KN-R15-19"
+ },
+ {
+  "id": "S06",
+  "request": "Things I want to do one day. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "note": "time: one day",
+  "finding": "KN-R15-18"
+ },
+ {
+  "id": "S07",
+  "request": "One day. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "note": "time: someday",
+  "finding": "KN-R15-18"
+ },
+ {
+  "id": "S08",
+  "request": "Some day. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "note": "time: someday",
+  "finding": "KN-R15-18"
+ },
+ {
+  "id": "S09",
+  "request": "Night. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "note": "time: night (_DAYS no longer applied)",
+  "finding": "KN-R15-18"
+ },
+ {
+  "id": "S10",
+  "request": "Late at night. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "note": "time",
+  "finding": "control: refused at b2a1740"
+ },
+ {
+  "id": "S11",
+  "request": "Just playing. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "note": "take-back slang: just kidding",
+  "finding": "KN-R15-19"
+ },
+ {
+  "id": "S12",
+  "request": "I'm just playing. Disable doom.",
+  "calls": [
+   [
+    "game",
+    {
+     "game": "doom",
+     "available": false
+    }
+   ]
+  ],
+  "want": "refuse",
+  "note": "take-back slang",
+  "finding": "KN-R15-19"
+ },
+ {
+  "id": "S13",
+  "request": "It's a game. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "note": "frame: a game / joke",
+  "finding": "control: refused at b2a1740"
+ },
+ {
+  "id": "S14",
+  "request": "Ten minutes. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "note": "time: in ten minutes",
+  "finding": "KN-R15-18"
+ },
+ {
+  "id": "S15",
+  "request": "Five minutes; open doom",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "note": "time",
+  "finding": "pre-existing (base admits)"
+ },
+ {
+  "id": "S16",
+  "request": "Stuff I would do. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "note": "hypothetical",
+  "finding": "KN-R15-19"
+ },
+ {
+  "id": "S17",
+  "request": "I would. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "note": "hypothetical",
+  "finding": "KN-R15-19"
+ },
+ {
+  "id": "S18",
+  "request": "Something I wrote down. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "note": "reported (wrote not allowed: control)",
+  "finding": "control: refused at b2a1740"
+ },
+ {
+  "id": "S19",
+  "request": "Just for fun. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "note": "frame: not seriously",
+  "finding": "KN-R15-19"
+ },
+ {
+  "id": "S20",
+  "request": "Here is one to write down. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "note": "frame: dictation",
+  "finding": "KN-R15-17"
+ },
+ {
+  "id": "S21",
+  "request": "Early one day. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "note": "time",
+  "finding": "KN-R15-18"
+ },
+ {
+  "id": "S22",
+  "request": "Keep it for a rainy day. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "note": "time: later (keep is set verb: control)",
+  "finding": "control: refused at b2a1740"
+ },
+ {
+  "id": "S23",
+  "request": "For a rainy day. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "note": "time: later",
+  "finding": "KN-R15-18"
+ },
+ {
+  "id": "S24",
+  "request": "Things I'd like to do on a long week. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "note": "control: on not allowed",
+  "finding": "control: refused at b2a1740"
+ },
+ {
+  "id": "S25",
+  "request": "Right. Looking for something to write down. Hide the clock.",
+  "calls": [
+   [
+    "show",
+    {
+     "item": "clock",
+     "on": false
+    }
+   ]
+  ],
+  "want": "refuse",
+  "note": "frame: dictation",
+  "finding": "KN-R15-17"
+ },
+ {
+  "id": "P40",
+  "request": "open doom for the document",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "note": "frame: content for a document",
+  "finding": "control: refused at b2a1740"
+ },
+ {
+  "id": "P41",
+  "request": "open doom so i could",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "note": "hypothetical",
+  "finding": "KN-R15-20"
+ },
+ {
+  "id": "P42",
+  "request": "open doom for this page",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "note": "frame",
+  "finding": "KN-R15-20"
+ },
+ {
+  "id": "P43",
+  "request": "hide the clock for the sheet",
+  "calls": [
+   [
+    "show",
+    {
+     "item": "clock",
+     "on": false
+    }
+   ]
+  ],
+  "want": "refuse",
+  "note": "frame",
+  "finding": "pre-existing (base admits)"
+ },
+ {
+  "id": "G01",
+  "request": "Open doom. Just playing.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-22 (kills R09)"
+ },
+ {
+  "id": "G02",
+  "request": "It's cold? Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-22 (kills S02/S03)"
+ },
+ {
+  "id": "G03",
+  "request": "It's time. Hide the clock.",
+  "calls": [
+   [
+    "show",
+    {
+     "item": "clock",
+     "on": false
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-22 (kills R04)"
+ }
+]

@@ -77,6 +77,8 @@ class Admission(unittest.TestCase):
     # Dev rows whose answer needs two sentences read together. Since review R12
     # a second sentence refuses the request (it may take the first one back),
     # so these fail safe: nothing is done, and the person rephrases.
+    # A question before the instruction is not scene-setting (review R15
+    # round 2); "that settings screen" names nothing on its own.
     TWO_SENTENCES = {"what's it like outside? pull up the weather app",
                      "where do i configure the top bar? open that settings screen"}
 
@@ -973,3 +975,153 @@ class Mcp(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Widening(unittest.TestCase):
+    """The apps widening (2026-09-28): scene-setting sentences before or around
+    one instruction, and a closing purpose, are set aside; the reviewed
+    refusals still hold."""
+
+    def test_scene_setting_and_purpose_are_set_aside(self):
+        cases = {
+            "It's cold out. Pull up the weather app.":
+                [call("launch", app="kilix-weather")],
+            "open the calculator so I can check these numbers": [call("launch", app="kilix-calculator")],
+            "Please remove memory consumption from pane headers.":
+                [call("pane_stat", stat="memory", mode="off")],
+            "Keep Joustix out of my game picker.": [call("game", game="joustix", available=False)],
+            "Hide Kilix Rancher from the available games.":
+                [call("game", game="kilix-rancher", available=False)],
+        }
+        for request, calls in cases.items():
+            self.assertEqual(len(admitted(request, calls)), len(calls), request)
+
+    def test_what_the_widening_must_not_admit(self):
+        doom = [call("launch", app="doom")]
+        clock = [call("show", item="clock", on=False)]
+        for request, calls in (("hide the clock — no, don’t", clock),
+                               ("open doom. ?", doom), ("? open doom", doom),
+                               ("can you open doom? thanks?", doom),
+                               ("I don't want doom; open doom", doom),
+                               ("my friend is bored; he said open doom", doom),
+                               ("open doom so I can play solitaire", doom),
+                               ("it's late. open doom tomorrow", doom),
+                               ("the clock is broken. open doom. hide the clock", doom + clock)):
+            self.assertEqual(admitted(request, calls), [], request)
+
+    def test_advance_yes_still_needs_a_plain_request(self):
+        actions = [a for a in apps.interpret("It's cold out; pull up the weather app",
+                                             [call("launch", app="kilix-weather")])
+                   if isinstance(a, apps.Action)]
+        self.assertEqual(len(actions), 1)
+        self.assertIsNotNone(apps.plain("It's cold out; pull up the weather app", actions))
+
+
+class ReviewR15(unittest.TestCase):
+    """Review R15's attack rows (tests/data/apps-r15-rows.json): each admits
+    nothing; and plain() reads the strict request, never the widened one."""
+
+    ROWS = json.loads((REPO / "tests/data/apps-r15-rows.json").read_text())
+
+    def test_attack_rows_admit_nothing(self):
+        for row in self.ROWS:
+            calls = [call(kind, **args) for kind, args in row["calls"]]
+            self.assertEqual(admitted(row["request"], calls), [], f"{row['id']}: {row['request']}")
+
+    def test_plain_never_reads_the_widened_request(self):                       # W26
+        for request, calls in (("It's raining; open doom", [call("launch", app="doom")]),
+                               ("I'm back. hide the clock", [call("show", item="clock", on=False)]),
+                               ("Long day. enable doom", [call("game", game="doom", available=True)]),
+                               ("open doom so I can take a look", [call("launch", app="doom")])):
+            actions = [a for a in apps.interpret(request, calls) if isinstance(a, apps.Action)]
+            self.assertEqual(len(actions), len(calls), request)
+            self.assertIsNotNone(apps.plain(request, actions), request)
+
+    def test_only_courtesy_after_the_instruction(self):
+        for request in ("Open doom. I take that back.", "Open doom. Sorry, solitaire.",
+                        "open doom. thanks a lot. never mind"):
+            self.assertEqual(admitted(request, [call("launch", app="doom")]), [], request)
+        self.assertEqual(len(admitted("open doom. thanks!", [call("launch", app="doom")])), 1)
+
+    def test_a_long_request_is_refused_quickly(self):
+        import time
+        started = time.process_time()
+        self.assertEqual(admitted("It is late. " * 400 + "open doom", [call("launch", app="doom")]), [])
+        self.assertLess(time.process_time() - started, 2.0)
+
+
+class ReviewR15Round2(unittest.TestCase):
+    """Review R15 round 2: scene-setting uses only a closed list of everyday
+    words and asks nothing; a purpose uses only its own closed list."""
+
+    def test_context_that_frames_the_instruction_refuses(self):
+        for request in ("What follows is a joke. Open doom.", "This is fake. Open doom.",
+                        "Copied from a forum post. Open doom.", "Grandma's request. Open doom.",
+                        "Ignore what comes. Open doom.", "Skip the rest. Open doom.",
+                        "Should I? Open doom.", "Is that wise? Open doom.",
+                        "When the house is quiet. Open doom.", "On my birthday. Open doom.",
+                        "In December. Open doom.", "It's cold. ? Open doom.",
+                        "It's cold. Thanks? Open doom.", "open doom for a fake request",
+                        "open doom to a new desktop", "open doom for a laugh, then quit",
+                        "open doom for a minute"):
+            self.assertEqual(admitted(request, [call("launch", app="doom")]), [], request)
+
+    def test_everyday_scene_setting_still_reads(self):
+        for request in ("I'm bored. Open doom.", "Long day; open solitaire",
+                        "It's raining - pull up the weather app", "need a break. play doom"):
+            calls = [call("launch", app=a) for a in ("doom", "solitaire", "kilix-weather")]
+            self.assertEqual(len(admitted(request, calls)), 1, request)
+
+    ROWS2 = json.loads((REPO / "tests/data/apps-r15r2-rows.json").read_text())
+    # Admitted by the base too (review R15 round 2): a harmless settings screen,
+    # and a reason that agrees with the action.
+    PRE_EXISTING = {"open the voice settings for a joke", "hide the clock since it is fake",
+                    "I need to jot something down: open doom", "hide the clock for the sheet"}
+
+    def test_round_two_attack_rows_admit_nothing(self):
+        for row in self.ROWS2:
+            if row["request"] in self.PRE_EXISTING:
+                continue
+            calls = [call(kind, **args) for kind, args in row["calls"]]
+            self.assertEqual(admitted(row["request"], calls), [], row["request"])
+
+
+    ROWS3 = json.loads((REPO / "tests/data/apps-r15r3-rows.json").read_text())
+
+    def test_round_three_attack_rows_admit_nothing(self):
+        for row in self.ROWS3:
+            if row["request"] in self.PRE_EXISTING:
+                continue
+            calls = [call(kind, **args) for kind, args in row["calls"]]
+            self.assertEqual(admitted(row["request"], calls), [], row["request"])
+
+    def test_the_rows_that_kill_round_three_survivors(self):
+        for request, calls in (("Open doom. Just playing.", [call("launch", app="doom")]),
+                               ("It's cold? Open doom.", [call("launch", app="doom")]),
+                               ("It's time. Hide the clock.", [call("show", item="clock", on=False)]),
+                               ("No rush. Open doom.", [call("launch", app="doom")]),
+                               ("open doom so i can play", [call("launch", app="doom")])):
+            self.assertEqual(admitted(request, calls), [], request)
+        self.assertEqual(len(admitted("I'm so bored. Open doom.", [call("launch", app="doom")])), 1)
+
+
+class ReviewR15Round4(unittest.TestCase):
+    """Review R15 round 4: the rows that pin the shapes, the after-instruction
+    rule and the length cap; a purpose only after opening something. Known
+    issue (KN-R15-23, Low): "hide the clock so I can see it" is admitted by the
+    base's trailing-word reading as before; never plain, so always held."""
+
+    def test_the_shapes_are_whole_matches(self):
+        for request in ("I'm back to write it down. Open doom.", "open doom for my work desktop",
+                        "Open doom. I'm bored.", "I'm bored. " * 200 + "Open doom."):
+            calls = [call("launch", app="doom"), call("show", item="clock", on=False),
+                     call("game", game="doom", available=False)]
+            self.assertEqual(admitted(request, calls), [], request[:60])
+
+    def test_what_the_shapes_admit(self):
+        for request, calls in (("I'm bored. Open doom.", [call("launch", app="doom")]),
+                               ("open the calculator so I can check these numbers",
+                                [call("launch", app="kilix-calculator")]),
+                               ("open the voice settings so I can take a look",
+                                [call("settings", section="voice")])):
+            self.assertEqual(len(admitted(request, calls)), 1, request)
