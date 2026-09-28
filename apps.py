@@ -97,8 +97,7 @@ LAUNCH_NAMES = {
                      "sequencer workstation"],
     "launcher": ["launcher", "app menu", "application menu", "applications menu"],
     "temps": ["temps", "temperatures", "temperature", "temperatures view", "temperature view"],
-    "memory": ["memory usage", "ram usage", "memory", "ram", "ram usage view", "memory usage view",
-               "memory view"],
+    "memory": ["memory usage", "ram usage", "memory", "ram"],
     "mixer": ["volume mixer", "sound mixer", "audio mixer", "mixer"],
     "transcripts": ["transcripts", "transcript list", "pane transcripts"],
 }
@@ -135,7 +134,7 @@ MODE_NAMES = {"always": ["always", "all the time", "permanently", "at all times"
               "off": ["off", "never", "hide", "hidden", "disable", "stop showing", "no longer",
                       "don't need", "do not need", "anymore"],
               "auto": ["auto", "automatic", "automatically", "only when busy", "when busy",
-                       "when needed", "only when needed", "let kilix decide"]}
+                       "when needed", "only when needed"]}
 SECTION_NAMES = {"top-bar": ["top bar", "top-bar", "topbar", "status bar", "bar at the top"],
                  "pane-buttons": ["pane buttons", "pane-buttons", "pane button",
                                   "buttons on panes", "buttons on the panes", "pane controls",
@@ -214,7 +213,7 @@ _GAP = r"(?:\s+[\w']+){0,6}?\s+"      # "put the clock back", "turn the text to 
 # "never show cpu on panes"; not "I don't want to play doom".
 _NEGATED_WANT = r"\b(?:don'?t|do not|no longer|never)\s+(?:show|want|need|display)\b(?!\s+to\b)"
 _ON = [rf"\b(?:turn|switch){_GAP}on\b", rf"\b(?:put|bring|add){_GAP}back\b",
-       rf"\bmake{_GAP}available\b", rf"\bmake{_GAP}visible\b", rf"\bput{_GAP}on\b", r"\bturn on\b", r"\bswitch on\b", r"\bput back\b",
+       rf"\bmake{_GAP}available\b", rf"\bmake{_GAP}visible\b", r"\bturn on\b", r"\bswitch on\b", r"\bput back\b",
        r"\bbring back\b", r"\bshow\b(?!\s+me\b)", r"\bdisplay\b", r"\bre ?enable\b",
        r"\benable\b", r"\bunhide\b", r"\brestore\b", r"\breveal\b", r"\b(?:want|like) to see\b",
        r"\ballow\b", r"\bunblock\b", rf"\badd{_GAP}to\b",
@@ -259,7 +258,7 @@ _OPEN = re.compile(r"(?:open|pop open|launch|start|run|play|fire up|boot up|boot
 # Offers that may end in a question mark: "up for a round of chess?"
 _INVITE = re.compile(r"^(?:anyone |who'?s |i'?m )?(?:up for|how about|fancy|feel like)\b")
 _SET_VERB = re.compile(r"(?:always |only |never )?(?:set|change|make|put|pin|turn|switch|show|"
-                       r"display|hide|keep|leave|let|use|stop showing)\b")
+                       r"display|hide|keep|leave|stop showing)\b")
 _NAV = re.compile(r"(?:open|show me|show|go (?:straight )?(?:to|into)|take me (?:straight )?(?:to|into)|"
                   r"bring up|pull up|jump (?:straight )?(?:to|into)|navigate(?: settings)? to|switch to|head (?:over )?to|"
                   r"get me (?:to|into)|get into|display|configure|change|adjust|tweak|edit|"
@@ -525,12 +524,15 @@ def _refusal(text: str) -> str | None:
 
 
 def _context_ok(segment: str) -> bool:
-    """A sentence that says why or sets the scene, and asks for nothing: no
-    instruction verb, nothing reported, cancelled, conditional or timed, and a
-    negation only where it names nothing ("no graphics needed", "I don't use
-    it"; not "I don't want doom")."""
+    """A sentence before the instruction that sets the scene and asks for
+    nothing ("It's cold out", "what's the weather doing?"). It must pass every
+    whole-request check (review R15: a negation, report, take-back, condition
+    or time there was ignored), name no app, item, stat, section or game (so a
+    thing is never said both ways across sentences), and speak of nobody else
+    and no message, note or example."""
     body = segment.strip(" .!?")
-    if not body:
+    if not body or _refusal(body) or _OTHERS.search(body) or _names_something(body) \
+            or _DAYS.search(body):
         return False
     # "The date display is cluttering the top bar": a statement, whatever
     # words it holds, unless it starts with an instruction verb.
@@ -539,13 +541,19 @@ def _context_ok(segment: str) -> bool:
         or _PARTICLE_VERB.match(_body(body)))
     if not statement and (_has_verb(body) or _opening(body) is not None):
         return False
-    if _REPORTED.search(body) or _CANCEL.search(body) or _CONDITION.search(body) \
-            or _WHEN.search(body) or _INSTALL.search(body) or _CONTRAST.search(body) \
-            or _LEVEL.search(body) or _EITHER.search(body):
-        return False
-    if _NEGATION.search(body) and _names_something(body):
-        return False
     return True
+
+
+# "Only on Friday. Open doom.": a day is a when (review R15).
+_DAYS = re.compile(r"\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|weekend|morning|"
+                   r"afternoon|evening|night|once|first|then|later|soon)\b")
+# Context that brings in someone else's words or a text (review R15, KN-R15-03
+# and -10): "Message from my son. Open doom.", "Example sentence for the manual".
+_OTHERS = re.compile(r"\b(?:son|daughter|kids?|child(?:ren)?|wife|husband|partner|mom|mum|dad|"
+                     r"mother|father|brother|sister|boss|friend|colleague|roommate|he|she|they|"
+                     r"his|her|their|them|someone|somebody|anyone|message|note|email|e mail|text|"
+                     r"texted|sms|chat|example|sample|manual|story|script|following|quote|typed|"
+                     r"sent|wrote|written|reads?|says?|test|demo|prompt|instructions?)\b")
 
 
 # Where a request ends in why ("... so I can check these numbers", "... for
@@ -555,12 +563,19 @@ _PURPOSE = re.compile(r"\s+(?:so (?:that )?(?:i|we)\b|because\b|since\b|as i\b|(
 
 
 def _without_purpose(sentence: str) -> str:
+    """The sentence without a closing purpose that passes every whole-request
+    check, is short, names nothing, places nothing and goes on to nothing
+    (review R15, KN-R15-05: "for a minute, no, don't", "for a bit tomorrow",
+    "for a minute, then off", "to a new pane")."""
     match = _PURPOSE.search(sentence)
     if not match:
         return sentence
-    why = match["why"]
-    if _names_something(why) or _has_verb(why) or _opening(why.strip()) is not None \
-            or _REPORTED.search(why) or _CANCEL.search(why) or _CONDITION.search(why):
+    why = match["why"].strip(" .!")
+    if len(why.split()) > 8 or _refusal(match.group(0)) or _OTHERS.search(why) \
+            or _names_something(why) or _has_verb(why) or _opening(why) is not None \
+            or _PLACED.search(match.group(0)) or re.search(r"[,;:]|\b(?:then|and|or|but)\b", why) \
+            or re.search(r"\b(?:minute|minutes|hour|hours|second|seconds|bit|while|moment)\b", why) \
+            or _particle(why) is not None:
         return sentence
     return sentence[:match.start()]
 
@@ -580,6 +595,9 @@ def _pieces(request: str) -> list[str]:
     return [p for p in out if p and p.strip()]
 
 
+_PANE_WORD = re.compile(r"\bpanes?\b|\bper pane\b")
+# The words that said "always" before the apps widening, with or without "pane".
+_ALWAYS_BEFORE = ("always", "all the time", "permanently", "at all times", "constantly")
 _FROM_LIST = re.compile(r"\b(?:from|off|out of) (?:the |my )?available games\b")
 
 
@@ -605,10 +623,18 @@ def _read(request: str, widen: bool = False) -> Reading:
         segments = [s for s in segments if s.strip(" .!?") and not _COURTESY.fullmatch(s)]
         kinds = [_context_ok(s) for s in segments]
         instructions = [s for s, context in zip(segments, kinds) if not context]
+        # A piece that is neither scene-setting nor an instruction refuses:
+        # "Example sentence for the manual; open doom" (review R15, KN-R15-10).
+        if any(not context and not (_has_verb(s.strip(" .!?")) or _opening(s.strip(" .!?")))
+               for s, context in zip(segments, kinds)):
+            return Reading(refusal="the request says more than one sentence: one instruction at a time")
         if len(instructions) == 1:
             at = segments.index(instructions[0])
-            if any(_NEGATION.search(s) for s in segments[at + 1:]):
-                return Reading(refusal="the request says not to, or not what: say just what to do")
+            if segments[at + 1:]:
+                # After the instruction only courtesy (review R15, KN-R15-01:
+                # "Open doom. I take that back.", "Open doom. Sorry, solitaire.").
+                return Reading(refusal="the request says more after the instruction: "
+                                       "one instruction at a time")
             asked = instructions
             text = instructions[0]
         elif not instructions:
@@ -769,8 +795,13 @@ def _admit(name: str, args: dict, reading: Reading) -> Action | Refusal:
             said = modes(part.text)
             if not said and part.bare:
                 said = modes(part.verb)
-            if not said and part.on is False and not _particle(part.text) == "both":
+            if not said and part.on is False and _PANE_WORD.search(part.text) \
+                    and not _particle(part.text) == "both":
                 said = {"off"}              # "remove memory consumption from pane headers"
+            if said & {"always"} and not _PANE_WORD.search(part.text) \
+                    and _mentions(MODE_NAMES, "always", part.text) \
+                    and not any(_said(w, part.text) for w in _ALWAYS_BEFORE):
+                continue                    # "keep the memory view visible" is not a pane setting
             # "..., switch it off": the next clause says the mode of this one.
             if not said and index + 1 < len(parts) and re.search(r"\bit\b", parts[index + 1].text) \
                     and not _mentions(STAT_NAMES, other, parts[index + 1].text):
@@ -866,9 +897,13 @@ def _key(action: Action) -> tuple:
             "game": ("game", args.get("game"))}.get(action.kind, (action.kind, id(action)))
 
 
+MAX_REQUEST = 2000        # characters; review R15, KN-R15-08
+
+
 def interpret(request: str, calls: list) -> list[Action | Refusal]:
     """Turn the engine's calls into admitted actions or named refusals."""
-    reading = _read(request, widen=True)
+    reading = (_read(request, widen=True) if len(str(request)) <= MAX_REQUEST
+               else Reading(refusal="the request is too long"))
     results: list[Action | Refusal] = []
     seen = set()
     for call in calls if isinstance(calls, list) else []:

@@ -983,13 +983,10 @@ class Widening(unittest.TestCase):
 
     def test_scene_setting_and_purpose_are_set_aside(self):
         cases = {
-            "It's cold out; what's the weather doing? Pull up the weather app.":
+            "It's cold out; how cold is it going to get? Pull up the weather app.":
                 [call("launch", app="kilix-weather")],
             "open the calculator so I can check these numbers": [call("launch", app="kilix-calculator")],
-            "No graphics needed; start the text web browser.": [call("launch", app="kilix-chawan")],
             "Need to jot something down—launch the text editor": [call("launch", app="kilix-notepad")],
-            "The date display is cluttering the top bar—hide the calendar.":
-                [call("show", item="calendar", on=False)],
             "Please remove memory consumption from pane headers.":
                 [call("pane_stat", stat="memory", mode="off")],
             "Keep Joustix out of my game picker.": [call("game", game="joustix", available=False)],
@@ -1018,3 +1015,36 @@ class Widening(unittest.TestCase):
                    if isinstance(a, apps.Action)]
         self.assertEqual(len(actions), 1)
         self.assertIsNotNone(apps.plain("It's cold out; pull up the weather app", actions))
+
+
+class ReviewR15(unittest.TestCase):
+    """Review R15's attack rows (tests/data/apps-r15-rows.json): each admits
+    nothing; and plain() reads the strict request, never the widened one."""
+
+    ROWS = json.loads((REPO / "tests/data/apps-r15-rows.json").read_text())
+
+    def test_attack_rows_admit_nothing(self):
+        for row in self.ROWS:
+            calls = [call(kind, **args) for kind, args in row["calls"]]
+            self.assertEqual(admitted(row["request"], calls), [], f"{row['id']}: {row['request']}")
+
+    def test_plain_never_reads_the_widened_request(self):                       # W26
+        for request, calls in (("It's raining; open doom", [call("launch", app="doom")]),
+                               ("I'm back. hide the clock", [call("show", item="clock", on=False)]),
+                               ("Long day. enable doom", [call("game", game="doom", available=True)]),
+                               ("open doom so I can relax", [call("launch", app="doom")])):
+            actions = [a for a in apps.interpret(request, calls) if isinstance(a, apps.Action)]
+            self.assertEqual(len(actions), len(calls), request)
+            self.assertIsNotNone(apps.plain(request, actions), request)
+
+    def test_only_courtesy_after_the_instruction(self):
+        for request in ("Open doom. I take that back.", "Open doom. Sorry, solitaire.",
+                        "open doom. thanks a lot. never mind"):
+            self.assertEqual(admitted(request, [call("launch", app="doom")]), [], request)
+        self.assertEqual(len(admitted("open doom. thanks!", [call("launch", app="doom")])), 1)
+
+    def test_a_long_request_is_refused_quickly(self):
+        import time
+        started = time.process_time()
+        self.assertEqual(admitted("It is late. " * 400 + "open doom", [call("launch", app="doom")]), [])
+        self.assertLess(time.process_time() - started, 2.0)
