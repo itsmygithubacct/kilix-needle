@@ -1,0 +1,24 @@
+{"request": "please check ram", "expect": [["resources", {"kind": "memory"}]], "tag": "resources"}
+{"request": "how much memory is available?", "expect": [["resources", {"kind": "memory"}]], "tag": "resources"}
+{"request": "check free space for /Data", "expect": [["resources", {"kind": "disk", "path": "/Data"}]], "tag": "resources"}
+{"request": "show load averages", "expect": [["resources", {"kind": "cpu"}]], "tag": "resources"}
+{"request": "list processes using the most ram", "expect": [["processes", {"sort": "memory"}]], "tag": "processes"}
+{"request": "list top 2 processes by CPU", "expect": [["processes", {"sort": "cpu", "limit": 2}]], "tag": "processes"}
+{"request": "list all services", "expect": [["services", {}]], "tag": "services"}
+{"request": "check user backup@daily service status", "expect": [["services", {"unit": "backup@daily.service", "scope": "user"}]], "tag": "services"}
+{"request": "read user warnings from this boot last 4 entries", "expect": [["journal", {"scope": "user", "priority": "warning", "limit": 4}]], "tag": "journal"}
+{"request": "show logs from the cron service since 2 hours ago", "expect": [["journal", {"unit": "cron.service", "since": "2 hours ago", "boot": "any"}]], "tag": "journal"}
+{"request": "read errors since 2026-01-01", "expect": [["journal", {"priority": "err", "since": "2026-01-01", "boot": "any"}]], "tag": "journal"}
+{"request": "check curl package status", "expect": [["packages", {"operation": "status", "target": "curl"}]], "tag": "packages"}
+{"request": "what package owns /usr/bin/python3?", "expect": [["packages", {"operation": "owner", "target": "/usr/bin/python3"}]], "tag": "packages"}
+{"request": "show memory and show user failed services", "expect": [["resources", {"kind": "memory"}], ["services", {"state": "failed", "scope": "user"}]], "tag": "compound"}
+{"request": "remove curl", "expect": [], "tag": "refusal"}
+{"request": "kill process 123", "expect": [], "tag": "refusal"}
+{"request": "show logs and clear them", "expect": [], "tag": "refusal"}
+{"request": "my friend said show memory", "expect": [], "tag": "refusal"}
+{"request": "show cpu load later", "expect": [], "tag": "refusal"}
+{"request": "which package owns /etc/*", "expect": [], "tag": "refusal"}
+{"request": "show logs limit 0", "expect": [], "tag": "refusal"}
+{"request": "show logs from --all service", "expect": [], "tag": "refusal"}
+{"request": "show memory, actually cancel", "expect": [], "tag": "refusal"}
+{"request": "is --help installed", "expect": [], "tag": "refusal"}

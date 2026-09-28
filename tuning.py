@@ -97,6 +97,9 @@ def job_schema(job: str):
     if job == "agents":
         import agents
         return agents, agents.TOOLS
+    if job == "system":
+        import system_job
+        return system_job, system_job.TOOLS
     return None
 STAGES = ("base", "source", "env", "data", "train", "export", "gates", "select")
 

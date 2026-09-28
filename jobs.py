@@ -20,6 +20,9 @@ class Job:
 
 
 JOBS = {
+    "system": Job("system", "read-only OS resources, processes, services, journal and packages",
+                  "evals/system", "evals/system/dev.jsonl", "evals/system/test.jsonl",
+                  "evals/system/heldout-pending.jsonl"),
     "panes": Job("panes", "Kilix panes and tabs", "evals",
                  "evals/dev.jsonl", "evals/test.jsonl", "evals/heldout-v8.jsonl"),
     "apps": Job("apps", "Kilix apps, games and settings", "evals/apps",

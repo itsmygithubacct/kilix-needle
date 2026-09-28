@@ -66,6 +66,9 @@ def open_runtime(args, *, may_install: bool = False, job: str = jobs.DEFAULT) ->
         import agents
         tuned_tools, tuned_translate, base_tools = (agents.TOOLS, (lambda calls: calls),
                                                     agents.TOOLS)
+    elif job == "system":
+        import system_job
+        tuned_tools, tuned_translate, base_tools = system_job.TOOLS, (lambda calls: calls), system_job.TOOLS
     else:
         tuned_tools, tuned_translate, base_tools = toolset.TOOLS, toolset.to_actions, LEGACY_TOOLS
     choice = None if explicit else tuning.selected(job)
@@ -437,13 +440,16 @@ def handle(engine: Engine, request: str, *, dry_run: bool = False, assume_yes: b
     """Run one request and print it. 0 = done or nothing to do, 1 = otherwise."""
     options = Options(dry_run=dry_run, assume_yes=assume_yes, agent=agent,
                       under_overlay=under_overlay)
-    run = {"apps": run_apps_request, "agents": run_agents_request}.get(job, run_request)
+    import system_collect
+    run = {"apps": run_apps_request, "agents": run_agents_request,
+           "system": system_collect.run_request}.get(job, run_request)
     if job == "agents":
         record = run(engine, request, options, _never if agent else _terminal_confirm,
                      cwd=os.getcwd())
     else:
         record = run(engine, request, options, _never if agent else _terminal_confirm)
-    print(json.dumps(record, ensure_ascii=False) if as_json else render(record), file=out)
+    print(json.dumps(record, ensure_ascii=False) if as_json else
+          system_collect.render(record) if job == "system" else render(record), file=out)
     return record["status"]
 
 
@@ -563,6 +569,8 @@ def main(argv: list[str] | None = None) -> int:
     elif argv[:1] == ["agents"]:
         # Launch, wait for and message coding-agent sessions (the agents job).
         job, argv = "agents", argv[1:]
+    elif argv[:1] == ["system"]:
+        job, argv = "system", argv[1:]
     agents_help = ("Directory resolution order: an explicit ~/ or absolute path; 'here' "
                    "(the calling pane's directory); exact entries in "
                    "~/.config/kilix-needle/dirs.json; then a unique exact checkout name "
@@ -587,11 +595,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--engine", metavar="FILE",
                         help="a local copy of the pinned engine instead of the installed asset")
     parser.add_argument("--root", help="the Kilix content root, if not inherited from Kilix")
+    if job == "system":
+        parser.description = "Read-only Linux diagnostics: resources, processes, services, journal and installed packages."
+        parser.add_argument("--baseline", action="store_true",
+                            help="use the explicit request grammar without loading a model")
     args = parser.parse_args(argv)
     modes = dict(dry_run=args.dry_run, assume_yes=args.yes, as_json=args.json,
                  agent=args.agent, under_overlay=args.under_overlay, job=job)
     try:
-        runtime = open_runtime(args, may_install=not args.agent, job=job)
+        if job == "system" and args.baseline:
+            import system_job
+            runtime = system_job.Baseline()
+        else:
+            runtime = open_runtime(args, may_install=not args.agent, job=job)
     except asset.AssetError as error:
         print(f"kilix-needle: {error}", file=sys.stderr)
         return 2
