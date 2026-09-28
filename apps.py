@@ -439,25 +439,56 @@ _OBJECT_END = re.compile(
     r"instead|right|for good)$")
 
 
+_MASK = "\x00"          # never in a request after _plain_words' normalisation
+
+
 @functools.lru_cache(maxsize=4096)
 def _without_when(clause: str) -> str:
     """The clause with its when-phrases blanked, the same length, so every
     position still points into it."""
-    return _NOT_AN_ITEM.sub(lambda m: "#" * len(m.group()), clause)
+    return _NOT_AN_ITEM.sub(lambda m: _MASK * len(m.group()), clause)
+
+
+# Where a widget is: after "on", "in", "from"... only these may follow, so
+# "the clock icon on the poster" names no indicator (review KN-R16-303).
+_PLACE = re.compile(
+    r"(?:(?:the|my|a|an|each|every|all|of|kilix|kilix's|top|bottom|status|task|menu|title|"
+    r"pane|panes|bar|taskbar|panel|screen|header|headers|desktop|corner|tray|tab|tabs|"
+    r"button|buttons|list|area|row|strip|toolbar|window|windows|terminal|here|there|"
+    r"controls?|icons?|indicators?|widgets?|at|in|on|for|me|us)\s*)+")
+_PREPOSITION = re.compile(r"(?:on|in|from|at|into|onto|to|out of|off of|off)$")
+# The object of these is what they describe: "pictures of the clock", "files
+# about the clock" (review KN-R16-303).
+_DESCRIBED = re.compile(r"(?:^|\s)(?:(?<!rid )(?<!out )(?<!off )(?<!instead )of|about|regarding|"
+                        r"named|called|containing|pictures? of|files? of)"
+                        r"\s+(?:(?:the|my|a|an|this|that|some)\s+)?$")
 
 
 def _names_the_item(clause: str, match: re.Match) -> bool:
+    """The name is the whole object of its clause: nothing before it makes it a
+    description, and after it come only widget nouns, then the end of the
+    object: sentence punctuation, a masked when-phrase, a word that ends it,
+    or a place a widget can be (reviews KN-R16-02, -202, -301, -303)."""
+    if _DESCRIBED.search(clause[:match.start()]):
+        return False
     rest = clause[match.end():]
     while True:
-        if not rest.strip() or re.match(r"\s*[,;:.!?#]", rest):
-            return True                     # the clause, or the object, ends
-        token = re.match(r"\s+([a-z']+)(?![\w/])", rest)
+        if not rest.strip() or re.match(rf"\s*(?:[,;:.!?](?:\s|$)|{_MASK})", rest):
+            return True
+        token = re.match(r"\s+([a-z']+)(?=\s|$|[,;:.!?]|" + _MASK + ")", rest)
         if token is None:
-            return False                    # a number, a path, a symbol
+            return False                    # a number, a path, a file name, a symbol
         word = token.group(1)
         if _WIDGET_NOUN.match(word):
             rest = rest[token.end():]       # "the clock icon ..."
             continue
+        two = re.match(r"\s+(out of|off of)\b", rest)
+        if _PREPOSITION.match(word) or two:
+            after = rest[(two or token).end():]
+            place = re.match(r"\s*(.*?)\s*(?:[,;:.!?](?:\s|$)|$|" + _MASK + r"|\b(?:and|then|"
+                             r"but|please|too|now|again|so|when|while)\b)", after)
+            words = place.group(1) if place else after
+            return not words or bool(_PLACE.fullmatch(words + " "))
         return bool(_OBJECT_END.match(word))
 
 
@@ -481,8 +512,17 @@ def _mentions(table: dict, key: str, clause: str) -> re.Match | None:
 
 
 def _mentions_item(item: str, clause: str) -> bool:
-    return bool(_mentions(ITEM_NAMES, item, clause)) or any(
-        item in members and _said(group, clause) for group, members in ITEM_GROUPS.items())
+    """The clause names the item, or a group holding it, as its whole object
+    (a group is checked like a name: review KN-R16-302)."""
+    if _mentions(ITEM_NAMES, item, clause):
+        return True
+    masked = _without_when(clause)
+    for group, members in ITEM_GROUPS.items():
+        if item in members:
+            match = _said(group, masked)
+            if match and _names_the_item(masked, match):
+                return True
+    return False
 
 
 def _polarity(clause: str) -> bool | None:
@@ -926,10 +966,13 @@ def _admit(name: str, args: dict, reading: Reading) -> Action | Refusal:
             # (reviews KN-R16-03, KN-R16-201).
             wish = (re.search(_NEGATED_WANT, part.verb)
                     or any(re.search(pattern, part.verb) for pattern in _WISH))
+            # A list named anywhere in the coordinated group scopes all of it:
+            # "I want doom and pong in the games list" (review KN-R16-304).
+            group = " ".join(p.text for p in parts if p.verb == part.verb)
             list_scope = re.search(
                 r"\b(?:in|on|from|off|into|out of) (?:the |my |our |this |that )?"
                 r"(?:games? )?(?:list|picker|menu)\b|\bgames? (?:list|picker|menu)\b",
-                part.verb + " " + part.text)
+                part.verb + " " + group)
             wish_only = wish and not (
                 _GAME_VERB.search(part.verb) or _GAME_VERB.search(part.text)
                 or list_scope)

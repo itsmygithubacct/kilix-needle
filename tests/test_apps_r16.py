@@ -208,3 +208,42 @@ class Round2(unittest.TestCase):
                         "I don't want games like doom and pong"):
             with self.subTest(request=request):
                 self.assertFalse([a for a in admitted(request) if a[0] == "game"])
+
+
+class Round3(unittest.TestCase):
+    """Review R16 round 3: file names, groups, described objects, places, list scope."""
+
+    def test_described_or_filed_names_are_no_widgets(self):    # KN-R16-301, -302, -303
+        for request in ("hide clock.png", "hide network.status", "hide the clock icon.svg",
+                        "hide clock#files", "hide clock icon.files",
+                        "hide the split buttons pictures", "hide font size buttons files",
+                        "hide pictures of the clock", "hide files about the clock",
+                        "hide pictures of clock, battery and network",
+                        "hide the clock icon on the poster",
+                        "hide the clock icon from the screenshot"):
+            with self.subTest(request=request):
+                self.assertEqual(admitted(request), [])
+        self.assertEqual(admitted("hide clock, files of the battery"),
+                         [("show", {"item": "clock", "on": False})])
+
+    def test_names_and_places_that_are_widgets_remain(self):
+        for request, n in (("hide clock.", 1), ("hide clock, battery", 2), ("hide clock, please", 1),
+                           ("hide the split buttons", 4), ("hide font size buttons", 2),
+                           ("get rid of the battery thing up top", 1),
+                           ("take the thermals icon out of the status bar", 1),
+                           ("restore the wi-fi icon in the bar at the top", 1),
+                           ("hide the windows icon from the status bar for me", 1),
+                           ("turn the split left icon on in the top bar", 1),
+                           ("take the dictation button off the pane controls", 1),
+                           ("show the time on the top bar at all times", 1)):
+            with self.subTest(request=request):
+                self.assertEqual(len(admitted(request)), n)
+
+    def test_a_list_named_after_a_coordinated_wish_scopes_all_of_it(self):  # KN-R16-304
+        for request in ("I want doom and pong in the games list",
+                        "I want doom in the games list and pong"):
+            with self.subTest(request=request):
+                self.assertEqual(admitted(request), [
+                    ("game", {"game": "doom", "available": True}),
+                    ("game", {"game": "kilix-pong", "available": True})])
+        self.assertEqual(admitted("I want doom and pong"), [])

@@ -350,11 +350,15 @@ Every call passes `apps.py`'s checks:
   next to something they admit ("disable doom and open doom") proposes only
   the admitted part. No refusal is shown for the rest. `plain()` still holds
   that part for a person, even with `--yes`.
-- An item's name counts only as the whole object of its clause: the name,
-  then widget words ("the clock icon", "the battery control"), then the end of
-  the object. "temp files", "network status page" and "the clock 2 files" name
-  no indicator. The word lists are closed. Known issue: some ways of naming a
-  widget are refused, and those requests go to a person.
+- An item's name counts only as the object of its clause. Nothing before it may
+  make it a description ("pictures of the clock"). After it come widget words
+  ("the clock icon", "the battery control"), then the end of the object: sentence
+  punctuation, a word that ends it, or a place a widget can be ("from the status
+  bar"). "temp files", "clock.png", "the split buttons pictures" and "the clock
+  icon on the poster" name no indicator. These are closed word lists, not a
+  parser. Known issue: some phrasings are refused and go to a person, and other
+  descriptions may still be read as a widget. Anything not plain is always held
+  for a person's yes.
 - A wish ("I want mines", "I don't need doom and pong") changes a games list
   only when it names the list, picker or menu.
 - Known issue: held-out v4 was read during review. The next change to what
