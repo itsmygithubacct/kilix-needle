@@ -20,6 +20,8 @@ class Job:
 
 
 JOBS = {
+    "files": Job("files", "read-only scoped file search and text previews", "evals/files",
+                 "evals/files/dev.jsonl", "", ""),
     "panes": Job("panes", "Kilix panes and tabs", "evals",
                  "evals/dev.jsonl", "evals/test.jsonl", "evals/heldout-v8.jsonl"),
     "apps": Job("apps", "Kilix apps, games and settings", "evals/apps",

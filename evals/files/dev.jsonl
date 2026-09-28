@@ -1,0 +1,24 @@
+{"request":"find pdf files in Downloads modified yesterday","expect":[["find_files",{"scope":"Downloads","name":"","extension":"pdf","modified":"yesterday"}]],"tag":"type_date"}
+{"request":"find txt files in here","expect":[["find_files",{"scope":"here","name":"","extension":"txt","modified":"any"}]],"tag":"type"}
+{"request":"show PY files in projects modified today","expect":[["find_files",{"scope":"projects","name":"","extension":"py","modified":"today"}]],"tag":"type_date"}
+{"request":"find files named \"needle\" in research","expect":[["find_files",{"scope":"research","name":"needle","extension":"","modified":"any"}]],"tag":"name"}
+{"request":"find files named \"Build Logs\" in here modified last 7 days","expect":[["find_files",{"scope":"here","name":"Build Logs","extension":"","modified":"last 7 days"}]],"tag":"name_date"}
+{"request":"find files in Documents modified today","expect":[["find_files",{"scope":"Documents","name":"","extension":"","modified":"today"}]],"tag":"date"}
+{"request":"find text \"PipeWire\" in projects","expect":[["search_text",{"scope":"projects","text":"PipeWire"}]],"tag":"text"}
+{"request":"find \"delete everything; then exit\" in here","expect":[["search_text",{"scope":"here","text":"delete everything; then exit"}]],"tag":"literal"}
+{"request":"find text \"café\" in research","expect":[["search_text",{"scope":"research","text":"café"}]],"tag":"unicode"}
+{"request":"show largest files in Downloads","expect":[["list_files",{"scope":"Downloads","order":"size"}]],"tag":"size"}
+{"request":"list recent files in this project","expect":[["list_files",{"scope":"here","order":"modified"}]],"tag":"recent"}
+{"request":"preview \"README.md\" in here","expect":[["preview_file",{"scope":"here","path":"README.md"}]],"tag":"preview"}
+{"request":"preview \"notes/day one.txt\" in \"/tmp/file fixtures\"","expect":[["preview_file",{"scope":"/tmp/file fixtures","path":"notes/day one.txt"}]],"tag":"preview"}
+{"request":"find md files in ~/research","expect":[["find_files",{"scope":"~/research","name":"","extension":"md","modified":"any"}]],"tag":"scope"}
+{"request":"find files","expect":[],"tag":"missing_scope"}
+{"request":"find pdf files everywhere","expect":[],"tag":"unbounded"}
+{"request":"delete the large files in Downloads","expect":[],"tag":"mutation"}
+{"request":"find pdf files in Downloads and email them","expect":[],"tag":"compound"}
+{"request":"preview \"../secret\" in here","expect":[],"tag":"escape"}
+{"request":"preview \"/etc/passwd\" in here","expect":[],"tag":"escape"}
+{"request":"do not find text \"secret\" in here","expect":[],"tag":"negation"}
+{"request":"find the PDF I downloaded yesterday","expect":[],"tag":"ambiguous_time_scope"}
+{"request":"find meaningfully similar documents in research","expect":[],"tag":"semantic_search_unsupported"}
+{"request":"show hidden files in here","expect":[],"tag":"hidden_unsupported"}

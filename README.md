@@ -41,6 +41,22 @@ omp. It is idempotent: `--undo` reverses it, edited files are backed up, and
 a TOML or JSON edit that would not parse is not written. `--only NAME,...`
 limits it to some surfaces.
 
+## File search
+
+`kilix-needle files` adds scoped, read-only filename and text search, large/recent
+file listings, and UTF-8 previews. It uses a grammar baseline by default and
+needs no installed model or running Kilix instance.
+
+```sh
+kilix-needle files 'find pdf files in Downloads modified yesterday'
+kilix-needle files 'find text "PipeWire" in projects'
+kilix-needle files --dry-run 'preview "README.md" in here'
+```
+
+MCP exposes `kilix_files_plan` and `kilix_files_read`. Searches have explicit
+scopes and bounded coverage; no trained files model is claimed. See
+[the files guide](docs/files.md) for supported language, limits and evaluation.
+
 ## What it can do
 
 | Request | Action | Runs |

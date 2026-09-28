@@ -93,7 +93,12 @@ def open_runtime(args, *, may_install: bool = False, job: str = jobs.DEFAULT) ->
         # engine still runs a model, for benchmarks.
         import apps
         return Runtime(apps.Proposer(), [], label="grammar")
-    if job == "apps":
+    if job == "files":
+        import files_job
+        if not explicit:
+            return Runtime(files_job.Baseline(), [], label="files grammar baseline")
+        tuned_tools, tuned_translate, base_tools = files_job.TOOLS, (lambda calls: calls), files_job.TOOLS
+    elif job == "apps":
         import apps
         tuned_tools, tuned_translate, base_tools = apps.TOOLS, (lambda calls: calls), apps.TOOLS
     elif job == "agents":
@@ -548,6 +553,9 @@ def _image(args, *, may_install: bool = False):
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["files"]:
+        from files_cli import main as files_main
+        return files_main(argv[1:])
     if argv[:1] == ["logs"]:
         from needle_logs.cli import main as logs_main
         return logs_main(argv[1:])

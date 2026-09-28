@@ -91,6 +91,9 @@ JOB_RECIPES = {"apps": APPS_RECIPE, "agents": AGENTS_RECIPE}
 
 def job_schema(job: str):
     """(module, tools) of a job with its own schema, or None for panes."""
+    if job == "files":
+        import files_job
+        return files_job, files_job.TOOLS
     if job == "apps":
         import apps
         return apps, apps.TOOLS
@@ -808,6 +811,8 @@ def in_use(job: str = jobs.DEFAULT) -> str:
     Review KN-R2-06: checking digests said "tuned" while the runtime refused
     the weights, and "base" when nothing was installed at all.
     """
+    if job == "files":
+        return "grammar baseline (no qualified tuned files model)"
     import asset
     from libengine import LibEngine, LibEngineError
     import toolset

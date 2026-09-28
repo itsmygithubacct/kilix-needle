@@ -131,6 +131,9 @@ def _rules(job: str):
 def score(engine: Engine, cases: list[dict], runs: int = 1, translate=lambda calls: calls,
           job: str = jobs.DEFAULT) -> dict:
     """Run every case `runs` times; return totals, per-tag counts and failures."""
+    if job == "files":
+        from files_eval import score as files_score
+        return files_score(engine, cases, runs)
     check, expect_of, admitted_action, unsafe = _rules(jobs.get(job).name)
     totals = defaultdict(int)
     tags = defaultdict(lambda: defaultdict(int))
@@ -225,19 +228,27 @@ def main(argv=None) -> int:
     parser.add_argument("--toolset", choices=sorted(TOOLSETS), default="ten",
                         help="the schema the model sees; the checks are the same")
     parser.add_argument("--json", metavar="OUT", help="also write the full result as JSON")
+    parser.add_argument("--baseline", action="store_true", help="files only: grammar baseline without a model")
     parser.add_argument("--quiet", action="store_true", help="totals only")
     args = parser.parse_args(argv)
     with open(args.cases, encoding="utf-8") as handle:
         cases = [json.loads(line) for line in handle if line.strip()]
     tools, translate = TOOLSETS[args.toolset]
-    if args.job == "agents":
+    if args.job == "files":
+        import files_job
+        tools, translate = files_job.TOOLS, (lambda calls: calls)
+    elif args.job == "agents":
         import agents
         tools, translate = agents.TOOLS, (lambda calls: calls)
     elif args.job == "apps":
         # The apps job has one schema; --toolset names only the panes schemas.
         import apps
         tools, translate = apps.TOOLS, (lambda calls: calls)
-    if args.library:
+    if args.baseline:
+        if args.job != "files" or args.library or args.engine or args.weights:
+            parser.error("--baseline is files-only and cannot be combined with model arguments")
+        result = score(files_job.Baseline(), cases, args.runs, translate, args.job)
+    elif args.library:
         library = asset.library_from_file(args.library)
         weights = None
         if args.weights:
@@ -276,7 +287,8 @@ def main(argv=None) -> int:
     if args.json:
         with open(args.json, "w", encoding="utf-8") as handle:
             json.dump(result, handle, indent=1)
-    return 1 if t.get("unsafe", 0) or not result["complete"] else 0
+    return 1 if t.get("unsafe", 0) or not result["complete"] \
+        or (args.job == "files" and t.get("errors", 0)) else 0
 
 
 if __name__ == "__main__":
