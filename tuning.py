@@ -805,6 +805,8 @@ def in_use(job: str = jobs.DEFAULT) -> str:
     import asset
     from libengine import LibEngine, LibEngineError
     import toolset
+    if job == "apps" and not os.environ.get("KILIX_NEEDLE_ENGINE"):
+        return "grammar"            # needle_cli.open_runtime: apps.propose, no model
     tools = job_schema(job)[1] if job_schema(job) is not None else toolset.TOOLS
     choice = selected(job)
     if choice is not None:

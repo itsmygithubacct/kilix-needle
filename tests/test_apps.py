@@ -1125,3 +1125,92 @@ class ReviewR15Round4(unittest.TestCase):
                                ("open the voice settings so I can take a look",
                                 [call("settings", section="voice")])):
             self.assertEqual(len(admitted(request, calls)), 1, request)
+
+
+class Proposer(unittest.TestCase):
+    """apps.propose: the checks propose as well as admit (2026-09-28). Every
+    call it offers is one a model could have made, so the checks' guarantees
+    carry over; what it adds is never misspelling a name and never missing a
+    call the reading supports."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Each eval request proposed and admitted once: (set, case, want, admitted)."""
+        check, expect_of, is_action, unsafe = evaluate._rules("apps")
+        cls.unsafe = staticmethod(unsafe)
+        cls.rows = []
+        for name in ("dev", "test", "heldout-v1", "heldout-v2", "heldout-v3", "heldout-v4"):
+            for line in (REPO / "evals" / "apps" / f"{name}.jsonl").read_text().splitlines():
+                case = json.loads(line)
+                got = [evaluate._norm(x.kind, x.args)
+                       for x in check(case["request"], apps.propose(case["request"]))
+                       if is_action(x)]
+                cls.rows.append((name, case, expect_of(case["expect"]), got))
+
+    def test_it_proposes_only_calls_of_the_five_tools(self):
+        for call in apps.CANDIDATE_CALLS:
+            self.assertIn(call["name"], apps.TOOL_NAMES)
+        self.assertEqual(len({json.dumps(c, sort_keys=True) for c in apps.CANDIDATE_CALLS}),
+                         len(apps.CANDIDATE_CALLS))
+
+    def test_no_eval_request_gets_a_side_effect_it_does_not_ask_for(self):
+        for name, case, want, got in self.rows:
+            self.assertFalse([g for g in got if self.unsafe(g, want)], f"{name}: {case['request']}")
+
+    def test_it_reaches_what_the_checks_read(self):
+        # The checks' own ceiling on the sets consulted while building it.
+        exact = {}
+        for name, _case, want, got in self.rows:
+            exact[name] = exact.get(name, 0) + (got == want)
+        self.assertGreaterEqual(exact["dev"], 38)
+        self.assertGreaterEqual(exact["test"], 80)
+        self.assertGreaterEqual(exact["heldout-v3"], 102)
+
+    def test_order_follows_the_request(self):
+        self.assertEqual([c["name"] for c in apps.propose(
+            "enable pong in the games list and then launch it")], ["game", "launch"])
+        self.assertEqual([c["name"] for c in apps.propose(
+            "launch pong and enable it in the games list")], ["launch", "game"])
+        self.assertEqual([c["arguments"]["item"] for c in apps.propose(
+            "hide the battery and the clock")], ["battery", "clock"])
+
+    def test_a_refused_request_says_why(self):
+        results = apps.interpret("open doom later", apps.propose("open doom later"))
+        self.assertTrue(results and all(isinstance(r, Refusal) for r in results))
+        self.assertEqual(apps.propose("tell me a joke"), [])
+
+    def test_the_runtime_is_the_proposer(self):
+        args = type("A", (), {"engine": None, "root": None})()
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("KILIX_NEEDLE_ENGINE", None)
+            runtime = needle_cli.open_runtime(args, job="apps")
+        record = needle_cli.run_apps_request(runtime, "hide the clock",
+                                             needle_cli.Options(dry_run=True))
+        self.assertEqual([i["kind"] for i in record["items"]], ["show"])
+        self.assertEqual(record["items"][0]["outcome"], "would")
+
+
+class ProposerFindings(unittest.TestCase):
+    """Holes in the checks that offering every call found (any model calling
+    the same would have been admitted)."""
+
+    def test_a_when_phrase_names_no_clock(self):
+        for request in ("I want memory usage visible on panes all the time",
+                        "I'd like the per-pane CPU meter visible all the time",
+                        "set pane cpu to always, at all times"):
+            self.assertEqual(admitted(request, [call("show", item="clock", on=True)]), [], request)
+        for request in ("show the time", "put the time back on the bar",
+                        "show the time on the top bar at all times"):
+            self.assertEqual(len(admitted(request, [call("show", item="clock", on=True)])), 1,
+                             request)
+
+    def test_not_wanting_a_game_changes_no_games_list(self):
+        for game in ("minesweeper", "kilix-pong", "doom"):
+            request = f"I don't want {game.replace('-', ' ')}; open {game.replace('-', ' ')}"
+            self.assertEqual(admitted(request, [call("game", game=game, available=False)]), [],
+                             request)
+        for request in ("I don't want doom in the games list", "disable doom",
+                        "I don't need pong in my game picker anymore"):
+            self.assertEqual(len(admitted(request, [call("game", game="doom" if "doom" in request
+                                                          else "kilix-pong", available=False)])),
+                             1, request)

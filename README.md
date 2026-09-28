@@ -286,8 +286,29 @@ kilix-needle apps "disable doom in the games list"
 kilix-needle apps --dry-run "take me to the voice settings"
 ```
 
-The model sees five tools: `launch`, `show`, `pane_stat`, `game` and
-`settings`. Every call passes `apps.py`'s checks:
+No model answers apps requests. The job has five tools: `launch`, `show`,
+`pane_stat`, `game` and `settings`. `apps.propose` offers every call those tools
+can make, and keeps the calls the request's own reading supports, in the
+request's order. The checks below are the same ones that screened a model's
+calls. They hold against a caller that may call anything, so offering them every
+call admits nothing more than such a caller could get admitted. What changes is
+that a name is never misspelled and no supported call is missed.
+
+Measured on 2026-09-28 against the tuned Needle 2 model apps-qat-3 (research
+WORKLOG):
+
+| Set | Proposer | apps-qat-3 |
+| --- | --- | --- |
+| dev | 38/40 | 35/40 |
+| test | 80/90 | 73/90 |
+| held-out v3 | 102/150 | 90/150 |
+| held-out v4 | 111/146 | 93/146 |
+
+Neither admits any unsafe action on any of these sets. A request takes about
+60 ms and no model is loaded. `KILIX_NEEDLE_ENGINE` (or `--engine`) still runs
+a model on the apps tools, for benchmarks.
+
+Every call passes `apps.py`'s checks:
 - **Names.** The app, game, indicator or section must be one Kilix really
   has, from the catalog and kilix-settings' controls, and the request must
   name it.

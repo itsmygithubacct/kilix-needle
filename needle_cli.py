@@ -59,6 +59,12 @@ class Runtime:
 def open_runtime(args, *, may_install: bool = False, job: str = jobs.DEFAULT) -> Runtime:
     """The tuned model if one passed its gates and is selected, else the base engine."""
     explicit = getattr(args, "engine", None) or os.environ.get("KILIX_NEEDLE_ENGINE")
+    if job == "apps" and not explicit:
+        # The apps checks propose as well as admit (apps.propose): measured,
+        # no model reaches what they read, and none is loaded. An explicit
+        # engine still runs a model, for benchmarks.
+        import apps
+        return Runtime(apps.Proposer(), [], label="grammar")
     if job == "apps":
         import apps
         tuned_tools, tuned_translate, base_tools = apps.TOOLS, (lambda calls: calls), apps.TOOLS

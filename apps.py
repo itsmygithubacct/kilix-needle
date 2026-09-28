@@ -1,8 +1,10 @@
 """The apps job: launch Kilix apps and games, and change Kilix settings.
 
-The model sees five tools (TOOLS). Every call it makes is untrusted: this
-module admits a call only when the request itself says it, in one clause, with
-a verb that means it. The names a model may use are resolved through tables of
+The job has five tools (TOOLS). propose() offers every call they can make and
+keeps the ones the request supports; no model answers apps requests (a model
+can still be run on them, for benchmarks). Every call is untrusted, whoever
+makes it: this module admits a call only when the request itself says it, in
+one clause, with a verb that means it. The names a model may use are resolved through tables of
 what Kilix really has (the catalog's content ids, kilix-settings' controls), so
 nothing outside them can run. See APPS-JOB-DESIGN.md in the research notes.
 
@@ -404,10 +406,21 @@ def _is_name(table: dict, key: str, text: str) -> bool:
     return said in _names(table, key)
 
 
+# Phrases that say when, holding an item's name: "all the time" names no
+# clock (found by apps.propose on held-out v1: "I want memory usage visible on
+# panes all the time" admitted showing the clock to any caller that asked).
+_NOT_AN_ITEM = re.compile(r"(?<![\w])(?:all the time|at all times|any ?time|every ?time|"
+                          r"some ?time|this time|next time|last time|in time|on time|"
+                          r"the whole time|full time|part time)(?![\w])")
+
+
 def _mentions(table: dict, key: str, clause: str) -> re.Match | None:
     """Where the clause names this key, by its longest name there, never a
     shorter name inside a longer one of another key ('chess' in 'chess bash' is
     chess bash; 'browser' in 'file browser' is the file browser)."""
+    if table is ITEM_NAMES:
+        # the same length, so every position still points into the clause
+        clause = _NOT_AN_ITEM.sub(lambda m: "#" * len(m.group()), clause)
     for phrase in _names(table, key):
         match = _said(phrase, clause)
         if match:
@@ -858,7 +871,13 @@ def _admit(name: str, args: dict, reading: Reading) -> Action | Refusal:
                 named = True
             if part.bare and not _names_kind(LAUNCH_NAMES, AVAILABILITY, part.verb):
                 continue
-            if named and part.on is available:
+            # "I don't want mines; open mines" wants no game, and changes no
+            # games list (found by apps.propose on the training data): a
+            # wish not to have a game is about the games list only when it says so.
+            wish_only = re.search(_NEGATED_WANT, part.text) and not (
+                _GAME_VERB.search(part.verb) or _GAME_VERB.search(part.text)
+                or re.search(r"\b(?:list|picker|menu|games)\b", part.text))
+            if named and part.on is available and not wish_only:
                 return Action(name, {"game": game, "available": available})
         return Refusal(name, f"no part of the request makes {game} "
                              f"{'available' if available else 'unavailable'}")
@@ -1060,3 +1079,97 @@ def plain(request: str, actions: list) -> str | None:
             continue
         return f"it says more than the actions do: {part.text!r}"
     return None
+
+
+# ---------------------------------------------------------------------------
+# The proposer. The checks above read the whole request themselves and admit a
+# call only when that reading says it, so any call they admit is one the
+# request supports, whoever proposed it; they hold against a proposer that
+# calls anything (reviews R12-R15). Offering every call and keeping the ones a
+# reading supports therefore admits no more than an adversarial model could,
+# and never misspells a name. Measured on dev, test and held-out v3 and v4 it
+# reaches the checks' own ceiling where a tuned Needle 2 does not (2026-09-28).
+
+CANDIDATE_CALLS = tuple(
+    [{"name": "launch", "arguments": {"app": app}} for app in LAUNCHABLE]
+    + [{"name": "show", "arguments": {"item": item, "on": on}}
+       for item in ITEMS for on in (True, False)]
+    + [{"name": "pane_stat", "arguments": {"stat": stat, "mode": mode}}
+       for stat in STATS for mode in MODES]
+    + [{"name": "game", "arguments": {"game": game, "available": available}}
+       for game in AVAILABILITY for available in (True, False)]
+    + [{"name": "settings", "arguments": {"section": section}} for section in SECTIONS])
+
+# Two actions on one name ("enable pong in the games list and then launch
+# it") keep the order their verbs have in the request.
+_ORDER_VERB = {
+    "launch": re.compile(r"(?<![\w])(?:open|launch|start|run|play|fire up|boot|bring up|"
+                         r"pull up|load)(?![\w])"),
+    "game": re.compile(r"(?<![\w])(?:enable|disable|allow|block|available|unavailable|"
+                       r"games list)(?![\w])"),
+    "settings": re.compile(r"(?<![\w])settings?(?![\w])"),
+}
+
+
+def _object_names(call: dict) -> list[str]:
+    kind, args = call["name"], call["arguments"]
+    if kind == "launch":
+        return _names(LAUNCH_NAMES, args["app"])
+    if kind == "game":
+        return _names(LAUNCH_NAMES, args["game"])
+    if kind == "show":
+        return _names(ITEM_NAMES, args["item"]) + [
+            group for group, members in ITEM_GROUPS.items() if args["item"] in members]
+    if kind == "pane_stat":
+        return _names(STAT_NAMES, args["stat"])
+    return _names(SECTION_NAMES, args["section"])
+
+
+def _order(text: str, call: dict) -> tuple:
+    """Where the request first names the call's object, then its verb."""
+    starts = [m.start() for m in (_said(name, text) for name in _object_names(call)) if m]
+    verb = _ORDER_VERB.get(call["name"])
+    said = verb.search(text) if verb else None
+    return (min(starts, default=len(text) + 1), said.start() if said else 0)
+
+
+def propose(request: str) -> list[dict]:
+    """Every call the request's own reading supports, in the request's order.
+
+    Each is admitted on its own; the checks between calls (a name said both
+    ways, launching a game the request makes unavailable) run again in
+    interpret, so they still refuse and hold the request. When nothing is
+    supported, a call on something the request names is offered so that
+    interpret says why it is refused ("the request says when").
+    """
+    text = _plain_words(request)
+    reading = (_read(request, widen=True) if len(str(request)) <= MAX_REQUEST
+               else Reading(refusal="the request is too long"))
+    supported = []
+    if not reading.refusal:
+        for call in CANDIDATE_CALLS:
+            if reading.way and call["name"] != "settings":
+                continue
+            if isinstance(_admit(call["name"], call["arguments"], reading), Action):
+                supported.append(call)
+    if supported:
+        return sorted(supported, key=lambda call: _order(text, call))
+    named = [call for call in CANDIDATE_CALLS
+             if any(_said(name, text) for name in _object_names(call))]
+    return sorted(named, key=lambda call: _order(text, call))[:1]
+
+
+class Proposer:
+    """The apps job's engine: propose() behind the interface a model has."""
+
+    def start(self) -> None:
+        pass
+
+    def reset(self) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+    def complete(self, text: str) -> dict:
+        return {"function_calls": propose(text)}
