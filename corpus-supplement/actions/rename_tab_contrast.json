@@ -1,0 +1,245 @@
+{
+ "action": "rename_tab",
+ "templates": [
+  {
+   "text": "set the tab's name to {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "title this tab {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "call the tab {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "tab name: {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "this tab is for {name} so name it that",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "retitle the tab {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "rename this tab to {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "rename the tab {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "can you rename this tab to {name}?",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "change the tab title to {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "set the tab title to {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "make the tab name {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "tab title should be {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "please call this tab {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "I keep losing track of tabs, name this one {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "name this tab {name}, it's where the {name} stuff lives",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "this tab needs a better name, call it {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "give this tab the name {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "label the tab {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "could you title the tab {name} for me",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "rename tab to {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "tab: {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "the tab should be called {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "retitle this tab as {name} so I can find it",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "all my tabs look the same, name this one {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "change this tab's name to {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "update the tab name to {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "switch the tab title over to {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "i'd like this tab named {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "put {name} as the tab's title",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "tab's for {name}, rename it accordingly",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "call this tab {name} please",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "rename the current tab to {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "new tab name for this one: {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "set this tab's title to {name}, it's confusing otherwise",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "title the tab {name} so it stands out in the tab bar",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "just rename the tab {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "the tab bar says something useless, make this tab {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "name the tab {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "hey, retitle this tab to {name}",
+   "args": {
+    "name": "$name"
+   }
+  }
+ ]
+}

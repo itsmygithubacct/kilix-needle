@@ -1,0 +1,245 @@
+{
+ "action": "arrange_panes",
+ "templates": [
+  {
+   "text": "switch to the {layout} layout",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "use {layout} layout",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "arrange the panes {layout}",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "set the layout to {layout}",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "make the layout {layout}",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "go {layout}",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "{layout} layout please",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "change the pane layout to {layout}",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "can you lay out the panes {layout}?",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "it's getting messy, go {layout}",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "rearrange the panes into {layout}",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "try the {layout} layout",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "layout: {layout}",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "put the panes in {layout} layout",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "the panes are all over the place, switch to {layout}",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "i'd prefer the {layout} layout here",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "change this tab's layout to {layout}",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "flip the layout to {layout}",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "reorganize the panes as {layout}",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "set the panes to the {layout} arrangement",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "this is cluttered, use the {layout} layout",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "could you arrange things {layout}",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "give me the {layout} layout",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "go with a {layout} layout",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "lay the panes out in {layout}",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "let's do {layout} for the layout",
+   "args": {
+    "layout": "$layout"
+   }
+  },
+  {
+   "text": "show the panes one at a time",
+   "args": {
+    "layout": "stack"
+   }
+  },
+  {
+   "text": "just show one pane, the grid made everything tiny",
+   "args": {
+    "layout": "stack"
+   }
+  },
+  {
+   "text": "stack the panes so there's one at a time",
+   "args": {
+    "layout": "stack"
+   }
+  },
+  {
+   "text": "just show one pane",
+   "args": {
+    "layout": "stack"
+   }
+  },
+  {
+   "text": "put the panes side by side",
+   "args": {
+    "layout": "vertical"
+   }
+  },
+  {
+   "text": "arrange them side by side, it's getting messy",
+   "args": {
+    "layout": "vertical"
+   }
+  },
+  {
+   "text": "lay the panes out side by side",
+   "args": {
+    "layout": "vertical"
+   }
+  },
+  {
+   "text": "put the panes stacked on top of each other",
+   "args": {
+    "layout": "horizontal"
+   }
+  },
+  {
+   "text": "arrange the panes one above the other",
+   "args": {
+    "layout": "horizontal"
+   }
+  },
+  {
+   "text": "I want them stacked on top of each other, side by side is too narrow",
+   "args": {
+    "layout": "horizontal"
+   }
+  },
+  {
+   "text": "put the panes in a grid",
+   "args": {
+    "layout": "grid"
+   }
+  },
+  {
+   "text": "arrange everything in a grid",
+   "args": {
+    "layout": "grid"
+   }
+  },
+  {
+   "text": "it's getting messy, put the panes in a grid",
+   "args": {
+    "layout": "grid"
+   }
+  },
+  {
+   "text": "the grid made everything tiny, show one pane at a time",
+   "args": {
+    "layout": "stack"
+   }
+  }
+ ]
+}

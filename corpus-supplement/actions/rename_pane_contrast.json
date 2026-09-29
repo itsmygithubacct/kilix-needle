@@ -1,0 +1,161 @@
+{
+ "action": "rename_pane",
+ "templates": [
+  {
+   "text": "rename this pane to {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "title this pane {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "call this pane {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "set the pane title to {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "pane title: {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "name this pane {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "change this pane's name to {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "give this pane the name {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "label the pane {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "this pane is for {name}, name it that",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "retitle the pane {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "can you rename the current pane to {name}?",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "I can't tell my panes apart, call this one {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "set this pane's title to {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "make the pane name {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "please title the pane {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "pane name should be {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "rename the pane {name} so I know what's in it",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "call the pane I'm in {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "rename the left pane to {name}",
+   "args": {
+    "name": "$name",
+    "pane": "left"
+   }
+  },
+  {
+   "text": "title the right pane {name}",
+   "args": {
+    "name": "$name",
+    "pane": "right"
+   }
+  },
+  {
+   "text": "call the pane above {name}",
+   "args": {
+    "name": "$name",
+    "pane": "above"
+   }
+  },
+  {
+   "text": "name the pane below {name}",
+   "args": {
+    "name": "$name",
+    "pane": "below"
+   }
+  },
+  {
+   "text": "set the left pane's title to {name}",
+   "args": {
+    "name": "$name",
+    "pane": "left"
+   }
+  },
+  {
+   "text": "change the right pane's name to {name}",
+   "args": {
+    "name": "$name",
+    "pane": "right"
+   }
+  }
+ ]
+}

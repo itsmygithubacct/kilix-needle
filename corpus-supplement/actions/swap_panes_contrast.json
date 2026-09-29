@@ -1,0 +1,95 @@
+{
+ "action": "swap_panes",
+ "templates": [
+  {
+   "text": "swap this pane with the one {side}",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "swap with the pane {side}",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "switch places with the pane {side}",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "trade places with the pane {side}",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "swap panes with the one {side}",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "can you swap this pane and the one {side}?",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "make this pane switch places with the one {side}",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "have this pane trade places with its neighbour {side}",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "swap me with the pane {side}",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "I want this pane where the one {side} is, swap them",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "switch places with whatever is {side}",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "trade places with the pane {side}, it fits better there",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "swap the current pane with the pane {side}",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "please swap this one with the pane {side}",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "this pane and the one {side} should switch places",
+   "args": {
+    "side": "$side"
+   }
+  }
+ ]
+}
