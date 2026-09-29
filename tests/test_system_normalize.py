@@ -108,10 +108,10 @@ class PlanTests(unittest.TestCase):
         cases = [
             ("show current memory figures", ("resources", {"kind": "all"})),
             ("show overall resources on /srv", ("resources", {"kind": "all"})),
-            ("could you pull the logs since yesterday", ("journal", {"boot": "current"})),
-            ("could you pull the logs since yesterday", ("journal", {"boot": "any"})),
-            ("show last five logs", ("journal", {"limit": 50})),
-            ("could you pull logs since 2 hours ago", ("journal", {"limit": 2, "since": "2 hours ago", "boot": "any"})),
+            ("could you pull the logs since yesterday morning", ("journal", {"boot": "current"})),
+            ("could you pull the logs since yesterday morning", ("journal", {"boot": "any"})),
+            ("show last five log things", ("journal", {"limit": 50})),
+            ("could you pull logs from a couple hours back", ("journal", {"limit": 2, "since": "2 hours ago", "boot": "any"})),
         ]
         for request, call in cases:
             with self.subTest(request=request, call=call):
@@ -141,7 +141,7 @@ class PlanTests(unittest.TestCase):
             ("how is cups holding up", ("resources", {"kind": "all"})),
             ("check syncthing in the user session, just its status", ("services", {"scope": "user"})),
             ("which services failed yesterday", ("services", {"state": "failed"})),
-            ("newest error from this boot", ("journal", {"priority": "err"})),
+            ("what went wrong most recently this boot", ("journal", {"priority": "err"})),
             ("is bash around on this box", ("packages", {"operation": "owner", "target": "bash"})),
             ("the errors from then", ("processes", {"sort": "memory"})),
         ]

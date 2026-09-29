@@ -69,6 +69,31 @@ _AUDIO = rf"(?:{_OUTPUT}|{_INPUT})"
 _LITERAL = r'"([^"\x00-\x1f\x7f-\x9f]+)"'
 
 
+_FONT_FILLER = frozenset("""
+set change make use adjust resize update switch put the a an to of in for kilix kilix's terminal terminal's
+text font fonts size sizes point points pt pts px please can you could would just now its it be at
+""".split())
+
+
+def _font_slots(text: str):
+    """"set the Kilix font size to 14 points", "use a 14 point font", "font size 14":
+    one absolute size, and a font or text word; every other word accounted for."""
+    low = text.lower().replace("\u2019", "'")
+    if re.search(r"\b(?:not|never|don'?t|if|when|until|later|tomorrow|by|more|less|bigger|smaller|larger|"
+                 r"increase\s+by|decrease|reset|pane|tab|window|editor|vim|browser)\b", low):
+        return None
+    if not re.search(r"\b(?:font|text)\b", low):
+        return None
+    numbers = re.findall(r"(?<![\w.])([0-9]{1,3})(?:\s*(?:pt|pts|px|points?))?(?![\w.])", low)
+    words = [w for w in re.findall(r"[a-z][a-z']*", re.sub(r"[0-9]+", " ", low))]
+    if len(numbers) != 1 or any(w not in _FONT_FILLER and w != "increase" for w in words):
+        return None
+    value = int(numbers[0])
+    if not 4 <= value <= 110:
+        return None
+    return Control("font", "set", value=value)
+
+
 def parse(request: str) -> Control | None:
     """Abstain on questions about actions, compounds, qualifiers and bad bounds.
 
@@ -162,6 +187,8 @@ def parse(request: str) -> Control | None:
             return Control("font", {"bigger": "larger"}.get(m[1].lower(), m[1].lower()), value=int(m[2] or 2))
     if match(rf"reset {size}"):
         return Control("font", "reset")
+    if (font := _font_slots(text)) is not None:
+        return font
     if m := match(r"(?:show|check) (system|cpu|memory|disk|network) (?:status|usage)"):
         return Control("system", "status", {"disk": "disks"}.get(m[1].lower(), m[1].lower()))
     if match(r"how much (?:ram|memory) is (?:free|available)\??"):

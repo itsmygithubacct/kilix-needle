@@ -210,6 +210,9 @@ def _journal(text: str) -> str | None:
     lead = re.match(r"(?:search|query|check)\s+(?:the\s+)?(?:system\s+)?(?:journal|logs?)\s+for\s+", text, re.I)
     if lead:
         text = text[lead.end():]
+    if re.search(r"\b(?:newest|latest|last|most\s+recent)\s+(?:(?:journal|log)\s+)?(?:error|warning|entry|message|line)\b(?!s)",
+                 text, re.I):
+        return None             # one newest entry: the part reader keeps its count
     head = _JOURNAL_HEAD.match(text)
     if not head:
         return None
@@ -262,6 +265,220 @@ def _journal(text: str) -> str | None:
     return out
 
 
+# ---- slot readers: the words a question needs, every other word accounted for ----
+
+_WORD = re.compile(r"[A-Za-z0-9][A-Za-z0-9+._:@/-]*|'s\b|[?!.,;:\"']")
+_REFUSE = re.compile(r"(?<![\w-])(?:not|never|no|don'?t|doesn'?t|isn'?t|without|if\s+not|unless|until|after|"
+                     r"tomorrow|later|install|remove|uninstall|purge|upgrade|downgrade|delete|kill|"
+                     r"restart|stop|start|enable|disable|reinstall|apt(?:-get)?\s+(?:install|remove|purge))(?![\w-])", re.I)
+_PKG_FILLER = frozenset("""
+what which whats what's is are the a an of and at if so then tell me whether its it has have i do does
+been being installed version versions present available exist exists status get check find out
+show report query currently current system machine this on here debian package packages dpkg dpkg-query
+-w -l -s policy apt please right now which's installation state info information details record entry
+there there's any exact version? yes to see whether confirm determine read look up lookup see level
+w l s
+""".split())
+_PKG_CUES = frozenset("installed installation version versions present available exist exists status policy "
+                      "dpkg dpkg-query".split())
+_PKG_GENERIC = frozenset("""it that this them one something anything package packages all kernel os system
+software linux debian python everything service services unit units process processes memory disk cpu log logs
+journal help version status""".split())
+
+
+def _package(text: str) -> str | None:
+    """"do I have jq installed?", "installed version of jq", "dpkg status of jq" -> "is jq installed"."""
+    if _REFUSE.search(text) or re.search(r"[*?\[\]]\S|\S[*\[\]]|(?<!\S)--(?!no-pager)\w", text):
+        return None             # a pattern or a flag is never one package's name
+    words = [w for w in _WORD.findall(text.lower()) if w not in "?!.,;:\"'" and w != "'s"]
+    if not any(w in _PKG_CUES for w in words):
+        return None
+    left = [w for w in words if w not in _PKG_FILLER]
+    if len(left) != 1 or left[0] in _PKG_GENERIC or not re.fullmatch(PACKAGE, left[0]):
+        return None
+    return f"is {left[0]} installed"
+
+
+_J_FILLER = frozenset("""
+show list get find search look for check what which did does has have had any the a an of in on from by with
+within over during journal journals system systemd journalctl syslog log logs logged logging entries entry
+messages message lines level recent recently latest newest most last past previous me my all please there is
+are were been since ago and to that this machine right now here up display print read give fetch return only
+current boot query dump tail see new occurred happened written wrote emitted produced reported output
+program process app application tag tagged identifier syslog_identifier named called its it's
+pull grab bring collect
+""".split())
+_J_NOUNS = frozenset("""services service processes process packages package memory disk cpu users user
+failures boots boot today yesterday who lines
+few several some couple handful many more most all any other others those these their our your my
+new old bunch lot lots dozen whole entire every each both same such own""".split())
+_J_UNITS = {"m": "minute", "min": "minute", "mins": "minute", "minute": "minute", "minutes": "minute",
+            "h": "hour", "hr": "hour", "hrs": "hour", "hour": "hour", "hours": "hour",
+            "d": "day", "day": "day", "days": "day"}
+
+
+def _journal_slots(text: str) -> str | None:
+    """A journal question read by its parts: level, program tag or unit, time window."""
+    if _REFUSE.search(text) or re.search(r"\b(?:delete|vacuum|rotate|flush|clear)\b", text, re.I):
+        return None
+    if re.search(r"[*?\[\]]", text.replace("?", "", text.endswith("?"))) or \
+            re.search(r"\blogged\s+(?:in|on|into)\b(?!\s+(?:the|during|over|within|since)\b)|\bwho\b", text, re.I):
+        return None             # a pattern, or who is logged in, is not a journal read
+    t = " " + text.lower().replace("\u2019", "'") + " "
+    if re.search(r"\s--(?!no-pager|since|identifier|unit|priority|lines|boot|user|output)\w", t):
+        return None
+    if re.search(r"\b(?:then|earlier|that|those|them|again|previously|aforementioned|same)\b", t):
+        return None             # "the errors from then": what "then" means is not in the request
+    found: dict = {}
+
+    def take(pattern, key, group=1):
+        nonlocal t
+        m = re.search(pattern, t, re.I)
+        if not m:
+            return None
+        if key in found:
+            return False
+        value = m.group(group) if group is not None else m.group(0)
+        if key in ("ident", "unit"):
+            said = re.search(rf"(?<![\w.@:-]){re.escape(value)}(?![\w.@:-])", text, re.I)
+            value = said.group(0) if said else value
+        found[key] = value
+        t = t[:m.start()] + " " + t[m.end():]
+        return True
+
+    # journalctl-style flags agents sometimes send
+    take(r"\s(?:-t|--identifier[= ])\s*['\"]?([a-z0-9_][a-z0-9_.@:-]*)['\"]?", "ident")
+    take(r"\s(?:-u|--unit[= ])\s*['\"]?([a-z0-9_][a-z0-9_.@:-]*)['\"]?", "unit")
+    take(r"\s(?:-p|--priority[= ])\s*['\"]?(err|error|3|warning|warn|4)['\"]?", "prio")
+    take(r"\s--since[= ]\s*['\"]([^'\"]+)['\"]", "since_raw")
+    take(r"\s(?:-n|--lines[= ])\s*([0-9]{1,3})", "limit")
+    if re.search(r"\s(?:-b|--boot)\s+-1\b", t):
+        found["boot"] = "previous"; t = re.sub(r"\s(?:-b|--boot)\s+-1\b", " ", t)
+    if re.search(r"\s(?:-b|--boot)(?=\s)", t):
+        found.setdefault("boot", "current"); t = re.sub(r"\s(?:-b|--boot)(?=\s)", " ", t)
+    if re.search(r"\s--user(?=\s)", t):
+        found["scope"] = "user"; t = re.sub(r"\s--user(?=\s)", " ", t)
+    t = re.sub(r"\s--no-pager|\s-o\s+\S+|\s--output[= ]\S+", " ", t)
+    # time: "in the past 20 min", "10m ago", "the last hour", "since 10 minutes ago"
+    m = re.search(rf"\s(?:(?:in|within|over|from|during|for|since)\s+)?(?:the\s+)?(?:last|past|previous)?\s*"
+                  rf"(?P<n>{_NUM}|an|a|one)\s*(?P<u>minutes?|mins?|m|hours?|hrs?|h|days?|d)\b(?:\s+ago)?", t)
+    if m:
+        n = m["n"]
+        found["time"] = (1 if n in ("an", "a") else _n(n), _J_UNITS[m["u"]])
+        t = t[:m.start()] + " " + t[m.end():]
+    else:
+        m = re.search(r"\s(?:(?:in|within|over|from|during|for)\s+)?(?:the\s+)?(?:last|past|previous)\s+"
+                      r"(minute|hour|day)\b", t)
+        if m:
+            found["time"] = (1, m[1]); t = t[:m.start()] + " " + t[m.end():]
+    take(r"\s(?:since|after|from)\s+([0-9]{4}-[0-9]{2}-[0-9]{2}(?:[ t][0-9]{2}:[0-9]{2}(?::[0-9]{2})?)?"
+         r"(?:\s*(?:utc|z))?)", "stamp")
+    take(r"\s(?:since|from|for)\s+(?:the\s+)?(today|yesterday)\b", "day")
+    # boots: "during the last boot", "this boot", "all boots"
+    m = re.search(r"\s(?:(?:during|in|from|for|of|since)\s+)?(?:the\s+)?(last|previous|this|current|any|all|every)"
+                  r"\s+boots?\b", t)
+    if m:
+        found["boot"] = {"last": "previous", "previous": "previous", "this": "current",
+                         "current": "current"}.get(m[1], "any")
+        t = t[:m.start()] + " " + t[m.end():]
+    if re.search(r"\b(?:errors?|err|error-level|failures?|critical)\b", t):
+        found.setdefault("prio", "err")
+    elif re.search(r"\bwarn(?:ings?)?\b", t):
+        found.setdefault("prio", "warning")
+    # a count of lines: "last 100 log lines", "the 10 most recent error messages"
+    m = re.search(rf"\s(?:(?:the\s+)?(?:last|latest|newest|most\s+recent)\s+)?({_NUM}|[0-9]{{1,4}})\s+"
+                  rf"(?:(?:most\s+recent|latest|newest)\s+)?(?:(?:journal|log|error|warning)\s+)?"
+                  rf"(?:lines|entries|messages|records|logs|errors|warnings)\b", t)
+    if m and not re.fullmatch(r"(?:minutes?|hours?|days?)", m[1]):
+        count = _n(m[1]) if not m[1].isdigit() else int(m[1])
+        if "limit" in found or not 1 <= count <= 100:
+            return None
+        found["limit"] = str(count)
+        t = t[:m.start()] + " " + t[m.end():] + " lines "
+    elif re.search(r"\b(?:the\s+)?(?:newest|latest|last|most\s+recent)\s+(?:(?:journal|log)\s+)?"
+                   r"(?:error|warning|entry|message|log\s+line|line)\b(?!s)", t) and "limit" not in found:
+        found["limit"] = "1"
+    # level
+    if re.search(r"\b(?:errors?|err|error-level|failures?|critical)\b", t):
+        found.setdefault("prio", "err")
+    elif re.search(r"\bwarn(?:ings?)?\b", t):
+        found.setdefault("prio", "warning")
+    t = re.sub(r"\b(?:errors?|err|error-level|failures?|critical|warnings?|warn)\b", " ", t)
+    if re.search(r"\buser\s+(?:journal|logs?|session)\b|\bmy\s+user\b", t):
+        found["scope"] = "user"
+    t = re.sub(r"\buser\b", " ", t)
+    # unit or program tag
+    for pat, key in ((rf"\b({UNIT}\.service)\b", "unit"),
+                     (rf"\b(?:service|unit)\s+({UNIT})", "unit"),
+                     (rf"\b({UNIT})\s+service\b", "unit")):
+        if key not in found:
+            take(pat, key)
+    words = [w for w in re.findall(r"[a-z0-9][a-z0-9_.@:+-]*|'s", t) if w != "'s"]
+    left = [w for w in words if w not in _J_FILLER]
+    # One name left with no "program" or "tag" word is a service (the tool's own
+    # reading); an empty read of it names the program-tag sentence.
+    named = bool(left) and re.search(
+        rf"\b(?:(?:for|from|of|by)\s+(?:the\s+)?|(?:program|tag|tagged|identifier|unit|service)\s+){re.escape(left[0])}\b"
+        rf"|\b{re.escape(left[0])}\s+(?:has\s+|have\s+)?logged\b|\b{re.escape(left[0])}(?:'s)?\s+"
+        rf"(?:(?:user|system|journal|recent|latest)\s+)?(?:logs?|errors?|warnings?|journal|entries|messages|log\s+lines)\b",
+        text, re.I)
+    if "ident" not in found and "unit" not in found and len(left) == 1 and re.fullmatch(UNIT, left[0]) \
+            and not left[0].isdigit() and left[0] not in _J_NOUNS and named:
+        tagged = re.search(rf"\b(?:program|process|app|application|tag|tagged|identifier)\b", text, re.I)
+        # Unit names and tags are case-sensitive: take the name as it was written.
+        said = re.search(rf"(?<![\w.@:-]){re.escape(left[0])}(?![\w.@:-])", text, re.I)
+        found["ident" if tagged else "unit"] = said.group(0) if said else left[0]
+        left = []
+    if left or ("ident" in found and "unit" in found):
+        return None
+    if not re.search(r"\b(?:journal|journalctl|syslog|logs?|entries|messages|lines)\b|errors?|warnings?",
+                     text, re.I):
+        return None
+    words_out = {"err": "errors", "error": "errors", "3": "errors",
+                 "warning": "warnings", "warn": "warnings", "4": "warnings"}.get(found.get("prio"), "journal")
+    out = ("user " if found.get("scope") == "user" else "") + words_out
+    if "ident" in found:
+        out += f" from the program {found['ident']}"
+    if "unit" in found:
+        out += f" from the {_unit(found['unit'])} service"
+    if found.get("boot") == "previous":
+        out += " from the previous boot"
+    since = None
+    if "time" in found:
+        count, unit = found["time"]
+        since = f"{count} {unit}{'s' if count != 1 else ''} ago"
+    if "stamp" in found:
+        if since:
+            return None
+        v = re.sub(r"(?<=[0-9])t(?=[0-9])", " ", found["stamp"])
+        since = re.sub(r"\s*(?:utc|z)$", " UTC", v)
+    if "since_raw" in found:
+        if since:
+            return None
+        raw = found["since_raw"].strip().lower()
+        m = re.fullmatch(rf"({_NUM})\s*(minutes?|mins?|m|hours?|hrs?|h|days?|d)(?:\s+ago)?", raw)
+        if m:
+            count = _n(m[1]); unit = _J_UNITS[m[2]]
+            since = f"{count} {unit}{'s' if count != 1 else ''} ago"
+        elif raw in ("today", "yesterday") or re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", raw):
+            since = raw
+        else:
+            return None
+    if "day" in found:
+        if since:
+            return None
+        since = found["day"]
+    if since:
+        out += f" since {since}"
+    if found.get("boot") == "current" and not since:
+        out += " from this boot"
+    if found.get("boot") == "any" and not since:
+        out += " from all boots"
+    if "limit" in found:
+        out += f" last {int(found['limit'])}"
+    return out
+
+
 def canonical(request: str) -> str | None:
     """The grammar's sentence for an agent's wording of one query, or None."""
     if not isinstance(request, str):
@@ -276,7 +493,7 @@ def canonical(request: str) -> str | None:
         m = re.fullmatch(pattern, text, re.I)
         if m and (built := build(m)) is not None:
             return built
-    return _journal(text)
+    return _journal(text) or _journal_slots(text) or _package(text)
 
 
 # ---- the other way: the grammar sentence for a query ----------------------------

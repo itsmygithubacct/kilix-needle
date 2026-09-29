@@ -124,3 +124,36 @@ class Sentences(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SlotReaders(unittest.TestCase):
+    """Journal and package questions read by their parts, and what stays unread."""
+
+    def test_journal_parts_read_as_their_sentence(self):
+        cases = {
+            "could you pull the logs since yesterday": "journal since yesterday",
+            "show last five logs": "journal last 5",
+            "newest error from this boot": "errors from this boot last 1",
+            "errors in the past hour": "errors since 1 hour ago",
+            "show 20 warnings from nginx": "warnings from the nginx service last 20",
+            "journalctl -u nginx -n 5": "journal from the nginx service last 5",
+        }
+        for request, sentence in cases.items():
+            with self.subTest(request=request):
+                self.assertEqual(system_agent.canonical(request), sentence)
+
+    def test_package_parts_read_as_their_sentence(self):
+        cases = {
+            "which package provides the dpkg-query command": "which package owns dpkg-query",
+            "what version of curl is installed": "is curl installed",
+        }
+        for request, sentence in cases.items():
+            with self.subTest(request=request):
+                self.assertEqual(system_agent.canonical(request), sentence)
+
+    def test_unsafe_or_unsure_wordings_stay_unread(self):
+        for request in ("install curl", "show errors from then", "show the same errors again", "who is logged in",
+                        "show logs for ssh*", "show 500 logs", "show a few recent logs", "show some logs",
+                        "delete the old logs", "vacuum the journal"):
+            with self.subTest(request=request):
+                self.assertIsNone(system_agent.canonical(request))

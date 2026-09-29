@@ -94,6 +94,14 @@ class Controls(unittest.TestCase):
                 c = controls.parse(text)
                 self.assertEqual((c.family, c.operation, c.target, c.value), expected)
 
+    def test_font_size_read_by_its_parts(self):
+        got = controls.parse("please make the font size 14")
+        self.assertEqual((got.family, got.operation, got.value), ("font", "set", 14))
+        for request in ("make the text bigger by 2", "font size 3", "set the font size to 14 in this pane",
+                        "font size 14 if it is not already"):
+            with self.subTest(request=request):
+                self.assertIsNone(controls.parse(request))
+
     def test_abstains_without_partial_execution(self):
         for text in ["should I mute microphone?", "don't mute microphone", "mute microphone and pause music",
                      "mute microphone if music stops", "mute microphone; reboot", "mute microphone\n",
