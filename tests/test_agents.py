@@ -836,6 +836,17 @@ class LunaBenchmarkLaunches(unittest.TestCase):
                 self.assertEqual(agents.exact_calls(request),
                                  [{"name": "agent", "arguments": {"agent": "codex", "dir": self.PATH}}])
 
+    def test_every_way_of_saying_no_task_is_a_plain_launch(self):
+        for tail in (". Leave the task blank; do not send it any task.", " with no task or prompt",
+                     ". Do not give it a task. Then stop.", ", no prompt", ". Give the agent no task."):
+            request = f"start an interactive Codex session in a new tab, working in {self.PATH}{tail}"
+            with self.subTest(tail=tail):
+                self.assertEqual(agents.exact_calls(request),
+                                 [{"name": "agent", "arguments": {"agent": "codex", "dir": self.PATH}}])
+        # A message or a task after ":" is never edited.
+        self.assertEqual(agents.exact_calls("tell codex in /tmp/w1: run the tests, then stop")[0]["arguments"]["text"],
+                         "run the tests, then stop")
+
     def test_waits_and_messages_are_exact_too(self):
         self.assertEqual(agents.exact_calls("tell codex in /tmp/w1: run the tests"),
                          [{"name": "tell", "arguments": {"session": "codex@/tmp/w1", "text": "run the tests"}}])

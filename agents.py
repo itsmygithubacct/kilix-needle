@@ -1042,13 +1042,6 @@ _LAUNCH_REWRITES = (
     (re.compile(r",? in a new tab\b", re.I), ""),
     (re.compile(r",? (?:working |running )?in (?:the )?(?:directory|folder|dir) (?=[~/])", re.I), " in "),
     (re.compile(r",? working in (?=[~/])", re.I), " in "),
-    (re.compile(r"(?:[.,;] *|\s+and\s+)(?:then stop|stop there|that'?s all|nothing else|"
-                r"and nothing else|leave it (?:there|idle))[.!]*$", re.I), ""),
-    (re.compile(r"[.,;] *give (?:it|the agent|them) no (?:task|prompt|instructions?)[.!]*$", re.I), ""),
-    (re.compile(r"(?:[,;]| -)? *(?:with )?(?:no |without (?:a |any )?)(?:task|prompt|instructions?)"
-                r"(?: (?:yet|for now))?[.!]*$", re.I), ""),
-    (re.compile(r"[.,;] *(?:do not|don'?t) give it (?:a |any )?(?:task|prompt|instructions?)"
-                r"(?: (?:yet|for now))?[.!]*$", re.I), ""),
 )
 
 
@@ -1068,9 +1061,40 @@ def exact_calls(request: str) -> list | None:
     return calls
 
 
+# A launch with no task, however it is said, at the end of the request: "Do not
+# give it a task", "Leave the task blank; do not send it any task", "with no task
+# or prompt", "Then stop." Only whole clauses at the end go; any other "not"
+# still refuses the request.
+_NO_TASK = re.compile(
+    # "with no task" may follow plain space; every other clause needs a real break
+    # (". Then stop", "; do not send it any task"): "open codex in X to please stop"
+    # keeps its task text, and is refused as before.
+    r"(?:\s+(?:with\s+)?(?:no|without\s+(?:a\s+|any\s+)?)\s*(?:initial\s+)?(?:task|prompt|instructions?)"
+    r"(?:\s+or\s+(?:task|prompt|instructions?))?(?:\s+(?:yet|for\s+now))?\s*[.!]*$)"
+    r"|(?:[.,;:]\s*|\s+-\s+|\s+and\s+)"
+    r"(?:(?:then\s+)?(?:stop(?:\s+there)?|that'?s\s+all|nothing\s+else|leave\s+it\s+(?:there|idle))"
+    r"|(?:leave|keep)\s+(?:the\s+)?(?:task|prompt)\s+(?:blank|empty)"
+    r"|(?:do\s+not|don'?t)\s+(?:give|send|pass)\s+(?:it|the\s+agent|them|the\s+session)\s+"
+    r"(?:a\s+|any\s+)?(?:initial\s+)?(?:task|prompt|instructions?|message)"
+    r"|give\s+(?:it|the\s+agent|them)\s+no\s+(?:task|prompt|instructions?)"
+    r"|(?:with\s+)?(?:no|without\s+(?:a\s+|any\s+)?)\s*(?:initial\s+)?(?:task|prompt|instructions?)"
+    r"(?:\s+or\s+(?:task|prompt|instructions?))?)"
+    r"(?:\s+(?:yet|for\s+now))?\s*[.!]*$", re.I)
+
+
 def _launch_plain(text: str) -> str:
     for pattern, replacement in _LAUNCH_REWRITES:
         text = pattern.sub(replacement, text)
+    # Only a launch without a message: a payload after ":" (a task, or a message
+    # to a session) is the person's words and is never edited.
+    if ":" in text or not re.match(r"\s*(?:please\s+)?(?:start|launch|open|run|begin|spin\s+up|fire\s+up)\b",
+                                   text, re.I):
+        return " ".join(text.split()).strip()
+    for _ in range(4):
+        stripped = _NO_TASK.sub("", text)
+        if stripped == text:
+            break
+        text = stripped
     return " ".join(text.split()).strip()
 
 
