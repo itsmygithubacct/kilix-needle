@@ -1042,7 +1042,11 @@ _LAUNCH_REWRITES = (
     # A tab running an agent in a directory is a launch there (candidate check,
     # CLI: "open a new tab in /x running codex" reached the panes job).
     (re.compile(rf"^(?:open|start|create|launch)\s+(?:a\s+)?(?:new\s+)?tab\s+in\s+(?P<d>[~/]\S*)\s+"
-                rf"(?:running|with|and\s+(?:run|start|launch))\s+({_AGENT_WORDS})\b", re.I), r"start \2 in \g<d>"),
+                rf"(?:running|with|and\s+(?:run|start|launch))\s+({_AGENT_WORDS})\b(?:\s+there\b)?", re.I),
+     r"start \2 in \g<d>"),
+    # "Open a new interactive Codex coding-agent tab in /x": the tab is the agent's.
+    (re.compile(rf"^(?:open|start|create|launch)\s+(?:an?\s+)?(?:new\s+)?(?:interactive\s+)?({_AGENT_WORDS})"
+                rf"(?:\s+coding[- ]agent|\s+agent)?\s+tab\s+in\s+(?P<d>[~/]\S*)", re.I), r"start \1 in \g<d>"),
     (re.compile(rf"^(?:open|start|create|launch)\s+(?:a\s+)?(?:new\s+)?tab\s+(?:running|with)\s+({_AGENT_WORDS})\s+"
                 rf"in\s+(?P<d>[~/]\S*)", re.I), r"start \1 in \g<d>"),
     (re.compile(r",? in a new tab\b", re.I), ""),
@@ -1075,11 +1079,13 @@ _NO_TASK = re.compile(
     # "with no task" may follow plain space; every other clause needs a real break
     # (". Then stop", "; do not send it any task"): "open codex in X to please stop"
     # keeps its task text, and is refused as before.
-    r"(?:\s+(?:with\s+)?(?:no|without\s+(?:a\s+|any\s+)?)\s*(?:initial\s+)?(?:task|prompt|instructions?)"
+    r"(?:\s+(?:(?:with\s+)?(?:no|without\s+(?:a\s+|any\s+)?)"
+    r"|without\s+giving\s+(?:it|the\s+agent|the\s+session)\s+(?:a\s+|any\s+))\s*(?:initial\s+)?(?:task|prompt|instructions?)"
     r"(?:\s+or\s+(?:task|prompt|instructions?))?(?:\s+(?:yet|for\s+now))?\s*[.!]*$)"
     r"|(?:[.,;:]\s*|\s+-\s+|\s+and\s+)"
     r"(?:(?:then\s+)?(?:stop(?:\s+there)?|that'?s\s+all|nothing\s+else|leave\s+it\s+(?:there|idle))"
-    r"|(?:leave|keep)\s+(?:the\s+)?(?:task|prompt)\s+(?:blank|empty)"
+    r"|(?:leave|keep)\s+(?:the\s+|its\s+)?(?:task|prompt)(?:\s*/\s*(?:task|prompt))?\s+(?:blank|empty)"
+    r"|(?:leave|keep)\s+(?:the\s+session|the\s+agent|it)\s+idle(?:\s+with\s+no\s+(?:task|prompt))?"
     r"|(?:do\s+not|don'?t)\s+(?:give|send|pass)\s+(?:it|the\s+agent|them|the\s+session)\s+"
     r"(?:a\s+|any\s+)?(?:initial\s+)?(?:task|prompt|instructions?|message)"
     r"|give\s+(?:it|the\s+agent|them)\s+no\s+(?:task|prompt|instructions?)"

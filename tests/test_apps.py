@@ -973,9 +973,6 @@ class Mcp(unittest.TestCase):
         self.assertEqual((options.assume_yes, options.agent, options.dry_run), (True, True, False))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class Widening(unittest.TestCase):
     """The apps widening (2026-09-28): scene-setting sentences before or around
@@ -1321,3 +1318,19 @@ class ReviewR18(unittest.TestCase):
             self.assertEqual(admitted(request, [call("show", item="clock", on=on)]),
                              [["show", {"item": "clock", "on": on}]], request)
         self.assertEqual(admitted("hide clock in permanently", [call("show", item="clock", on=False)]), [])
+
+
+class InKilix(unittest.TestCase):
+    def test_a_trailing_in_kilix_is_filler_but_not_before_another_name(self):
+        call = [{"name": "launch", "arguments": {"app": "super-kilix"}}]
+        for request in ("Open the game Super Kilix in Kilix", "open super kilix in kilix please"):
+            with self.subTest(request=request):
+                self.assertEqual(apps.interpret(request, call)[0].kind, "launch")
+                self.assertNotIsInstance(apps.interpret(request, call)[0], Refusal)
+        for request in ("open super kilix in kilix lights", "open super kilix in kilix land"):
+            with self.subTest(request=request):
+                self.assertIsInstance(apps.interpret(request, call)[0], Refusal)
+
+
+if __name__ == "__main__":
+    unittest.main()

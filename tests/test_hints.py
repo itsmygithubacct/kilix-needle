@@ -41,5 +41,29 @@ class Hints(unittest.TestCase):
                 self.assertIsNone(plain(first, [action]))
 
 
+    def test_a_panes_request_that_reads_as_nothing_names_what_the_job_does(self):
+        import panes_exact
+        hint = needle_cli._hint("panes", "Find the pane titled bench-target in this tab and report its pane identifier.",
+                                {"status": 0, "items": [], "note": "There is no pane or tab action in that request."})
+        self.assertIn("close the pane titled bench-target", hint)
+        for form in ("go to the pane titled bench-target", "close the pane titled bench-target"):
+            with self.subTest(form=form):
+                self.assertIsNotNone(panes_exact.read(form))
+
+    def test_a_request_that_opens_with_a_job_runs_as_that_job(self):
+        cases = [
+            ("panes", "agents start codex in /x", ("agents", [], "start codex in /x")),
+            ("panes", "kilix-needle system --agent --json is jq installed",
+             ("system", ["--agent", "--json"], "is jq installed")),
+            ("agents", "kilix-needle system is jq installed", ("system", [], "is jq installed")),
+            ("agents", "agents in tab 2, wait for them", None),     # an agents request, not a job name
+            ("panes", "close the agents pane", None),
+            ("panes", "apps", None),
+        ]
+        for job, request, expected in cases:
+            with self.subTest(request=request):
+                self.assertEqual(needle_cli._named_job(job, request), expected)
+
+
 if __name__ == "__main__":
     unittest.main()

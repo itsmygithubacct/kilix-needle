@@ -279,7 +279,7 @@ _FILLER = r"(?:(?:the|a|an|my|me|us|some|of|up|round|game|quick|little|new|our|t
           r"overall)\s+)*"
 _TAIL = re.compile(r"(?:please|pls|now|right now|right away|for me|for a bit|for a while|again|"
                    r"thanks|thank you|quickly|real quick|quick|up|too|asap|game|app|tool|program|"
-                   r"in (?:a |another |its own )?(?:new )?tab)\b")
+                   r"in (?:a |another |its own )?(?:new )?(?:kilix )?tab|(?:in|on) kilix(?=\s*$|\s*[.!,]|\s+(?:please|pls|now|thanks|thank you)\b))\b")
 _SETTINGS_WORD = re.compile(r"\b(?:settings?|preferences|prefs|options|config(?:ure|uration)?|"
                             r"section|page|screen|panel)\b")
 

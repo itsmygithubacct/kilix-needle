@@ -229,13 +229,39 @@ _EXAMPLES = {
     },
     "agents": "start codex in /abs/dir  |  wait for codex in /abs/dir to finish  |  "
               "tell codex in /abs/dir: run the tests",
-    "apps": "open the pdf viewer  |  hide the clock",
+    "apps": "open the pdf viewer  |  play super kilix  |  hide the clock  |  set the font size to 14",
     "system": "show memory  |  show failed services  |  is curl installed?",
     "files": "find pdf files in Downloads  |  find text \"TODO\" in projects",
 }
 _MCP = {"agents": "kilix_agents_act", "system": "kilix_system_read", "files": "kilix_files_read"}
 _CLI = {"panes": "kilix-needle", "agents": "kilix-needle agents", "apps": "kilix-needle apps",
         "system": "kilix-needle system", "files": "kilix-needle files"}
+
+
+_JOB_FLAGS = ("--agent", "--json", "--yes", "--dry-run", "--baseline")
+
+
+def _named_job(job: str, request: str) -> tuple[str, list, str] | None:
+    """(job, flags, request) when the request opens with a job's name: "agents
+    ...", or a whole "kilix-needle [flags] system [flags] ..." command line. A
+    bare job word counts only under the default job; under a named job only a
+    command line does ("agents in tab 2 ..." is an agents request)."""
+    words = request.split()
+    cli = words[:1] == ["kilix-needle"]
+    words = words[1:] if cli else words
+    flags = []
+    while words and words[0] in _JOB_FLAGS:
+        flags.append(words.pop(0))
+    if not words or words[0] not in ("agents", "apps", "system") or len(words) < 2:
+        return None
+    target = words.pop(0)
+    if not cli and job != jobs.DEFAULT:
+        return None
+    while words and words[0] in _JOB_FLAGS:
+        flags.append(words.pop(0))
+    if "--baseline" in flags and target != "system":
+        return None
+    return (target, flags, " ".join(words)) if words else None
 
 
 def _other_job(job: str, request: str) -> str | None:
@@ -263,7 +289,9 @@ def _other_job(job: str, request: str) -> str | None:
 
 def _hint(job: str, request: str, result: dict) -> str | None:
     items = result.get("items") or []
-    if not result.get("status") or any(i.get("outcome") in ("done", "would") for i in items):
+    # A panes request that read as nothing returns status 0 and still needs a hint.
+    if (not result.get("status") and (job != "panes" or items)) \
+            or any(i.get("outcome") in ("done", "would") for i in items):
         return None
     other = _other_job(job, request)
     if other:
@@ -274,6 +302,14 @@ def _hint(job: str, request: str, result: dict) -> str | None:
         kinds = [i.get("kind") for i in items if i.get("kind") in examples]
         if kinds:
             return "accepted form: " + examples[kinds[0]]
+        if job == "panes" and not items:
+            # Nothing to do was read ("find the pane titled X and report its id"):
+            # this job acts on panes and reports nothing, so name what it does
+            # with the pane the request names.
+            named = re.search(r"\bpane\s+(?:titled|named|called)\s+(\"[^\"]+\"|'[^']+'|[\w.+@:-]+)", request, re.I)
+            pane = f"the pane titled {named.group(1)}" if named else "the logs pane"
+            return (f"this job acts on panes and does not report them; accepted forms: go to {pane}  |  "
+                    f"close {pane}  |  run 'make test' in {pane}  |  split right and run htop")
         return None
     return f"accepted forms: {examples}" if examples else None
 
@@ -848,6 +884,15 @@ def main(argv: list[str] | None = None) -> int:
         parser.add_argument("--suggest", action="store_true",
                             help="suggest read-only queries for an unfamiliar request; collect nothing")
     args = parser.parse_args(argv)
+    named = _named_job(job, " ".join(args.request))
+    if named:
+        # The request itself opens with a job ("agents start codex in /x", or a
+        # whole "kilix-needle system --json ..." line): run it as that job.
+        target, flags, rest = named
+        kept = [f"--{k.replace('_', '-')}" for k in ("dry_run", "yes", "json", "agent", "under_overlay")
+                if getattr(args, k, False)]
+        kept += [x for k in ("engine", "root") if getattr(args, k, None) for x in (f"--{k}", getattr(args, k))]
+        return main([target, *dict.fromkeys(kept + flags), rest])
     if job == "system" and args.suggest and args.baseline:
         parser.error("--suggest and --baseline cannot be combined")
     if job == "system" and args.suggest and not args.request:

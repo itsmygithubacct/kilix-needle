@@ -831,14 +831,19 @@ class LunaBenchmarkLaunches(unittest.TestCase):
                         f"{self.PATH}. Do not give it a task. Then stop.",
                         f"Start an interactive Codex coding-agent session in a new tab in {self.PATH}, "
                         f"with no task.",
-                        f"start codex in {self.PATH}"):
+                        f"start codex in {self.PATH}",
+                        f"Open a new interactive Codex coding-agent tab in {self.PATH} without giving it a task.",
+                        f"Open a new tab in {self.PATH} and start an interactive Codex coding-agent session there. "
+                        f"Leave the session idle with no task."):
             with self.subTest(request=request):
                 self.assertEqual(agents.exact_calls(request),
                                  [{"name": "agent", "arguments": {"agent": "codex", "dir": self.PATH}}])
 
     def test_every_way_of_saying_no_task_is_a_plain_launch(self):
         for tail in (". Leave the task blank; do not send it any task.", " with no task or prompt",
-                     ". Do not give it a task. Then stop.", ", no prompt", ". Give the agent no task."):
+                     ". Do not give it a task. Then stop.", ", no prompt", ". Give the agent no task.",
+                     ". Do not give it a task; leave its task/prompt empty. Then stop.",
+                     " without giving it a task.", ". Leave the session idle with no task."):
             request = f"start an interactive Codex session in a new tab, working in {self.PATH}{tail}"
             with self.subTest(tail=tail):
                 self.assertEqual(agents.exact_calls(request),
