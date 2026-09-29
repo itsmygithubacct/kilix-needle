@@ -228,9 +228,9 @@ class Recipe(unittest.TestCase):
         manifest = tuning.recipe(pack)
         self.assertIs(manifest["train"]["qat"], True)
         self.assertEqual(manifest["train"]["epochs"], 4)
-        self.assertEqual(manifest["gates"]["heldout"], "evals/heldout-v10.jsonl")
+        self.assertEqual(manifest["gates"]["heldout"], "evals/heldout-v11.jsonl")
         evals = {str(p.relative_to(tuning.REPO)) for p in (tuning.REPO / "evals").glob("*.jsonl")}
-        self.assertIn("evals/heldout-v10.jsonl", evals)
+        self.assertIn("evals/heldout-v11.jsonl", evals)
         self.assertLessEqual(evals, set(manifest["data"]["exclude"]))
         self.assertIn(manifest["gates"]["heldout"], manifest["data"]["exclude"])
         # the pack's own manifest is not changed
