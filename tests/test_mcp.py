@@ -139,6 +139,55 @@ class Tools(unittest.TestCase):
         self.assertEqual(item["outcome"], "refused")
 
 
+class TokenCost(unittest.TestCase):
+    """Agents pay for every byte of tools/list and of each result (2026-09-29 route
+    benchmark: 9,026 bytes of tool text and every record sent twice)."""
+
+    def setUp(self):
+        os.environ["KITTY_WINDOW_ID"] = "300"
+        self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
+
+    def test_tool_list_stays_small(self):
+        replies, _ = converse([{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}])
+        tools = replies[0]["result"]["tools"]
+        self.assertLessEqual(len(json.dumps(tools)), 6800)
+
+        def described(node):
+            if isinstance(node, dict):
+                return sum(len(v) if k == "description" and isinstance(v, str) else described(v)
+                           for k, v in node.items())
+            return sum(map(described, node)) if isinstance(node, list) else 0
+        self.assertLessEqual(described(tools), 2800)
+
+    def test_result_is_one_compact_record_without_the_echoed_request(self):
+        with FakeKilix(desktop()):
+            replies, _ = converse([call(1, "kilix_plan", request="close tab 2")],
+                                  calls=[{"name": "close_tab", "arguments": {"tab": "2"}}])
+        result = replies[0]["result"]
+        record = result["structuredContent"]
+        self.assertNotIn("request", record)
+        self.assertNotIn("note", record)                    # it was empty
+        self.assertEqual(record["items"][0]["outcome"], "would")
+        text = result["content"][0]["text"]
+        self.assertEqual(json.loads(text), record)
+        self.assertNotIn(", ", text)
+        self.assertNotIn("close tab 2\"", text)
+
+    def test_trim_keeps_everything_the_caller_does_not_already_have(self):
+        record = {"request": "close tab 2", "status": 1, "note": "nothing runs without a yes",
+                  "observation": None, "hint": "", "future_field": {"x": ""},
+                  "items": [{"outcome": "refused", "reason": "not a plain instruction", "note": ""}]}
+        kept = mcp_server._result(record, True, "close tab 2")["structuredContent"]
+        self.assertEqual(kept, {"status": 1, "note": "nothing runs without a yes",
+                                "observation": None, "future_field": {"x": ""},
+                                "items": record["items"]})
+        other = mcp_server._result(record, True, "close tab 3")["structuredContent"]
+        self.assertEqual(other["request"], "close tab 2")   # not an echo: kept
+        text = mcp_server._result(record, True, "close tab 2")["content"][0]["text"]
+        self.assertIn("not a plain instruction", text)
+        self.assertIn("refused", text)
+
+
 class FuzzyUnderMcp(unittest.TestCase):
     """Review R8 mutant G01: a whole-word target is never acted on through MCP."""
 
