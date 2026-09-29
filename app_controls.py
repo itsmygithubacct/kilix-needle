@@ -72,6 +72,7 @@ _LITERAL = r'"([^"\x00-\x1f\x7f-\x9f]+)"'
 _FONT_FILLER = frozenset("""
 set change make use adjust resize update switch put the a an to of in for kilix kilix's terminal terminal's
 text font fonts size sizes point points pt pts px please can you could would just now its it be at
+exactly precisely global globally everywhere setting settings value configure configured config configuration
 """.split())
 
 
@@ -79,6 +80,17 @@ def _font_slots(text: str):
     """"set the Kilix font size to 14 points", "use a 14 point font", "font size 14":
     one absolute size, and a font or text word; every other word accounted for."""
     low = text.lower().replace("\u2019", "'")
+    # What an agent adds around the one setting: a report of the result, that
+    # the size is absolute, that it is Kilix-wide, that nothing else changes.
+    low = re.sub(r"(?:[.;,]\s*|\s+and\s+)(?:then\s+)?(?:confirm|report|verify|show|print|return|tell\s+me|say)"
+                 r"(?:\s+(?:the|new|size|change|font|text|value|it|result|setting|that|applied|current|was|is|what|"
+                 r"has|been|updated|succeeded|worked|took|effect|whether|if|it's|resulting|size's))*\s*[.!]?$", "", low)
+    low = re.sub(r"(?:[.;,]\s*|\s+)(?:and\s+)?(?:(?:leave|keep)\s+(?:everything|all|anything)\s+else\s+"
+                 r"(?:unchanged|as\s+(?:it\s+)?is|alone)|(?:do\s+not|don'?t)\s+change\s+anything\s+else)\s*[.!]?$", "", low)
+    low = re.sub(r"\(?\s*(?:an?\s+)?absolute(?:\s+(?:size|value))?(?:\s*[,;]?\s*not\s+(?:a\s+)?relative"
+                 r"(?:\s+(?:change|size|adjustment))?)?\s*\)?|\(?\s*not\s+(?:a\s+)?relative"
+                 r"(?:\s+(?:change|size|adjustment))?\s*\)?", " ", low)
+    low = re.sub(r"\b(?:for|in|across)\s+all\s+(?:windows|panes|tabs|sessions)\b", " ", low)
     if re.search(r"\b(?:not|never|don'?t|if|when|until|later|tomorrow|by|more|less|bigger|smaller|larger|"
                  r"increase\s+by|decrease|reset|pane|tab|window|editor|vim|browser)\b", low):
         return None

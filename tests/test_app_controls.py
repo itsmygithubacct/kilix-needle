@@ -97,8 +97,17 @@ class Controls(unittest.TestCase):
     def test_font_size_read_by_its_parts(self):
         got = controls.parse("please make the font size 14")
         self.assertEqual((got.family, got.operation, got.value), ("font", "set", 14))
+        for request in ("Set the Kilix text size to 14 (absolute size, not relative).",
+                        "Change the terminal font size in Kilix to 14 pt and confirm the change.",
+                        "Set the Kilix terminal text size to 14 points for all windows.",
+                        "Set the terminal text size to 14 points in Kilix and leave everything else unchanged.",
+                        "Make the Kilix font size exactly 14."):
+            with self.subTest(request=request):
+                self.assertEqual(controls.parse(request).value, 14)
         for request in ("make the text bigger by 2", "font size 3", "set the font size to 14 in this pane",
-                        "font size 14 if it is not already"):
+                        "font size 14 if it is not already", "set font size to 14, not 12",
+                        "set font size to 14 and confirm the clock is hidden",
+                        "set text size to 14 for all windows except this one", "font size 14 and show the battery"):
             with self.subTest(request=request):
                 self.assertIsNone(controls.parse(request))
 

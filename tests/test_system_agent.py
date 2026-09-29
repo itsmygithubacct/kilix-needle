@@ -151,6 +151,31 @@ class SlotReaders(unittest.TestCase):
             with self.subTest(request=request):
                 self.assertEqual(system_agent.canonical(request), sentence)
 
+    def test_levels_fields_parentheses_and_framing_read_as_parts(self):
+        cases = {
+            "Show journal entries at error priority from the last 15 minutes for the syslog identifier "
+            "nightly-sync, and report the error code.": "errors from the program nightly-sync since 15 minutes ago",
+            "Read error-level (priority err) journal entries for SYSLOG_IDENTIFIER=nightly-sync in the past "
+            "15 minutes.": "errors from the program nightly-sync since 15 minutes ago",
+            "List recent journal errors (last 15 min) from the nightly-sync program, newest first.":
+                "errors from the program nightly-sync since 15 minutes ago",
+            "Fetch the error entries logged under the identifier nightly-sync over the past quarter hour.":
+                "errors from the program nightly-sync since 15 minutes ago",
+            "I need the errors that nightly-sync wrote to the journal in the last 15 minutes.":
+                "errors from the nightly-sync service since 15 minutes ago",
+            "Read-only: report whether jq is installed and which version.": "is jq installed",
+            "Package version check: jq": "is jq installed",
+        }
+        for request, sentence in cases.items():
+            with self.subTest(request=request):
+                self.assertEqual(system_agent.canonical(request), sentence)
+
+    def test_conflicts_and_pointers_stay_unread(self):
+        for request in ("show warning-level logs at priority err", "show errors from that boot",
+                        "show the errors from that", "errors at that time for nginx"):
+            with self.subTest(request=request):
+                self.assertIsNone(system_agent.canonical(request))
+
     def test_unsafe_or_unsure_wordings_stay_unread(self):
         for request in ("install curl", "show errors from then", "show the same errors again", "who is logged in",
                         "show logs for ssh*", "show 500 logs", "show a few recent logs", "show some logs",

@@ -30,6 +30,11 @@ _NUM = r"(?:[1-9][0-9]{0,2}|" + "|".join(sorted(_WORDS, key=len, reverse=True)) 
 
 # Framing around a query, never part of it.
 _FRAMING = [
+    r"^\s*read[- ]only\s*[:,-]\s*|[,;]?\s*\(\s*read[- ]only\s*\)|,?\s+read[- ]only\s*[.!]?$",
+    # A parenthesis that carries a value ("(last 15 min)", "(priority err)") is read
+    # as words; any other one ("(/)", "(cron or crond)") is dropped.
+    (r"\s*\(((?:[^()]*?\b(?:[0-9]+|err|error|errors|warning|warnings|priority|level|min|mins|minutes?|"
+     r"hours?|days?|boot)\b[^()]*))\)", r" \1 "),
     r"\s*\((?:[^()]*)\)",                                    # "(/)", "(cron or crond)"
     r",?\s+using\s+(?:a\s+)?read-only\s+(?:system\s+)?(?:query|queries|tools?)",
     r"\s+on\s+this\s+(?:machine|system|computer|laptop|host)",
@@ -43,14 +48,15 @@ _FRAMING = [
 # Trailing clauses that say how to answer, not what to read.
 _ANSWER_TAIL = re.compile(
     r"(?:[.;:!?,]|,?\s+and)\s*(?:then\s+)?(?:return|report|answer|include|give|tell\s+me|list|"
-    r"identify|state|print|reply|say|confirm|note)\b(?!\s+(?:its|the)\s+(?:installed\s+)?version\b).*$", re.I)
+    r"identify|state|print|reply|say|confirm|note|summari[sz]e|describe|quote|show\s+me)\b(?!\s+(?:its|the)\s+(?:installed\s+)?version\b).*$", re.I)
 
 
 def _strip(text: str) -> str:
     text = " ".join(text.split())
     text = re.sub(r"^(?:please\s+|can\s+you\s+|could\s+you\s+|now\s+)+", "", text, flags=re.I)
     for pattern in _FRAMING:
-        text = re.sub(pattern, " ", text, flags=re.I)
+        pattern, to = pattern if isinstance(pattern, tuple) else (pattern, " ")
+        text = re.sub(pattern, to, text, flags=re.I)
     text = " ".join(text.split())
     text = _ANSWER_TAIL.sub("", text).strip()
     return text.rstrip(" .?!").strip()
@@ -277,10 +283,10 @@ been being installed version versions present available exist exists status get 
 show report query currently current system machine this on here debian package packages dpkg dpkg-query
 -w -l -s policy apt please right now which's installation state info information details record entry
 there there's any exact version? yes to see whether confirm determine read look up lookup see level
-w l s
+w l s for from via that that's database db manager in give return string number
 """.split())
 _PKG_CUES = frozenset("installed installation version versions present available exist exists status policy "
-                      "dpkg dpkg-query".split())
+                      "dpkg dpkg-query info information details".split())
 _PKG_GENERIC = frozenset("""it that this them one something anything package packages all kernel os system
 software linux debian python everything service services unit units process processes memory disk cpu log logs
 journal help version status""".split())
@@ -290,7 +296,7 @@ def _package(text: str) -> str | None:
     """"do I have jq installed?", "installed version of jq", "dpkg status of jq" -> "is jq installed"."""
     if _REFUSE.search(text) or re.search(r"[*?\[\]]\S|\S[*\[\]]|(?<!\S)--(?!no-pager)\w", text):
         return None             # a pattern or a flag is never one package's name
-    words = [w for w in _WORD.findall(text.lower()) if w not in "?!.,;:\"'" and w != "'s"]
+    words = [w.rstrip(":") for w in _WORD.findall(text.lower()) if w not in "?!.,;:\"'" and w != "'s"]
     if not any(w in _PKG_CUES for w in words):
         return None
     left = [w for w in words if w not in _PKG_FILLER]
@@ -306,7 +312,7 @@ messages message lines level recent recently latest newest most last past previo
 are were been since ago and to that this machine right now here up display print read give fetch return only
 current boot query dump tail see new occurred happened written wrote emitted produced reported output
 program process app application tag tagged identifier syslog_identifier named called its it's
-pull grab bring collect
+pull grab bring collect retrieve report records record under whose i need want wrote write writes
 """.split())
 _J_NOUNS = frozenset("""services service processes process packages package memory disk cpu users user
 failures boots boot today yesterday who lines
@@ -327,7 +333,10 @@ def _journal_slots(text: str) -> str | None:
     t = " " + text.lower().replace("\u2019", "'") + " "
     if re.search(r"\s--(?!no-pager|since|identifier|unit|priority|lines|boot|user|output)\w", t):
         return None
-    if re.search(r"\b(?:then|earlier|that|those|them|again|previously|aforementioned|same)\b", t):
+    # "that" as a pointer ("that boot", "from that", "at that time"), not as a relative pronoun
+    if re.search(r"\b(?:then|earlier|those|them|again|previously|aforementioned|same)\b"
+                 r"|\bthat\s+(?:one|time|boot|error|errors|entry|entries|message|unit|service|program|tag|window|period)\b"
+                 r"|\b(?:from|since|at|before|after|of)\s+that\b|\bthat\s*[.?!]?\s*$", t):
         return None             # "the errors from then": what "then" means is not in the request
     found: dict = {}
 
@@ -348,6 +357,25 @@ def _journal_slots(text: str) -> str | None:
 
     # journalctl-style flags agents sometimes send
     take(r"\s(?:-t|--identifier[= ])\s*['\"]?([a-z0-9_][a-z0-9_.@:-]*)['\"]?", "ident")
+    take(r"\s(?:syslog_identifier|syslog\s+identifier)\s*[=:]\s*['\"]?([a-z0-9_][a-z0-9_.@:-]*)['\"]?", "ident")
+    take(r"\s_?systemd_unit\s*[=:]\s*['\"]?([a-z0-9_][a-z0-9_.@:-]*)['\"]?", "unit")
+    # a level said as a phrase: "at error priority", "error-priority", "priority err", "severity: warning"
+    level_phrase = (r"\s(?:(?:at|with|of)\s+)?(?:(?:the|an?)\s+)?(?:(err|error|warning|warn)[- ](?:priority|level|severity)"
+                    r"|(?:priority|level|severity)\s*[=:]?\s*(err|error|3|warning|warn|4))(?:\s+or\s+(?:higher|above|worse))?\b")
+    m = re.search(level_phrase, t)
+    levels = set()
+    while m:
+        levels.add({"3": "err", "error": "err", "4": "warning", "warn": "warning"}.get(m[1] or m[2], m[1] or m[2]))
+        t = t[:m.start()] + " " + t[m.end():]
+        m = re.search(level_phrase, t)
+    if len(levels) > 1:
+        return None             # two levels: which one is meant is not clear
+    if levels:
+        found["prio"] = levels.pop()
+    if re.search(r"\berror-level\b", t) and found.get("prio", "err") == "err":
+        found["prio"] = "err"; t = re.sub(r"\berror-level\b", " ", t)
+    t = re.sub(r",?\s+(?:(?:with\s+)?(?:the\s+)?(?:newest|latest|most\s+recent|oldest)\s+(?:ones?\s+)?first"
+               r"|in\s+(?:reverse\s+)?(?:chronological|time)\s+order)\b", " ", t)
     take(r"\s(?:-u|--unit[= ])\s*['\"]?([a-z0-9_][a-z0-9_.@:-]*)['\"]?", "unit")
     take(r"\s(?:-p|--priority[= ])\s*['\"]?(err|error|3|warning|warn|4)['\"]?", "prio")
     take(r"\s--since[= ]\s*['\"]([^'\"]+)['\"]", "since_raw")
@@ -359,6 +387,9 @@ def _journal_slots(text: str) -> str | None:
     if re.search(r"\s--user(?=\s)", t):
         found["scope"] = "user"; t = re.sub(r"\s--user(?=\s)", " ", t)
     t = re.sub(r"\s--no-pager|\s-o\s+\S+|\s--output[= ]\S+", " ", t)
+    t = re.sub(r":(?=\s)", " ", t)                     # "journal: errors, tag X"
+    t = re.sub(r"\b(?:a\s+)?quarter(?:\s+of\s+an)?\s+hour\b", "15 minutes", t)
+    t = re.sub(r"\b(?:a\s+)?half(?:\s+an)?\s+hour\b", "30 minutes", t)
     # time: "in the past 20 min", "10m ago", "the last hour", "since 10 minutes ago"
     m = re.search(rf"\s(?:(?:in|within|over|from|during|for|since)\s+)?(?:the\s+)?(?:last|past|previous)?\s*"
                   rf"(?P<n>{_NUM}|an|a|one)\s*(?P<u>minutes?|mins?|m|hours?|hrs?|h|days?|d)\b(?:\s+ago)?", t)
@@ -418,8 +449,9 @@ def _journal_slots(text: str) -> str | None:
     # One name left with no "program" or "tag" word is a service (the tool's own
     # reading); an empty read of it names the program-tag sentence.
     named = bool(left) and re.search(
-        rf"\b(?:(?:for|from|of|by)\s+(?:the\s+)?|(?:program|tag|tagged|identifier|unit|service)\s+){re.escape(left[0])}\b"
-        rf"|\b{re.escape(left[0])}\s+(?:has\s+|have\s+)?logged\b|\b{re.escape(left[0])}(?:'s)?\s+"
+        rf"\b(?:(?:for|from|of|by)\s+(?:the\s+)?|(?:program|tag|tagged|identifier|unit|service)\s+(?:is\s+|[=:]\s*)?)"
+        rf"{re.escape(left[0])}\b"
+        rf"|\b{re.escape(left[0])}\s+(?:has\s+|have\s+)?(?:logged|wrote|written|emitted|produced|reported)\b|\b{re.escape(left[0])}(?:'s)?\s+"
         rf"(?:(?:user|system|journal|recent|latest)\s+)?(?:logs?|errors?|warnings?|journal|entries|messages|log\s+lines)\b",
         text, re.I)
     if "ident" not in found and "unit" not in found and len(left) == 1 and re.fullmatch(UNIT, left[0]) \
