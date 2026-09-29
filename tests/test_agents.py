@@ -820,3 +820,35 @@ class RouteBenchmarkLaunches(unittest.TestCase):
                 got = agents.interpret(request, [{"name": "agent",
                                                   "arguments": {"agent": "codex", "dir": value}}], None)
                 self.assertEqual(not isinstance(got[0], Refusal), ok)
+
+
+class LunaBenchmarkLaunches(unittest.TestCase):
+    """gpt-6-luna route benchmark: every agents launch was refused (0/18)."""
+    PATH = "/home/pleb/research/x/bench/work/gpt-6-luna-high-priority/agent-lsewnf"
+
+    def test_the_grammar_reads_the_launch_and_needs_no_model(self):
+        for request in (f"Start an interactive Codex coding-agent session in a new tab working in "
+                        f"{self.PATH}. Do not give it a task. Then stop.",
+                        f"Start an interactive Codex coding-agent session in a new tab in {self.PATH}, "
+                        f"with no task.",
+                        f"start codex in {self.PATH}"):
+            with self.subTest(request=request):
+                self.assertEqual(agents.exact_calls(request),
+                                 [{"name": "agent", "arguments": {"agent": "codex", "dir": self.PATH}}])
+
+    def test_waits_and_messages_are_exact_too(self):
+        self.assertEqual(agents.exact_calls("tell codex in /tmp/w1: run the tests"),
+                         [{"name": "tell", "arguments": {"session": "codex@/tmp/w1", "text": "run the tests"}}])
+
+    def test_anything_else_still_goes_to_the_model(self):
+        for request in ("don't start codex in /tmp/w1", "bring up the codex session in kilix",
+                        "start codex in /tmp/w1 and do not close tab 2"):
+            with self.subTest(request=request):
+                self.assertIsNone(agents.exact_calls(request))
+
+    def test_the_request_path_never_asks_the_model(self):
+        engine = mock.Mock()
+        record = needle_cli.run_agents_request(engine, f"start codex in {self.PATH}",
+                                               needle_cli.Options(dry_run=True))
+        engine.complete.assert_not_called()
+        self.assertEqual([i["kind"] for i in record["items"]], ["agent"])

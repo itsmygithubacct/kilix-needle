@@ -424,8 +424,16 @@ def run_agents_request(engine, request: str, options: Options,
                        confirm: Callable[[str], bool] = _terminal_confirm, *,
                        cwd: str | None = None) -> dict:
     """One agents-job request, as the same record as run_request."""
+    def exact(request):
+        # A request the agents grammar reads completely needs no model; its
+        # calls are admitted by the same checks (agents.exact_calls).
+        import agents
+        found = agents.exact_calls(request)
+        return run_agents_calls(request, found, options, cwd=cwd) if found else None
+
     return _recorded("agents", engine, request, options,
-                     lambda request, calls: run_agents_calls(request, calls, options, cwd=cwd))
+                     lambda request, calls: run_agents_calls(request, calls, options, cwd=cwd),
+                     exact=exact)
 
 
 def run_agents_calls(request: str, calls: list, options: Options, *,

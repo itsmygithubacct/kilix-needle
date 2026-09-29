@@ -1042,12 +1042,30 @@ _LAUNCH_REWRITES = (
     (re.compile(r",? in a new tab\b", re.I), ""),
     (re.compile(r",? (?:working |running )?in (?:the )?(?:directory|folder|dir) (?=[~/])", re.I), " in "),
     (re.compile(r",? working in (?=[~/])", re.I), " in "),
+    (re.compile(r"(?:[.,;] *|\s+and\s+)(?:then stop|stop there|that'?s all|nothing else|"
+                r"and nothing else|leave it (?:there|idle))[.!]*$", re.I), ""),
     (re.compile(r"[.,;] *give (?:it|the agent|them) no (?:task|prompt|instructions?)[.!]*$", re.I), ""),
     (re.compile(r"(?:[,;]| -)? *(?:with )?(?:no |without (?:a |any )?)(?:task|prompt|instructions?)"
                 r"(?: (?:yet|for now))?[.!]*$", re.I), ""),
     (re.compile(r"[.,;] *(?:do not|don'?t) give it (?:a |any )?(?:task|prompt|instructions?)"
                 r"(?: (?:yet|for now))?[.!]*$", re.I), ""),
 )
+
+
+def exact_calls(request: str) -> list | None:
+    """The calls this job's own reading of the request states, when the checks
+    admit every one: no model is needed for them (route benchmark, gpt-6-luna:
+    the tuned model rewrote long directories and every launch was refused)."""
+    wants = parse(request, None)
+    if not wants:
+        return None
+    calls = [{"name": w.kind,
+              "arguments": {k: (v.text.strip() if isinstance(v, Payload) else v) for k, v in w.args}}
+             for w in wants]
+    results = interpret(request, calls)
+    if not results or not all(isinstance(r, Action) for r in results):
+        return None
+    return calls
 
 
 def _launch_plain(text: str) -> str:
