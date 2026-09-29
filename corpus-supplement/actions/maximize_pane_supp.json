@@ -1,0 +1,83 @@
+{
+ "action": "maximize_pane",
+ "templates": [
+  {
+   "text": "zoom this pane",
+   "args": {}
+  },
+  {
+   "text": "make this pane full size",
+   "args": {}
+  },
+  {
+   "text": "blow this pane up to fill the screen",
+   "args": {}
+  },
+  {
+   "text": "maximize the current pane, it's too cramped",
+   "args": {}
+  },
+  {
+   "text": "give this pane the whole window",
+   "args": {}
+  },
+  {
+   "text": "full-screen this pane please",
+   "args": {}
+  },
+  {
+   "text": "zoom in on the {program} pane",
+   "args": {
+    "pane": "$program"
+   }
+  },
+  {
+   "text": "maximize {program}",
+   "args": {
+    "pane": "$program"
+   }
+  },
+  {
+   "text": "let the {program} pane fill the screen",
+   "args": {
+    "pane": "$program"
+   }
+  },
+  {
+   "text": "unzoom",
+   "args": {
+    "restore": true
+   }
+  },
+  {
+   "text": "put the layout back the way it was",
+   "args": {
+    "restore": true
+   }
+  },
+  {
+   "text": "restore the panes",
+   "args": {
+    "restore": true
+   }
+  },
+  {
+   "text": "shrink this back down and bring the other panes back",
+   "args": {
+    "restore": true
+   }
+  },
+  {
+   "text": "un-maximize please",
+   "args": {
+    "restore": true
+   }
+  },
+  {
+   "text": "undo the zoom, I need to see everything",
+   "args": {
+    "restore": true
+   }
+  }
+ ]
+}

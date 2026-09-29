@@ -791,6 +791,10 @@ def _names_a_target(word: str, key: str, prompt: str) -> bool:
     return word not in _NOT_A_NAME
 
 
+_BROWSERS = frozenset({"browser", "web browser", "chrome", "chromium", "firefox", "safari", "edge",
+                       "brave", "opera", "vivaldi", "web", "website", "webpage", "web page"})
+
+
 def _named_target(name: str, key: str, args: dict, prompt: str) -> str | Refusal:
     raw = _text(args, key)
     # The introducing word is not part of the name: measured (fourteen tools),
@@ -818,6 +822,11 @@ def _named_target(name: str, key: str, args: dict, prompt: str) -> str | Refusal
         # "the tab right before this one": right is how close, not where
         # (held-out v10).
         return Refusal(name, f"{value!r} does not say where here")
+    if key == "tab" and value.startswith("name:") and value[5:] in _BROWSERS and re.search(
+            rf"(?<![\w]){re.escape(value[5:])}\s+tabs?\b", prompt, re.IGNORECASE):
+        # "close the browser tab with the docs" is a web browser's tab, not a
+        # Kilix tab (held-out v11).
+        return Refusal(name, f"a {value[5:]} tab belongs to the web browser, not Kilix")
     if value.startswith("name:") and not _names_a_target(value[5:], key, prompt):
         # Measured (tuned Needle 3, held-out v8): "close the next tab over" ->
         # close_tab("over"), grounded because the word is in the request.

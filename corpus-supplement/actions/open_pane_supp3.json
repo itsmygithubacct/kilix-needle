@@ -1,0 +1,391 @@
+{
+ "action": "open_pane",
+ "templates": [
+  {
+   "text": "carve out a pane {side}",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "tack on another pane {side}",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "squeeze in a pane {side} please",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "drop in a split {side}",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "{side}, I need one more pane",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "make me a {side_adj} split",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "spin up a {side_adj} pane, running out of room here",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "pop another pane in {side}",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "could I have a split {side}, thanks",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "need a spare pane {side} to poke around in",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "put a new pane {side} of this one",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "split this pane {side}",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "I want a {side_adj} split",
+   "args": {
+    "side": "$side"
+   }
+  },
+  {
+   "text": "spin up {program} in a split",
+   "args": {
+    "program": "$program"
+   }
+  },
+  {
+   "text": "give me a pane with {program} in it",
+   "args": {
+    "program": "$program"
+   }
+  },
+  {
+   "text": "I want {program} in a split",
+   "args": {
+    "program": "$program"
+   }
+  },
+  {
+   "text": "need a pane for {program}",
+   "args": {
+    "program": "$program"
+   }
+  },
+  {
+   "text": "stick {program} in a new pane so I can keep an eye on it",
+   "args": {
+    "program": "$program"
+   }
+  },
+  {
+   "text": "pop open a split running {program}",
+   "args": {
+    "program": "$program"
+   }
+  },
+  {
+   "text": "{program} in a new pane, please",
+   "args": {
+    "program": "$program"
+   }
+  },
+  {
+   "text": "could you split off a pane and start {program} there",
+   "args": {
+    "program": "$program"
+   }
+  },
+  {
+   "text": "tack {program} on as a new pane",
+   "args": {
+    "program": "$program"
+   }
+  },
+  {
+   "text": "new split, {program}",
+   "args": {
+    "program": "$program"
+   }
+  },
+  {
+   "text": "carve a pane {side} for {program}",
+   "args": {
+    "side": "$side",
+    "program": "$program"
+   }
+  },
+  {
+   "text": "stick {program} in a pane {side}",
+   "args": {
+    "side": "$side",
+    "program": "$program"
+   }
+  },
+  {
+   "text": "{program} {side} please, in a new pane",
+   "args": {
+    "side": "$side",
+    "program": "$program"
+   }
+  },
+  {
+   "text": "drop {program} into a fresh {side_adj} split",
+   "args": {
+    "side": "$side",
+    "program": "$program"
+   }
+  },
+  {
+   "text": "I want {program} in a split {side}",
+   "args": {
+    "side": "$side",
+    "program": "$program"
+   }
+  },
+  {
+   "text": "squeeze a {side_adj} pane in with {program} running",
+   "args": {
+    "side": "$side",
+    "program": "$program"
+   }
+  },
+  {
+   "text": "need a pane {side} running {program} to watch things",
+   "args": {
+    "side": "$side",
+    "program": "$program"
+   }
+  },
+  {
+   "text": "give me a {side_adj} pane and start {program} in it",
+   "args": {
+    "side": "$side",
+    "program": "$program"
+   }
+  },
+  {
+   "text": "spin up {program} {side} in its own pane",
+   "args": {
+    "side": "$side",
+    "program": "$program"
+   }
+  },
+  {
+   "text": "make me a split {side} with {program}",
+   "args": {
+    "side": "$side",
+    "program": "$program"
+   }
+  },
+  {
+   "text": "pop a {side_adj} pane with {program} going",
+   "args": {
+    "side": "$side",
+    "program": "$program"
+   }
+  },
+  {
+   "text": "carve a pane {side} and call it {name}",
+   "args": {
+    "side": "$side",
+    "name": "$name"
+   }
+  },
+  {
+   "text": "add a {side_adj} pane named {name}",
+   "args": {
+    "side": "$side",
+    "name": "$name"
+   }
+  },
+  {
+   "text": "give me a pane {side} titled {name}",
+   "args": {
+    "side": "$side",
+    "name": "$name"
+   }
+  },
+  {
+   "text": "new {side_adj} split, label it {name}",
+   "args": {
+    "side": "$side",
+    "name": "$name"
+   }
+  },
+  {
+   "text": "tack on a pane {side} with the title {name}",
+   "args": {
+    "side": "$side",
+    "name": "$name"
+   }
+  },
+  {
+   "text": "I want a split {side} called {name} for my notes",
+   "args": {
+    "side": "$side",
+    "name": "$name"
+   }
+  },
+  {
+   "text": "squeeze in a {side_adj} pane, name it {name}",
+   "args": {
+    "side": "$side",
+    "name": "$name"
+   }
+  },
+  {
+   "text": "spin up {program} in a split called {name}",
+   "args": {
+    "program": "$program",
+    "name": "$name"
+   }
+  },
+  {
+   "text": "need a pane for {program}, call it {name}",
+   "args": {
+    "program": "$program",
+    "name": "$name"
+   }
+  },
+  {
+   "text": "give me a {program} pane named {name}",
+   "args": {
+    "program": "$program",
+    "name": "$name"
+   }
+  },
+  {
+   "text": "open a split running {program} and title it {name}",
+   "args": {
+    "program": "$program",
+    "name": "$name"
+   }
+  },
+  {
+   "text": "stick {program} in a new pane labelled {name}",
+   "args": {
+    "program": "$program",
+    "name": "$name"
+   }
+  },
+  {
+   "text": "new pane called {name} with {program} in it",
+   "args": {
+    "program": "$program",
+    "name": "$name"
+   }
+  },
+  {
+   "text": "carve a pane {side} called {name} running {program}",
+   "args": {
+    "side": "$side",
+    "program": "$program",
+    "name": "$name"
+   }
+  },
+  {
+   "text": "stick {program} in a {side_adj} split and name it {name}",
+   "args": {
+    "side": "$side",
+    "program": "$program",
+    "name": "$name"
+   }
+  },
+  {
+   "text": "I want {program} in a pane {side}, titled {name}",
+   "args": {
+    "side": "$side",
+    "program": "$program",
+    "name": "$name"
+   }
+  },
+  {
+   "text": "{side_adj} pane, {program}, call it {name}",
+   "args": {
+    "side": "$side",
+    "program": "$program",
+    "name": "$name"
+   }
+  },
+  {
+   "text": "spin up a pane {side} named {name} and launch {program} there",
+   "args": {
+    "side": "$side",
+    "program": "$program",
+    "name": "$name"
+   }
+  },
+  {
+   "text": "could you drop in a {side_adj} pane called {name} with {program}",
+   "args": {
+    "side": "$side",
+    "program": "$program",
+    "name": "$name"
+   }
+  },
+  {
+   "text": "make me a split {side} for {program} and label it {name}",
+   "args": {
+    "side": "$side",
+    "program": "$program",
+    "name": "$name"
+   }
+  },
+  {
+   "text": "give me another pane",
+   "args": {}
+  },
+  {
+   "text": "split this",
+   "args": {}
+  },
+  {
+   "text": "could I get a new pane please",
+   "args": {}
+  },
+  {
+   "text": "I need one more split",
+   "args": {}
+  },
+  {
+   "text": "spin up a fresh pane",
+   "args": {}
+  },
+  {
+   "text": "tack on a pane",
+   "args": {}
+  }
+ ]
+}

@@ -1658,3 +1658,14 @@ class ReviewR19(unittest.TestCase):
                 self.assertTrue([r for r in interpret(f"Close the pane named {name}",
                                                       [call("close_pane", pane=name)])
                                  if isinstance(r, Action)])
+
+
+class HeldOutV11(unittest.TestCase):
+    def test_a_web_browser_tab_is_no_kilix_tab(self):
+        for prompt, tab in (("close the browser tab with the docs", "browser"),
+                            ("close the chrome tab", "chrome"), ("close my firefox tab", "firefox")):
+            with self.subTest(prompt=prompt):
+                self.assertFalse([r for r in interpret(prompt, [call("close_tab", tab=tab)])
+                                  if isinstance(r, Action)])
+        self.assertTrue([r for r in interpret("close the logs tab", [call("close_tab", tab="logs")])
+                         if isinstance(r, Action)])

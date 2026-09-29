@@ -1,0 +1,95 @@
+{
+ "action": "move_tab",
+ "templates": [
+  {
+   "text": "move this tab left",
+   "args": {
+    "direction": "left"
+   }
+  },
+  {
+   "text": "shift the tab one spot to the left",
+   "args": {
+    "direction": "left"
+   }
+  },
+  {
+   "text": "nudge this tab over to the left",
+   "args": {
+    "direction": "left"
+   }
+  },
+  {
+   "text": "could you slide the current tab left a place",
+   "args": {
+    "direction": "left"
+   }
+  },
+  {
+   "text": "bump this tab leftward",
+   "args": {
+    "direction": "left"
+   }
+  },
+  {
+   "text": "move this tab to the right",
+   "args": {
+    "direction": "right"
+   }
+  },
+  {
+   "text": "shift the current tab one place right",
+   "args": {
+    "direction": "right"
+   }
+  },
+  {
+   "text": "nudge this tab rightward",
+   "args": {
+    "direction": "right"
+   }
+  },
+  {
+   "text": "slide this tab over to the right please",
+   "args": {
+    "direction": "right"
+   }
+  },
+  {
+   "text": "move this tab to position {ordinal}",
+   "args": {
+    "position": "$ordinal"
+   }
+  },
+  {
+   "text": "put this tab in slot {ordinal}",
+   "args": {
+    "position": "$ordinal"
+   }
+  },
+  {
+   "text": "I want this tab at spot {ordinal} in the tab bar",
+   "args": {
+    "position": "$ordinal"
+   }
+  },
+  {
+   "text": "drag the current tab to position {ordinal}",
+   "args": {
+    "position": "$ordinal"
+   }
+  },
+  {
+   "text": "could you move this tab to place {ordinal} so they're in order",
+   "args": {
+    "position": "$ordinal"
+   }
+  },
+  {
+   "text": "reorder: this tab goes to position {ordinal}",
+   "args": {
+    "position": "$ordinal"
+   }
+  }
+ ]
+}

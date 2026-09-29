@@ -1,0 +1,98 @@
+{
+ "action": "rename_pane",
+ "templates": [
+  {
+   "text": "rename this pane to {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "call this pane {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "title this pane {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "label the current pane {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "{name} is a better name for this pane",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "give this pane the name {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "could you name this pane {name} please",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "change the pane title to {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "stick the label {name} on this pane",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "pane name: {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "I want this pane called {name} so I can find it",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "set this pane's title to {name}",
+   "args": {
+    "name": "$name"
+   }
+  },
+  {
+   "text": "rename the {program} pane to {name}",
+   "args": {
+    "pane": "$program",
+    "name": "$name"
+   }
+  },
+  {
+   "text": "call the {program} pane {name}",
+   "args": {
+    "pane": "$program",
+    "name": "$name"
+   }
+  },
+  {
+   "text": "give the {program} pane the title {name}",
+   "args": {
+    "pane": "$program",
+    "name": "$name"
+   }
+  }
+ ]
+}
