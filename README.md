@@ -182,6 +182,30 @@ too: `kilix-needle --agent --json --yes REQUEST` prints one JSON record. Don't
 expose it inside omp.sh's Docker sandbox: its network namespace cannot reach
 Kilix's abstract socket.
 
+What an agent should know (measured in a Codex route benchmark, 2026-09-29):
+
+- **Each job has its own command:** `kilix-needle agents`, `apps`, `system`,
+  `files` and `logs`. The bare command is the panes job only. A refused record
+  carries `hint`: the job whose grammar reads the request, or one accepted
+  phrasing for what was refused. Restate the request once in that form rather
+  than guessing.
+- **Pane ids work as targets:** "close pane 70", "run 'make' in pane:70" (the
+  ids `kilix pane` prints).
+- **A yes given in advance covers these typing forms:** "run 'X' in the NAME
+  pane", "type the command X into pane NAME", with an optional "and press
+  Enter".
+- **Plain `sh` panes accept typed commands** when only the shell holds the
+  terminal. `bash`, `zsh` and `fish` still need shell integration's prompt mark.
+- **The agents job takes an explicit directory**: "start codex in /abs/dir",
+  also "an interactive Codex session in a new tab, working in the directory
+  /abs/dir. Do not give it a task."
+- **The Codex entry that `setup` writes forwards the Kilix, `GPU_TERMINAL_*`,
+  XDG and kitty auth variables.** Re-run `kilix-needle setup --only codex` after
+  an update.
+
+For one exact pane operation, a direct `kilix pane` verb costs an agent less
+than a Needle call. Needle is for requests in a person's words.
+
 ## Read pane logs
 
 The experimental `logs` command reads recorded evidence without loading an
