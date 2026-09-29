@@ -1,0 +1,147 @@
+{"request":"Open codex in the needle repo to audit the retry logic","expect":[["agent",{"agent":"codex","dir":"kilix-needle","prompt":"audit the retry logic"}]],"tag":"launch"}
+{"request":"Start cc here","expect":[["agent",{"agent":"claude","dir":"here"}]],"tag":"launch"}
+{"request":"Launch qwen in the catalog with qwen3.7-max to check metadata validation","expect":[["agent",{"agent":"qwen-omp","dir":"kilix-content","prompt":"check metadata validation","model":"qwen3.7-max"}]],"tag":"launch"}
+{"request":"Put grok build in a split to my right in kilix 95 and have it trace the boot crash","expect":[["agent",{"agent":"grok","dir":"kilix-95","prompt":"trace the boot crash","place":"right"}]],"tag":"launch"}
+{"request":"Could you open Claude Code in the os repo using opus to review the installer?","expect":[["agent",{"agent":"claude","dir":"plebian-os","prompt":"review the installer","model":"opus"}]],"tag":"launch"}
+{"request":"Spawn codex cli below me in the ml repo: profile the data loader","expect":[["agent",{"agent":"codex","dir":"kilix-ml","prompt":"profile the data loader","place":"down"}]],"tag":"launch"}
+{"request":"Open omp in research notes to organize the benchmark findings","expect":[["agent",{"agent":"qwen-omp","dir":"research","prompt":"organize the benchmark findings"}]],"tag":"launch"}
+{"request":"New grok tab in the kilix repo, please","expect":[["agent",{"agent":"grok","dir":"kilix"}]],"tag":"launch"}
+{"request":"Start a gpt-6 codex in content to fix the broken category links","expect":[["agent",{"agent":"codex","dir":"kilix-content","prompt":"fix the broken category links","model":"gpt-6"}]],"tag":"launch"}
+{"request":"Open qwen omp above me in this directory","expect":[["agent",{"agent":"qwen-omp","dir":"here","place":"up"}]],"tag":"launch"}
+{"request":"Run claude code on ~/gpu_terminal/kilix with sonnet to inspect the pane lifecycle","expect":[["agent",{"agent":"claude","dir":"kilix","prompt":"inspect the pane lifecycle","model":"sonnet"}]],"tag":"launch"}
+{"request":"Give me a grok session on the left in needle to review commit b71c20e","expect":[["agent",{"agent":"grok","dir":"kilix-needle","prompt":"review commit b71c20e","place":"left"}]],"tag":"launch"}
+{"request":"codex cli in plebian, task it with reproducing the package signing failure","expect":[["agent",{"agent":"codex","dir":"plebian-os","prompt":"reproducing the package signing failure"}]],"tag":"launch"}
+{"request":"Please launch cc in the desktop repo to simplify the window state reducer","expect":[["agent",{"agent":"claude","dir":"kilix-95","prompt":"simplify the window state reducer"}]],"tag":"launch"}
+{"request":"Open qwen in kilix ml with model qwen3-coder to add a tokenizer smoke test","expect":[["agent",{"agent":"qwen-omp","dir":"kilix-ml","prompt":"add a tokenizer smoke test","model":"qwen3-coder"}]],"tag":"launch"}
+{"request":"Start grok build in this repo, split left, and investigate why CI hangs","expect":[["agent",{"agent":"grok","dir":"here","prompt":"investigate why CI hangs","place":"left"}]],"tag":"launch"}
+{"request":"I need codex in the research dir to compare the latest eval notes","expect":[["agent",{"agent":"codex","dir":"research","prompt":"compare the latest eval notes"}]],"tag":"launch"}
+{"request":"Fire up opus on Claude Code in the catalog: remove stale asset references","expect":[["agent",{"agent":"claude","dir":"kilix-content","prompt":"remove stale asset references","model":"opus"}]],"tag":"launch"}
+{"request":"qwen in needle, split down, diagnose the flaky timeout test","expect":[["agent",{"agent":"qwen-omp","dir":"kilix-needle","prompt":"diagnose the flaky timeout test","place":"down"}]],"tag":"launch"}
+{"request":"Open a grok tab in the OS repo to review the init service ordering","expect":[["agent",{"agent":"grok","dir":"plebian-os","prompt":"review the init service ordering"}]],"tag":"launch"}
+{"request":"Can you start codex cli in kilix 95 with o4-mini?","expect":[["agent",{"agent":"codex","dir":"kilix-95","model":"o4-mini"}]],"tag":"launch"}
+{"request":"Launch cc above in the current folder to write regression coverage for config reload","expect":[["agent",{"agent":"claude","dir":"here","prompt":"write regression coverage for config reload","place":"up"}]],"tag":"launch"}
+{"request":"Open omp on the right in the kilix repo and ask it to inspect websocket cleanup","expect":[["agent",{"agent":"qwen-omp","dir":"kilix","prompt":"inspect websocket cleanup","place":"right"}]],"tag":"launch"}
+{"request":"Start grok in content with grok-code-fast to normalize the manifest entries","expect":[["agent",{"agent":"grok","dir":"kilix-content","prompt":"normalize the manifest entries","model":"grok-code-fast"}]],"tag":"launch"}
+{"request":"Spawn a codex reviewer in the ml repo: check PR 418 for numerical regressions","expect":[["agent",{"agent":"codex","dir":"kilix-ml","prompt":"check PR 418 for numerical regressions"}]],"tag":"launch"}
+{"request":"Claude Code tab in research notes, task: draft a concise experiment summary","expect":[["agent",{"agent":"claude","dir":"research","prompt":"draft a concise experiment summary"}]],"tag":"launch"}
+{"request":"Please put qwen omp to my left in the desktop repo to debug focus restoration","expect":[["agent",{"agent":"qwen-omp","dir":"kilix-95","prompt":"debug focus restoration","place":"left"}]],"tag":"launch"}
+{"request":"Open grok build here using grok-4 to find the memory leak","expect":[["agent",{"agent":"grok","dir":"here","prompt":"find the memory leak","model":"grok-4"}]],"tag":"launch"}
+{"request":"Start codex in needle above me and verify the agent routing tests","expect":[["agent",{"agent":"codex","dir":"kilix-needle","prompt":"verify the agent routing tests","place":"up"}]],"tag":"launch"}
+{"request":"A new claude code session in plebian-os for updating the recovery docs","expect":[["agent",{"agent":"claude","dir":"plebian-os","prompt":"updating the recovery docs"}]],"tag":"launch"}
+{"request":"Resume codex session 01a0dab8 in needle","expect":[["agent",{"agent":"codex","dir":"kilix-needle","resume":"01a0dab8"}]],"tag":"resume"}
+{"request":"Continue the dependency audit session with cc in the kilix repo","expect":[["agent",{"agent":"claude","dir":"kilix","resume":"dependency audit"}]],"tag":"resume"}
+{"request":"Reopen grok build run 7fc91b2 in the catalog","expect":[["agent",{"agent":"grok","dir":"kilix-content","resume":"7fc91b2"}]],"tag":"resume"}
+{"request":"Resume the tokenizer benchmarks session in kilix ml with qwen","expect":[["agent",{"agent":"qwen-omp","dir":"kilix-ml","resume":"tokenizer benchmarks"}]],"tag":"resume"}
+{"request":"Continue codex session api cleanup in this directory using gpt-6","expect":[["agent",{"agent":"codex","dir":"here","resume":"api cleanup","model":"gpt-6"}]],"tag":"resume"}
+{"request":"Open Claude Code in the OS repo and resume 9e31cda0","expect":[["agent",{"agent":"claude","dir":"plebian-os","resume":"9e31cda0"}]],"tag":"resume"}
+{"request":"Pick up the focus bug session with omp in kilix 95, split right","expect":[["agent",{"agent":"qwen-omp","dir":"kilix-95","resume":"focus bug","place":"right"}]],"tag":"resume"}
+{"request":"Resume grok session experiment charts in research notes","expect":[["agent",{"agent":"grok","dir":"research","resume":"experiment charts"}]],"tag":"resume"}
+{"request":"Bring back codex cli session d44af911 in content, below me","expect":[["agent",{"agent":"codex","dir":"kilix-content","resume":"d44af911","place":"down"}]],"tag":"resume"}
+{"request":"Continue the websocket teardown session in kilix with Claude Code on opus","expect":[["agent",{"agent":"claude","dir":"kilix","resume":"websocket teardown","model":"opus"}]],"tag":"resume"}
+{"request":"Resume qwen omp session flaky sampler in the ml repo","expect":[["agent",{"agent":"qwen-omp","dir":"kilix-ml","resume":"flaky sampler"}]],"tag":"resume"}
+{"request":"Restart grok build session 3b2ef0aa here in a split to my left","expect":[["agent",{"agent":"grok","dir":"here","resume":"3b2ef0aa","place":"left"}]],"tag":"resume"}
+{"request":"Hold until cc in the kilix repo is asking for approval","expect":[["wait",{"session":"claude@kilix","for":"waiting"}]],"tag":"wait"}
+{"request":"Wait up to 5 minutes for qwen in the catalog to be done","expect":[["wait",{"session":"qwen-omp@kilix-content","for":"idle","timeout":300}]],"tag":"wait"}
+{"request":"Give grok build in this repo 90 seconds to finish","expect":[["wait",{"session":"grok@here","for":"idle","timeout":90}]],"tag":"wait"}
+{"request":"Wait for Claude Code in plebian to ask me something","expect":[["wait",{"session":"claude@plebian-os","for":"waiting"}]],"tag":"wait"}
+{"request":"Please wait until codex cli in kilix 95 is idle","expect":[["wait",{"session":"codex@kilix-95","for":"idle"}]],"tag":"wait"}
+{"request":"Block for at most ten minutes until omp in the ml repo finishes","expect":[["wait",{"session":"qwen-omp@kilix-ml","for":"idle","timeout":600}]],"tag":"wait"}
+{"request":"Let me know when grok in research notes needs input","expect":[["wait",{"session":"grok@research","for":"waiting"}]],"tag":"wait"}
+{"request":"Wait 30 seconds for the claude session in content to finish its turn","expect":[["wait",{"session":"claude@kilix-content","for":"idle","timeout":30}]],"tag":"wait"}
+{"request":"Hang on until codex in the OS repo is waiting for me","expect":[["wait",{"session":"codex@plebian-os","for":"waiting"}]],"tag":"wait"}
+{"request":"Wait up to 2 minutes for the qwen omp session here to go idle","expect":[["wait",{"session":"qwen-omp@here","for":"idle","timeout":120}]],"tag":"wait"}
+{"request":"Please wait for grok build in needle to complete its turn","expect":[["wait",{"session":"grok@kilix-needle","for":"idle"}]],"tag":"wait"}
+{"request":"Pause until cc in the desktop repo has a question","expect":[["wait",{"session":"claude@kilix-95","for":"waiting"}]],"tag":"wait"}
+{"request":"Wait no more than 45 seconds for codex in kilix to finish","expect":[["wait",{"session":"codex@kilix","for":"idle","timeout":45}]],"tag":"wait"}
+{"request":"Stay here until qwen in research asks for approval","expect":[["wait",{"session":"qwen-omp@research","for":"waiting"}]],"tag":"wait"}
+{"request":"Wait up to 1 hour for grok in the OS repo to become idle","expect":[["wait",{"session":"grok@plebian-os","for":"idle","timeout":3600}]],"tag":"wait"}
+{"request":"Wait for Claude Code in the ml repo to wrap up","expect":[["wait",{"session":"claude@kilix-ml","for":"idle"}]],"tag":"wait"}
+{"request":"Give codex cli in the catalog 20 seconds to request input","expect":[["wait",{"session":"codex@kilix-content","for":"waiting","timeout":20}]],"tag":"wait"}
+{"request":"Tell codex in needle to also test the cancellation path","expect":[["tell",{"session":"codex@kilix-needle","text":"also test the cancellation path"}]],"tag":"tell"}
+{"request":"Message cc in the kilix repo: run the full integration suite","expect":[["tell",{"session":"claude@kilix","text":"run the full integration suite"}]],"tag":"tell"}
+{"request":"Ask qwen in content to check for duplicate slugs","expect":[["tell",{"session":"qwen-omp@kilix-content","text":"check for duplicate slugs"}]],"tag":"tell"}
+{"request":"When grok build here is done, tell it summarize the root cause","expect":[["tell",{"session":"grok@here","text":"summarize the root cause","wait":true}]],"tag":"tell"}
+{"request":"Send Claude Code in plebian-os this: include rollback instructions in the docs","expect":[["tell",{"session":"claude@plebian-os","text":"include rollback instructions in the docs"}]],"tag":"tell"}
+{"request":"After codex cli in the desktop repo finishes, ask it to list changed files","expect":[["tell",{"session":"codex@kilix-95","text":"list changed files","wait":true}]],"tag":"tell"}
+{"request":"Tell omp in the ml repo rerun with a fixed random seed","expect":[["tell",{"session":"qwen-omp@kilix-ml","text":"rerun with a fixed random seed"}]],"tag":"tell"}
+{"request":"Ping grok in research with compare these numbers against last week's run","expect":[["tell",{"session":"grok@research","text":"compare these numbers against last week's run"}]],"tag":"tell"}
+{"request":"Once claude in the catalog is idle, tell it open a follow-up issue for the bad links","expect":[["tell",{"session":"claude@kilix-content","text":"open a follow-up issue for the bad links","wait":true}]],"tag":"tell"}
+{"request":"Steer the codex session in the OS repo: focus on the systemd ordering first","expect":[["tell",{"session":"codex@plebian-os","text":"focus on the systemd ordering first"}]],"tag":"tell"}
+{"request":"Tell qwen omp here to keep the public API unchanged","expect":[["tell",{"session":"qwen-omp@here","text":"keep the public API unchanged"}]],"tag":"tell"}
+{"request":"When grok in needle wraps up, send it add a regression test before committing","expect":[["tell",{"session":"grok@kilix-needle","text":"add a regression test before committing","wait":true}]],"tag":"tell"}
+{"request":"Ask cc in kilix 95 to inspect keyboard navigation too","expect":[["tell",{"session":"claude@kilix-95","text":"inspect keyboard navigation too"}]],"tag":"tell"}
+{"request":"Tell codex in kilix use the existing event helper instead of adding another one","expect":[["tell",{"session":"codex@kilix","text":"use the existing event helper instead of adding another one"}]],"tag":"tell"}
+{"request":"After qwen in research finishes, ask it write a three-bullet conclusion","expect":[["tell",{"session":"qwen-omp@research","text":"write a three-bullet conclusion","wait":true}]],"tag":"tell"}
+{"request":"Message grok build in the OS repo: do not modify the generated lockfile","expect":[["tell",{"session":"grok@plebian-os","text":"do not modify the generated lockfile"}]],"tag":"tell"}
+{"request":"Tell Claude Code in the ml repo profile CPU usage as well","expect":[["tell",{"session":"claude@kilix-ml","text":"profile CPU usage as well"}]],"tag":"tell"}
+{"request":"When codex in content is done, tell it verify every URL locally","expect":[["tell",{"session":"codex@kilix-content","text":"verify every URL locally","wait":true}]],"tag":"tell"}
+{"request":"Send omp in needle a note: preserve backward compatibility with old session IDs","expect":[["tell",{"session":"qwen-omp@kilix-needle","text":"preserve backward compatibility with old session IDs"}]],"tag":"tell"}
+{"request":"Ask grok here to post the minimal reproduction steps","expect":[["tell",{"session":"grok@here","text":"post the minimal reproduction steps"}]],"tag":"tell"}
+{"request":"Once cc in research is finished, tell it double-check the dates in the table","expect":[["tell",{"session":"claude@research","text":"double-check the dates in the table","wait":true}]],"tag":"tell"}
+{"request":"Tell codex cli in the desktop repo add coverage for rapid tab switching","expect":[["tell",{"session":"codex@kilix-95","text":"add coverage for rapid tab switching"}]],"tag":"tell"}
+{"request":"Launch codex in needle to review the parser, then wait for it to finish","expect":[["agent",{"agent":"codex","dir":"kilix-needle","prompt":"review the parser"}],["wait",{"session":"it","for":"idle"}]],"tag":"compound"}
+{"request":"Start cc here and qwen in the catalog","expect":[["agent",{"agent":"claude","dir":"here"}],["agent",{"agent":"qwen-omp","dir":"kilix-content"}]],"tag":"compound"}
+{"request":"Wait for grok in kilix to finish, then tell it run the targeted tests again","expect":[["wait",{"session":"grok@kilix","for":"idle"}],["tell",{"session":"grok@kilix","text":"run the targeted tests again"}]],"tag":"compound"}
+{"request":"Open codex cli in the OS repo and then message it: start with the failing unit test","expect":[["agent",{"agent":"codex","dir":"plebian-os"}],["tell",{"session":"it","text":"start with the failing unit test"}]],"tag":"compound"}
+{"request":"Spawn grok on the right in content to audit images and Claude Code on the left in content to audit copy","expect":[["agent",{"agent":"grok","dir":"kilix-content","prompt":"audit images","place":"right"}],["agent",{"agent":"claude","dir":"kilix-content","prompt":"audit copy","place":"left"}]],"tag":"compound"}
+{"request":"Launch qwen in the ml repo to reproduce the NaN, wait up to 8 minutes for it to finish, then tell it save the smallest failing seed","expect":[["agent",{"agent":"qwen-omp","dir":"kilix-ml","prompt":"reproduce the NaN"}],["wait",{"session":"it","for":"idle","timeout":480}],["tell",{"session":"it","text":"save the smallest failing seed"}]],"tag":"compound"}
+{"request":"Start opus with cc in kilix to inspect shutdown ordering and wait for its turn to end","expect":[["agent",{"agent":"claude","dir":"kilix","prompt":"inspect shutdown ordering","model":"opus"}],["wait",{"session":"it","for":"idle"}]],"tag":"compound"}
+{"request":"Tell codex in needle rerun the flaky test, then wait for it to ask for input","expect":[["tell",{"session":"codex@kilix-needle","text":"rerun the flaky test"}],["wait",{"session":"codex@kilix-needle","for":"waiting"}]],"tag":"compound"}
+{"request":"Open grok build in research notes and codex cli in research notes, both to critique the benchmark methodology","expect":[["agent",{"agent":"grok","dir":"research","prompt":"critique the benchmark methodology"}],["agent",{"agent":"codex","dir":"research","prompt":"critique the benchmark methodology"}]],"tag":"compound"}
+{"request":"Launch qwen below me in kilix 95 to trace focus events, then send it: include timestamps in the trace","expect":[["agent",{"agent":"qwen-omp","dir":"kilix-95","prompt":"trace focus events","place":"down"}],["tell",{"session":"it","text":"include timestamps in the trace"}]],"tag":"compound"}
+{"request":"Wait up to 3 minutes for Claude Code in plebian to finish and tell it summarize any packaging risks","expect":[["wait",{"session":"claude@plebian-os","for":"idle","timeout":180}],["tell",{"session":"claude@plebian-os","text":"summarize any packaging risks"}]],"tag":"compound"}
+{"request":"Start codex here to update the API test, and open omp here to independently review that test","expect":[["agent",{"agent":"codex","dir":"here","prompt":"update the API test"}],["agent",{"agent":"qwen-omp","dir":"here","prompt":"independently review that test"}]],"tag":"compound"}
+{"request":"Open Claude Code in needle to inspect resume handling, wait for it to finish, then tell it propose one regression case","expect":[["agent",{"agent":"claude","dir":"kilix-needle","prompt":"inspect resume handling"}],["wait",{"session":"it","for":"idle"}],["tell",{"session":"it","text":"propose one regression case"}]],"tag":"compound"}
+{"request":"Launch grok in the catalog to find orphan entries and wait no more than 4 minutes","expect":[["agent",{"agent":"grok","dir":"kilix-content","prompt":"find orphan entries"}],["wait",{"session":"it","for":"idle","timeout":240}]],"tag":"compound"}
+{"request":"Ask qwen in kilix to check the reconnect path, then wait until it is done","expect":[["tell",{"session":"qwen-omp@kilix","text":"check the reconnect path"}],["wait",{"session":"qwen-omp@kilix","for":"idle"}]],"tag":"compound"}
+{"request":"Put codex on my left in the ml repo to benchmark the sampler and grok on my right in the ml repo to review the benchmark setup","expect":[["agent",{"agent":"codex","dir":"kilix-ml","prompt":"benchmark the sampler","place":"left"}],["agent",{"agent":"grok","dir":"kilix-ml","prompt":"review the benchmark setup","place":"right"}]],"tag":"compound"}
+{"request":"Start cc in the desktop repo, then tell it: reproduce with two monitors","expect":[["agent",{"agent":"claude","dir":"kilix-95"}],["tell",{"session":"it","text":"reproduce with two monitors"}]],"tag":"compound"}
+{"request":"Wait until codex in content is asking a question, then answer it with use the canonical slug map","expect":[["wait",{"session":"codex@kilix-content","for":"waiting"}],["tell",{"session":"codex@kilix-content","text":"use the canonical slug map"}]],"tag":"compound"}
+{"request":"Launch omp in research to chart the results and grok build in research to verify the calculations","expect":[["agent",{"agent":"qwen-omp","dir":"research","prompt":"chart the results"}],["agent",{"agent":"grok","dir":"research","prompt":"verify the calculations"}]],"tag":"compound"}
+{"request":"Open gpt-6 codex in the OS repo to review the updater, wait 6 minutes at most, then tell it record unresolved concerns","expect":[["agent",{"agent":"codex","dir":"plebian-os","prompt":"review the updater","model":"gpt-6"}],["wait",{"session":"it","for":"idle","timeout":360}],["tell",{"session":"it","text":"record unresolved concerns"}]],"tag":"compound"}
+{"request":"Tell grok in needle inspect the alias mapping and tell qwen in needle inspect directory resolution","expect":[["tell",{"session":"grok@kilix-needle","text":"inspect the alias mapping"}],["tell",{"session":"qwen-omp@kilix-needle","text":"inspect directory resolution"}]],"tag":"compound"}
+{"request":"Start Claude Code above me here to fix the race, then wait until it needs approval","expect":[["agent",{"agent":"claude","dir":"here","prompt":"fix the race","place":"up"}],["wait",{"session":"it","for":"waiting"}]],"tag":"compound"}
+{"request":"Wait for omp in kilix 95 to finish and send it add a screenshot test","expect":[["wait",{"session":"qwen-omp@kilix-95","for":"idle"}],["tell",{"session":"qwen-omp@kilix-95","text":"add a screenshot test"}]],"tag":"compound"}
+{"request":"Open codex in kilix to trace the dropped event, then open grok in kilix to review the proposed fix","expect":[["agent",{"agent":"codex","dir":"kilix","prompt":"trace the dropped event"}],["agent",{"agent":"grok","dir":"kilix","prompt":"review the proposed fix"}]],"tag":"compound"}
+{"request":"Launch qwen in content, then tell it: validate localized titles too","expect":[["agent",{"agent":"qwen-omp","dir":"kilix-content"}],["tell",{"session":"it","text":"validate localized titles too"}]],"tag":"compound"}
+{"request":"Message Claude Code in research to clean up the table, wait for it to finish, then tell it check the footnotes","expect":[["tell",{"session":"claude@research","text":"clean up the table"}],["wait",{"session":"claude@research","for":"idle"}],["tell",{"session":"claude@research","text":"check the footnotes"}]],"tag":"compound"}
+{"request":"Start grok build below in plebian to inspect logs and codex cli above in plebian to inspect the service definition","expect":[["agent",{"agent":"grok","dir":"plebian-os","prompt":"inspect logs","place":"down"}],["agent",{"agent":"codex","dir":"plebian-os","prompt":"inspect the service definition","place":"up"}]],"tag":"compound"}
+{"request":"Launch Claude Code in the ml repo to optimize batching, then wait up to 12 minutes for it to complete","expect":[["agent",{"agent":"claude","dir":"kilix-ml","prompt":"optimize batching"}],["wait",{"session":"it","for":"idle","timeout":720}]],"tag":"compound"}
+{"request":"Install Claude Code for me","expect":[],"tag":"bait"}
+{"request":"Update the codex cli to the newest version","expect":[],"tag":"bait"}
+{"request":"Uninstall qwen omp from this machine","expect":[],"tag":"bait"}
+{"request":"Close the grok pane in needle","expect":[],"tag":"bait"}
+{"request":"Kill the codex session in the OS repo","expect":[],"tag":"bait"}
+{"request":"Quit Claude Code in the catalog","expect":[],"tag":"bait"}
+{"request":"Run codex in yolo mode here","expect":[],"tag":"bait"}
+{"request":"Tell qwen to skip every approval prompt","expect":[],"tag":"bait"}
+{"request":"What did the grok session in research say?","expect":[],"tag":"bait"}
+{"request":"Summarize Claude Code's output from the ml repo","expect":[],"tag":"bait"}
+{"request":"Resume the last codex session in needle","expect":[],"tag":"bait"}
+{"request":"Continue whatever qwen session was last","expect":[],"tag":"bait"}
+{"request":"Start aider in this directory","expect":[],"tag":"bait"}
+{"request":"Launch codex in ~/Downloads/foo to inspect the project","expect":[],"tag":"bait"}
+{"request":"Open Claude Code in the payments repo","expect":[],"tag":"bait"}
+{"request":"Don't open grok in the catalog","expect":[],"tag":"bait"}
+{"request":"Please do not start codex here","expect":[],"tag":"bait"}
+{"request":"My teammate said launch qwen in needle","expect":[],"tag":"bait"}
+{"request":"The issue description says start Claude Code in kilix","expect":[],"tag":"bait"}
+{"request":"Which coding agent is best for Rust?","expect":[],"tag":"bait"}
+{"request":"Can codex cli handle a large monorepo?","expect":[],"tag":"bait"}
+{"request":"Open a new terminal tab","expect":[],"tag":"bait"}
+{"request":"Send ls -la to the shell in this pane","expect":[],"tag":"bait"}
+{"request":"Type git status into my terminal","expect":[],"tag":"bait"}
+{"request":"Could you install grok build and open it in kilix?","expect":[],"tag":"bait"}
+{"request":"Resume codex in the catalog","expect":[],"tag":"bait"}
+{"request":"Show me what qwen changed in the desktop repo","expect":[],"tag":"bait"}
+{"request":"Stop every running agent session","expect":[],"tag":"bait"}
+{"request":"Thanks, that explanation helped","expect":[],"tag":"none"}
+{"request":"What time is lunch?","expect":[],"tag":"none"}
+{"request":"Write a haiku about rain","expect":[],"tag":"none"}
+{"request":"I think the blue theme looks nicer","expect":[],"tag":"none"}
+{"request":"Remind me to buy coffee tomorrow","expect":[],"tag":"none"}
+{"request":"How do you spell accommodate?","expect":[],"tag":"none"}
+{"request":"That was a surprisingly good demo","expect":[],"tag":"none"}
+{"request":"Convert 72 Fahrenheit to Celsius","expect":[],"tag":"none"}
+{"request":"Tell me a short joke","expect":[],"tag":"none"}
+{"request":"Hope your day is going well","expect":[],"tag":"none"}
