@@ -482,7 +482,7 @@ class ReviewR18Round2(unittest.TestCase):
         engine = mock.Mock()
         engine.complete.return_value = {"success": False, "error": "private pane title zq-secret-9",
                                         "function_calls": []}
-        record = needle_cli.run_request(engine, "close the left pane", needle_cli.Options(dry_run=True))
+        record = needle_cli.run_request(engine, "shut the left pane", needle_cli.Options(dry_run=True))
         self.assertIn("zq-secret-9", record["note"])                       # the caller still sees it
         text = (history.directory() / "requests.jsonl").read_text()
         self.assertNotIn("zq-secret-9", text)

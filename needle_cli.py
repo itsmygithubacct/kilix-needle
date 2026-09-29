@@ -161,8 +161,15 @@ def run_request(engine: Engine, request: str, options: Options,
     status 0 = done or nothing to do, 1 = something was refused, skipped or failed.
     Each item has "outcome": refused | unresolved | would | skipped | done | failed.
     """
+    def exact(request):
+        # A canonical pane command needs no model (panes_exact); its calls go
+        # through the same checks, resolution and confirmation.
+        import panes_exact
+        found = panes_exact.admitted(request)
+        return run_calls(request, found, options, confirm) if found else None
+
     return _recorded("panes", engine, request, options, lambda request, calls: run_calls(
-        request, getattr(engine, "translate", lambda c: c)(calls), options, confirm))
+        request, getattr(engine, "translate", lambda c: c)(calls), options, confirm), exact=exact)
 
 
 # One accepted phrasing per refused kind, so an agent can restate the request

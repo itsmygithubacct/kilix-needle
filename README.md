@@ -191,6 +191,10 @@ What an agent should know (measured in a Codex route benchmark, 2026-09-29):
   than guessing.
 - **Pane ids work as targets:** "close pane 70", "run 'make' in pane:70" (the
   ids `kilix pane` prints).
+- **Canonical pane commands skip the model entirely**, and still pass every
+  check and confirmation: close, go to or type into a pane named by title,
+  name, side or id, and close or go to tab N. Examples: "close the pane titled
+  build in this tab", "run 'make' in pane 70", "go to tab 2" (`panes_exact.py`).
 - **A yes given in advance covers these typing forms:** "run 'X' in the NAME
   pane", "type the command X into pane NAME", with an optional "and press
   Enter".
@@ -898,6 +902,7 @@ real shape, including window groups.
 | `libengine.py` | `libneedle.so` in a worker, for tuned weights |
 | `asset.py` | admitting installed assets or pinned local copies; the first-use install |
 | `tuning.py` | `kilix-needle tune` |
+| `panes_exact.py` | canonical pane commands read without a model, then checked like any call |
 | `state.py` | the one state directory, and moving older data-home state into it |
 | `needle_cli.py` | the command line, prompt loop and runtime selection |
 | `mcp_server.py` | `kilix-needle mcp` |

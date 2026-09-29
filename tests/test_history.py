@@ -58,7 +58,7 @@ class History(unittest.TestCase):
     def test_every_job_records_its_request_calls_and_outcome(self):
         options = needle_cli.Options(dry_run=True)
         needle_cli.run_apps_request(grammar(), "hide the clock", options)
-        needle_cli.run_request(Engine(), "close the left pane", options)
+        needle_cli.run_request(Engine(), "shut the left pane", options)
         needle_cli.run_agents_request(Engine(), "tell me a joke", options, cwd="/tmp")
         apps, panes, agents = self.entries()
         self.assertEqual((apps["job"], panes["job"], agents["job"]), ("apps", "panes", "agents"))
@@ -116,7 +116,7 @@ class History(unittest.TestCase):
 
     def test_a_request_whose_engine_fails_is_still_recorded(self):
         with self.assertRaises(RuntimeError):
-            needle_cli.run_request(Engine(fail=True), "close the left pane",
+            needle_cli.run_request(Engine(fail=True), "shut the left pane",
                                    needle_cli.Options(dry_run=True))
         (entry,) = self.entries()
         self.assertEqual(entry["note"], "the request did not finish")
@@ -216,7 +216,7 @@ class ReviewR17(unittest.TestCase):
             self.assertEqual(self.run_one()["items"][0]["outcome"], "would")
             history._warned = False
             with self.assertRaisesRegex(RuntimeError, "engine broke"):
-                needle_cli.run_request(Engine(fail=True), "close the left pane",
+                needle_cli.run_request(Engine(fail=True), "shut the left pane",
                                        needle_cli.Options(dry_run=True))
 
     def test_a_short_write_leaves_whole_lines(self):                        # KN-R17-04

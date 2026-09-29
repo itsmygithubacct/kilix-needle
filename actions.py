@@ -371,8 +371,10 @@ def _pane_phrases(target: str) -> list[str]:
         n = target[3:]
         return [rf"(?:the )?(?:pane|window)\s*(?:id\s*)?[:#]?\s*{n}", rf"#{n}"]
     name = re.escape((target[5:] if target.startswith("name:") else target).casefold())
-    return [rf"(?:the |that )?{name} {unit}", rf"(?:the )?{unit} (?:called|named|titled|running) {name}",
-            rf"(?:the )?{unit} {name}"]
+    here = r"(?: in (?:this|the current) tab)?"   # narrows, never widens
+    return [rf"(?:the |that )?{name} {unit}{here}",
+            rf"(?:the )?{unit} (?:called|named|titled|labell?ed|running) {name}{here}",
+            rf"(?:the )?{unit} {name}{here}"]
 
 
 # A word that is plainly an argument to a shell command, not English.
@@ -971,7 +973,7 @@ def _bound_to_unit(mentions: list[str], text: str, unit_words: list[str]) -> boo
     for mention in mentions:
         word = re.escape(mention)
         if re.search(rf"(?<![\w]){word}\s+(?:{units})\b"
-                     rf"|\b(?:{units})\s+(?:(?:called|named|running|with|number)\s+"
+                     rf"|\b(?:{units})\s+(?:(?:called|named|titled|labell?ed|running|with|number)\s+"
                      rf"|(?:on|to|at)\s+(?:the\s+)?)?{word}(?![\w])",
                      text, re.IGNORECASE):
             return True
