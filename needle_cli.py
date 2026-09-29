@@ -165,6 +165,77 @@ def run_request(engine: Engine, request: str, options: Options,
         request, getattr(engine, "translate", lambda c: c)(calls), options, confirm))
 
 
+# One accepted phrasing per refused kind, so an agent can restate the request
+# once instead of guessing (route benchmark 2026-09-29: runs rephrased 8-20
+# times, up to 3.1M tokens).
+_EXAMPLES = {
+    "panes": {
+        "run_in_pane": "run 'make test' in the build pane  |  run 'make test' in pane 70",
+        "open_pane": "split right and run htop",
+        "open_tab": "open a new tab running htop",
+        "close_pane": "close the logs pane  |  close pane 70",
+        "close_tab": "close tab 2",
+        "go_to_pane": "go to the logs pane  |  go to pane 70",
+        "go_to_tab": "go to tab 2",
+        "rename_tab": "rename this tab to api",
+        "rename_pane": "rename this pane to api",
+        "arrange_panes": "arrange the panes in a grid",
+        "resize_pane": "make this pane wider by 10",
+        "maximize_pane": "maximize this pane",
+        "swap_panes": "swap this pane with the one on the right",
+        "move_tab": "move this tab to position 1",
+    },
+    "agents": "start codex in /abs/dir  |  wait for codex in /abs/dir to finish  |  "
+              "tell codex in /abs/dir: run the tests",
+    "apps": "open the pdf viewer  |  hide the clock",
+    "system": "show memory  |  show failed services  |  is curl installed?",
+    "files": "find pdf files in Downloads  |  find text \"TODO\" in projects",
+}
+_MCP = {"agents": "kilix_agents_act", "system": "kilix_system_read", "files": "kilix_files_read"}
+_CLI = {"panes": "kilix-needle", "agents": "kilix-needle agents", "apps": "kilix-needle apps",
+        "system": "kilix-needle system", "files": "kilix-needle files"}
+
+
+def _other_job(job: str, request: str) -> str | None:
+    """A job whose own grammar reads the request, when it is not this one."""
+    try:
+        if job != "agents":
+            import agents
+            if agents.parse(request, None):
+                return "agents"
+        if job != "system":
+            import system_job
+            if system_job.parse(request):
+                return "system"
+        if job != "files":
+            import files_job
+            try:
+                files_job.parse(request)
+                return "files"
+            except ValueError:
+                pass
+    except Exception:       # noqa: BLE001 - a hint never breaks a request
+        return None
+    return None
+
+
+def _hint(job: str, request: str, result: dict) -> str | None:
+    items = result.get("items") or []
+    if not result.get("status") or any(i.get("outcome") in ("done", "would") for i in items):
+        return None
+    other = _other_job(job, request)
+    if other:
+        return (f"this reads as a request for the {other} job: {_CLI[other]} REQUEST "
+                f"(MCP: {_MCP[other]})")
+    examples = _EXAMPLES.get(job)
+    if isinstance(examples, dict):
+        kinds = [i.get("kind") for i in items if i.get("kind") in examples]
+        if kinds:
+            return "accepted form: " + examples[kinds[0]]
+        return None
+    return f"accepted forms: {examples}" if examples else None
+
+
 def _recorded(job: str, engine, request: str, options: Options, run, exact=None) -> dict:
     """Check the prompt, ask the engine, run its calls, and record the request
     in the local history (history.py) whatever happens."""
@@ -190,6 +261,9 @@ def _recorded(job: str, engine, request: str, options: Options, run, exact=None)
             private = dict(result, note="the engine's reply could not be used")
             return result
         result = run(request, calls)
+        hint = _hint(job, request, result) if isinstance(result, dict) else None
+        if hint:
+            result["hint"] = hint
         return result
     finally:
         try:        # never replaces the result or the exception on its way out
