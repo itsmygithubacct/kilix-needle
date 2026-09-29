@@ -477,7 +477,7 @@ def _game_object(text: str) -> bool:
     """The clause is one game's name, and at most where it is listed:
     "pong", "pong in the games list" (review KN-R16-501)."""
     shape = re.fullmatch(rf"(?:(?:the|my|a|an) )?(?P<name>.+?)(?: {_LIST_QUALIFIER})?"
-                         r"(?: (?:please|too|as well))?", text)
+                         r"(?: (?:please|too|as well|for me|for us))?", text)
     return bool(shape) and any(_is_name(LAUNCH_NAMES, game, shape["name"])
                                for game in AVAILABILITY)
 
@@ -506,8 +506,11 @@ def _names_the_item(clause: str, match: re.Match) -> bool:
             place = re.match(r"\s*(.*?)\s*(?:[,;:.!?](?:\s|$)|$|" + _MASK + r"|\b(?:and|then|"
                              r"but|please|too|now|again|so|when|while)\b)", after)
             words = place.group(1) if place else after
-            if not words:
-                # "turn the clock on", "take it off": a particle, not a place
+            closing = [w for w in words.split() if not _PLACE_TAIL.fullmatch(w)]
+            if not words or (word in ("on", "off") and not closing):
+                # "turn the clock on", "take it off", "turn the clock off
+                # permanently": a particle, perhaps closed by an adverb, not a
+                # place (review KN-R16-601)
                 return word in ("on", "off")
             # "from the top bar completely": an adverb may close a place,
             # never stand for one (reviews KN-R16-402, -502).
@@ -864,6 +867,14 @@ def _read(request: str, widen: bool = False) -> Reading:
 
 def _admit(name: str, args: dict, reading: Reading) -> Action | Refusal:
     parts = reading.parts
+    # A reason for a change says the change both ways as often as not: "hide
+    # the clock so I can see it", "disable doom so I can take a look". Only an
+    # opening may carry a purpose (review R15 round 4, KN-R15-23).
+    if name in ("show", "pane_stat", "game") and any(
+            (why := _PURPOSE.search(" " + part.text))
+            and _PURPOSE_SHAPE.fullmatch(why.group(0).strip(" .!")) for part in parts):
+        return Refusal(name, "the request gives a reason for a change; only opening "
+                             "something may carry one")
     if name == "launch":
         app = _resolve(LAUNCH_NAMES, LAUNCHABLE, args.get("app"))
         if app is None:
