@@ -1,8 +1,10 @@
 """A local history of the requests kilix-needle's engines answer, for improving
 its grammar and models.
 
-One JSON line per panes, apps or agents request answered through the CLI or
-MCP (needle_cli._recorded). Lines go to requests.jsonl in GPU_TERMINAL_HOME's
+One JSON line per panes, apps, agents, files or default system request answered
+through the CLI or MCP (needle_cli._recorded, files_cli.run and
+system_dispatch.dispatch). Explicit system suggestion previews are not recorded.
+Lines go to requests.jsonl in GPU_TERMINAL_HOME's
 kilix-apps/kilix-needle/history (default ~/.local/gpu_terminal). Each line holds:
 - the request as given, and the checked form the engine saw when it differs;
 - the job, and whether a person or an agent sent it;

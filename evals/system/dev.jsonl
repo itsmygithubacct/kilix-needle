@@ -1,0 +1,25 @@
+{"request": "show memory", "expect": [["resources", {"kind": "memory"}]], "tag": "resources"}
+{"request": "show cpu load", "expect": [["resources", {"kind": "cpu"}]], "tag": "resources"}
+{"request": "how much space is left on the root disk?", "expect": [["resources", {"kind": "disk", "path": "/"}]], "tag": "resources"}
+{"request": "show disk space on /var", "expect": [["resources", {"kind": "disk", "path": "/var"}]], "tag": "resources"}
+{"request": "what's using all my memory?", "expect": [["processes", {"sort": "memory"}]], "tag": "processes"}
+{"request": "show top 5 processes by cpu", "expect": [["processes", {"sort": "cpu", "limit": 5}]], "tag": "processes"}
+{"request": "show failed services", "expect": [["services", {"state": "failed"}]], "tag": "services"}
+{"request": "show user failed services", "expect": [["services", {"state": "failed", "scope": "user"}]], "tag": "services"}
+{"request": "show ssh service status", "expect": [["services", {"unit": "ssh.service"}]], "tag": "services"}
+{"request": "show errors from the ssh service since yesterday", "expect": [["journal", {"unit": "ssh.service", "priority": "err", "since": "yesterday", "boot": "any"}]], "tag": "journal"}
+{"request": "show logs from the previous boot limit 10", "expect": [["journal", {"boot": "previous", "limit": 10}]], "tag": "journal"}
+{"request": "is bash installed?", "expect": [["packages", {"operation": "status", "target": "bash"}]], "tag": "packages"}
+{"request": "which package provides ls?", "expect": [["packages", {"operation": "owner", "target": "ls"}]], "tag": "packages"}
+{"request": "what failed during this boot?", "expect": [["services", {"state": "failed"}], ["journal", {"priority": "err"}]], "tag": "compound"}
+{"request": "why is my machine slow?", "expect": [["resources", {"kind": "all"}], ["processes", {"sort": "cpu"}]], "tag": "compound"}
+{"request": "restart ssh", "expect": [], "tag": "refusal"}
+{"request": "install htop", "expect": [], "tag": "refusal"}
+{"request": "show memory and reboot", "expect": [], "tag": "refusal"}
+{"request": "show logs from * service", "expect": [], "tag": "refusal"}
+{"request": "which package provides this command?", "expect": [], "tag": "refusal"}
+{"request": "don't show memory", "expect": [], "tag": "refusal"}
+{"request": "show errors since 2026-13-40", "expect": [], "tag": "refusal"}
+{"request": "show top 1000 processes by memory", "expect": [], "tag": "refusal"}
+{"request": "show memory; rm /tmp/file", "expect": [], "tag": "refusal"}
+{"request": "show the service", "expect": [], "tag": "refusal"}

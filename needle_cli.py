@@ -86,6 +86,9 @@ class LazyRuntime:
 
 def open_runtime(args, *, may_install: bool = False, job: str = jobs.DEFAULT) -> Runtime:
     """The tuned model if one passed its gates and is selected, else the base engine."""
+    if job == "system":
+        import system_model
+        return system_model.open_runtime(args)
     explicit = getattr(args, "engine", None) or os.environ.get("KILIX_NEEDLE_ENGINE")
     if job == "apps" and not explicit:
         # The apps checks propose as well as admit (apps.propose): measured,
@@ -502,19 +505,39 @@ def render(record: dict) -> str:
 
 
 def handle(engine: Engine, request: str, *, dry_run: bool = False, assume_yes: bool = False,
-           out=sys.stdout, as_json: bool = False, agent: bool = False,
-           under_overlay: bool = False, job: str = jobs.DEFAULT) -> int:
+           out=None, as_json: bool = False, agent: bool = False,
+           under_overlay: bool = False, job: str = jobs.DEFAULT,
+           baseline: bool = False, model_label=None) -> int:
     """Run one request and print it. 0 = done or nothing to do, 1 = otherwise."""
     options = Options(dry_run=dry_run, assume_yes=assume_yes, agent=agent,
                       under_overlay=under_overlay)
+    import system_collect
     run = {"apps": run_apps_request, "agents": run_agents_request}.get(job, run_request)
-    if job == "agents":
+    if job == "system":
+        import system_dispatch
+        record = system_dispatch.dispatch(request, engine, options, baseline=baseline,
+                                          model_label=model_label)
+    elif job == "agents":
         record = run(engine, request, options, _never if agent else _terminal_confirm,
                      cwd=os.getcwd())
     else:
         record = run(engine, request, options, _never if agent else _terminal_confirm)
-    print(json.dumps(record, ensure_ascii=False) if as_json else render(record), file=out)
+    print(json.dumps(record, ensure_ascii=False) if as_json else
+          system_collect.render(record) if job == "system" else render(record), file=out)
     return record["status"]
+
+
+def _handle_system(args, request: str, modes: dict) -> int:
+    """Open the tuned system runtime only when this request needs inference."""
+    source = {"label": None}
+
+    def classify(text):
+        with open_runtime(args, job="system") as runtime:
+            source["label"] = runtime.label
+            runtime.reset()
+            return runtime.complete(text)
+
+    return handle(classify, request, **modes, model_label=lambda: source["label"])
 
 
 def _offer_tuning(args) -> None:
@@ -555,6 +578,35 @@ def _image(args, *, may_install: bool = False):
         return asset.from_installed(args.root)
 
 
+def _render_system_suggestion(plan: dict) -> None:
+    """Display a proposal without implying that any observation was collected."""
+    def safe(value) -> str:
+        return json.dumps(str(value), ensure_ascii=True)[1:-1]
+
+    trust = plan.get("trust")
+    path = plan.get("path")
+    if plan.get("runtime_error"):
+        reasons = "; ".join(safe(reason) for reason in plan.get("reasons") or [])
+        print(f"kilix-needle: suggestion unavailable: {reasons or 'classifier failed'}",
+              file=sys.stderr)
+        return
+    if plan.get("protocol_error"):
+        reasons = "; ".join(safe(reason) for reason in plan.get("reasons") or [])
+        print(f"kilix-needle: invalid suggestion: {reasons or 'invalid classifier reply'}",
+              file=sys.stderr)
+        return
+    if path == "grammar" and trust == "grammar":
+        print("Grammar plan (no observations collected):")
+    elif path == "model" and trust == "model_proposal":
+        print("Model-proposed read-only queries (unverified; no observations collected):")
+    else:
+        print("No read-only query suggested; no observations collected.")
+    for kind, args in plan.get("actions") or []:
+        print(f"  {safe(kind)}: {json.dumps(args, ensure_ascii=True, sort_keys=True)}")
+    for reason in plan.get("reasons") or []:
+        print(f"  {safe(reason)}")
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] == ["files"]:
@@ -584,6 +636,9 @@ def main(argv: list[str] | None = None) -> int:
         return status
     if argv[:1] == ["tune"]:
         return tuning.main(argv[1:])
+    if argv[:1] == ["system-model"]:
+        import system_model
+        return system_model.main(argv[1:])
     if argv[:1] == ["install"]:
         parser = argparse.ArgumentParser(prog="kilix-needle install",
                                          description="Accept the Needle 2 licence and install "
@@ -636,6 +691,8 @@ def main(argv: list[str] | None = None) -> int:
     elif argv[:1] == ["agents"]:
         # Launch, wait for and message coding-agent sessions (the agents job).
         job, argv = "agents", argv[1:]
+    elif argv[:1] == ["system"]:
+        job, argv = "system", argv[1:]
     agents_help = ("Directory resolution order: an explicit ~/ or absolute path; 'here' "
                    "(the calling pane's directory); exact entries in "
                    "~/.config/kilix-needle/dirs.json; then a unique exact checkout name "
@@ -660,20 +717,53 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--engine", metavar="FILE",
                         help="a local copy of the pinned engine instead of the installed asset")
     parser.add_argument("--root", help="the Kilix content root, if not inherited from Kilix")
+    if job == "system":
+        parser.description = "Read-only Linux diagnostics: resources, processes, services, journal and installed packages."
+        parser.add_argument("--baseline", action="store_true",
+                            help="use only the explicit grammar; disable model fallback")
+        parser.add_argument("--suggest", action="store_true",
+                            help="suggest read-only queries for an unfamiliar request; collect nothing")
     args = parser.parse_args(argv)
+    if job == "system" and args.suggest and args.baseline:
+        parser.error("--suggest and --baseline cannot be combined")
+    if job == "system" and args.suggest and not args.request:
+        parser.error("--suggest requires a request")
+    if job == "system" and args.suggest:
+        import system_normalize
+
+        def classify(request):
+            with open_runtime(args, may_install=not args.agent, job="system") as engine:
+                engine.reset()
+                return engine.complete(request)
+
+        request = " ".join(args.request)
+        suggestion = system_normalize.plan(request, classify)
+        if args.json:
+            print(json.dumps(suggestion, ensure_ascii=False))
+        else:
+            _render_system_suggestion(suggestion)
+        return int(bool(suggestion.get("runtime_error") or suggestion.get("protocol_error")))
     modes = dict(dry_run=args.dry_run, assume_yes=args.yes, as_json=args.json,
                  agent=args.agent, under_overlay=args.under_overlay, job=job)
+    if job == "system":
+        modes["baseline"] = args.baseline
     try:
         # An exact apps control needs no engine at all (review KN-R18-03): the
-        # apps runtime opens on the first request that needs it.
-        runtime = (LazyRuntime(lambda: open_runtime(args, may_install=not args.agent, job=job))
-                   if job == "apps" else open_runtime(args, may_install=not args.agent, job=job))
+        # apps runtime opens on the first request that needs it. The system job
+        # runs without this runtime (_handle_system).
+        if job == "apps":
+            runtime = LazyRuntime(lambda: open_runtime(args, may_install=not args.agent, job=job))
+        elif job != "system":
+            runtime = open_runtime(args, may_install=not args.agent, job=job)
     except asset.AssetError as error:
         print(f"kilix-needle: {error}", file=sys.stderr)
         return 2
     try:
-        with runtime as engine:
+        from contextlib import nullcontext
+        with (nullcontext(None) if job == "system" else runtime) as engine:
             if args.request:
+                if job == "system":
+                    return _handle_system(args, " ".join(args.request), modes)
                 return handle(engine, " ".join(args.request), **modes)
             if args.agent or not sys.stdin.isatty():
                 print("kilix-needle: give a request, or run it in a terminal", file=sys.stderr)
@@ -688,7 +778,8 @@ def main(argv: list[str] | None = None) -> int:
                 if line.strip() in ("quit", "exit", ":q"):
                     return status
                 if line.strip():
-                    status = handle(engine, line, **modes)
+                    status = (_handle_system(args, line, modes) if job == "system" else
+                              handle(engine, line, **modes))
     except (asset.AssetError, EngineError, LibEngineError) as error:
         print(f"kilix-needle: {error}", file=sys.stderr)
         return 2

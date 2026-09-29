@@ -91,7 +91,7 @@ class Selection(unittest.TestCase):
         status = json.loads(out.getvalue())
         self.assertEqual(status["job"], "panes")
         self.assertEqual(status["selected"]["run"], "qat-6")
-        self.assertEqual(sorted(status["jobs"]), ["agents", "apps", "files", "notes", "panes"])
+        self.assertEqual(sorted(status["jobs"]), ["agents", "apps", "files", "notes", "panes", "system"])
         self.assertIsNone(status["jobs"]["apps"]["selected"])
         with self.assertRaises(SystemExit), mock.patch.object(sys, "stderr", io.StringIO()):
             tuning.main(["--job", "nothing", "--status"])

@@ -100,6 +100,9 @@ def job_schema(job: str):
     if job == "agents":
         import agents
         return agents, agents.TOOLS
+    if job == "system":
+        import system_job
+        return system_job, system_job.TOOLS
     return None
 STAGES = ("base", "source", "env", "data", "train", "export", "gates", "select")
 
@@ -815,6 +818,13 @@ def in_use(job: str = jobs.DEFAULT) -> str:
         return "grammar baseline (no qualified tuned files model)"
     import asset
     from libengine import LibEngine, LibEngineError
+    if job == "system":
+        import system_model
+        try:
+            with system_model.open_runtime() as runtime:
+                return f"grammar first; {runtime.label} (proposals only)"
+        except (system_model.SystemModelError, asset.AssetError, LibEngineError, OSError) as error:
+            return f"grammar first; tuned normalizer unavailable ({error})"
     import toolset
     if job == "apps" and not os.environ.get("KILIX_NEEDLE_ENGINE"):
         return "grammar"            # needle_cli.open_runtime: apps.propose, no model
@@ -922,6 +932,8 @@ def main(argv: list[str]) -> int:
                                          if p.is_dir() and p.name != "jobs"
                                          and not p.name.startswith("."))}
                    for name in sorted(jobs.JOBS)}
+        import system_model
+        per_job["system"]["normalizer_profile"] = system_model.status()
         try:
             unknown = sorted(set(_read_selections()) - set(jobs.JOBS))
         except TuneError as error:
