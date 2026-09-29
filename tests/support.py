@@ -22,6 +22,12 @@ for _name in ("GPU_TERMINAL_HOME", "KILIX_DATA_HOME", "KILIX_CONFIG_HOME", "KILI
 for _name in ("KILIX_NEEDLE_LIBRARY", "KILIX_NEEDLE_ENGINE", "KILIX_ML_HOME"):
     os.environ.pop(_name, None)
 
+# Controls must not discover the user's live audio/player/voice sockets either.
+os.environ["PULSE_SERVER"] = "unix:" + os.path.join(_SANDBOX.name, "no-pulse.sock")
+os.environ["KILIX_AMP_SOCKET"] = os.path.join(_SANDBOX.name, "no-amp.sock")
+os.environ["KILIX_SESSION_HOME"] = os.path.join(_SANDBOX.name, "session")
+os.environ["GPU_TERMINAL_SETTINGS_FILE"] = os.path.join(_SANDBOX.name, "settings.conf")
+
 import kilix  # noqa: E402
 
 RECORDER = """#!/bin/sh
