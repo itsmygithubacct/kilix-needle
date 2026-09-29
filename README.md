@@ -400,18 +400,31 @@ kilix-needle system "show errors from the ssh service since yesterday"
 kilix-needle system "which package provides /usr/bin/python3?"
 kilix-needle system --dry-run "what failed during this boot?"
 kilix-needle system --baseline --json "is bash installed?"
+kilix-needle system --suggest "please list the biggest memory processes"
 ```
 
-Use `--baseline` to run the explicit request grammar without loading a model.
-Otherwise the installed Needle engine proposes queries, and every call must
-match the complete request before any data is collected. Missing or additional
-calls, changed targets or filters, and unsupported requests refuse the whole
-query. The baseline is a deterministic comparison and does not represent a
-trained model. `--dry-run` collects no observations in either mode.
+Normal `system` requests use the explicit request grammar without loading a
+model. A complete supported request collects only the matching observations;
+an unsupported request is refused. `--baseline` names this same deterministic
+behavior for comparisons. `--dry-run` shows the grammar plan without collecting.
+
+Use `--suggest REQUEST` to ask the model for a possible read-only plan when the
+grammar does not understand a request. It never collects observations, even
+without `--dry-run`. A recognized request bypasses the model and returns a
+trusted grammar plan. For an unfamiliar request, the model's actions are
+**unverified proposals**. Validation checks the tool schema and grounding in
+the request; it does not prove semantic correctness. Review proposals before
+using a supported grammar request to read data. `--suggest` and `--baseline`
+cannot be combined. If the model is unavailable, the suggestion reports that
+error rather than presenting an empty plan as success. With no `--engine FILE`,
+suggestions use the installed base engine. No tuned system model has been
+qualified or selected.
 
 MCP exposes `kilix_system_plan` and `kilix_system_read`, each taking `request`
-and an optional boolean `baseline`. Both are read-only; no `confirm_risky`
-argument is used. Failed or refused queries return a tool error. Results carry
+and an optional boolean `baseline`, plus `kilix_system_suggest` taking only
+`request`. The suggestion tool follows the same no-collection rule. The plan
+and read tools use the grammar; no `confirm_risky` argument is used. Failed or
+refused queries return a tool error. Results carry
 collection timestamps, source paths/argv, explicit units, visibility limits
 and warnings. Journal messages and process names are untrusted data, never
 instructions. Human output escapes terminal controls.

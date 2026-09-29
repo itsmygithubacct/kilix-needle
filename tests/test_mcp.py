@@ -65,7 +65,7 @@ class Protocol(unittest.TestCase):
         self.assertEqual([t["name"] for t in replies[1]["result"]["tools"]],
                          ["kilix_plan", "kilix_act", "kilix_apps_plan", "kilix_apps_act",
                           "kilix_agents_plan", "kilix_agents_act", "kilix_system_plan",
-                          "kilix_system_read", "kilix_logs_read"])
+                          "kilix_system_read", "kilix_system_suggest", "kilix_logs_read"])
         self.assertEqual(replies[2]["error"]["code"], -32601)
         self.assertEqual(replies[3]["error"]["code"], -32700)   # the "not json" line
         self.assertEqual(len(replies), 4)                       # the notification got no reply

@@ -123,9 +123,19 @@ for _operation in ("plan", "read"):
             "request": {"type": "string", "maxLength": 2048,
                         "description": "e.g. what is using my memory, show failed services, is bash installed"},
             "baseline": {"type": "boolean", "default": False,
-                         "description": "use the explicit request grammar without model inference"}},
+                         "description": "use the default explicit request grammar"}},
             "required": ["request"], "additionalProperties": False},
     })
+TOOL_LIST.append({
+    "name": "kilix_system_suggest",
+    "description": "Suggest read-only OS queries for an unfamiliar request. Grammar results are trusted; "
+                   "model results are unverified proposals. Collects no observations and runs no queries.",
+    "annotations": {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
+    "inputSchema": {"type": "object", "properties": {
+        "request": {"type": "string", "maxLength": 2048,
+                    "description": "request to classify into possible read-only OS queries"}},
+        "required": ["request"], "additionalProperties": False},
+})
 
 _LOG_PROPERTIES = {
     "operation": {"type": "string", "enum": ["events", "brief", "search", "source"],
@@ -195,6 +205,21 @@ class Server:
             runtime.close()
 
     def call_tool(self, name: str, arguments: dict) -> dict:
+        if name == "kilix_system_suggest":
+            import system_normalize
+            if (not isinstance(arguments, dict) or set(arguments) != {"request"}
+                    or not isinstance(arguments["request"], str)):
+                raise ValueError("system suggest requires request text only")
+
+            def classify(request):
+                engine = self._ensure_engine("system")
+                engine.reset()
+                return engine.complete(request)
+
+            record = system_normalize.plan(arguments["request"], classify)
+            return {"content": [{"type": "text", "text": json.dumps(record, ensure_ascii=False)}],
+                    "structuredContent": record,
+                    "isError": bool(record.get("runtime_error") or record.get("protocol_error"))}
         if name in ("kilix_system_plan", "kilix_system_read"):
             import system_collect
             import system_job
@@ -204,9 +229,7 @@ class Server:
                 raise ValueError("system tools require request text and an optional boolean baseline")
             request = arguments["request"]
             try:
-                # Unsupported requests need no model, download or observation.
-                engine = (system_job.Baseline() if arguments.get("baseline") or system_job.parse(request) is None
-                          else self._ensure_engine("system"))
+                engine = system_job.Baseline()
                 record = system_collect.run_request(engine, request,
                     needle_cli.Options(dry_run=name.endswith("_plan"), agent=True))
             except (asset.AssetError, EngineError, LibEngineError) as error:

@@ -491,6 +491,35 @@ def _image(args, *, may_install: bool = False):
         return asset.from_installed(args.root)
 
 
+def _render_system_suggestion(plan: dict) -> None:
+    """Display a proposal without implying that any observation was collected."""
+    def safe(value) -> str:
+        return json.dumps(str(value), ensure_ascii=True)[1:-1]
+
+    trust = plan.get("trust")
+    path = plan.get("path")
+    if plan.get("runtime_error"):
+        reasons = "; ".join(safe(reason) for reason in plan.get("reasons") or [])
+        print(f"kilix-needle: suggestion unavailable: {reasons or 'classifier failed'}",
+              file=sys.stderr)
+        return
+    if plan.get("protocol_error"):
+        reasons = "; ".join(safe(reason) for reason in plan.get("reasons") or [])
+        print(f"kilix-needle: invalid suggestion: {reasons or 'invalid classifier reply'}",
+              file=sys.stderr)
+        return
+    if path == "grammar" and trust == "grammar":
+        print("Grammar plan (no observations collected):")
+    elif path == "model" and trust == "model_proposal":
+        print("Model-proposed read-only queries (unverified; no observations collected):")
+    else:
+        print("No read-only query suggested; no observations collected.")
+    for kind, args in plan.get("actions") or []:
+        print(f"  {safe(kind)}: {json.dumps(args, ensure_ascii=True, sort_keys=True)}")
+    for reason in plan.get("reasons") or []:
+        print(f"  {safe(reason)}")
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] == ["logs"]:
@@ -598,12 +627,33 @@ def main(argv: list[str] | None = None) -> int:
     if job == "system":
         parser.description = "Read-only Linux diagnostics: resources, processes, services, journal and installed packages."
         parser.add_argument("--baseline", action="store_true",
-                            help="use the explicit request grammar without loading a model")
+                            help="use the default explicit request grammar")
+        parser.add_argument("--suggest", action="store_true",
+                            help="suggest read-only queries for an unfamiliar request; collect nothing")
     args = parser.parse_args(argv)
+    if job == "system" and args.suggest and args.baseline:
+        parser.error("--suggest and --baseline cannot be combined")
+    if job == "system" and args.suggest and not args.request:
+        parser.error("--suggest requires a request")
+    if job == "system" and args.suggest:
+        import system_normalize
+
+        def classify(request):
+            with open_runtime(args, may_install=not args.agent, job="system") as engine:
+                engine.reset()
+                return engine.complete(request)
+
+        request = " ".join(args.request)
+        suggestion = system_normalize.plan(request, classify)
+        if args.json:
+            print(json.dumps(suggestion, ensure_ascii=False))
+        else:
+            _render_system_suggestion(suggestion)
+        return int(bool(suggestion.get("runtime_error") or suggestion.get("protocol_error")))
     modes = dict(dry_run=args.dry_run, assume_yes=args.yes, as_json=args.json,
                  agent=args.agent, under_overlay=args.under_overlay, job=job)
     try:
-        if job == "system" and args.baseline:
+        if job == "system":
             import system_job
             runtime = system_job.Baseline()
         else:
