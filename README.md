@@ -1,7 +1,7 @@
 # kilix-needle
 
-Drive Kilix panes, tabs, apps and coding-agent sessions, and query Linux system
-state. kilix-needle combines request grammars with
+Drive Kilix panes, tabs, apps and coding-agent sessions, search files, and query
+Linux system state. kilix-needle combines request grammars with
 [Needle 2](https://huggingface.co/Cactus-Compute/needle2), a 45M-parameter
 tool-calling model that runs on the CPU in about 45 MB of RAM.
 
@@ -265,22 +265,41 @@ backslash is refused.
 
 ## Jobs
 
-kilix-needle has three action jobs and one read-only system job:
+kilix-needle has three action jobs and three read-only jobs:
 
 | Job | CLI | Scope |
 | --- | --- | --- |
 | `panes` (default) | `kilix-needle REQUEST` | Kilix panes and tabs |
-| `apps` | `kilix-needle apps REQUEST` | Apps, games and settings |
+| `apps` | `kilix-needle apps REQUEST` | Apps, games and settings; exact audio, music, voice, text-size and status controls |
 | `agents` | `kilix-needle agents REQUEST` | Launch, resume, wait for and message coding-agent sessions |
+| `files` | `kilix-needle files REQUEST` | Read-only file search, listings and previews in a named scope |
 | `system` | `kilix-needle system REQUEST` | Read resources, processes, services, journal entries and installed package information |
+| logs | `kilix-needle logs …` | Read and search local pane logs, with citations |
+
+### How each job understands a request
+
+Every job has a **proposer** and **checks**. The proposer suggests calls. The checks
+read the whole request themselves and admit a call only if the request says it.
+The checks decide; a proposer that invents a call gets it refused.
+
+| Job | Proposer in use | Why |
+| --- | --- | --- |
+| `panes` | the tuned Needle 2 model qat-6, over five tools that expand to 14 actions | Commands, titles and sizes are free-form, so a model has to propose them |
+| `apps` | no model: `apps.propose` offers every call the checks can read, and the exact controls come first | Every argument is from a closed list, so the checks can read all of it and no model can beat them (held-out v4: grammar 111/146, tuned model 93) |
+| `agents` | the tuned model agents-qat-1; the checks' clause reading must equal the calls | The request is the consent to launch, so the reading must be exact |
+| `files` | the grammar; a trained research model was not promoted | Scopes and filters must be exact; the model refused too rarely (4/40) |
+| `system` | the grammar first, then a tuned normalizer that only *proposes* for unfamiliar wording | The grammar is exact but narrow; model proposals never collect on their own |
+| logs | a baseline reader, no model | It reads, it doesn't act |
+
+A default changes only by measurement on a **blind held-out set**. Such a set is
+written from a specification by a session that sees no code, no training data and
+no other set, and each set gates once. A change also needs an independent review.
 
 Jobs have separate eval sets and model selections (`jobs.py`). Selecting a tuned
 execution model for one job never changes another job's model, and a model gated
-for one job can't be selected for another. The `system` job defaults to grammar
-plus a tuned normalizer: grammar matches bypass inference, and model-derived
-queries remain proposals. Its separate `system-model` profile does not select or
-promote an execution model; automatic collection from model proposals is not
-enabled.
+for one job can't be selected for another. The `system` job's separate
+`system-model` profile does not select or promote an execution model; automatic
+collection from model proposals is not enabled.
 
 For jobs using an execution model, model selection compares stock and tuned
 models, from any Needle generation. The criteria, in order:
