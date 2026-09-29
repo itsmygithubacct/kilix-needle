@@ -1,16 +1,23 @@
-"""kilix-needle: drive Kilix panes and tabs from plain requests with Needle 2.
+"""kilix-needle: plain requests to Kilix, one job per kind of request.
 
-    kilix-needle split right and run htop
-    kilix-needle                     # a prompt loop; one request per line
-    kilix-needle --dry-run close tab 2
+    kilix-needle close the pane titled build        # panes (this command)
+    kilix-needle agents "start codex in /abs/dir"   # coding-agent sessions
+    kilix-needle apps "open the pdf viewer"         # apps, games, settings
+    kilix-needle system "is jq installed"           # read-only machine state
+    kilix-needle files 'find files named "x" in here'
+    kilix-needle logs search --session NAME --query TEXT
 
-Each request is one Needle turn. Its calls pass the checks in `actions`,
-resolve against a fresh `kilix @ ls`, and are printed before anything runs.
-Opening, focusing, arranging, renaming and resizing run straight away.
-Closing, typing into a pane and starting a program wait for `y`. `--yes`
-answers that question for you, for scripts and agent harnesses. It cannot
-override a refusal: if any part of a request was refused, the rest waits for a
-typed `y` even with `--yes`, and without a terminal nothing runs.
+Agents: act directly with `--agent --json --yes`. A refused request runs
+nothing, so a `--dry-run` first only adds a call; a refused record carries
+`hint`, the accepted form or the job to use, so one retry is enough. Exact
+pane commands need no model: "close pane 70", "run 'make' in the pane titled
+build", "split right and run htop", "go to tab 2".
+
+Each request's calls pass the checks in `actions`, resolve against a fresh
+`kilix @ ls`, and are printed before anything runs. Opening, focusing,
+arranging, renaming and resizing run straight away. Closing, typing into a
+pane and starting a program wait for `y`; `--yes` answers that for scripts and
+agents, but never overrides a refusal.
 """
 from __future__ import annotations
 
