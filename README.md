@@ -1,6 +1,7 @@
 # kilix-needle
 
-Drive Kilix panes, tabs, apps and coding-agent sessions, and query Linux system state, using
+Drive Kilix panes, tabs, apps and coding-agent sessions, and query Linux system
+state. kilix-needle combines request grammars with
 [Needle 2](https://huggingface.co/Cactus-Compute/needle2), a 45M-parameter
 tool-calling model that runs on the CPU in about 45 MB of RAM.
 
@@ -13,6 +14,8 @@ kilix-needle --dry-run close this pane
 kilix-needle --yes close tab 2  # no question; for scripts and agents
 kilix-needle agents "open codex in kilix-needle: review the diff"
 kilix-needle agents --dry-run "open grok here in a split on the right"
+kilix-needle system "show memory"
+kilix-needle system --json "can you look at cpu load for me"  # tuned proposal only
 ```
 
 Requires Python 3.11+ on Linux x86-64, run inside Kilix. It has no Python
@@ -271,13 +274,16 @@ kilix-needle has three action jobs and one read-only system job:
 | `agents` | `kilix-needle agents REQUEST` | Launch, resume, wait for and message coding-agent sessions |
 | `system` | `kilix-needle system REQUEST` | Read resources, processes, services, journal entries and installed package information |
 
-Jobs have separate eval sets and model selections (`jobs.py`). The new `system`
-job has development cases; its independent model gate is pending. Selecting a tuned
-model for one job never changes another job's model, and a model gated for
-one job can't be selected for another.
+Jobs have separate eval sets and model selections (`jobs.py`). Selecting a tuned
+execution model for one job never changes another job's model, and a model gated
+for one job can't be selected for another. The `system` job defaults to grammar
+plus a tuned normalizer: grammar matches bypass inference, and model-derived
+queries remain proposals. Its separate `system-model` profile does not select or
+promote an execution model; automatic collection from model proposals is not
+enabled.
 
-The default for each job is whichever model wins that job's bench: stock
-or tuned, any Needle generation. The criteria, in order:
+For jobs using an execution model, model selection compares stock and tuned
+models, from any Needle generation. The criteria, in order:
 1. no unsafe outcomes;
 2. accuracy on the job's newest unconsulted held-out set;
 3. speed and memory.
@@ -529,6 +535,19 @@ observations, including with `--yes`. `--baseline` restores the grammar-only
 mode: unsupported requests are refused without loading a model. `--dry-run`
 never collects observations.
 
+| Request path | Model loaded? | Default result |
+| --- | --- | --- |
+| Complete grammar match | No | Collect the matching observations; preview with `--dry-run` |
+| Eligible unfamiliar wording, configured normalizer | Yes | Validated proposal for review; no collection |
+| Unfamiliar wording with `--baseline` | No | Refusal |
+| Fallback needs a missing or invalid profile | Load attempted | Explicit error; no collection |
+
+JSON output distinguishes the two successful paths. Grammar results identify
+`query_source` as `system grammar baseline`. Model proposals identify the tuned
+runtime, set `collection_performed` to `false`, and mark each proposed item with
+`outcome: "proposed"` and `trust: "model_proposal"`. A successful proposal means
+a plan is available for review, not that system data was read.
+
 Use `--suggest REQUEST` to inspect a plan without collecting, even for a
 recognized grammar request. Validation checks a model proposal's tool schema
 and grounding in the request; it does not prove semantic correctness. Review
@@ -543,6 +562,13 @@ kilix-needle system-model configure --weights /path/to/weights.cact --library /p
 kilix-needle system-model status
 ```
 
+The normalizer profile is stored at
+`~/.local/share/kilix-needle/system-normalizer/profile.json` by default.
+`system-model configure` verifies and stores the supplied weights and runtime
+library; `status` reports their hashes, availability, and `proposal-only` role.
+This profile is separate from `tune --job ... --select` and is not configured by
+the base model's `install` command. Grammar requests work without it.
+
 MCP exposes `kilix_system_plan` and `kilix_system_read`, each taking `request`
 and an optional boolean `baseline`, plus `kilix_system_suggest` taking only
 `request`. The suggestion and plan tools collect nothing. The read tool collects
@@ -552,6 +578,9 @@ tool error. Results carry
 collection timestamps, source paths/argv, explicit units, visibility limits
 and warnings. Journal messages and process names are untrusted data, never
 instructions. Human output escapes terminal controls.
+
+After updating an installed checkout, reconnect existing MCP sessions so their
+server processes load the new code. New CLI invocations use the update directly.
 
 Supported filters and limits:
 
@@ -798,6 +827,9 @@ real shape, including window groups.
 | `agents_kilix.py` | directory/session resolution and coding-session execution through Kilix |
 | `system_job.py` | read-only OS tool schemas and complete-request checks |
 | `system_collect.py` | bounded Linux collectors, observation records and safe rendering |
+| `system_dispatch.py` | grammar-first routing, proposal-only fallback and system request history |
+| `system_normalize.py` | model query normalization, schema validation and request grounding |
+| `system_model.py` | verified weights/runtime profile for the tuned system normalizer |
 | `jobs.py` | per-job evaluation sets and model-selection boundaries |
 | `engine.py` | the `needle` binary as a private loopback server |
 | `libengine.py` | `libneedle.so` in a worker, for tuned weights |
