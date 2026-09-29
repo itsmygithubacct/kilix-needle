@@ -292,8 +292,25 @@ software linux debian python everything service services unit units process proc
 journal help version status""".split())
 
 
+# A read-only package query written as its command: only the package's name is
+# taken from it, and nothing is run. A pipe may go only to a text filter.
+_PKG_COMMAND = re.compile(
+    r"(?:dpkg(?:-query)?\s+(?:-s|-l|-W|-p|--status|--list|--show|--print-avail)"
+    r"(?:\s+(?:-f|--showformat)(?:=|\s+)?(?:'[^'\n]*'|\"[^\"`$\n]*\"|[^\s'\"`;&|$]+))?"
+    r"|apt-cache\s+(?:policy|show|showpkg)|apt\s+(?:show|policy|list\s+--installed)"
+    r"|apt\s+list\s+--installed\s+--)\s+(?P<pkg>[a-z0-9][a-z0-9.+-]*)"
+    r"(?:\s+2>/dev/null)?(?:\s*\|\s*(?:grep|egrep|head|tail|awk|cut|sed\s+-n)\b[^|;&`$<>]*)?")
+
+
 def _package(text: str) -> str | None:
     """"do I have jq installed?", "installed version of jq", "dpkg status of jq" -> "is jq installed"."""
+    # Shell substitution, or a dpkg/apt flag that changes the system, is never read.
+    if re.search(r"\$\(|(?<![\w-])(?:-i|-r|-P|--install|--remove|--purge|--configure|"
+                 r"--unpack|--set-selections)(?![\w-])", text):
+        return None
+    command = _PKG_COMMAND.fullmatch(text.strip().strip("`"))
+    if command and command["pkg"] not in _PKG_GENERIC:
+        return f"is {command['pkg']} installed"
     if _REFUSE.search(text) or re.search(r"[*?\[\]]\S|\S[*\[\]]|(?<!\S)--(?!no-pager)\w", text):
         return None             # a pattern or a flag is never one package's name
     words = [w.rstrip(":") for w in _WORD.findall(text.lower()) if w not in "?!.,;:\"'" and w != "'s"]
@@ -392,7 +409,8 @@ def _journal_slots(text: str) -> str | None:
     t = re.sub(r"\b(?:a\s+)?half(?:\s+an)?\s+hour\b", "30 minutes", t)
     # time: "in the past 20 min", "10m ago", "the last hour", "since 10 minutes ago"
     m = re.search(rf"\s(?:(?:in|within|over|from|during|for|since)\s+)?(?:the\s+)?(?:last|past|previous)?\s*"
-                  rf"(?P<n>{_NUM}|an|a|one)\s*(?P<u>minutes?|mins?|m|hours?|hrs?|h|days?|d)\b(?:\s+ago)?", t)
+                  rf"(?P<n>[0-9]{{1,3}}(?=\s*[a-z])|(?:{_NUM}|an|a|one)(?=\s))\s*(?P<u>minutes?|mins?|m|hours?|hrs?|h|days?|d)\b"
+                  rf"(?:\s+ago)?", t)
     if m:
         n = m["n"]
         found["time"] = (1 if n in ("an", "a") else _n(n), _J_UNITS[m["u"]])
@@ -412,10 +430,11 @@ def _journal_slots(text: str) -> str | None:
         found["boot"] = {"last": "previous", "previous": "previous", "this": "current",
                          "current": "current"}.get(m[1], "any")
         t = t[:m.start()] + " " + t[m.end():]
-    if re.search(r"\b(?:errors?|err|error-level|failures?|critical)\b", t):
-        found.setdefault("prio", "err")
-    elif re.search(r"\bwarn(?:ings?)?\b", t):
+    # "errors and warnings": the warning level includes errors
+    if re.search(r"\bwarn(?:ings?)?\b", t):
         found.setdefault("prio", "warning")
+    elif re.search(r"\b(?:errors?|err|error-level|failures?|critical)\b", t):
+        found.setdefault("prio", "err")
     # a count of lines: "last 100 log lines", "the 10 most recent error messages"
     m = re.search(rf"\s(?:(?:the\s+)?(?:last|latest|newest|most\s+recent)\s+)?({_NUM}|[0-9]{{1,4}})\s+"
                   rf"(?:(?:most\s+recent|latest|newest)\s+)?(?:(?:journal|log|error|warning)\s+)?"
@@ -430,10 +449,11 @@ def _journal_slots(text: str) -> str | None:
                    r"(?:error|warning|entry|message|log\s+line|line)\b(?!s)", t) and "limit" not in found:
         found["limit"] = "1"
     # level
-    if re.search(r"\b(?:errors?|err|error-level|failures?|critical)\b", t):
-        found.setdefault("prio", "err")
-    elif re.search(r"\bwarn(?:ings?)?\b", t):
+    # "errors and warnings": the warning level includes errors
+    if re.search(r"\bwarn(?:ings?)?\b", t):
         found.setdefault("prio", "warning")
+    elif re.search(r"\b(?:errors?|err|error-level|failures?|critical)\b", t):
+        found.setdefault("prio", "err")
     t = re.sub(r"\b(?:errors?|err|error-level|failures?|critical|warnings?|warn)\b", " ", t)
     if re.search(r"\buser\s+(?:journal|logs?|session)\b|\bmy\s+user\b", t):
         found["scope"] = "user"
@@ -511,10 +531,89 @@ def _journal_slots(text: str) -> str | None:
     return out
 
 
+_PROC_FILLER = frozenset("""
+show list get display give find see check read what which who whose is are was the a an of by in on at for with
+top most highest heaviest biggest largest greatest ranked ranking rank ranks sorted sort ordered order using use
+uses used consuming consume consumes consumption usage utilization utilisation load share percent percentage
+currently current right now this machine system me my heavy hungry hog hogs consumer consumers process processes
+program programs task tasks running active live their its and to ps please
+""".split())
+
+
+def _processes(text: str) -> str | None:
+    """"show the top cpu processes", "process ranking by memory", "top 5 memory hogs":
+    a ranking of processes by one metric; every other word accounted for."""
+    low = " " + text.lower() + " "
+    if _REFUSE.search(low) or re.search(r"\b(?:renice|nice|signal|terminate|suspend|pause|resume|limit|cap)\b", low):
+        return None
+    if not re.search(r"\b(?:process(?:es)?|programs?|tasks?|hogs?|consumers?)\b", low):
+        return None
+    cpu = re.search(r"\b(?:cpu|processor|cpu-heavy)\b", low)
+    mem = re.search(r"\b(?:memory|ram|rss|mem|memory-heavy)\b", low)
+    if bool(cpu) == bool(mem):
+        return None             # no metric, or both: which ranking is meant is not said
+    low = re.sub(r"\b(?:cpu|processor|cpu-heavy|memory|ram|rss|mem|memory-heavy)\b", " ", low)
+    limit = None
+    m = re.search(rf"\s(?:(?:the\s+)?top\s+)?({_NUM})(?=\s)", low)
+    if m:
+        limit = _n(m[1])
+        if not 1 <= limit <= 50:
+            return None
+        low = low[:m.start()] + " " + low[m.end():]
+    words = re.findall(r"[a-z0-9][a-z0-9'%.-]*|%", low)
+    if any(w not in _PROC_FILLER for w in words):   # a number left over is never dropped
+        return None
+    sort = "cpu" if cpu else "memory"
+    return f"show the top {limit} processes by {sort}" if limit else f"show processes by {sort}"
+
+
+# Kinds a compound's parts may be: parts of one kind often share their words
+# ("errors and warnings for nginx"), so only parts of different kinds are split.
+def _kind(sentence: str) -> str | None:
+    import system_job
+    found = system_job._parse(sentence)
+    kinds = {a.kind for a in found} if found and not any(isinstance(a, system_job.Refusal) for a in found) else set()
+    return kinds.pop() if len(kinds) == 1 else None
+
+
+def _compound(text: str) -> str | None:
+    """"Show process ranking by cpu and recent errors for tag X": a request of two
+    or three reads of different kinds, each read alone, joined by "and"."""
+    parts = [p.strip(" ,.;") for p in re.split(r"\s*(?:;|,?\s+and\s+(?:also\s+|then\s+)?|,\s+(?:then|also)\s+)\s*", text)
+             if p.strip(" ,.;")]
+    if not 2 <= len(parts) <= 3:
+        return None
+    sentences, kinds = [], []
+    for part in parts:
+        if len(re.findall(r"[\w/.-]+", part)) < 2:
+            return None         # "... by cpu and memory": a bare word continues the part before it
+        sentence = _one_read(part)
+        kind = sentence and _kind(sentence)
+        if not kind:
+            return None
+        sentences.append(sentence); kinds.append(kind)
+    if len(set(kinds)) != len(kinds):
+        return None
+    return " and ".join(sentences)
+
+
+def _one_read(text: str) -> str | None:
+    import system_job
+    if system_job._parse(text) and _kind(text):
+        return text
+    for pattern, build in _FAMILIES:
+        m = re.fullmatch(pattern, text, re.I)
+        if m and (built := build(m)) is not None:
+            return built
+    return _journal(text) or _journal_slots(text) or _package(text) or _processes(text)
+
+
 def canonical(request: str) -> str | None:
     """The grammar's sentence for an agent's wording of one query, or None."""
     if not isinstance(request, str):
         return None
+    if re.search(r"\$\(|\$\{(?!Version\})", request):
+        return None             # shell substitution is never part of a read
     text = _strip(request)
     if not text:
         return None
@@ -525,7 +624,7 @@ def canonical(request: str) -> str | None:
         m = re.fullmatch(pattern, text, re.I)
         if m and (built := build(m)) is not None:
             return built
-    return _journal(text) or _journal_slots(text) or _package(text)
+    return _journal(text) or _journal_slots(text) or _package(text) or _processes(text) or _compound(text)
 
 
 # ---- the other way: the grammar sentence for a query ----------------------------

@@ -170,6 +170,30 @@ class SlotReaders(unittest.TestCase):
             with self.subTest(request=request):
                 self.assertEqual(system_agent.canonical(request), sentence)
 
+    def test_rankings_compounds_and_package_commands(self):
+        cases = {
+            "show the top cpu processes": "show processes by cpu",
+            "top 5 memory hogs": "show the top 5 processes by memory",
+            "Show process ranking by cpu and recent errors from the last 10 minutes for process tag bench-x.":
+                "show processes by cpu and errors from the program bench-x since 10 minutes ago",
+            "Is jq installed, and show the top memory processes": "Is jq installed and show processes by memory",
+            "show errors and warnings for nginx": "warnings from the nginx service",
+            "dpkg-query -W -f='${Version}' jq": "is jq installed",
+            "apt-cache policy jq": "is jq installed",
+            "dpkg -s jq | grep Version": "is jq installed",
+        }
+        for request, sentence in cases.items():
+            with self.subTest(request=request):
+                self.assertEqual(system_agent.canonical(request), sentence)
+        for request in ("show process ranking", "kill the top cpu process", "show top 1000 processes by memory",
+                        "top processes by cpu and memory", "errors for nginx and errors for sshd",
+                        "is jq installed and restart nginx", "show errors for nginx and then delete them",
+                        "apt-cache policy $(whoami)", "dpkg -i jq.deb", "dpkg -s jq; rm -rf /", "dpkg -s jq | sh",
+                        "dpkg -s jq | grep x > /etc/passwd", 'dpkg-query -W -f="$(reboot)" jq',
+                        "dpkg -s jq && reboot"):
+            with self.subTest(request=request):
+                self.assertIsNone(system_agent.canonical(request))
+
     def test_conflicts_and_pointers_stay_unread(self):
         for request in ("show warning-level logs at priority err", "show errors from that boot",
                         "show the errors from that", "errors at that time for nginx"):

@@ -11,7 +11,7 @@ import system_collect
 import system_job
 
 
-UNKNOWN = "please list the biggest memory processes"
+UNKNOWN = "please list the processes eating memory lately"
 PROPOSAL = {"function_calls": [{"name": "processes", "arguments": {"sort": "memory"}}]}
 
 

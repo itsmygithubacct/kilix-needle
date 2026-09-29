@@ -136,8 +136,8 @@ class PlanTests(unittest.TestCase):
     def test_tool_family_intent_and_missing_targets(self):
         denied = [
             ("screen went blank. what happened", ("resources", {"kind": "disk"})),
-            ("cpu hogs", ("resources", {"kind": "cpu"})),
-            ("show top ten cpu consumers", ("resources", {"kind": "cpu"})),
+            ("cpu hogs lately", ("resources", {"kind": "cpu"})),
+            ("show top ten cpu consumers over time", ("resources", {"kind": "cpu"})),
             ("how is cups holding up", ("resources", {"kind": "all"})),
             ("check syncthing in the user session, just its status", ("services", {"scope": "user"})),
             ("which services failed yesterday", ("services", {"state": "failed"})),

@@ -28,7 +28,7 @@ class SystemHistory(unittest.TestCase):
         classify = mock.Mock(return_value={"function_calls": [
             {"name": "processes", "arguments": {"sort": "memory"}}]})
         collector = mock.Mock()
-        result = system_dispatch.dispatch("please list the biggest memory processes", classify,
+        result = system_dispatch.dispatch("please list the processes eating memory lately", classify,
                                           needle_cli.Options(assume_yes=True), collector=collector,
                                           model_label="tuned normalizer test")
         collector.collect.assert_not_called()

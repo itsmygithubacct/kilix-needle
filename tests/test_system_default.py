@@ -10,7 +10,7 @@ import needle_cli
 import system_collect
 
 
-UNKNOWN = "please list the biggest memory processes"
+UNKNOWN = "please list the processes eating memory lately"
 REPLY = {"function_calls": [{"name": "processes", "arguments": {"sort": "memory"}}]}
 
 
