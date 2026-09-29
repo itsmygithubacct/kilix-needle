@@ -573,12 +573,28 @@ _HEARSAY = re.compile(
     r"asked|want|wants|wanted|suggest|suggests|suggesting|suggested|advise|advises|advised|"
     r"nag|nags|nagging|nagged|urge|urges|urged)\s+(?:me|us)\s+to\b", re.I)
 _HEARSAY_SPEAKER = re.compile(r"^\s*(?:please\s+|can you\s+|could you\s+)?(?:i|we)\b", re.I)
+# Written or third-party instructions: "our onboarding wiki instructs newcomers
+# to type yarn build into the ci pane" (held-out v14).
+_INSTRUCTS = re.compile(
+    r"\b(?:instructs?|instructed|tells|told|asks|asked|wants|wanted|says|said|recommends?|"
+    r"recommended|suggests|suggested|advises|advised|expects|expected|reminds|reminded)"
+    r"\s+(?:[\w'-]+\s+){0,3}to\s", re.I)
+_IMPERATIVE_LEAD = re.compile(r"^\s*(?:(?:please|pls|can you|could you|would you|kindly)\s*)*$", re.I)
+# A request taken back runs nothing: "close tab 3 - no wait, never mind" (held-out v14).
+_RETRACTED = re.compile(
+    r"(?<![\w-])(?:never\s*mind|nevermind|forget (?:it|that|about it)|scratch that|cancel that|"
+    r"no wait|belay that|on second thought|don'?t bother|ignore (?:that|this|me))(?![\w-])", re.I)
 
 
 def _hearsay(prompt: str) -> bool:
     """Another person's instruction. "I want us to…" is the user speaking."""
     match = _HEARSAY.search(prompt)
-    return bool(match) and not _HEARSAY_SPEAKER.match(prompt[:match.start()] + " ")
+    if match and not _HEARSAY_SPEAKER.match(prompt[:match.start()] + " "):
+        return True
+    match = _INSTRUCTS.search(prompt)
+    lead = prompt[:match.start()] if match else ""
+    return bool(match) and not _IMPERATIVE_LEAD.match(lead) \
+        and not _HEARSAY_SPEAKER.match(lead + " ")
 
 
 def interpret(prompt: str, calls: list) -> list[Action | Refusal]:
@@ -592,6 +608,10 @@ def interpret(prompt: str, calls: list) -> list[Action | Refusal]:
     if _hearsay(prompt):
         return [Refusal(str(call.get("name") if isinstance(call, dict) else call),
                         "the request reports someone else's instruction")
+                for call in (calls if isinstance(calls, list) else [])]
+    if _RETRACTED.search(prompt):
+        return [Refusal(str(call.get("name") if isinstance(call, dict) else call),
+                        "the request is taken back")
                 for call in (calls if isinstance(calls, list) else [])]
     for call in calls if isinstance(calls, list) else []:
         name = call.get("name") if isinstance(call, dict) else None
@@ -849,6 +869,12 @@ def _named_target(name: str, key: str, args: dict, prompt: str) -> str | Refusal
         # "close the browser tab with the docs" is a web browser's tab, not a
         # Kilix tab (held-out v11).
         return Refusal(name, f"a {value[5:]} tab belongs to the web browser, not Kilix")
+    units = r"tabs?" if key == "tab" else r"panes?|windows?|splits?"
+    if value.startswith("name:") and re.search(
+            rf"\b(?:whichever|whatever|which ever|what ever)\s+(?:{units})\b", prompt, re.IGNORECASE):
+        # "close whichever tab sat before this one": a description, not a name
+        # (held-out v14: tab "sat").
+        return Refusal(name, f"{value[5:]!r} describes a {key}; it does not name one")
     if value.startswith("name:") and not _names_a_target(value[5:], key, prompt):
         # Measured (tuned Needle 3, held-out v8): "close the next tab over" ->
         # close_tab("over"), grounded because the word is in the request.
@@ -1044,6 +1070,9 @@ def _program_spans(prompt: str, name: str = "") -> set[str]:
                 if where and re.match(r"\s+(?:in|into|on|at)\s+the\s+", where.group(0), re.I):
                     continue    # "run ls -la in the right split": an existing pane, a command
                 bare = _LOCATION.sub("", rest).strip().strip(".!?")
+                # "with btop inside": where it runs, not an argument (held-out v14).
+                bare = re.sub(r"\s+(?:inside|in it|in there|in here|there|inside it)$", "",
+                              bare, flags=re.IGNORECASE)
                 if needs_location and bare == rest.strip(".!?"):
                     continue    # "open the pod bay doors": nothing says where
                 if bare and not re.match(r"(?:a|an|the|another)?\s*(?:new\s+)?"

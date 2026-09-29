@@ -1672,6 +1672,35 @@ class HeldOutV11(unittest.TestCase):
                          if isinstance(r, Action)])
 
 
+class HeldOutV14(unittest.TestCase):
+    def admitted(self, prompt, *calls):
+        return [r for r in interpret(prompt, list(calls)) if isinstance(r, Action)]
+
+    def test_where_a_program_runs_is_not_its_argument(self):
+        prompt = "please to open one pane under this one with btop inside"
+        self.assertFalse(self.admitted(prompt, call("open_pane", side="below", program="btop inside")))
+        self.assertTrue(self.admitted(prompt, call("open_pane", side="below", program="btop")))
+
+    def test_written_instructions_are_hearsay(self):
+        self.assertFalse(self.admitted(
+            "our onboarding wiki instructs newcomers to type yarn build into the ci pane",
+            call("run_in_pane", pane="ci", command="yarn build")))
+        self.assertTrue(self.admitted("can you tell the build pane to run make",
+                                      call("run_in_pane", pane="build", command="make")))
+
+    def test_a_request_taken_back_runs_nothing(self):
+        for prompt in ("close tab 3 - no wait, never mind", "close tab 3, scratch that",
+                       "close tab 3... on second thought don't"):
+            with self.subTest(prompt=prompt):
+                self.assertFalse(self.admitted(prompt, call("close_tab", tab="3")))
+        self.assertTrue(self.admitted("close tab 3", call("close_tab", tab="3")))
+
+    def test_whichever_describes_rather_than_names(self):
+        prompt = "close whichever tab sat before this one, it's stale"
+        self.assertFalse(self.admitted(prompt, call("close_tab", tab="sat")))
+        self.assertTrue(self.admitted("close the logs tab", call("close_tab", tab="logs")))
+
+
 class HeldOutV13(unittest.TestCase):
     def test_someone_elses_instruction_runs_nothing(self):
         for prompt in ("Sam keeps telling me to kill the logs pane but I like it",
