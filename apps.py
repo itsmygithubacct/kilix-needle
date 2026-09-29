@@ -1138,7 +1138,11 @@ _PLAIN_FORMS = {
              (r"(?:turn|switch) off (?:the )?(?P<name>.+?)", False),
              (r"(?:turn|switch) (?:the )?(?P<name>.+?) on", True),
              (r"(?:turn|switch) (?:the )?(?P<name>.+?) off", False)],
-    "game": [(r"enable (?P<name>.+?)", True), (r"disable (?P<name>.+?)", False),
+    "game": [(r"(?:disable|remove|hide|take) (?P<name>.+?) (?:from|off|out of|in) (?:the )?(?:kilix'?s? )?"
+              r"games?(?: list| menu)?", False),
+             (r"(?:enable|add|restore|put|bring) (?P<name>.+?) (?:back )?(?:to|on|onto|into|in) (?:the )?"
+              r"(?:kilix'?s? )?games?(?: list| menu)?", True),
+             (r"enable (?P<name>.+?)", True), (r"disable (?P<name>.+?)", False),
              (r"make (?P<name>.+?) available", True), (r"make (?P<name>.+?) unavailable", False)],
     "pane_stat": [(r"set (?:the )?pane (?P<name>.+?) to (?P<mode>.+?)", None),
                   (r"show (?:the )?pane (?P<name>.+?) (?P<mode>always|auto)", None),

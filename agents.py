@@ -1039,6 +1039,12 @@ _LAUNCH_REWRITES = (
     (re.compile(rf"\b(?:an? (?:new )?(?:interactive )?|(?:new )?interactive |new )({_AGENT_WORDS})"
                 rf"(?: coding[- ]agent| agent)? session\b(?! (?:called|named|titled|labell?ed)\b)",
                 re.I), r"\1"),
+    # A tab running an agent in a directory is a launch there (candidate check,
+    # CLI: "open a new tab in /x running codex" reached the panes job).
+    (re.compile(rf"^(?:open|start|create|launch)\s+(?:a\s+)?(?:new\s+)?tab\s+in\s+(?P<d>[~/]\S*)\s+"
+                rf"(?:running|with|and\s+(?:run|start|launch))\s+({_AGENT_WORDS})\b", re.I), r"start \2 in \g<d>"),
+    (re.compile(rf"^(?:open|start|create|launch)\s+(?:a\s+)?(?:new\s+)?tab\s+(?:running|with)\s+({_AGENT_WORDS})\s+"
+                rf"in\s+(?P<d>[~/]\S*)", re.I), r"start \1 in \g<d>"),
     (re.compile(r",? in a new tab\b", re.I), ""),
     (re.compile(r",? (?:working |running )?in (?:the )?(?:directory|folder|dir) (?=[~/])", re.I), " in "),
     (re.compile(r",? working in (?=[~/])", re.I), " in "),

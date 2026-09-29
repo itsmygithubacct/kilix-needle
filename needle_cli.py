@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 import json
+import re
 import os
 import sys
 import time
@@ -169,6 +170,15 @@ def run_request(engine: Engine, request: str, options: Options,
     Each item has "outcome": refused | unresolved | would | skipped | done | failed.
     """
     def exact(request):
+        # "help" sent as a request answers with the jobs, not a refused open_tab.
+        if re.fullmatch(r"\s*(?:(?:show|print|get)\s+(?:me\s+)?(?:the\s+)?)?(?:help|usage|--help|-h)"
+                        r"(?:\s+(?:please|text|page))?[\s.!?]*", request, re.I):
+            return {"request": request, "status": 0, "items": [],
+                    "note": "kilix-needle --help lists the jobs; this command is the panes job",
+                    "hint": "accepted forms: close the pane titled NAME | run 'CMD' in pane N | "
+                            "split right and run htop | go to tab 2 | kilix-needle agents \"start codex in "
+                            "/abs/dir\" | kilix-needle system \"is jq installed\" | kilix-needle apps "
+                            "\"open the pdf viewer\" | kilix-needle files 'find files named \"x\" in here'"}
         # A canonical pane command needs no model (panes_exact); its calls go
         # through the same checks, resolution and confirmation.
         import panes_exact

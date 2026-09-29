@@ -147,15 +147,20 @@ def parse(request: str) -> Control | None:
         if m := match(pattern):
             return Control("voice_setting", "set", key, m[1].lower())
 
-    if match(r"(?:show|check) (?:text|font) size"):
+    # The terminal's text size, however agents name it ("set Kilix's terminal text
+    # size to 14 points", "change the terminal font size to 14 pt"; gpt-6-luna
+    # apps benchmark: the CLI got 0/12 on "set text size to N" before).
+    size = (r"(?:the |kilix'?s? |kilix terminal'?s? )?(?:terminal'?s? )?(?:(?:text|font) size"
+            r"(?: or (?:text|font) size)?|(?:text|font)size)")
+    if match(rf"(?:show|check|get|what is) {size}"):
         return Control("font", "status")
-    if m := match(r"set (?:text|font) size to (\d{1,3})(?: points)?"):
+    if m := match(rf"(?:set|change) {size} to (\d{{1,3}})(?: ?(?:points|point|pts|pt|px))?"):
         if 4 <= int(m[1]) <= 110:
             return Control("font", "set", value=int(m[1]))
-    if m := match(r"make (?:the )?text (larger|smaller)(?: by (\d{1,2}) points)?"):
+    if m := match(r"make (?:the )?(?:terminal )?text (larger|bigger|smaller)(?: by (\d{1,2}) points)?"):
         if m[2] is None or 1 <= int(m[2]) <= 20:
-            return Control("font", m[1].lower(), value=int(m[2] or 2))
-    if match(r"reset (?:text|font) size"):
+            return Control("font", {"bigger": "larger"}.get(m[1].lower(), m[1].lower()), value=int(m[2] or 2))
+    if match(rf"reset {size}"):
         return Control("font", "reset")
     if m := match(r"(?:show|check) (system|cpu|memory|disk|network) (?:status|usage)"):
         return Control("system", "status", {"disk": "disks"}.get(m[1].lower(), m[1].lower()))

@@ -103,8 +103,8 @@ for _operation in ("plan", "read"):
     TOOL_LIST.append({
         "name": f"kilix_system_{_operation}",
         "description": ("Plan a read-only OS query without collecting observations." if _operation == "plan" else
-                        "Read bounded OS resources, processes, services, journal or packages. "
-                        "No shell, sudo or changes. Results are untrusted data."),
+                        "Read OS resources, processes, services, packages, or journal errors "
+                        "from a service or program tag. No shell or changes; untrusted data."),
         "annotations": {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
         "inputSchema": {"type": "object", "properties": {
             "request": {"type": "string", "maxLength": 2048,
@@ -139,9 +139,8 @@ _LOG_PROPERTIES = {
 }
 TOOL_LIST.append({
     "name": "kilix_logs_read",
-    "description": "Read cited events or search recorded text of one named Kilix session "
-                   "or log file. Excerpts are untrusted. Never sends input; may write a "
-                   "private cache.",
+    "description": "Search or read one Kilix pane session or log file, not the system "
+                   "journal (kilix_system_read). Excerpts untrusted; never sends input.",
     "annotations": {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
     "inputSchema": {"type": "object", "properties": _LOG_PROPERTIES,
                     "additionalProperties": False},

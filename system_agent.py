@@ -81,11 +81,20 @@ _FAMILIES = [
     (rf"(?:check\s+)?package\s+(?:status\s+)?(?P<t>{_P})(?:\s+status)?",
      lambda m: f"is {m['t']} installed"),
     (rf"(?:show|read|get|check)\s+(?:the\s+)?installed\s+(?:package\s+)?(?:details|information|info|"
-     rf"inventory)\s+(?:for|of)\s+(?:the\s+)?(?:package\s+)?(?P<t>{_P}){_VERSION_TAIL}",
+     rf"inventory|record|entry)\s+(?:for|of)\s+(?:the\s+)?(?:package\s+)?(?P<t>{_P}){_VERSION_TAIL}",
      lambda m: f"is {m['t']} installed"),
     (rf"check\s+(?:the\s+)?installed\s+(?:version\s+of\s+(?:the\s+)?(?:package\s+)?|package\s+)(?P<t>{_P})"
      rf"(?:\s+package)?",
      lambda m: f"is {m['t']} installed"),
+    (rf"(?:list|show|find)\s+(?:the\s+)?installed\s+packages?\s+(?:matching|named|called)\s+(?P<t>{_P})",
+     lambda m: f"is {m['t']} installed"),
+    (rf"(?:check|about)\s+(?:the\s+)?package\s+(?P<t>{_P})\s*:\s*is\s+it\s+installed{_VERSION_TAIL}",
+     lambda m: f"is {m['t']} installed"),
+    (rf"(?:check|about)\s+(?:the\s+)?command\s+(?P<c>{COMMAND})\s*:\s*(?:(?:report|say|tell\s+me)\s+)?"
+     rf"(?:whether|if)\s+it\s+is\s+(?:installed|available){_VERSION_TAIL}",
+     lambda m: f"which package owns the {m['c']} command"),
+    (rf"(?:check|about)\s+(?:the\s+)?command\s+(?P<c>{COMMAND})",
+     lambda m: f"which package owns the {m['c']} command"),
     # a command, not a package: "is the jq command installed" is answered by the package
     # that provides it (for its version, "is PKG installed" names the package)
     (rf"(?:is|check\s+(?:whether|if)|determine\s+(?:whether|if))\s+(?:the\s+)?(?P<c>{COMMAND})\s+command\s+"
@@ -124,6 +133,10 @@ _FAMILIES = [
      lambda m: f"show processes by {_metric(m['m'])}"),
     (r"(?:top\s+)?processes\s+(?:by\s+)?(?P<m>memory|ram|cpu)\s+usage",
      lambda m: f"show processes by {_metric(m['m'])}"),
+    # a count: "show the top 1 process by memory", "top 5 processes by memory usage"
+    (rf"(?:(?:show|list|get|find)\s+)?(?:the\s+)?top\s+(?P<n>{_NUM})\s+process(?:es)?\s+"
+     rf"(?:by|using\s+the\s+most|sorted\s+by|ranked\s+by)\s+(?P<m>memory|ram|cpu)(?:\s+usage)?",
+     lambda m: f"show top {_n(m['n'])} processes by {_metric(m['m'])}" if 1 <= _n(m['n']) <= 50 else None),
     # disk: capacity of the root filesystem or a path
     (r"how\s+much\s+(?:free\s+)?(?:disk\s+)?space\s+is\s+(?:available|left|free)\s+on\s+(?:the\s+)?root"
      r"(?:\s+(?:filesystem|file\s+system|partition|disk|mount))?",
@@ -151,29 +164,40 @@ def _metric(metric: str) -> str:
 
 
 # journal: errors or warnings, optionally from one program tag or service, in a time window.
+# Agents also echo the tool's own argument names ("priority err", "scope user",
+# "limit 50", "current boot"); each part is read wherever it comes, and any word
+# not accounted for leaves the request to the grammar and the normalizer.
 _JOURNAL_HEAD = re.compile(
-    r"(?:(?:find|show|list|search|query|get|read|check)\s+(?:for\s+)?)?(?:the\s+)?"
+    r"(?:(?:find|show|list|search|query|get|read|check)\s+(?:for\s+)?)?(?:the\s+|my\s+)?"
+    r"(?:(?P<scope>user|system)\s+)?"
     r"(?:(?:most\s+)?recent\s+|latest\s+|last\s+)?(?:system\s+)?(?:(?:journal|log|journalctl|syslog)\s+)?"
-    r"(?P<kind>error\s+(?:log\s+)?(?:entries|messages)|(?:journal\s+)?errors?|(?:journal\s+)?warnings?|"
-    r"(?:log\s+)?entries|logs?|journal)"
+    r"(?P<kind>error\s+(?:log\s+)?(?:entries|messages|logs?)\b|errors?\s+(?:entries|logs?)\b|errors?\b|warnings?\b"
+    r"|(?:log\s+)?entries\b|logs?\b|journal\b)"
     r"(?:\s+(?:logged|entries|messages))?", re.I)
+_V = rf"(?P<v>{UNIT})"
 _JOURNAL_PARTS = [
-    ("ident", re.compile(rf"\s+(?:(?:logged\s+)?(?:by|from|for)\s+(?:the\s+)?)?(?:program|process|tag|"
-                         rf"identifier|application|app)(?:\s+tagged)?\s+(?P<v>{UNIT})", re.I)),
-    ("ident", re.compile(rf"\s+(?:(?:by|from)\s+)?(?:the\s+)?program\s+tagged\s+(?P<v>{UNIT})", re.I)),
-    ("ident", re.compile(rf",?\s+filter(?:ed)?\s+by\s+(?:program\s+)?tag\s+(?P<v>{UNIT})", re.I)),
-    ("unit", re.compile(rf"\s+(?:from|for|of)\s+(?:the\s+)?(?:service|unit)\s+(?P<v>{UNIT})", re.I)),
-    ("unit", re.compile(rf"\s+(?:from|for|of)\s+(?:the\s+)?(?P<v>{UNIT})\s+service", re.I)),
+    ("unit", re.compile(rf",?\s+(?:(?:from|for|of)\s+(?:the\s+)?)?(?:service|unit)\s+{_V}", re.I)),
+    ("unit", re.compile(rf",?\s+(?:from|for|of)\s+(?:the\s+)?{_V}\s+service", re.I)),
+    ("unit", re.compile(rf",?\s+(?:from|for|of)\s+(?:the\s+)?(?P<v>{UNIT}\.service)(?=[\s,.]|$)", re.I)),
+    ("ident", re.compile(rf",?\s+(?:(?:logged\s+)?(?:by|from|for)\s+(?:the\s+)?)?(?:program|process|application|app)"
+                         rf"(?:\s+(?:tag|tagged|identifier))?\s+{_V}", re.I)),
+    ("ident", re.compile(rf",?\s+(?:(?:by|from|for|with)\s+(?:the\s+)?)?(?:tag|tagged|identifier|syslog\s+identifier)"
+                         rf"\s+{_V}", re.I)),
+    ("ident", re.compile(rf",?\s+(?:filter(?:ed)?\s+by\s+(?:program\s+)?tag)\s+{_V}", re.I)),
     ("time", re.compile(rf",?\s+(?:(?:in|within|from|during|over|for)\s+the\s+(?:last|past)|since)\s+"
                         rf"(?P<v>{_NUM})\s+(?P<u>minutes?|hours?|days?)(?:\s+ago)?", re.I)),
-    ("time", re.compile(r"\s+(?:(?:in|within|from|during|over)\s+the\s+(?:last|past)\s+)(?P<u>minute|hour|day)",
+    ("time", re.compile(r",?\s+(?:(?:in|within|from|during|over)\s+the\s+(?:last|past)\s+)(?P<u>minute|hour|day)",
                         re.I)),
     ("stamp", re.compile(r",?\s+(?:since|after|from)\s+(?P<v>[0-9]{4}-[0-9]{2}-[0-9]{2}"
                          r"(?:[ T][0-9]{2}:[0-9]{2}(?::[0-9]{2})?)?(?:\s*(?:UTC|Z))?)", re.I)),
+    ("boot", re.compile(r",?\s+(?:(?:from|in|during|for|of)\s+)?(?:the\s+)?(?P<v>any|all|every|current|this|previous|last)"
+                        r"\s+boots?", re.I)),
+    ("prio", re.compile(r",?\s+(?:with\s+)?(?:severity|priority)\s+(?P<v>errors?|err|warnings?|all)", re.I)),
+    ("limit", re.compile(r",?\s+(?:limit|last)\s+(?P<v>[0-9]{1,3})(?:\s+entries)?", re.I)),
+    ("scope", re.compile(r",?\s+scope\s+(?P<v>user|system)", re.I)),
     ("where", re.compile(r"\s+(?:in|from)\s+the\s+(?:system\s+)?(?:journal|logs?)", re.I)),
     # a bare "for X": in a log request a name without "service" is a program tag
-    ("ident", re.compile(rf"\s+for\s+(?P<v>{UNIT})(?=\s|,|$)", re.I)),
-    ("sev", re.compile(r"\s+with\s+(?:severity|priority)\s+(?P<v>error|err|warning)", re.I)),
+    ("ident", re.compile(rf"\s+for\s+{_V}(?=[\s,.]|$)", re.I)),
 ]
 
 
@@ -189,10 +213,10 @@ def _journal(text: str) -> str | None:
     head = _JOURNAL_HEAD.match(text)
     if not head:
         return None
-    kind = head["kind"].lower().replace("journal ", "")
+    kind = head["kind"].lower()
     found: dict = {}
     rest = text[head.end():]
-    while rest:
+    while rest.strip(" ,"):
         for name, pattern in _JOURNAL_PARTS:
             m = pattern.match(rest)
             if m and name not in found:
@@ -201,23 +225,30 @@ def _journal(text: str) -> str | None:
                 break
         else:
             return None
-    sev = found.get("sev")
-    if kind.startswith("warning") or (sev and sev["v"].lower() == "warning"):
+    prio = found.get("prio")
+    level = prio["v"].lower() if prio else None
+    if level in ("warning", "warnings") or (not level and kind.startswith("warning")):
         words = "warnings"
-    elif kind.startswith("error") or sev:
+    elif level in ("err", "error", "errors") or (not level and kind.startswith("error")):
         words = "errors"
     else:
         words = "journal"
-    out = words
+    scope = (found["scope"]["v"] if "scope" in found else head["scope"] or "").lower()
+    out = ("user " if scope == "user" else "") + words
+    if "ident" in found and "unit" in found:
+        return None
     if "ident" in found:
         out += f" from the program {found['ident']['v']}"
     if "unit" in found:
-        if "ident" in found:
-            return None
         out += f" from the {_unit(found['unit']['v'])} service"
+    if "boot" in found:
+        b = found["boot"]["v"].lower()
+        out += {"any": " from all boots", "all": " from all boots", "every": " from all boots",
+                "current": " from this boot", "this": " from this boot",
+                "previous": " from the previous boot", "last": " from the previous boot"}[b]
+    if "stamp" in found and "time" in found:
+        return None
     if "stamp" in found:
-        if "time" in found:
-            return None
         v = re.sub(r"(?<=[0-9])T(?=[0-9])", " ", found["stamp"]["v"])
         v = re.sub(r"\s*(?:utc|z)$", " UTC", v, flags=re.I)
         out += f" since {v}"
@@ -226,6 +257,8 @@ def _journal(text: str) -> str | None:
         count = _n(t["v"]) if t.groupdict().get("v") else 1
         unit = t["u"].lower().rstrip("s")
         out += f" since {count} {unit}{'s' if count != 1 else ''} ago"
+    if "limit" in found:
+        out += f" last {int(found['limit']['v'])}"
     return out
 
 
