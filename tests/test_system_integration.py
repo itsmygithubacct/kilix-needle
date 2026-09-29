@@ -42,14 +42,18 @@ class CliIntegration(unittest.TestCase):
              mock.patch.object(needle_cli, "handle", wraps=needle_cli.handle) as handle, \
              mock.patch("sys.stdout", new_callable=io.StringIO):
             self.assertEqual(needle_cli.main(["system", "--dry-run", "show memory"]), 0)
-        self.assertIsInstance(handle.call_args.args[0], system_job.Baseline)
+        self.assertTrue(callable(handle.call_args.args[0]))
 
-    def test_default_unknown_refuses_without_runtime(self):
-        with mock.patch.object(needle_cli, "open_runtime", side_effect=AssertionError("runtime opened")), \
+    def test_default_unknown_runtime_failure_refuses_without_collection(self):
+        output = io.StringIO()
+        with mock.patch.object(needle_cli, "open_runtime", side_effect=RuntimeError("missing model")) as factory, \
              mock.patch.object(system_collect.Collector, "collect", side_effect=AssertionError("collected")), \
-             mock.patch.object(needle_cli, "handle", wraps=needle_cli.handle), \
-             mock.patch("sys.stdout", new_callable=io.StringIO):
-            self.assertEqual(needle_cli.main(["system", UNKNOWN]), 1)
+             mock.patch("sys.stdout", output):
+            self.assertEqual(needle_cli.main(["system", "--json", UNKNOWN]), 1)
+        factory.assert_called_once()
+        record = json.loads(output.getvalue())
+        self.assertFalse(record["collection_performed"])
+        self.assertEqual(record["items"][0]["outcome"], "refused")
 
     def test_suggest_recognized_skips_runtime_and_collector_without_dry_run(self):
         output = io.StringIO()

@@ -282,7 +282,7 @@ def plan(request, classify):
     try:
         reply = classify(request)
     except Exception as exc:
-        return _result("refused", "clarify", reasons=(f"classifier failed: {type(exc).__name__}",),
+        return _result("refused", "clarify", reasons=(f"classifier failed: {type(exc).__name__}: {exc}",),
                        runtime_error=True)
     if not isinstance(reply, dict) or reply.get("error"):
         return _result("refused", "clarify", raw_reply=reply,

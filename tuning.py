@@ -807,6 +807,13 @@ def in_use(job: str = jobs.DEFAULT) -> str:
     """
     import asset
     from libengine import LibEngine, LibEngineError
+    if job == "system":
+        import system_model
+        try:
+            with system_model.open_runtime() as runtime:
+                return f"grammar first; {runtime.label} (proposals only)"
+        except (system_model.SystemModelError, asset.AssetError, LibEngineError, OSError) as error:
+            return f"grammar first; tuned normalizer unavailable ({error})"
     import toolset
     tools = job_schema(job)[1] if job_schema(job) is not None else toolset.TOOLS
     choice = selected(job)
@@ -912,6 +919,8 @@ def main(argv: list[str]) -> int:
                                          if p.is_dir() and p.name != "jobs"
                                          and not p.name.startswith("."))}
                    for name in sorted(jobs.JOBS)}
+        import system_model
+        per_job["system"]["normalizer_profile"] = system_model.status()
         try:
             unknown = sorted(set(_read_selections()) - set(jobs.JOBS))
         except TuneError as error:

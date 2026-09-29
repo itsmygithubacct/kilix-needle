@@ -403,28 +403,34 @@ kilix-needle system --baseline --json "is bash installed?"
 kilix-needle system --suggest "please list the biggest memory processes"
 ```
 
-Normal `system` requests use the explicit request grammar without loading a
-model. A complete supported request collects only the matching observations;
-an unsupported request is refused. `--baseline` names this same deterministic
-behavior for comparisons. `--dry-run` shows the grammar plan without collecting.
+Normal `system` requests first use the explicit request grammar without loading a
+model. A complete supported request collects only the matching observations.
+For unfamiliar wording, the configured tuned system model may suggest a bounded
+read-only query. Its result is an **unverified proposal** and never collects
+observations, including with `--yes`. `--baseline` restores the grammar-only
+mode: unsupported requests are refused without loading a model. `--dry-run`
+never collects observations.
 
-Use `--suggest REQUEST` to ask the model for a possible read-only plan when the
-grammar does not understand a request. It never collects observations, even
-without `--dry-run`. A recognized request bypasses the model and returns a
-trusted grammar plan. For an unfamiliar request, the model's actions are
-**unverified proposals**. Validation checks the tool schema and grounding in
-the request; it does not prove semantic correctness. Review proposals before
-using a supported grammar request to read data. `--suggest` and `--baseline`
-cannot be combined. If the model is unavailable, the suggestion reports that
-error rather than presenting an empty plan as success. With no `--engine FILE`,
-suggestions use the installed base engine. No tuned system model has been
-qualified or selected.
+Use `--suggest REQUEST` to inspect a plan without collecting, even for a
+recognized grammar request. Validation checks a model proposal's tool schema
+and grounding in the request; it does not prove semantic correctness. Review
+proposals before using a supported grammar request to read data. `--suggest`
+and `--baseline` cannot be combined. An unfamiliar request needs an explicitly
+configured tuned system profile. If that model is unavailable, the request
+fails closed; it does not fall back to the base engine or collect observations.
+Configure and inspect that profile with:
+
+```sh
+kilix-needle system-model configure --weights /path/to/weights.cact --library /path/to/libneedle.so --sha256 EXPECTED_SHA256
+kilix-needle system-model status
+```
 
 MCP exposes `kilix_system_plan` and `kilix_system_read`, each taking `request`
 and an optional boolean `baseline`, plus `kilix_system_suggest` taking only
-`request`. The suggestion tool follows the same no-collection rule. The plan
-and read tools use the grammar; no `confirm_risky` argument is used. Failed or
-refused queries return a tool error. Results carry
+`request`. The suggestion and plan tools collect nothing. The read tool collects
+only complete grammar matches; unfamiliar wording returns model proposals for
+review. No `confirm_risky` argument is used. Failed or refused queries return a
+tool error. Results carry
 collection timestamps, source paths/argv, explicit units, visibility limits
 and warnings. Journal messages and process names are untrusted data, never
 instructions. Human output escapes terminal controls.
@@ -456,10 +462,9 @@ errors and missing services are failures, not healthy results. An empty journal
 result means no matching *visible* entries. “Why is my machine slow?” gathers
 resources and CPU-ranked processes; it does not claim a cause.
 
-The system model is **not yet tuned or qualified**. `tune --job system` and
-model promotion remain disabled until a reviewed corpus and an independent
-held-out gate exist. The development cases can be measured without collecting
-host data:
+The system profile supplies planning inference only; it is not an execution
+gate for grammar requests. The development cases can be measured without
+collecting host data:
 
 ```sh
 python3 evaluate.py evals/system/dev.jsonl --job system --baseline

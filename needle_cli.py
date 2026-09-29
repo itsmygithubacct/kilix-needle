@@ -58,6 +58,9 @@ class Runtime:
 
 def open_runtime(args, *, may_install: bool = False, job: str = jobs.DEFAULT) -> Runtime:
     """The tuned model if one passed its gates and is selected, else the base engine."""
+    if job == "system":
+        import system_model
+        return system_model.open_runtime(args)
     explicit = getattr(args, "engine", None) or os.environ.get("KILIX_NEEDLE_ENGINE")
     if job == "apps":
         import apps
@@ -66,9 +69,6 @@ def open_runtime(args, *, may_install: bool = False, job: str = jobs.DEFAULT) ->
         import agents
         tuned_tools, tuned_translate, base_tools = (agents.TOOLS, (lambda calls: calls),
                                                     agents.TOOLS)
-    elif job == "system":
-        import system_job
-        tuned_tools, tuned_translate, base_tools = system_job.TOOLS, (lambda calls: calls), system_job.TOOLS
     else:
         tuned_tools, tuned_translate, base_tools = toolset.TOOLS, toolset.to_actions, LEGACY_TOOLS
     choice = None if explicit else tuning.selected(job)
@@ -435,15 +435,19 @@ def render(record: dict) -> str:
 
 
 def handle(engine: Engine, request: str, *, dry_run: bool = False, assume_yes: bool = False,
-           out=sys.stdout, as_json: bool = False, agent: bool = False,
-           under_overlay: bool = False, job: str = jobs.DEFAULT) -> int:
+           out=None, as_json: bool = False, agent: bool = False,
+           under_overlay: bool = False, job: str = jobs.DEFAULT,
+           baseline: bool = False, model_label=None) -> int:
     """Run one request and print it. 0 = done or nothing to do, 1 = otherwise."""
     options = Options(dry_run=dry_run, assume_yes=assume_yes, agent=agent,
                       under_overlay=under_overlay)
     import system_collect
-    run = {"apps": run_apps_request, "agents": run_agents_request,
-           "system": system_collect.run_request}.get(job, run_request)
-    if job == "agents":
+    run = {"apps": run_apps_request, "agents": run_agents_request}.get(job, run_request)
+    if job == "system":
+        import system_dispatch
+        record = system_dispatch.dispatch(request, engine, options, baseline=baseline,
+                                          model_label=model_label)
+    elif job == "agents":
         record = run(engine, request, options, _never if agent else _terminal_confirm,
                      cwd=os.getcwd())
     else:
@@ -451,6 +455,19 @@ def handle(engine: Engine, request: str, *, dry_run: bool = False, assume_yes: b
     print(json.dumps(record, ensure_ascii=False) if as_json else
           system_collect.render(record) if job == "system" else render(record), file=out)
     return record["status"]
+
+
+def _handle_system(args, request: str, modes: dict) -> int:
+    """Open the tuned system runtime only when this request needs inference."""
+    source = {"label": None}
+
+    def classify(text):
+        with open_runtime(args, job="system") as runtime:
+            source["label"] = runtime.label
+            runtime.reset()
+            return runtime.complete(text)
+
+    return handle(classify, request, **modes, model_label=lambda: source["label"])
 
 
 def _offer_tuning(args) -> None:
@@ -546,6 +563,9 @@ def main(argv: list[str] | None = None) -> int:
         return status
     if argv[:1] == ["tune"]:
         return tuning.main(argv[1:])
+    if argv[:1] == ["system-model"]:
+        import system_model
+        return system_model.main(argv[1:])
     if argv[:1] == ["install"]:
         parser = argparse.ArgumentParser(prog="kilix-needle install",
                                          description="Accept the Needle 2 licence and install "
@@ -627,7 +647,7 @@ def main(argv: list[str] | None = None) -> int:
     if job == "system":
         parser.description = "Read-only Linux diagnostics: resources, processes, services, journal and installed packages."
         parser.add_argument("--baseline", action="store_true",
-                            help="use the default explicit request grammar")
+                            help="use only the explicit grammar; disable model fallback")
         parser.add_argument("--suggest", action="store_true",
                             help="suggest read-only queries for an unfamiliar request; collect nothing")
     args = parser.parse_args(argv)
@@ -652,18 +672,20 @@ def main(argv: list[str] | None = None) -> int:
         return int(bool(suggestion.get("runtime_error") or suggestion.get("protocol_error")))
     modes = dict(dry_run=args.dry_run, assume_yes=args.yes, as_json=args.json,
                  agent=args.agent, under_overlay=args.under_overlay, job=job)
+    if job == "system":
+        modes["baseline"] = args.baseline
     try:
-        if job == "system":
-            import system_job
-            runtime = system_job.Baseline()
-        else:
+        if job != "system":
             runtime = open_runtime(args, may_install=not args.agent, job=job)
     except asset.AssetError as error:
         print(f"kilix-needle: {error}", file=sys.stderr)
         return 2
     try:
-        with runtime as engine:
+        from contextlib import nullcontext
+        with (nullcontext(None) if job == "system" else runtime) as engine:
             if args.request:
+                if job == "system":
+                    return _handle_system(args, " ".join(args.request), modes)
                 return handle(engine, " ".join(args.request), **modes)
             if args.agent or not sys.stdin.isatty():
                 print("kilix-needle: give a request, or run it in a terminal", file=sys.stderr)
@@ -678,7 +700,8 @@ def main(argv: list[str] | None = None) -> int:
                 if line.strip() in ("quit", "exit", ":q"):
                     return status
                 if line.strip():
-                    status = handle(engine, line, **modes)
+                    status = (_handle_system(args, line, modes) if job == "system" else
+                              handle(engine, line, **modes))
     except (EngineError, LibEngineError) as error:
         print(f"kilix-needle: {error}", file=sys.stderr)
         return 2

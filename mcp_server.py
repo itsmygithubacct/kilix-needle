@@ -221,19 +221,25 @@ class Server:
                     "structuredContent": record,
                     "isError": bool(record.get("runtime_error") or record.get("protocol_error"))}
         if name in ("kilix_system_plan", "kilix_system_read"):
-            import system_collect
-            import system_job
+            import system_dispatch
             if (not isinstance(arguments, dict) or set(arguments) - {"request", "baseline"}
                     or not isinstance(arguments.get("request"), str)
                     or type(arguments.get("baseline", False)) is not bool):
                 raise ValueError("system tools require request text and an optional boolean baseline")
             request = arguments["request"]
-            try:
-                engine = system_job.Baseline()
-                record = system_collect.run_request(engine, request,
-                    needle_cli.Options(dry_run=name.endswith("_plan"), agent=True))
-            except (asset.AssetError, EngineError, LibEngineError) as error:
-                return {"content": [{"type": "text", "text": str(error)}], "isError": True}
+            source = {"label": None}
+
+            def classify(text):
+                engine = self._ensure_engine("system")
+                source["label"] = getattr(engine, "label", "model proposal")
+                engine.reset()
+                return engine.complete(text)
+
+            record = system_dispatch.dispatch(
+                request, classify,
+                needle_cli.Options(dry_run=name.endswith("_plan"), agent=True),
+                baseline=arguments.get("baseline", False),
+                model_label=lambda: source["label"])
             return {"content": [{"type": "text", "text": json.dumps(record, ensure_ascii=True)}],
                     "structuredContent": record, "isError": record["status"] != 0}
         if name == "kilix_logs_read":
