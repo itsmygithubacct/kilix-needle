@@ -86,6 +86,13 @@ _FAMILIES = [
     (rf"check\s+(?:the\s+)?installed\s+(?:version\s+of\s+(?:the\s+)?(?:package\s+)?|package\s+)(?P<t>{_P})"
      rf"(?:\s+package)?",
      lambda m: f"is {m['t']} installed"),
+    # a command, not a package: "is the jq command installed" is answered by the package
+    # that provides it (for its version, "is PKG installed" names the package)
+    (rf"(?:is|check\s+(?:whether|if)|determine\s+(?:whether|if))\s+(?:the\s+)?(?P<c>{COMMAND})\s+command\s+"
+     rf"(?:is\s+)?(?:installed|available){_VERSION_TAIL}",
+     lambda m: f"which package owns the {m['c']} command"),
+    (rf"check\s+(?:the\s+)?installed\s+version\s+of\s+(?:the\s+)?(?P<c>{COMMAND})\s+command",
+     lambda m: f"which package owns the {m['c']} command"),
     # packages: which package owns a file or command
     (rf"(?:find\s+)?(?:what|which)\s+(?:debian\s+|installed\s+)?package\s+(?:provides|owns|contains|installed)\s+"
      rf"(?:the\s+(?:file\s+|command\s+)?(?P<p>{PATH})|(?:the\s+)?(?P<p2>{COMMAND})\s+command"
@@ -161,6 +168,8 @@ _JOURNAL_PARTS = [
                         rf"(?P<v>{_NUM})\s+(?P<u>minutes?|hours?|days?)(?:\s+ago)?", re.I)),
     ("time", re.compile(r"\s+(?:(?:in|within|from|during|over)\s+the\s+(?:last|past)\s+)(?P<u>minute|hour|day)",
                         re.I)),
+    ("stamp", re.compile(r",?\s+(?:since|after|from)\s+(?P<v>[0-9]{4}-[0-9]{2}-[0-9]{2}"
+                         r"(?:[ T][0-9]{2}:[0-9]{2}(?::[0-9]{2})?)?(?:\s*(?:UTC|Z))?)", re.I)),
     ("where", re.compile(r"\s+(?:in|from)\s+the\s+(?:system\s+)?(?:journal|logs?)", re.I)),
     # a bare "for X": in a log request a name without "service" is a program tag
     ("ident", re.compile(rf"\s+for\s+(?P<v>{UNIT})(?=\s|,|$)", re.I)),
@@ -170,6 +179,10 @@ _JOURNAL_PARTS = [
 
 def _journal(text: str) -> str | None:
     """"find errors logged by program X in the last ten minutes" -> the grammar's sentence."""
+    svc = re.fullmatch(rf"(?:read|show|get|list)\s+(?:the\s+)?journal\s+(?:logs?|entries)\s+(?:for|from)\s+(?:the\s+)?"
+                       rf"(?:service|unit)\s+(?P<u>{UNIT}),?\s+(?P<k>errors|warnings)(?P<rest>.*)", text, re.I)
+    if svc:
+        text = f"{svc['k']} from the service {svc['u']}{svc['rest']}"
     lead = re.match(r"(?:search|query|check)\s+(?:the\s+)?(?:system\s+)?(?:journal|logs?)\s+for\s+", text, re.I)
     if lead:
         text = text[lead.end():]
@@ -202,6 +215,12 @@ def _journal(text: str) -> str | None:
         if "ident" in found:
             return None
         out += f" from the {_unit(found['unit']['v'])} service"
+    if "stamp" in found:
+        if "time" in found:
+            return None
+        v = re.sub(r"(?<=[0-9])T(?=[0-9])", " ", found["stamp"]["v"])
+        v = re.sub(r"\s*(?:utc|z)$", " UTC", v, flags=re.I)
+        out += f" since {v}"
     if "time" in found:
         t = found["time"]
         count = _n(t["v"]) if t.groupdict().get("v") else 1

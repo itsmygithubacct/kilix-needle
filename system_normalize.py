@@ -222,7 +222,8 @@ def _ground(request, kind, args):
             return "warning priority was not requested"
         if "since" in args and not _literal_present(request, args["since"]):
             return "journal time is not an exact request literal"
-        explicit_since = re.search(r"\bsince\s+(today|yesterday|\d{4}-\d{2}-\d{2}|"
+        explicit_since = re.search(r"\bsince\s+(today|yesterday|\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2}(?::\d{2})?)?"
+                                   r"(?: utc)?|"
                                    r"\d+\s+(?:minutes?|hours?|days?)\s+ago)\b", local, re.I)
         if explicit_since and args.get("since", "").lower() != explicit_since.group(1).lower():
             return "journal time conflicts with request"

@@ -54,7 +54,8 @@ UNIT = r"[A-Za-z0-9_][A-Za-z0-9_.@:-]{0,127}"
 PACKAGE = r"[a-z0-9][a-z0-9+.-]*(?::[a-z0-9-]+)?"
 PATH = r"/(?:[A-Za-z0-9_+.,@%=-]+/)*[A-Za-z0-9_+.,@%=-]*"
 COMMAND = r"[A-Za-z0-9_][A-Za-z0-9_.+-]{0,127}"
-SINCE = r"(?:today|yesterday|[1-9][0-9]{0,2} (?:minutes?|hours?|days?) ago|[0-9]{4}-[0-9]{2}-[0-9]{2})"
+SINCE = (r"(?:today|yesterday|[1-9][0-9]{0,2} (?:minutes?|hours?|days?) ago"
+         r"|[0-9]{4}-[0-9]{2}-[0-9]{2}(?: [0-9]{2}:[0-9]{2}(?::[0-9]{2})?)?(?: [uU][tT][cC])?)")
 
 
 @dataclass(frozen=True)
@@ -101,9 +102,15 @@ def normalize(kind, args):
     if "since" in result:
         if not re.fullmatch(SINCE, result["since"]):
             raise ValueError("unsupported journal time")
-        if re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", result["since"]):
-            from datetime import date
-            date.fromisoformat(result["since"])
+        stamp = re.fullmatch(r"([0-9]{4}-[0-9]{2}-[0-9]{2})(?: ([0-9]{2}:[0-9]{2}(?::[0-9]{2})?))?(?: utc)?",
+                             result["since"], re.I)
+        if stamp:
+            # A real date and time only ("2026-13-40" and "25:61" are refused).
+            from datetime import date, time
+            date.fromisoformat(stamp[1])
+            if stamp[2]:
+                time.fromisoformat(stamp[2])
+            result["since"] = result["since"][:10] + result["since"][10:].replace("utc", "UTC")
     if kind == "packages":
         pattern = PACKAGE if result["operation"] == "status" else f"(?:{PATH}|{COMMAND})"
         if not re.fullmatch(pattern, result["target"]) or result["target"].lower() in ("the", "this", "that", "it"):

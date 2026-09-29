@@ -61,6 +61,41 @@ class Families(unittest.TestCase):
         self.assertIsNone(reads("restart the ssh service"))
 
 
+class ReviewedShapes(unittest.TestCase):
+    """Three shapes a second session found in the benchmark requests."""
+
+    def test_a_command_is_answered_by_the_package_that_provides_it(self):
+        for request in ("Check whether the rg command is installed and report its version.",
+                        "check the installed version of the fd command"):
+            with self.subTest(request=request):
+                got = reads(request)
+                self.assertEqual(got[0][0], "packages")
+                self.assertEqual(got[0][1]["operation"], "owner")
+
+    def test_logs_for_a_service_then_errors(self):
+        got = reads("Read journal logs for service nightly-sync, errors since 15 minutes ago.")
+        self.assertEqual(got[0][1]["unit"], "nightly-sync.service")
+        self.assertEqual(got[0][1]["priority"], "err")
+
+    def test_a_date_and_time_is_a_start(self):
+        got = reads("Show journal errors for nightly-sync since 2026-09-29 19:52:00 UTC.")
+        self.assertEqual(got[0][1]["since"], "2026-09-29 19:52:00 UTC")
+        self.assertEqual(got[0][1]["identifier"], "nightly-sync")
+        self.assertEqual(reads("errors since 2026-09-29T08:05Z")[0][1]["since"], "2026-09-29 08:05 UTC")
+        for bad in ("errors since 2026-13-40 10:00", "errors since 2026-09-29 25:61"):
+            with self.subTest(bad=bad):
+                self.assertIsNone(reads(bad))
+
+    def test_an_empty_service_read_names_the_program_tag_sentence(self):
+        import system_collect
+        collector = system_collect.Collector()
+        with mock.patch.object(collector, "_command", return_value=(0, "", [])):
+            data, _argv, _warn = collector.journal({"unit": "nightly-sync.service", "since": "10 minutes ago",
+                                                    "scope": "system", "boot": "any", "priority": "err",
+                                                    "limit": 50})
+        self.assertIn("errors from the program nightly-sync since 10 minutes ago", data["note"])
+
+
 class Sentences(unittest.TestCase):
     def test_a_sentence_is_offered_only_when_it_reads_back_exactly(self):
         for actions in ([["packages", {"operation": "status", "target": "jq"}]],
