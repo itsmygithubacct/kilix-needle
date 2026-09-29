@@ -23,6 +23,11 @@ import subprocess
 import sys
 
 _BUFFER = 64 * 1024
+# Upstream's default is 256 new tokens. A call carrying a long absolute path twice
+# (command and pane) ran past it: "tool call truncated: token budget exhausted",
+# 17 times in the gpt-6-luna route benchmark. Generation stops at the end of the
+# call, so a higher cap costs time only where the answer was being cut off.
+_MAX_NEW_TOKENS = 768
 _WORKER = os.path.abspath(__file__)
 
 
@@ -142,7 +147,8 @@ def _worker(library_fd: int, weights_fd: int | None) -> int:
             status = lib.needle_init(None, tools, None)
             say({"ok": True} if status > 0 else {"ok": False, "error": f"needle_init {status}"})
         elif op == "complete":
-            written = lib.needle_complete(message["input"].encode("utf-8"), 256, buffer, _BUFFER)
+            written = lib.needle_complete(message["input"].encode("utf-8"), _MAX_NEW_TOKENS,
+                                          buffer, _BUFFER)
             if written < 0:
                 say({"type": "error", "error": f"needle_complete {written}"})
             else:
