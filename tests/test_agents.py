@@ -789,3 +789,34 @@ class ReviewR14Round8(unittest.TestCase):
         for request, count in self.READINGS.items():
             wants = agents.parse(request)
             self.assertEqual(len(wants) if wants else None, count, request)
+
+
+class RouteBenchmarkLaunches(unittest.TestCase):
+    """How agents asked for a launch in the Codex route benchmark (2026-09-29)."""
+
+    def test_agent_wordings_of_a_launch_read_as_the_canonical_form(self):
+        want = [agents.Want("agent", (("agent", "codex"), ("dir", "/tmp/w1")))]
+        for request in (
+                "Start an interactive Codex coding-agent session in a new tab, working in the "
+                "directory /tmp/w1. Do not give it a task.",
+                "start a new codex session in /tmp/w1 with no task",
+                "start codex in /tmp/w1, no prompt",
+                "launch codex in the directory /tmp/w1. Give the agent no task."):
+            with self.subTest(request=request):
+                self.assertEqual(agents.parse(request, None), want)
+
+    def test_other_negations_and_existing_sessions_still_refuse(self):
+        for request in ("don't start codex in /tmp/w1", "start codex in /tmp/w1. Do not.",
+                        "start codex in /tmp/w1 and do not close tab 2",
+                        "bring up the codex session in kilix"):
+            with self.subTest(request=request):
+                self.assertIsNone(agents.parse(request, None))
+
+    def test_the_same_path_however_the_model_words_it(self):
+        request = "start codex in /tmp/w1"
+        for value, ok in (("/tmp/w1", True), ("/tmp/w1/", True), ("the directory /tmp/w1", True),
+                          ("/tmp/w2", False), ("/tmp", False)):
+            with self.subTest(value=value):
+                got = agents.interpret(request, [{"name": "agent",
+                                                  "arguments": {"agent": "codex", "dir": value}}], None)
+                self.assertEqual(not isinstance(got[0], Refusal), ok)

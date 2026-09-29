@@ -926,7 +926,12 @@ def _same_dir(value, want: str, dirs: dict | None) -> bool:
     if want == "here":
         return _fold(value) in map(_fold, ("here", *_HERE))
     if want.startswith(("~", "/", ".")):
-        return value.strip() == want
+        # The same path, however the model wrote the words around it: "the
+        # directory /x", "/x/" (route benchmark: "not the directory the request
+        # names" for its own path).
+        got = re.sub(r"^(?:(?:in|at) )?(?:the )?(?:directory|folder|dir) ", "", value.strip(),
+                     flags=re.I)
+        return got.rstrip("/") == want.rstrip("/")
     return _dir_norm(value) == _dir_norm(want)
 
 
@@ -1023,6 +1028,34 @@ def _why_not(request: str) -> str:
     return "the request isn't a launch, wait or message this job can read"
 
 
+# How agents word a launch (Codex route benchmark, 2026-09-29): "start an
+# interactive Codex coding-agent session in a new tab, working in the directory
+# /x. Do not give it a task." Each rewrite keeps the meaning of the canonical
+# form: a launch always opens its own tab, and a launch without a task is the
+# default. Only a whole trailing no-task phrase is removed; any other "not" in
+# the request still refuses it.
+_AGENT_WORDS = _alternation(_AGENT_ALIAS)
+_LAUNCH_REWRITES = (
+    (re.compile(rf"\b(?:an? (?:new )?(?:interactive )?|(?:new )?interactive |new )({_AGENT_WORDS})"
+                rf"(?: coding[- ]agent| agent)? session\b(?! (?:called|named|titled|labell?ed)\b)",
+                re.I), r"\1"),
+    (re.compile(r",? in a new tab\b", re.I), ""),
+    (re.compile(r",? (?:working |running )?in (?:the )?(?:directory|folder|dir) (?=[~/])", re.I), " in "),
+    (re.compile(r",? working in (?=[~/])", re.I), " in "),
+    (re.compile(r"[.,;] *give (?:it|the agent|them) no (?:task|prompt|instructions?)[.!]*$", re.I), ""),
+    (re.compile(r"(?:[,;]| -)? *(?:with )?(?:no |without (?:a |any )?)(?:task|prompt|instructions?)"
+                r"(?: (?:yet|for now))?[.!]*$", re.I), ""),
+    (re.compile(r"[.,;] *(?:do not|don'?t) give it (?:a |any )?(?:task|prompt|instructions?)"
+                r"(?: (?:yet|for now))?[.!]*$", re.I), ""),
+)
+
+
+def _launch_plain(text: str) -> str:
+    for pattern, replacement in _LAUNCH_REWRITES:
+        text = pattern.sub(replacement, text)
+    return " ".join(text.split()).strip()
+
+
 def parse(request: str, dirs: dict | None = FIXTURE_DIRS) -> list | None:
     """The actions the request states, as Want tuples, or None."""
     text = str(request)
@@ -1033,6 +1066,7 @@ def parse(request: str, dirs: dict | None = FIXTURE_DIRS) -> list | None:
     text = " ".join(text.split())
     if len(text) > MAX_REQUEST:
         return None
+    text = _launch_plain(text)
     got = _Reader(text, dirs).read() if text else None
     return list(got) if got else None
 
