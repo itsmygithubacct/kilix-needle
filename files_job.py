@@ -32,6 +32,8 @@ TOOLS = [
 ]
 
 _SCOPES = {"here": "here", "this project": "here", "the current directory": "here",
+           "this directory": "here", "the directory": "here", "this folder": "here",
+           "current directory": "here", "the current folder": "here",
            "downloads": "Downloads", "my downloads": "Downloads", "documents": "Documents",
            "my documents": "Documents", "research": "research", "projects": "projects"}
 _TYPE_WORDS = {'markdown': 'md', 'python': 'py', 'text': 'txt', 'javascript': 'js',
@@ -65,12 +67,67 @@ def _scope(s):
     return value
 
 
+USAGE = ('files requests: find files named "NAME" in SCOPE [modified today|yesterday|last N days] '
+         '| find pdf files in SCOPE | find text "TEXT" in SCOPE | list largest|recent files in SCOPE '
+         '| preview "rel/path" in SCOPE; SCOPE is here, Downloads, Documents, research, projects '
+         'or an absolute path')
+_HELP = re.compile(r'(?:files\s+)?(?:--help|-h|help)(?:\s*[;:].*)?', re.I)
+# How agents ask for a name (gpt-6-luna route benchmark: 1 of 9 file searches got
+# through; "find files named quartz-ledger-*", "find files whose name starts with
+# X under DIR", "search filename X"). Each is the canonical "find files named ... in
+# SCOPE": a name is a literal piece of the file name, so a prefix or a trailing *
+# asks for the same search.
+_WORDY_NAME = re.compile(
+    r'(?:find|search for|look for|locate|search)\s+(?:the\s+|all\s+)?(?:files?|filenames?)\s+'
+    r'(?:(?:anywhere|somewhere|recursively)\s+)?'
+    r'(?:(?:in|under|below|within|inside)\s+(?P<scope1>.+?)\s+)?'
+    r'(?:whose\s+(?:base\s*)?name\s+(?:starts|begins)\s+with|(?:with\s+(?:a\s+)?)?(?:base\s*)?names?\s+'
+    r'(?:starting|beginning)\s+with|starting\s+with|beginning\s+with|named|called|matching|'
+    r'containing|with\s+names?\s+(?:matching|containing))\s+'
+    r'(?P<name>"[^"\n]+"|\'[^\'\n]+\'|[\w.+@-]+\*?)'
+    r'(?:\s+(?:(?:anywhere|somewhere|recursively)\s+)?(?:in|under|below|within|inside)\s+(?P<scope2>.+?))?'
+    r'(?:\s+(?:anywhere|somewhere|recursively))?',
+    re.I)
+_RETURN_TAIL = re.compile(r'[.,;]?\s*(?:and\s+)?return\s+(?:only\s+)?(?:the\s+)?(?:full\s+)?(?:absolute\s+)?'
+                          r'paths?(?:\s*\(s\))?(?:\s+only)?[.!]*$|[.!]+$', re.I)
+
+
+_SHORT_NAME = re.compile(
+    r'(?:(?:find|locate|look\s+for)\s+(?P<glob>[\w.+@-]+\*)\s+files?'
+    r'|search\s+(?:for\s+)?filenames?\s+(?P<plain>"[^"\n]+"|\'[^\'\n]+\'|[\w.+@-]+\*?))'
+    r'(?:\s+(?:(?:anywhere|somewhere|recursively)\s+)?(?:in|under|below|within|inside)\s+(?P<scope2>.+?))?',
+    re.I)
+
+
+def _canonical(q: str) -> str:
+    """Rewrite an agent's wording of a name search to the canonical form, or return it unchanged."""
+    text = _RETURN_TAIL.sub('', q).strip()
+    m = _WORDY_NAME.fullmatch(text)
+    if not m and (short := _SHORT_NAME.fullmatch(text)):
+        m = {'name': short['glob'] or short['plain'], 'scope1': None, 'scope2': short['scope2']}
+    if not m:
+        return q
+    name = m['name']
+    literal = name[1:-1] if name[:1] in ('"', "'") else name
+    if literal.endswith('*'):
+        literal = literal[:-1]
+    if not literal or '*' in literal or '?' in literal or '"' in literal:
+        return q
+    scope = m['scope1'] or m['scope2']
+    if not scope:
+        raise ValueError(f'name a scope, e.g.: find files named "{literal}" in here  ({USAGE})')
+    return f'find files named "{literal}" in {scope}'
+
+
 def parse(request: str) -> list[Action]:
     if not isinstance(request, str) or not request.strip() or len(request.encode('utf-8')) > 4096:
         raise ValueError('provide a request of 1–4096 UTF-8 bytes')
     if any(unicodedata.category(c) in ('Cc', 'Cf', 'Zl', 'Zp') for c in request):
         raise ValueError('control characters are not supported')
     q = request.strip()
+    if _HELP.fullmatch(q):
+        raise ValueError(USAGE)
+    q = _canonical(q)
     # Full matches preserve quoted payloads and reject unaccounted instructions.
     patterns = [
         (rf'(?:find|search for) files named ({_LITERAL}) in ({_SCOPE})(?: modified ({_DATE}))?', 'find'),
@@ -105,7 +162,7 @@ def parse(request: str) -> list[Action]:
         if path.startswith('/') or any(p in ('', '.', '..') or p.startswith('.') for p in path.split('/')):
             raise ValueError('preview needs a relative path without hidden or parent components')
         return [Action('preview_file', {'scope': _scope(m[2]), 'path': path})]
-    raise ValueError('unsupported or ambiguous files request; use files --help for exact search forms')
+    raise ValueError('unsupported or ambiguous files request; ' + USAGE)
 
 
 def interpret(request, calls):

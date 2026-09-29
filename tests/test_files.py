@@ -53,6 +53,33 @@ class Grammar(unittest.TestCase):
             with self.subTest(word=word):
                 with self.assertRaises(ValueError):job.parse(f'find {word} files in Downloads')
 
+    def test_agent_wordings_of_a_name_search(self):
+        # gpt-6-luna route benchmark: 1 of 9 file searches got through.
+        want = lambda scope: [job.Action('find_files', {'scope': scope, 'name': 'quartz-ledger-',
+                                                        'extension': '', 'modified': 'any'})]
+        for text, scope in (('Find files whose name starts with quartz-ledger- in /tmp/w', '/tmp/w'),
+                            ('Find files anywhere under /tmp/w whose basename starts with "quartz-ledger-". '
+                             'Return the full path(s) only.', '/tmp/w'),
+                            ('find the file whose name starts with "quartz-ledger-" somewhere under /tmp/w', '/tmp/w'),
+                            ('find files named quartz-ledger-* in this directory', 'here'),
+                            ('find quartz-ledger-* files in this directory', 'here'),
+                            ('search filename quartz-ledger- in here', 'here')):
+            with self.subTest(text=text):
+                self.assertEqual(job.parse(text), want(scope))
+
+    def test_help_and_a_missing_scope_say_what_is_accepted(self):
+        for text in ('files --help', 'help'):
+            with self.subTest(text=text):
+                with self.assertRaisesRegex(ValueError, 'find files named "NAME" in SCOPE'):
+                    job.parse(text)
+        with self.assertRaisesRegex(ValueError, 'find files named "quartz-ledger-" in here'):
+            job.parse('find files named quartz-ledger-*')
+        for text in ('find files named a*b in here', 'delete files named x in here',
+                     'find files named x in here and delete them'):
+            with self.subTest(text=text):
+                with self.assertRaises(ValueError):
+                    job.parse(text)
+
     def test_proposals_cannot_broaden_or_add_queries(self):
         text='find pdf files in Downloads modified yesterday'
         calls=job.Baseline().complete(text)['function_calls']
