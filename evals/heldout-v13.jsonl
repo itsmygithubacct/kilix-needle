@@ -1,0 +1,182 @@
+{"request": "my tests are about to run for ages, split one off below so I can keep editing up here", "expect": [["open_pane", {"side": "below"}]], "tag": "open_pane"}
+{"request": "give me htop in a new pane on the left, want to watch memory while this compiles", "expect": [["open_pane", {"side": "left", "program": "htop"}]], "tag": "open_pane"}
+{"request": "need a scratch shell next to this one, right side please", "expect": [["open_pane", {"side": "right"}]], "tag": "open_pane"}
+{"request": "open a pane above this and call it notes", "expect": [["open_pane", {"side": "above", "name": "notes"}]], "tag": "open_pane"}
+{"request": "could you start python in a split? want to test a regex real quick", "expect": [["open_pane", {"program": "python"}]], "tag": "open_pane"}
+{"request": "throw btop into a pane underneath, the fans are screaming", "expect": [["open_pane", {"side": "below", "program": "btop"}]], "tag": "open_pane"}
+{"request": "one more pane please, I've got too much going on in this one", "expect": [["open_pane", {}]], "tag": "open_pane"}
+{"request": "to the right, open a pane named server so I don't mix it up with the others", "expect": [["open_pane", {"side": "right", "name": "server"}]], "tag": "open_pane"}
+{"request": "while I read these docs I'd like ipython in a split on the right", "expect": [["open_pane", {"side": "right", "program": "ipython"}]], "tag": "open_pane"}
+{"request": "new tab please, this one's cluttered", "expect": [["open_tab", {}]], "tag": "open_tab"}
+{"request": "open a tab for lazygit, I need to stage some hunks", "expect": [["open_tab", {"program": "lazygit"}]], "tag": "open_tab"}
+{"request": "can I get a fresh tab called deploy", "expect": [["open_tab", {"name": "deploy"}]], "tag": "open_tab"}
+{"request": "start htop in its own tab so it's out of the way", "expect": [["open_tab", {"program": "htop"}]], "tag": "open_tab"}
+{"request": "I'm switching over to the frontend work now, give me another tab", "expect": [["open_tab", {}]], "tag": "open_tab"}
+{"request": "make a tab named scratch where I can mess around", "expect": [["open_tab", {"name": "scratch"}]], "tag": "open_tab"}
+{"request": "a separate tab with ranger in it would help, I need to dig through downloads", "expect": [["open_tab", {"program": "ranger"}]], "tag": "open_tab"}
+{"request": "spin up a tab for psql and call it db", "expect": [["open_tab", {"program": "psql", "name": "db"}]], "tag": "open_tab"}
+{"request": "fresh tab with vim, going to write the changelog", "expect": [["open_tab", {"program": "vim"}]], "tag": "open_tab"}
+{"request": "close this pane, the build finished", "expect": [["close_pane", {"pane": "current"}]], "tag": "close_pane"}
+{"request": "kill the htop pane, I've seen enough", "expect": [["close_pane", {"pane": "htop"}]], "tag": "close_pane"}
+{"request": "the pane on the left is done, you can close it", "expect": [["close_pane", {"pane": "left"}]], "tag": "close_pane"}
+{"request": "exit the pane below me please", "expect": [["close_pane", {"pane": "below"}]], "tag": "close_pane"}
+{"request": "quit the logs pane, the bug's reproduced", "expect": [["close_pane", {"pane": "logs"}]], "tag": "close_pane"}
+{"request": "can you close the right-hand pane, it's just an idle shell", "expect": [["close_pane", {"pane": "right"}]], "tag": "close_pane"}
+{"request": "kill the next pane over", "expect": [["close_pane", {"pane": "next"}]], "tag": "close_pane"}
+{"request": "nothing's happening in the pane above, close it", "expect": [["close_pane", {"pane": "above"}]], "tag": "close_pane"}
+{"request": "I don't need the watcher pane anymore, kill it", "expect": [["close_pane", {"pane": "watcher"}]], "tag": "close_pane"}
+{"request": "close tab 3, that server is dead anyway", "expect": [["close_tab", {"tab": "3"}]], "tag": "close_tab"}
+{"request": "close this tab, I'm done with the review", "expect": [["close_tab", {"tab": "current"}]], "tag": "close_tab"}
+{"request": "kill the tab called scratch", "expect": [["close_tab", {"tab": "scratch"}]], "tag": "close_tab"}
+{"request": "exit the next tab over, it's just a leftover shell", "expect": [["close_tab", {"tab": "next"}]], "tag": "close_tab"}
+{"request": "the tab just before this one only had a half-finished rebase I already aborted, close that previous tab", "expect": [["close_tab", {"tab": "previous"}]], "tag": "close_tab"}
+{"request": "close the deploy tab now that the release is out", "expect": [["close_tab", {"tab": "deploy"}]], "tag": "close_tab"}
+{"request": "please close the second tab", "expect": [["close_tab", {"tab": "2"}]], "tag": "close_tab"}
+{"request": "that docs tab can be closed, I've got what I need", "expect": [["close_tab", {"tab": "docs"}]], "tag": "close_tab"}
+{"request": "kill tab 5, it's the stale one from this morning", "expect": [["close_tab", {"tab": "5"}]], "tag": "close_tab"}
+{"request": "jump to the pane on the right", "expect": [["go_to_pane", {"pane": "right"}]], "tag": "go_to_pane"}
+{"request": "take me to htop for a sec, want to check cpu", "expect": [["go_to_pane", {"pane": "htop"}]], "tag": "go_to_pane"}
+{"request": "the migration output is scrolling in the pane underneath me, move my cursor down into that pane", "expect": [["go_to_pane", {"pane": "below"}]], "tag": "go_to_pane"}
+{"request": "switch over to the logs pane, something just errored", "expect": [["go_to_pane", {"pane": "logs"}]], "tag": "go_to_pane"}
+{"request": "I bounced one pane too far, send me back to the previous pane where the diff was", "expect": [["go_to_pane", {"pane": "previous"}]], "tag": "go_to_pane"}
+{"request": "can you move focus up to the pane above", "expect": [["go_to_pane", {"pane": "above"}]], "tag": "go_to_pane"}
+{"request": "let me look at the next pane", "expect": [["go_to_pane", {"pane": "next"}]], "tag": "go_to_pane"}
+{"request": "hop over to the left pane, I left the editor there", "expect": [["go_to_pane", {"pane": "left"}]], "tag": "go_to_pane"}
+{"request": "go to the server pane so I can see the request come in", "expect": [["go_to_pane", {"pane": "server"}]], "tag": "go_to_pane"}
+{"request": "switch me to tab 2, I think the test output is there", "expect": [["go_to_tab", {"tab": "2"}]], "tag": "go_to_tab"}
+{"request": "flip to the next tab", "expect": [["go_to_tab", {"tab": "next"}]], "tag": "go_to_tab"}
+{"request": "back to the previous tab, I forgot to save something", "expect": [["go_to_tab", {"tab": "previous"}]], "tag": "go_to_tab"}
+{"request": "take me to the deploy tab", "expect": [["go_to_tab", {"tab": "deploy"}]], "tag": "go_to_tab"}
+{"request": "show me tab 4 real quick", "expect": [["go_to_tab", {"tab": "4"}]], "tag": "go_to_tab"}
+{"request": "jump over to the tab named notes", "expect": [["go_to_tab", {"tab": "notes"}]], "tag": "go_to_tab"}
+{"request": "switch to the db tab, I need the connection string", "expect": [["go_to_tab", {"tab": "db"}]], "tag": "go_to_tab"}
+{"request": "over to the first tab please", "expect": [["go_to_tab", {"tab": "1"}]], "tag": "go_to_tab"}
+{"request": "I want to be in the api tab now", "expect": [["go_to_tab", {"tab": "api"}]], "tag": "go_to_tab"}
+{"request": "put these panes side by side, I want to compare the two diffs", "expect": [["arrange_panes", {"layout": "vertical"}]], "tag": "arrange_panes"}
+{"request": "lay the panes out one above the other", "expect": [["arrange_panes", {"layout": "horizontal"}]], "tag": "arrange_panes"}
+{"request": "switch to the grid layout, I've got four things going", "expect": [["arrange_panes", {"layout": "grid"}]], "tag": "arrange_panes"}
+{"request": "give me the tall layout so the editor gets most of the height", "expect": [["arrange_panes", {"layout": "tall"}]], "tag": "arrange_panes"}
+{"request": "fat layout please, the log lines are long", "expect": [["arrange_panes", {"layout": "fat"}]], "tag": "arrange_panes"}
+{"request": "only show one pane at a time, it's too cramped", "expect": [["arrange_panes", {"layout": "stack"}]], "tag": "arrange_panes"}
+{"request": "these panes got squashed into a weird shape after I resized the window, switch this tab to the splits layout", "expect": [["arrange_panes", {"layout": "splits"}]], "tag": "arrange_panes"}
+{"request": "four panes in a grid is unreadable on the laptop screen, go back to the splits arrangement for this tab", "expect": [["arrange_panes", {"layout": "splits"}]], "tag": "arrange_panes"}
+{"request": "I'm screen sharing, use the stack layout for this tab", "expect": [["arrange_panes", {"layout": "stack"}]], "tag": "arrange_panes"}
+{"request": "everything in this tab is the Go service now, so rename the tab to backend-go", "expect": [["rename_tab", {"name": "backend-go"}]], "tag": "rename_tab"}
+{"request": "call this tab Staging", "expect": [["rename_tab", {"name": "Staging"}]], "tag": "rename_tab"}
+{"request": "this tab should be named migrations, I keep losing it", "expect": [["rename_tab", {"name": "migrations"}]], "tag": "rename_tab"}
+{"request": "can you retitle the tab as bugfix-4312", "expect": [["rename_tab", {"name": "bugfix-4312"}]], "tag": "rename_tab"}
+{"request": "label the current tab logs", "expect": [["rename_tab", {"name": "logs"}]], "tag": "rename_tab"}
+{"request": "name this tab release notes please", "expect": [["rename_tab", {"name": "release notes"}]], "tag": "rename_tab"}
+{"request": "change the tab's title to api v2", "expect": [["rename_tab", {"name": "api v2"}]], "tag": "rename_tab"}
+{"request": "I'm on the parser now, rename the tab to parser", "expect": [["rename_tab", {"name": "parser"}]], "tag": "rename_tab"}
+{"request": "set the tab name to Monday standup", "expect": [["rename_tab", {"name": "Monday standup"}]], "tag": "rename_tab"}
+{"request": "make this pane wider, the lines are wrapping", "expect": [["resize_pane", {"direction": "wider"}]], "tag": "resize_pane"}
+{"request": "the log pane beside me is cut off at the timestamps, make my pane narrower by 12 so it gets room", "expect": [["resize_pane", {"direction": "narrower", "amount": 12}]], "tag": "resize_pane"}
+{"request": "taller please, I can't see the whole stack trace", "expect": [["resize_pane", {"direction": "taller"}]], "tag": "resize_pane"}
+{"request": "make the current pane shorter by 5 cells", "expect": [["resize_pane", {"direction": "shorter", "amount": 5}]], "tag": "resize_pane"}
+{"request": "give this pane 20 cells more width", "expect": [["resize_pane", {"direction": "wider", "amount": 20}]], "tag": "resize_pane"}
+{"request": "can you make this one a little shorter, it's hogging the screen", "expect": [["resize_pane", {"direction": "shorter"}]], "tag": "resize_pane"}
+{"request": "the JSON lines keep wrapping mid-key, stretch this pane 18 cells wider", "expect": [["resize_pane", {"direction": "wider", "amount": 18}]], "tag": "resize_pane"}
+{"request": "I need this pane taller by 8", "expect": [["resize_pane", {"direction": "taller", "amount": 8}]], "tag": "resize_pane"}
+{"request": "narrow this pane down, the editor next to it needs room", "expect": [["resize_pane", {"direction": "narrower"}]], "tag": "resize_pane"}
+{"request": "I just fixed the off-by-one, so in the pane under this one run make test-unit", "expect": [["run_in_pane", {"pane": "below", "command": "make test-unit"}]], "tag": "run_in_pane"}
+{"request": "before I commit, send git diff --stat to the pane on my left so I can eyeball the changes", "expect": [["run_in_pane", {"pane": "left", "command": "git diff --stat"}]], "tag": "run_in_pane"}
+{"request": "run npm run dev in the server pane, I restarted the db", "expect": [["run_in_pane", {"pane": "server", "command": "npm run dev"}]], "tag": "run_in_pane"}
+{"request": "can you send ls -la to the right pane", "expect": [["run_in_pane", {"pane": "right", "command": "ls -la"}]], "tag": "run_in_pane"}
+{"request": "over in the logs pane, run tail -f app.log", "expect": [["run_in_pane", {"pane": "logs", "command": "tail -f app.log"}]], "tag": "run_in_pane"}
+{"request": "execute cargo build --release in the pane above", "expect": [["run_in_pane", {"pane": "above", "command": "cargo build --release"}]], "tag": "run_in_pane"}
+{"request": "run pytest -x in this pane", "expect": [["run_in_pane", {"pane": "current", "command": "pytest -x"}]], "tag": "run_in_pane"}
+{"request": "in the next pane run docker ps, I want to see what's up", "expect": [["run_in_pane", {"pane": "next", "command": "docker ps"}]], "tag": "run_in_pane"}
+{"request": "have the build pane run make clean", "expect": [["run_in_pane", {"pane": "build", "command": "make clean"}]], "tag": "run_in_pane"}
+{"request": "zoom this pane, I need to read the whole diff", "expect": [["maximize_pane", {}]], "tag": "maximize_pane"}
+{"request": "the stack trace in the logs pane is too long to follow at this size, blow that logs pane up to fill the tab", "expect": [["maximize_pane", {"pane": "logs"}]], "tag": "maximize_pane"}
+{"request": "restore the layout, I'm done reading", "expect": [["maximize_pane", {"restore": true}]], "tag": "maximize_pane"}
+{"request": "make the pane on the right full size", "expect": [["maximize_pane", {"pane": "right"}]], "tag": "maximize_pane"}
+{"request": "unzoom please", "expect": [["maximize_pane", {"restore": true}]], "tag": "maximize_pane"}
+{"request": "blow up the htop pane to full size for a moment", "expect": [["maximize_pane", {"pane": "htop"}]], "tag": "maximize_pane"}
+{"request": "okay I've read the whole trace, un-maximize and give me back all my panes the way they were", "expect": [["maximize_pane", {"restore": true}]], "tag": "maximize_pane"}
+{"request": "zoom in on the pane below", "expect": [["maximize_pane", {"pane": "below"}]], "tag": "maximize_pane"}
+{"request": "maximize this one so the stack trace fits", "expect": [["maximize_pane", {}]], "tag": "maximize_pane"}
+{"request": "this pane is just throwaway experiments, give it the name sandbox", "expect": [["rename_pane", {"name": "sandbox"}]], "tag": "rename_pane"}
+{"request": "the pane on my left is running the watcher for the unit suite, rename it to unit-tests", "expect": [["rename_pane", {"pane": "left", "name": "unit-tests"}]], "tag": "rename_pane"}
+{"request": "title this pane Build Output", "expect": [["rename_pane", {"name": "Build Output"}]], "tag": "rename_pane"}
+{"request": "the pane below should be named watcher", "expect": [["rename_pane", {"pane": "below", "name": "watcher"}]], "tag": "rename_pane"}
+{"request": "the htop pane is actually showing GPU stats now too, rename that htop pane to sysmon", "expect": [["rename_pane", {"pane": "htop", "name": "sysmon"}]], "tag": "rename_pane"}
+{"request": "label this pane api so I stop guessing", "expect": [["rename_pane", {"name": "api"}]], "tag": "rename_pane"}
+{"request": "give the right pane the name db-shell", "expect": [["rename_pane", {"pane": "right", "name": "db-shell"}]], "tag": "rename_pane"}
+{"request": "change this pane's title to PROD so I don't type in it by accident", "expect": [["rename_pane", {"name": "PROD"}]], "tag": "rename_pane"}
+{"request": "rename the pane above to notes", "expect": [["rename_pane", {"pane": "above", "name": "notes"}]], "tag": "rename_pane"}
+{"request": "I'd rather have my editor on the left edge, so swap this pane with its neighbour on the left", "expect": [["swap_panes", {"side": "left"}]], "tag": "swap_panes"}
+{"request": "the REPL should sit on top of the logs, not under them, trade this pane with the one directly below it", "expect": [["swap_panes", {"side": "below"}]], "tag": "swap_panes"}
+{"request": "my eyes keep drifting right to read this, exchange positions between this pane and the right-hand one", "expect": [["swap_panes", {"side": "right"}]], "tag": "swap_panes"}
+{"request": "put this pane where the one above is and that one where mine is, a straight swap upward", "expect": [["swap_panes", {"side": "above"}]], "tag": "swap_panes"}
+{"request": "can you swap with the left pane, my eyes keep going the wrong way", "expect": [["swap_panes", {"side": "left"}]], "tag": "swap_panes"}
+{"request": "swap my pane with whatever's sitting directly beneath it, the terminal belongs lower down", "expect": [["swap_panes", {"side": "below"}]], "tag": "swap_panes"}
+{"request": "swap this pane with its right-hand neighbour", "expect": [["swap_panes", {"side": "right"}]], "tag": "swap_panes"}
+{"request": "flip places with the pane above", "expect": [["swap_panes", {"side": "above"}]], "tag": "swap_panes"}
+{"request": "swap with the pane below please, it reads better that way", "expect": [["swap_panes", {"side": "below"}]], "tag": "swap_panes"}
+{"request": "this tab keeps drifting to the end of the bar, bump it one spot to the left", "expect": [["move_tab", {"direction": "left"}]], "tag": "move_tab"}
+{"request": "the review tab should come after the build tab, so push this current tab one place rightwards", "expect": [["move_tab", {"direction": "right"}]], "tag": "move_tab"}
+{"request": "move this tab to position 1, it's the one I use most", "expect": [["move_tab", {"position": 1}]], "tag": "move_tab"}
+{"request": "put the current tab third in the tab bar", "expect": [["move_tab", {"position": 3}]], "tag": "move_tab"}
+{"request": "nudge this tab left", "expect": [["move_tab", {"direction": "left"}]], "tag": "move_tab"}
+{"request": "I'd like this tab fifth in the tab bar so my muscle memory for alt+5 works", "expect": [["move_tab", {"position": 5}]], "tag": "move_tab"}
+{"request": "move the tab right, it belongs next to deploy", "expect": [["move_tab", {"direction": "right"}]], "tag": "move_tab"}
+{"request": "make this tab the second one", "expect": [["move_tab", {"position": 2}]], "tag": "move_tab"}
+{"request": "put this tab at position 9", "expect": [["move_tab", {"position": 9}]], "tag": "move_tab"}
+{"request": "split a pane below and then switch to the grid layout", "expect": [["open_pane", {"side": "below"}], ["arrange_panes", {"layout": "grid"}]], "tag": "compound"}
+{"request": "go to tab 3 and close the pane on the left", "expect": [["go_to_tab", {"tab": "3"}], ["close_pane", {"pane": "left"}]], "tag": "compound"}
+{"request": "rename this tab to review and move it to position 1", "expect": [["rename_tab", {"name": "review"}], ["move_tab", {"position": 1}]], "tag": "compound"}
+{"request": "run make in the build pane and jump to the pane on the right", "expect": [["run_in_pane", {"pane": "build", "command": "make"}], ["go_to_pane", {"pane": "right"}]], "tag": "compound"}
+{"request": "close the htop pane and put the rest side by side", "expect": [["close_pane", {"pane": "htop"}], ["arrange_panes", {"layout": "vertical"}]], "tag": "compound"}
+{"request": "new tab called logs, then move it left", "expect": [["open_tab", {"name": "logs"}], ["move_tab", {"direction": "left"}]], "tag": "compound"}
+{"request": "swap with the pane above and then make this one taller", "expect": [["swap_panes", {"side": "above"}], ["resize_pane", {"direction": "taller"}]], "tag": "compound"}
+{"request": "open htop in a pane below and rename this tab to monitoring", "expect": [["open_pane", {"side": "below", "program": "htop"}], ["rename_tab", {"name": "monitoring"}]], "tag": "compound"}
+{"request": "close tab 4 and then go to tab 2", "expect": [["close_tab", {"tab": "4"}], ["go_to_tab", {"tab": "2"}]], "tag": "compound"}
+{"request": "restore the layout and then close the pane below", "expect": [["maximize_pane", {"restore": true}], ["close_pane", {"pane": "below"}]], "tag": "compound"}
+{"request": "title this pane editor, then split another one off to the right", "expect": [["rename_pane", {"name": "editor"}], ["open_pane", {"side": "right"}]], "tag": "compound"}
+{"request": "switch to the next tab, then run git pull in the pane below", "expect": [["go_to_tab", {"tab": "next"}], ["run_in_pane", {"pane": "below", "command": "git pull"}]], "tag": "compound"}
+{"request": "make this pane narrower by 10 and swap it with the one on the right", "expect": [["resize_pane", {"direction": "narrower", "amount": 10}], ["swap_panes", {"side": "right"}]], "tag": "compound"}
+{"request": "open a pane on the left called notes and switch the layout to tall", "expect": [["open_pane", {"side": "left", "name": "notes"}], ["arrange_panes", {"layout": "tall"}]], "tag": "compound"}
+{"request": "rename this tab to infra, then open a new tab running k9s", "expect": [["rename_tab", {"name": "infra"}], ["open_tab", {"program": "k9s"}]], "tag": "compound"}
+{"request": "go to the previous tab, close the pane above, then use the stack layout", "expect": [["go_to_tab", {"tab": "previous"}], ["close_pane", {"pane": "above"}], ["arrange_panes", {"layout": "stack"}]], "tag": "compound"}
+{"request": "move this tab right and rename it frontend", "expect": [["move_tab", {"direction": "right"}], ["rename_tab", {"name": "frontend"}]], "tag": "compound"}
+{"request": "run npm test in the right pane, then maximize the right pane so I can watch it", "expect": [["run_in_pane", {"pane": "right", "command": "npm test"}], ["maximize_pane", {"pane": "right"}]], "tag": "compound"}
+{"request": "make this pane shorter by 4 and focus the pane below", "expect": [["resize_pane", {"direction": "shorter", "amount": 4}], ["go_to_pane", {"pane": "below"}]], "tag": "compound"}
+{"request": "open a new tab, split a pane right with btop, then switch to the fat layout", "expect": [["open_tab", {}], ["open_pane", {"side": "right", "program": "btop"}], ["arrange_panes", {"layout": "fat"}]], "tag": "compound"}
+{"request": "how do I close a pane with just the keyboard?", "expect": [], "tag": "bait"}
+{"request": "my coworker said I should close tab 3, not sure I agree yet", "expect": [], "tag": "bait"}
+{"request": "open a new tab in about ten minutes, once the backup's done", "expect": [], "tag": "bait"}
+{"request": "if the build fails, split a pane below for the logs", "expect": [], "tag": "bait"}
+{"request": "don't close the htop pane, I'm still watching it", "expect": [], "tag": "bait"}
+{"request": "quit vim for me, I'm stuck in it again", "expect": [], "tag": "bait"}
+{"request": "exit less, I'm done reading the man page", "expect": [], "tag": "bait"}
+{"request": "ugh, whatever, close it, it's been bugging me all morning", "expect": [], "tag": "bait"}
+{"request": "yeah, kill it", "expect": [], "tag": "bait"}
+{"request": "close the browser tab with the YouTube video", "expect": [], "tag": "bait"}
+{"request": "open a new tab in Firefox for the docs", "expect": [], "tag": "bait"}
+{"request": "kill the Gmail tab in Chrome, it's eating memory", "expect": [], "tag": "bait"}
+{"request": "remind me later to rename this tab", "expect": [], "tag": "bait"}
+{"request": "Sam keeps telling me to kill the logs pane but I like it", "expect": [], "tag": "bait"}
+{"request": "why does the grid layout keep squishing my editor?", "expect": [], "tag": "bait"}
+{"request": "should I maximize this pane or just make it wider?", "expect": [], "tag": "bait"}
+{"request": "split off a pane on the right for the server logs... no wait, scrap that, I'll keep it as is", "expect": [], "tag": "bait"}
+{"request": "switch to tab 2... wait no, stay here", "expect": [], "tag": "bait"}
+{"request": "change the default shell to zsh in the settings", "expect": [], "tag": "bait"}
+{"request": "close the file I have open in the editor", "expect": [], "tag": "bait"}
+{"request": "delete the old logs folder in my home directory", "expect": [], "tag": "bait"}
+{"request": "reboot the machine after the update finishes", "expect": [], "tag": "bait"}
+{"request": "exit the python repl, I typed something wrong", "expect": [], "tag": "bait"}
+{"request": "once the tests go green, move this tab to the front", "expect": [], "tag": "bait"}
+{"request": "tomorrow, run make deploy in the build pane because the freeze lifts then", "expect": [], "tag": "bait"}
+{"request": "don't run rm -rf build in the left pane, I still need those artifacts", "expect": [], "tag": "bait"}
+{"request": "thanks a lot, that setup is exactly what I was after", "expect": [], "tag": "none"}
+{"request": "the build took forever today", "expect": [], "tag": "none"}
+{"request": "lol ok", "expect": [], "tag": "none"}
+{"request": "I think I'll grab a coffee", "expect": [], "tag": "none"}
+{"request": "nice, the tests pass now", "expect": [], "tag": "none"}
+{"request": "morning! coffee's still brewing, give me a minute before we start", "expect": [], "tag": "none"}
+{"request": "my cat just walked across the keyboard", "expect": [], "tag": "none"}
+{"request": "hmm, let me think about this for a second", "expect": [], "tag": "none"}
+{"request": "that refactor was harder than I expected", "expect": [], "tag": "none"}
+{"request": "ok cool, appreciate it", "expect": [], "tag": "none"}
