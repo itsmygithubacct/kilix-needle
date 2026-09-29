@@ -6,6 +6,7 @@ wrong in a way that would have closed, typed or started something unasked.
 import unittest
 
 import support  # noqa: F401
+import actions
 from actions import TOOLS, Action, Refusal, interpret, plain
 
 
@@ -1669,6 +1670,22 @@ class HeldOutV11(unittest.TestCase):
                                   if isinstance(r, Action)])
         self.assertTrue([r for r in interpret("close the logs tab", [call("close_tab", tab="logs")])
                          if isinstance(r, Action)])
+
+
+class HeldOutV13(unittest.TestCase):
+    def test_someone_elses_instruction_runs_nothing(self):
+        for prompt in ("Sam keeps telling me to kill the logs pane but I like it",
+                       "my boss told me to close tab 2", "Ana wants me to close the left pane"):
+            with self.subTest(prompt=prompt):
+                self.assertFalse([r for r in interpret(prompt, [call("close_pane", pane="left")])
+                                  if isinstance(r, Action)])
+
+    def test_the_user_speaking_is_not_hearsay(self):
+        for prompt, tool, args in (("I want you to close the left pane", "close_pane", {"pane": "left"}),
+                                   ("i want us to open a new tab", "open_tab", {}),
+                                   ("close the pane Sam told me about", "close_pane", {"pane": "current"})):
+            with self.subTest(prompt=prompt):
+                self.assertFalse(actions._hearsay(actions.normalize(prompt)))
 
 
 class HeldOutV12(unittest.TestCase):

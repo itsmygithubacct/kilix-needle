@@ -566,6 +566,21 @@ def _says_when(prompt: str, calls: list) -> bool:
     return bool(_WHEN.search(_COURTEOUS_WHEN.sub(" ", text)))
 
 
+# Someone else's instruction, reported: "Sam keeps telling me to kill the logs
+# pane but I like it" is not a request to close it (held-out v13).
+_HEARSAY = re.compile(
+    r"\b(?:keeps?|kept|keep on|always|was|were|is|are)?\s*(?:tell|tells|telling|told|ask|asks|asking|"
+    r"asked|want|wants|wanted|suggest|suggests|suggesting|suggested|advise|advises|advised|"
+    r"nag|nags|nagging|nagged|urge|urges|urged)\s+(?:me|us)\s+to\b", re.I)
+_HEARSAY_SPEAKER = re.compile(r"^\s*(?:please\s+|can you\s+|could you\s+)?(?:i|we)\b", re.I)
+
+
+def _hearsay(prompt: str) -> bool:
+    """Another person's instruction. "I want us to…" is the user speaking."""
+    match = _HEARSAY.search(prompt)
+    return bool(match) and not _HEARSAY_SPEAKER.match(prompt[:match.start()] + " ")
+
+
 def interpret(prompt: str, calls: list) -> list[Action | Refusal]:
     """Turn the engine's calls into admitted actions or named refusals."""
     prompt = normalize(prompt)
@@ -573,6 +588,10 @@ def interpret(prompt: str, calls: list) -> list[Action | Refusal]:
     if _says_when(prompt, calls):
         return [Refusal(str(call.get("name") if isinstance(call, dict) else call),
                         "the request says when or on what condition, not now")
+                for call in (calls if isinstance(calls, list) else [])]
+    if _hearsay(prompt):
+        return [Refusal(str(call.get("name") if isinstance(call, dict) else call),
+                        "the request reports someone else's instruction")
                 for call in (calls if isinstance(calls, list) else [])]
     for call in calls if isinstance(calls, list) else []:
         name = call.get("name") if isinstance(call, dict) else None
