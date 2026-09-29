@@ -1,5 +1,6 @@
 """Jobs: each has its own selected model, and a selection never crosses jobs."""
 import io
+import os
 import json
 import sys
 import tempfile
@@ -99,9 +100,15 @@ class Selection(unittest.TestCase):
         args = type("A", (), {"engine": None, "root": None})()
         with mock.patch.object(tuning, "selected", return_value=None) as chosen, \
                 mock.patch.object(needle_cli, "_image", return_value=mock.Mock()):
-            needle_cli.open_runtime(args, job="apps")
-            chosen.assert_called_once_with("apps")
+            needle_cli.open_runtime(args, job="agents")
+            chosen.assert_called_once_with("agents")
             chosen.reset_mock()
+            # The apps checks propose; no model is asked for (apps.propose).
+            runtime = needle_cli.open_runtime(args, job="apps")
+            chosen.assert_not_called()
+            self.assertEqual(runtime.label, "grammar")
+            self.assertEqual(runtime.complete("hide the clock")["function_calls"],
+                             [{"name": "show", "arguments": {"item": "clock", "on": False}}])
             needle_cli.open_runtime(args)
             chosen.assert_called_once_with("panes")
 
@@ -198,8 +205,9 @@ class ReviewR11(unittest.TestCase):
     def test_in_use_and_status_ask_about_each_job(self):                   # R11-M7, R11-M8
         with mock.patch.object(tuning, "selected", return_value=None) as chosen, \
                 mock.patch("asset.from_installed", return_value=mock.MagicMock()):
-            tuning.in_use("apps")
-        chosen.assert_called_with("apps")
+            tuning.in_use("agents")
+        chosen.assert_called_with("agents")
+        self.assertEqual(tuning.in_use("apps"), "grammar")
         out = io.StringIO()
         with mock.patch.object(tuning, "in_use", side_effect=lambda job="panes": f"x-{job}"), \
                 mock.patch.object(sys, "stdout", out):
@@ -493,7 +501,7 @@ class AppsTuning(unittest.TestCase):
 
     def test_the_apps_recipe_is_its_own(self):                                     # R12 M21
         manifest = tuning.recipe(tuning.load_manifest(tuning.library_path("apps")), "apps")
-        self.assertEqual(manifest["gates"]["heldout"], "evals/apps/heldout-v3.jsonl")
+        self.assertEqual(manifest["gates"]["heldout"], "evals/apps/heldout-v4.jsonl")
         self.assertFalse(manifest["data"].get("supplements"))
         self.assertEqual(manifest["data"]["toolset"], "apps")
         evals = {str(p.relative_to(tuning.REPO)) for p in (tuning.REPO / "evals").rglob("*.jsonl")}
@@ -591,9 +599,11 @@ class AppsTuning(unittest.TestCase):
 
                 def __exit__(self, *exc):
                     return False
+            # apps answers with its grammar unless an engine is named (benchmarks).
             with mock.patch("libengine.LibEngine", Engine), \
                     mock.patch("asset.installed_library", return_value=mock.MagicMock()), \
-                    mock.patch("asset.load_verified", return_value=mock.MagicMock()):
+                    mock.patch("asset.load_verified", return_value=mock.MagicMock()), \
+                    mock.patch.dict(os.environ, {"KILIX_NEEDLE_ENGINE": "x"} if job == "apps" else {}):
                 self.assertTrue(tuning.in_use(job).startswith("tuned"))
             self.assertEqual(loaded, [tools], job)
 

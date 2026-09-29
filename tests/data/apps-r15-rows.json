@@ -1,0 +1,865 @@
+[
+ {
+  "id": "T01",
+  "request": "Open doom. I take that back.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-01"
+ },
+ {
+  "id": "T02",
+  "request": "Open doom. Hold off.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-01"
+ },
+ {
+  "id": "T03",
+  "request": "Open doom. Stop.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-01"
+ },
+ {
+  "id": "T04",
+  "request": "Open doom. That was a mistake.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-01"
+ },
+ {
+  "id": "T05",
+  "request": "Hide the clock. Scrap that.",
+  "calls": [
+   [
+    "show",
+    {
+     "item": "clock",
+     "on": false
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-01"
+ },
+ {
+  "id": "T06",
+  "request": "Open doom. Revert that.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-01"
+ },
+ {
+  "id": "T07",
+  "request": "Open doom. Retracted.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-01"
+ },
+ {
+  "id": "T08",
+  "request": "Open doom. N\u043e.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-01"
+ },
+ {
+  "id": "T09",
+  "request": "Open doom. \u043do.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-01"
+ },
+ {
+  "id": "T10",
+  "request": "Open doom; I take it back",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-01"
+ },
+ {
+  "id": "C01",
+  "request": "Open doom. Sorry, solitaire.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-01"
+ },
+ {
+  "id": "C02",
+  "request": "Hide the clock. I meant the battery.",
+  "calls": [
+   [
+    "show",
+    {
+     "item": "clock",
+     "on": false
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-01"
+ },
+ {
+  "id": "C03",
+  "request": "Hide the clock. The battery, I mean.",
+  "calls": [
+   [
+    "show",
+    {
+     "item": "clock",
+     "on": false
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-01"
+ },
+ {
+  "id": "C04",
+  "request": "Open doom. Correction: solitaire.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-01"
+ },
+ {
+  "id": "C05",
+  "request": "Show pane cpu always. Well, auto.",
+  "calls": [
+   [
+    "pane_stat",
+    {
+     "stat": "cpu",
+     "mode": "always"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-01"
+ },
+ {
+  "id": "C06",
+  "request": "Open doom \u2014 sorry, solitaire",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-01"
+ },
+ {
+  "id": "N01",
+  "request": "Do not run the following; open doom",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-02"
+ },
+ {
+  "id": "N02",
+  "request": "Don't do this; open doom",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-02"
+ },
+ {
+  "id": "N03",
+  "request": "Never do this. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-02"
+ },
+ {
+  "id": "N04",
+  "request": "This is not a request; open doom",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-02"
+ },
+ {
+  "id": "N05",
+  "request": "Test only, do not execute; hide the clock",
+  "calls": [
+   [
+    "show",
+    {
+     "item": "clock",
+     "on": false
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-02"
+ },
+ {
+  "id": "R01",
+  "request": "Message from my son. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-03"
+ },
+ {
+  "id": "R02",
+  "request": "Here is a line from a movie script. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-03"
+ },
+ {
+  "id": "R04",
+  "request": "My son typed this. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-03"
+ },
+ {
+  "id": "R05",
+  "request": "Example sentence for the manual; open doom",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-10 (pre-existing)"
+ },
+ {
+  "id": "Q01",
+  "request": "Open doom. Should I?",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-01"
+ },
+ {
+  "id": "Q02",
+  "request": "Open doom. What do you think?",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-01"
+ },
+ {
+  "id": "Q03",
+  "request": "Hide the clock. Good idea?",
+  "calls": [
+   [
+    "show",
+    {
+     "item": "clock",
+     "on": false
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-01"
+ },
+ {
+  "id": "Q04",
+  "request": "Open doom. Right?",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-01"
+ },
+ {
+  "id": "P01",
+  "request": "open doom for a minute, no, don't",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-05"
+ },
+ {
+  "id": "P02",
+  "request": "open doom for a bit tomorrow",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-05"
+ },
+ {
+  "id": "P03",
+  "request": "show pane cpu always for a minute, then off",
+  "calls": [
+   [
+    "pane_stat",
+    {
+     "stat": "cpu",
+     "mode": "always"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-05"
+ },
+ {
+  "id": "P04",
+  "request": "hide the clock for a minute, then back on",
+  "calls": [
+   [
+    "show",
+    {
+     "item": "clock",
+     "on": false
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-05"
+ },
+ {
+  "id": "P05",
+  "request": "open doom for a sec, not really",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-05"
+ },
+ {
+  "id": "P06",
+  "request": "open doom to a new pane",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-05"
+ },
+ {
+  "id": "P07",
+  "request": "open doom for a laugh at midnight",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-05"
+ },
+ {
+  "id": "P08",
+  "request": "open doom for an install",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-05"
+ },
+ {
+  "id": "P09",
+  "request": "open doom since the boss typed it",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-05"
+ },
+ {
+  "id": "P10",
+  "request": "open doom so i can not",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-05"
+ },
+ {
+  "id": "V01",
+  "request": "get rid of the memory usage view",
+  "calls": [
+   [
+    "pane_stat",
+    {
+     "stat": "memory",
+     "mode": "off"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-06"
+ },
+ {
+  "id": "V02",
+  "request": "block cpu heavy games",
+  "calls": [
+   [
+    "pane_stat",
+    {
+     "stat": "cpu",
+     "mode": "off"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-06"
+ },
+ {
+  "id": "V03",
+  "request": "put the laptop on battery power",
+  "calls": [
+   [
+    "show",
+    {
+     "item": "battery",
+     "on": true
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-06"
+ },
+ {
+  "id": "V04",
+  "request": "remove the memory app from the launcher",
+  "calls": [
+   [
+    "pane_stat",
+    {
+     "stat": "memory",
+     "mode": "off"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-06"
+ },
+ {
+  "id": "V05",
+  "request": "put the clock on hold",
+  "calls": [
+   [
+    "show",
+    {
+     "item": "clock",
+     "on": true
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-06"
+ },
+ {
+  "id": "W01",
+  "request": "When the kids are asleep. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-03"
+ },
+ {
+  "id": "W02",
+  "request": "Once the kids are asleep; open doom",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-10 (pre-existing)"
+ },
+ {
+  "id": "W03",
+  "request": "Only on Friday. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-03"
+ },
+ {
+  "id": "W04",
+  "request": "The clock should stay. Hide the clock.",
+  "calls": [
+   [
+    "show",
+    {
+     "item": "clock",
+     "on": false
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-04"
+ },
+ {
+  "id": "W05",
+  "request": "The clock stays on. Hide the clock.",
+  "calls": [
+   [
+    "show",
+    {
+     "item": "clock",
+     "on": false
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-04"
+ },
+ {
+  "id": "W06",
+  "request": "Doom is off limits for the kids. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-04"
+ },
+ {
+  "id": "W07",
+  "request": "Doom stays enabled. Disable doom.",
+  "calls": [
+   [
+    "game",
+    {
+     "game": "doom",
+     "available": false
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-04"
+ },
+ {
+  "id": "W08",
+  "request": "I like the clock visible. Hide the clock.",
+  "calls": [
+   [
+    "show",
+    {
+     "item": "clock",
+     "on": false
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-04"
+ },
+ {
+  "id": "W09",
+  "request": "Pane cpu should be off. Show pane cpu always.",
+  "calls": [
+   [
+    "pane_stat",
+    {
+     "stat": "cpu",
+     "mode": "always"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-04"
+ },
+ {
+  "id": "V06",
+  "request": "let doom use all the cpu always",
+  "calls": [
+   [
+    "pane_stat",
+    {
+     "stat": "cpu",
+     "mode": "always"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-06"
+ },
+ {
+  "id": "V07",
+  "request": "use the memory view continuously",
+  "calls": [
+   [
+    "pane_stat",
+    {
+     "stat": "memory",
+     "mode": "always"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-06"
+ },
+ {
+  "id": "V08",
+  "request": "keep the memory view visible",
+  "calls": [
+   [
+    "pane_stat",
+    {
+     "stat": "memory",
+     "mode": "always"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-06"
+ },
+ {
+  "id": "V09",
+  "request": "put the calculator on the clock",
+  "calls": [
+   [
+    "show",
+    {
+     "item": "clock",
+     "on": true
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-06"
+ },
+ {
+  "id": "V10",
+  "request": "drop the ram usage view",
+  "calls": [
+   [
+    "pane_stat",
+    {
+     "stat": "memory",
+     "mode": "off"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-06"
+ },
+ {
+  "id": "T11",
+  "request": "Open the voice settings. I take that back.",
+  "calls": [
+   [
+    "settings",
+    {
+     "section": "voice"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-01"
+ },
+ {
+  "id": "N06",
+  "request": "Don't do this; open the voice settings",
+  "calls": [
+   [
+    "settings",
+    {
+     "section": "voice"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-02"
+ }
+]

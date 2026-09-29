@@ -19,10 +19,12 @@ from dataclasses import dataclass
 import json
 import os
 import sys
+import time
 from typing import Callable
 
 from actions import LEGACY_TOOLS, Action, Refusal, interpret, plain
 import asset
+import history
 import jobs
 from engine import Engine, EngineError, check_prompt
 import kilix
@@ -59,6 +61,12 @@ class Runtime:
 def open_runtime(args, *, may_install: bool = False, job: str = jobs.DEFAULT) -> Runtime:
     """The tuned model if one passed its gates and is selected, else the base engine."""
     explicit = getattr(args, "engine", None) or os.environ.get("KILIX_NEEDLE_ENGINE")
+    if job == "apps" and not explicit:
+        # The apps checks propose as well as admit (apps.propose): measured,
+        # no model reaches what they read, and none is loaded. An explicit
+        # engine still runs a model, for benchmarks.
+        import apps
+        return Runtime(apps.Proposer(), [], label="grammar")
     if job == "apps":
         import apps
         tuned_tools, tuned_translate, base_tools = apps.TOOLS, (lambda calls: calls), apps.TOOLS
@@ -119,14 +127,32 @@ def run_request(engine: Engine, request: str, options: Options,
     status 0 = done or nothing to do, 1 = something was refused, skipped or failed.
     Each item has "outcome": refused | unresolved | would | skipped | done | failed.
     """
+    return _recorded("panes", engine, request, options, lambda request, calls: run_calls(
+        request, getattr(engine, "translate", lambda c: c)(calls), options, confirm))
+
+
+def _recorded(job: str, engine, request: str, options: Options, run) -> dict:
+    """Check the prompt, ask the engine, run its calls, and record the request
+    in the local history (history.py) whatever happens."""
+    started = time.monotonic()
+    given, checked, calls, result = request, None, None, None
     try:
-        request = check_prompt(request)
-    except ValueError as error:
-        return {"request": request, "status": 1, "note": str(error), "items": []}
-    engine.reset()
-    reply = engine.complete(request)
-    translate = getattr(engine, "translate", lambda calls: calls)
-    return run_calls(request, translate(reply.get("function_calls") or []), options, confirm)
+        try:
+            request = checked = check_prompt(request)
+        except ValueError as error:
+            result = {"request": request, "status": 1, "note": str(error), "items": []}
+            return result
+        engine.reset()
+        calls = engine.complete(request).get("function_calls") or []
+        result = run(request, calls)
+        return result
+    finally:
+        try:        # never replaces the result or the exception on its way out
+            history.record(job, given, checked, engine, calls, options,
+                           result or {"status": None, "note": "the request did not finish"},
+                           time.monotonic() - started)
+        except Exception:       # noqa: BLE001
+            pass
 
 
 def run_calls(request: str, calls: list, options: Options,
@@ -271,13 +297,8 @@ def run_agents_request(engine, request: str, options: Options,
                        confirm: Callable[[str], bool] = _terminal_confirm, *,
                        cwd: str | None = None) -> dict:
     """One agents-job request, as the same record as run_request."""
-    try:
-        request = check_prompt(request)
-    except ValueError as error:
-        return {"request": request, "status": 1, "note": str(error), "items": []}
-    engine.reset()
-    reply = engine.complete(request)
-    return run_agents_calls(request, reply.get("function_calls") or [], options, cwd=cwd)
+    return _recorded("agents", engine, request, options,
+                     lambda request, calls: run_agents_calls(request, calls, options, cwd=cwd))
 
 
 def run_agents_calls(request: str, calls: list, options: Options, *,
@@ -315,14 +336,8 @@ def run_agents_calls(request: str, calls: list, options: Options, *,
 def run_apps_request(engine, request: str, options: Options,
                      confirm: Callable[[str], bool] = _terminal_confirm) -> dict:
     """One apps-job request, as the same record as run_request."""
-    try:
-        request = check_prompt(request)
-    except ValueError as error:
-        return {"request": request, "status": 1, "note": str(error), "items": []}
-    engine.reset()
-    reply = engine.complete(request)
-    translate = getattr(engine, "translate", lambda calls: calls)
-    return run_apps_calls(request, translate(reply.get("function_calls") or []), options, confirm)
+    return _recorded("apps", engine, request, options, lambda request, calls: run_apps_calls(
+        request, getattr(engine, "translate", lambda c: c)(calls), options, confirm))
 
 
 def run_apps_calls(request: str, calls: list, options: Options,
@@ -357,6 +372,10 @@ def run_apps_calls(request: str, calls: list, options: Options,
         record["status"] = 1
     if hold and actions:
         record["note"] = "part of the request was refused, so nothing runs without a yes"
+    elif unplain:
+        # A proposal keeps only what the checks admit, so part of the request
+        # may go unaccounted for: a plan says so too (review KN-R16-204).
+        record["note"] = f"a person's confirmation is required: {unplain}"
     broken = False
     for action in actions:
         entry = {"kind": action.kind, "args": dict(action.args)}
@@ -487,6 +506,9 @@ def _image(args, *, may_install: bool = False):
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["logs"]:
+        from needle_logs.cli import main as logs_main
+        return logs_main(argv[1:])
     if argv[:1] in (["contract"], ["bridge"]):
         import domain_bridge
         return domain_bridge.main(argv)

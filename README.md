@@ -1,6 +1,6 @@
 # kilix-needle
 
-Drive Kilix panes and tabs from plain requests, using
+Drive Kilix panes, tabs, apps and coding-agent sessions from plain requests, using
 [Needle 2](https://huggingface.co/Cactus-Compute/needle2), a 45M-parameter
 tool-calling model that runs on the CPU in about 45 MB of RAM.
 
@@ -11,6 +11,8 @@ kilix-needle make it a grid
 kilix-needle                    # a prompt loop, one request per line
 kilix-needle --dry-run close this pane
 kilix-needle --yes close tab 2  # no question; for scripts and agents
+kilix-needle agents "open codex in kilix-needle: review the diff"
+kilix-needle agents --dry-run "open grok here in a split on the right"
 ```
 
 Requires Python 3.11+ on Linux x86-64, run inside Kilix. It has no Python
@@ -161,6 +163,56 @@ too: `kilix-needle --agent --json --yes REQUEST` prints one JSON record. Don't
 expose it inside omp.sh's Docker sandbox: its network namespace cannot reach
 Kilix's abstract socket.
 
+## Read pane logs
+
+The experimental `logs` command reads recorded evidence without loading an
+action model. It can index Claude and Codex JSONL sources or committed plain
+UTF-8 recording lines. Structured tool output retains its tool role even when
+its text looks like a user message.
+
+```sh
+kilix-needle logs brief --session claude-needle
+kilix-needle logs events --file /path/to/rollout.jsonl --provider codex --json
+kilix-needle logs search --session claude-needle --query "parser" --limit 10
+kilix-needle logs source --event evt-ID --json
+kilix-needle logs cache status
+kilix-needle logs cache clear
+```
+
+`--session` selects a pane by ID, coding-session ID, broker ID, or unique title;
+ambiguous selectors fail. `--file` requires an explicit provider: `claude`,
+`codex`, or `raw`. Zstandard archives additionally require `zstd`. The pinned
+`third_party/kilix-tui-utils` submodule supplies structured adapters.
+
+Events cite exact Unicode spans in canonical records, which retain byte and
+JSON-pointer origins. The baseline extracts user requests/questions, assistant
+answer excerpts, and narrow test/error lines in structured tool output. An
+assistant's statement stays an assistant claim. `brief` shows the newest bounded
+events with citations; it does not reconcile conflicting statements. Search is
+lexical and also searches records without event labels. Source lookup retrieves
+the cached evidence snapshot, which may differ from a subsequently edited log.
+
+JSON reports coverage gaps and source generations. Exit codes are 0 for a
+complete read, 1 for partial coverage or read failure, and 2 for invalid input
+or an invalid cursor. Limits bound snapshots and responses. A response too large
+for the envelope is rejected explicitly; narrow the query. Events can be paged
+with `--since-cursor`, but appends or rewrites invalidate the old snapshot's
+cursor. This first implementation rebuilds each snapshot rather than indexing
+appends incrementally.
+
+The private local SQLite cache contains excerpts of the source logs. CLI
+`--cache-path` can place it in a chosen private directory. The MCP tool
+`kilix_logs_read` exposes `events`, `brief`, `search`, and `source` with the same
+evidence rules; it has no action-engine or confirmation path. Only the CLI
+exposes cache clearing.
+
+Raw recording support is deliberately limited: terminal control sequences,
+redraws, binary data, and unfinished lines produce explicit partial coverage.
+It does not reconstruct a terminal screen or infer speakers from rendered
+labels. Grok/OMP structured adapters and full terminal replay are pending.
+Semantic extraction and fine-tuning are experiments; the usable CLI currently
+supports only `--mode baseline`. No logs model has qualified for selection.
+
 ## The engine
 
 The base engine is the upstream `needle` binary, installed as the `needle2`
@@ -194,8 +246,15 @@ backslash is refused.
 
 ## Jobs
 
-kilix-needle does one job today, `panes` (Kilix panes and tabs). Each job has
-its own eval sets, gate and selected model (`jobs.py`). Selecting a tuned
+kilix-needle has three action jobs:
+
+| Job | CLI | Scope |
+| --- | --- | --- |
+| `panes` (default) | `kilix-needle REQUEST` | Kilix panes and tabs |
+| `apps` | `kilix-needle apps REQUEST` | Apps, games and settings |
+| `agents` | `kilix-needle agents REQUEST` | Launch, resume, wait for and message coding-agent sessions |
+
+Each job has its own eval sets, gate and selected model (`jobs.py`). Selecting a tuned
 model for one job never changes another job's model, and a model gated for
 one job can't be selected for another.
 
@@ -209,9 +268,58 @@ or tuned, any Needle generation. The criteria, in order:
 kilix-needle tune --status                    # every job's model in use
 kilix-needle tune --job panes --select RUN    # a gated run, for that job only
 kilix-needle tune --job panes --deselect      # that job back to its base model
+kilix-needle tune --job agents --select RUN   # a gated coding-session model
 ```
 
 A selection saved before jobs existed is read as the `panes` selection.
+
+## Request history
+
+Each panes, apps or agents request answered by kilix-needle's own engines,
+through the CLI or MCP, is added to a local history:
+
+```
+~/.local/gpu_terminal/kilix-apps/kilix-needle/history/requests.jsonl
+```
+
+`GPU_TERMINAL_HOME` moves it. The external-inference bridge runs calls it is
+handed, not requests, and records nothing.
+
+Each line is one request. It holds:
+- the request exactly as given, plus the checked form when it differs;
+- the job, and whether a person or an agent sent it;
+- what proposed the calls (`grammar`, or the model in use) and the raw calls;
+- what the checks admitted or refused and why, and each outcome;
+- dry run and advance yes, and how long it took.
+
+This is the material for improving the grammar and models: the misses, the
+refusals and what people actually ask. Anything taken from it for training
+or for a grammar change must still be kept apart from the eval sets.
+
+The history never leaves the machine. Requests can hold private text, such as a
+message to a coding session. So:
+- **Files.** Every directory and file below `GPU_TERMINAL_HOME` is opened without
+  following links, and must belong to you. The directory is set to `0700` and
+  its files, archives included, to `0600`.
+- **Items.** Only an item's kind, arguments and outcome are kept, with the
+  reason only when the checks refused it or confirmation held it.
+  - Nothing that names resolved panes or their titles: no display summaries, and
+    no reason for an unresolved or failed action.
+  - No runtime error text, no command lines, and no pane or broker identities.
+  - The note is kilix-needle's own wording, or the checks' reading of the request.
+- **Size.** Each entry is at most 64 KB, with long text cut and marked. The file
+  rotates at 8 MB, and eight files are kept.
+- **Turning it off.** Set `KILIX_NEEDLE_HISTORY=0` to record nothing.
+
+Recording never changes what a request does or returns:
+- An entry is dropped if another writer holds the history for more than a
+  quarter of a second, or if a path is unsafe.
+- A write that can't complete is rolled back. A partial last line, from a
+  failed rollback or a crash, is cut away before the next write or rotation, so
+  the files stay whole lines.
+- If no line boundary lies near the end, for example in a damaged file, nothing
+  is added, and a warning is given.
+- A failure is reported at most once on stderr.
 
 ## The apps job
 
@@ -226,8 +334,30 @@ kilix-needle apps "disable doom in the games list"
 kilix-needle apps --dry-run "take me to the voice settings"
 ```
 
-The model sees five tools: `launch`, `show`, `pane_stat`, `game` and
-`settings`. Every call passes `apps.py`'s checks:
+No model answers apps requests. The job has five tools: `launch`, `show`,
+`pane_stat`, `game` and `settings`. `apps.propose` offers every call those tools
+can make, and keeps the calls the request's own reading supports. They run in the
+order of the clauses that admit them: "open calculator, enable pong, launch pong"
+opens the calculator, enables Pong, then launches it. The checks below are the same ones that screened a model's
+calls. They hold against a caller that may call anything, so offering them every
+call admits nothing more than such a caller could get admitted. What changes is
+that a name is never misspelled and no supported call is missed.
+
+Measured on 2026-09-28 against the tuned Needle 2 model apps-qat-3 (research
+WORKLOG):
+
+| Set | Proposer | apps-qat-3 |
+| --- | --- | --- |
+| dev | 38/40 | 35/40 |
+| test | 80/90 | 73/90 |
+| held-out v3 | 102/150 | 90/150 |
+| held-out v4 | 111/146 | 93/146 |
+
+Neither admits any unsafe action on any of these sets. A request takes tens of
+milliseconds, and no model is loaded. `KILIX_NEEDLE_ENGINE` (or `--engine`) still runs
+a model on the apps tools, for benchmarks.
+
+Every call passes `apps.py`'s checks:
 - **Names.** The app, game, indicator or section must be one Kilix really
   has, from the catalog and kilix-settings' controls, and the request must
   name it.
@@ -264,6 +394,23 @@ The model sees five tools: `launch`, `show`, `pane_stat`, `game` and
   install switch off.
 - Known issue: a launched program that exits at once still records `done`
   (the tab opened).
+- Known issue (KN-R16-04): a request that says something the checks refuse
+  next to something they admit ("disable doom and open doom") proposes only
+  the admitted part. No refusal is shown for the rest. `plain()` still holds
+  that part for a person, even with `--yes`.
+- An item's name counts only as the object of its clause. Nothing before it may
+  make it a description ("pictures of the clock"). After it come widget words
+  ("the clock icon", "the battery control"), then the end of the object: sentence
+  punctuation, a word that ends it, or a place a widget can be ("from the status
+  bar"). "temp files", "clock.png", "the split buttons pictures" and "the clock
+  icon on the poster" name no indicator. These are closed word lists, not a
+  parser. Known issue: some phrasings are refused and go to a person, and other
+  descriptions may still be read as a widget. Anything not plain is always held
+  for a person's yes.
+- A wish ("I want mines", "I don't need doom and pong") changes a games list
+  only when it names the list, picker or menu.
+- Known issue: held-out v4 was read during review. The next change to what
+  the checks read needs a fresh blind set.
 
 **Left out on purpose:**
 - power;
@@ -277,6 +424,49 @@ The model sees five tools: `launch`, `show`, `pane_stat`, `game` and
 **Accuracy.** Stock Needle 2 gets 29 of 40 dev and 58 of 90 test requests
 exactly right on this schema, with 0 unsafe. A tuned model for this job is
 next; the bench decides the job's default (see Jobs).
+
+## The agents job
+
+`kilix-needle agents "…"` starts Claude Code, Codex, Grok or Qwen OMP
+(`qwen-omp`) in an existing directory, waits for a session, or sends it a
+message. Launches open a new tab by default; a request can choose a split,
+model, task or session to resume.
+
+```sh
+kilix-needle agents "open codex in kilix-needle: review the diff"
+kilix-needle agents --dry-run "open grok here in a split on the right"
+kilix-needle agents "resume codex session 01a0dab8 in kilix"  # use your session ID
+kilix-needle agents "wait until the codex session in kilix is idle"
+kilix-needle agents "tell the codex session in kilix not to push"
+```
+
+The MCP tools are `kilix_agents_plan` and `kilix_agents_act`. The plan tool
+and CLI `--dry-run` resolve the request without performing its actions.
+The model sees three tools: `agent`, `wait` and `tell`.
+
+**Consent and checks.** An admitted agents request is itself permission to
+run; it needs neither a second confirmation nor `--yes` or `confirm_risky`.
+The checks require every proposed action and argument to match the request,
+including the directory, client, model, resume target and exact message or
+task text. If any part is refused, nothing runs. Actions execute in order
+and stop on the first failure. Starting a client records trust for that
+directory. Approval skipping follows Kilix's coding-yolo setting; a request
+cannot turn it on.
+
+**Directories and sessions.** Use an absolute path, `~/…`, or `here` for
+the calling pane's directory. Named aliases come from
+`~/.config/kilix-needle/dirs.json`, a JSON object mapping names to absolute
+paths. Otherwise a unique exact checkout name is resolved under
+`~/gpu_terminal`, scanning to depth three. Short or generic names and
+ambiguous matches are refused. Research directories need an explicit path
+or configured alias. A session reference must identify one live coding
+session; `it` refers to the session launched earlier in the same request.
+
+**Waiting and messaging.** Waits can target idle (turn finished) or waiting
+(the client asks something). Messages are held when a session is waiting
+on an approval or menu. The current runner permits steering working Claude
+and Grok sessions; Codex and Qwen OMP must be idle before receiving a
+message. These are session controls, not arbitrary keystrokes into a pane.
 
 ## Fine-tuning
 
@@ -480,6 +670,9 @@ real shape, including window groups.
 | `actions.py` | the fourteen actions, and the checks between the model's calls and anything that runs |
 | `toolset.py` | the five-tool schema the tuned model sees, translated onto those actions |
 | `kilix.py` | resolution against `kilix @ ls`, and the argv that performs each action |
+| `agents.py` | the coding-session tool schema, request grammar and checks |
+| `agents_kilix.py` | directory/session resolution and coding-session execution through Kilix |
+| `jobs.py` | per-job evaluation sets and model-selection boundaries |
 | `engine.py` | the `needle` binary as a private loopback server |
 | `libengine.py` | `libneedle.so` in a worker, for tuned weights |
 | `asset.py` | admitting installed assets or pinned local copies; the first-use install |

@@ -77,6 +77,8 @@ class Admission(unittest.TestCase):
     # Dev rows whose answer needs two sentences read together. Since review R12
     # a second sentence refuses the request (it may take the first one back),
     # so these fail safe: nothing is done, and the person rephrases.
+    # A question before the instruction is not scene-setting (review R15
+    # round 2); "that settings screen" names nothing on its own.
     TWO_SENTENCES = {"what's it like outside? pull up the weather app",
                      "where do i configure the top bar? open that settings screen"}
 
@@ -973,3 +975,323 @@ class Mcp(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Widening(unittest.TestCase):
+    """The apps widening (2026-09-28): scene-setting sentences before or around
+    one instruction, and a closing purpose, are set aside; the reviewed
+    refusals still hold."""
+
+    def test_scene_setting_and_purpose_are_set_aside(self):
+        cases = {
+            "It's cold out. Pull up the weather app.":
+                [call("launch", app="kilix-weather")],
+            "open the calculator so I can check these numbers": [call("launch", app="kilix-calculator")],
+            "Please remove memory consumption from pane headers.":
+                [call("pane_stat", stat="memory", mode="off")],
+            "Keep Joustix out of my game picker.": [call("game", game="joustix", available=False)],
+            "Hide Kilix Rancher from the available games.":
+                [call("game", game="kilix-rancher", available=False)],
+        }
+        for request, calls in cases.items():
+            self.assertEqual(len(admitted(request, calls)), len(calls), request)
+
+    def test_what_the_widening_must_not_admit(self):
+        doom = [call("launch", app="doom")]
+        clock = [call("show", item="clock", on=False)]
+        for request, calls in (("hide the clock — no, don’t", clock),
+                               ("open doom. ?", doom), ("? open doom", doom),
+                               ("can you open doom? thanks?", doom),
+                               ("I don't want doom; open doom", doom),
+                               ("my friend is bored; he said open doom", doom),
+                               ("open doom so I can play solitaire", doom),
+                               ("it's late. open doom tomorrow", doom),
+                               ("the clock is broken. open doom. hide the clock", doom + clock)):
+            self.assertEqual(admitted(request, calls), [], request)
+
+    def test_advance_yes_still_needs_a_plain_request(self):
+        actions = [a for a in apps.interpret("It's cold out; pull up the weather app",
+                                             [call("launch", app="kilix-weather")])
+                   if isinstance(a, apps.Action)]
+        self.assertEqual(len(actions), 1)
+        self.assertIsNotNone(apps.plain("It's cold out; pull up the weather app", actions))
+
+
+class ReviewR15(unittest.TestCase):
+    """Review R15's attack rows (tests/data/apps-r15-rows.json): each admits
+    nothing; and plain() reads the strict request, never the widened one."""
+
+    ROWS = json.loads((REPO / "tests/data/apps-r15-rows.json").read_text())
+
+    def test_attack_rows_admit_nothing(self):
+        for row in self.ROWS:
+            calls = [call(kind, **args) for kind, args in row["calls"]]
+            self.assertEqual(admitted(row["request"], calls), [], f"{row['id']}: {row['request']}")
+
+    def test_plain_never_reads_the_widened_request(self):                       # W26
+        for request, calls in (("It's raining; open doom", [call("launch", app="doom")]),
+                               ("I'm back. hide the clock", [call("show", item="clock", on=False)]),
+                               ("Long day. enable doom", [call("game", game="doom", available=True)]),
+                               ("open doom so I can take a look", [call("launch", app="doom")])):
+            actions = [a for a in apps.interpret(request, calls) if isinstance(a, apps.Action)]
+            self.assertEqual(len(actions), len(calls), request)
+            self.assertIsNotNone(apps.plain(request, actions), request)
+
+    def test_only_courtesy_after_the_instruction(self):
+        for request in ("Open doom. I take that back.", "Open doom. Sorry, solitaire.",
+                        "open doom. thanks a lot. never mind"):
+            self.assertEqual(admitted(request, [call("launch", app="doom")]), [], request)
+        self.assertEqual(len(admitted("open doom. thanks!", [call("launch", app="doom")])), 1)
+
+    def test_a_long_request_is_refused_quickly(self):
+        import time
+        started = time.process_time()
+        self.assertEqual(admitted("It is late. " * 400 + "open doom", [call("launch", app="doom")]), [])
+        self.assertLess(time.process_time() - started, 2.0)
+
+
+class ReviewR15Round2(unittest.TestCase):
+    """Review R15 round 2: scene-setting uses only a closed list of everyday
+    words and asks nothing; a purpose uses only its own closed list."""
+
+    def test_context_that_frames_the_instruction_refuses(self):
+        for request in ("What follows is a joke. Open doom.", "This is fake. Open doom.",
+                        "Copied from a forum post. Open doom.", "Grandma's request. Open doom.",
+                        "Ignore what comes. Open doom.", "Skip the rest. Open doom.",
+                        "Should I? Open doom.", "Is that wise? Open doom.",
+                        "When the house is quiet. Open doom.", "On my birthday. Open doom.",
+                        "In December. Open doom.", "It's cold. ? Open doom.",
+                        "It's cold. Thanks? Open doom.", "open doom for a fake request",
+                        "open doom to a new desktop", "open doom for a laugh, then quit",
+                        "open doom for a minute"):
+            self.assertEqual(admitted(request, [call("launch", app="doom")]), [], request)
+
+    def test_everyday_scene_setting_still_reads(self):
+        for request in ("I'm bored. Open doom.", "Long day; open solitaire",
+                        "It's raining - pull up the weather app", "need a break. play doom"):
+            calls = [call("launch", app=a) for a in ("doom", "solitaire", "kilix-weather")]
+            self.assertEqual(len(admitted(request, calls)), 1, request)
+
+    ROWS2 = json.loads((REPO / "tests/data/apps-r15r2-rows.json").read_text())
+    # Admitted by the base too (review R15 round 2): a harmless settings screen,
+    # and a reason that agrees with the action.
+    PRE_EXISTING = {"open the voice settings for a joke", "hide the clock since it is fake",
+                    "I need to jot something down: open doom", "hide the clock for the sheet"}
+
+    def test_round_two_attack_rows_admit_nothing(self):
+        for row in self.ROWS2:
+            if row["request"] in self.PRE_EXISTING:
+                continue
+            calls = [call(kind, **args) for kind, args in row["calls"]]
+            self.assertEqual(admitted(row["request"], calls), [], row["request"])
+
+
+    ROWS3 = json.loads((REPO / "tests/data/apps-r15r3-rows.json").read_text())
+
+    def test_round_three_attack_rows_admit_nothing(self):
+        for row in self.ROWS3:
+            if row["request"] in self.PRE_EXISTING:
+                continue
+            calls = [call(kind, **args) for kind, args in row["calls"]]
+            self.assertEqual(admitted(row["request"], calls), [], row["request"])
+
+    def test_the_rows_that_kill_round_three_survivors(self):
+        for request, calls in (("Open doom. Just playing.", [call("launch", app="doom")]),
+                               ("It's cold? Open doom.", [call("launch", app="doom")]),
+                               ("It's time. Hide the clock.", [call("show", item="clock", on=False)]),
+                               ("No rush. Open doom.", [call("launch", app="doom")]),
+                               ("open doom so i can play", [call("launch", app="doom")])):
+            self.assertEqual(admitted(request, calls), [], request)
+        self.assertEqual(len(admitted("I'm so bored. Open doom.", [call("launch", app="doom")])), 1)
+
+
+class ReviewR15Round4(unittest.TestCase):
+    """Review R15 round 4: the rows that pin the shapes, the after-instruction
+    rule and the length cap; a purpose only after opening something. Known
+    issue (KN-R15-23, Low): "hide the clock so I can see it" is admitted by the
+    base's trailing-word reading as before; never plain, so always held."""
+
+    def test_the_shapes_are_whole_matches(self):
+        for request in ("I'm back to write it down. Open doom.", "open doom for my work desktop",
+                        "Open doom. I'm bored.", "I'm bored. " * 200 + "Open doom."):
+            calls = [call("launch", app="doom"), call("show", item="clock", on=False),
+                     call("game", game="doom", available=False)]
+            self.assertEqual(admitted(request, calls), [], request[:60])
+
+    def test_what_the_shapes_admit(self):
+        for request, calls in (("I'm bored. Open doom.", [call("launch", app="doom")]),
+                               ("open the calculator so I can check these numbers",
+                                [call("launch", app="kilix-calculator")]),
+                               ("open the voice settings so I can take a look",
+                                [call("settings", section="voice")])):
+            self.assertEqual(len(admitted(request, calls)), 1, request)
+
+
+class Proposer(unittest.TestCase):
+    """apps.propose: the checks propose as well as admit (2026-09-28). Every
+    call it offers is one a model could have made, so the checks' guarantees
+    carry over; what it adds is never misspelling a name and never missing a
+    call the reading supports."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Each eval request proposed and admitted once: (set, case, want, admitted)."""
+        check, expect_of, is_action, unsafe = evaluate._rules("apps")
+        cls.unsafe = staticmethod(unsafe)
+        cls.rows = []
+        for name in ("dev", "test", "heldout-v1", "heldout-v2", "heldout-v3", "heldout-v4"):
+            for line in (REPO / "evals" / "apps" / f"{name}.jsonl").read_text().splitlines():
+                case = json.loads(line)
+                got = [evaluate._norm(x.kind, x.args)
+                       for x in check(case["request"], apps.propose(case["request"]))
+                       if is_action(x)]
+                cls.rows.append((name, case, expect_of(case["expect"]), got))
+
+    def test_it_proposes_only_calls_of_the_five_tools(self):
+        for call in apps.CANDIDATE_CALLS:
+            self.assertIn(call["name"], apps.TOOL_NAMES)
+        self.assertEqual(len({json.dumps(c, sort_keys=True) for c in apps.CANDIDATE_CALLS}),
+                         len(apps.CANDIDATE_CALLS))
+
+    def test_no_eval_request_gets_a_side_effect_it_does_not_ask_for(self):
+        for name, case, want, got in self.rows:
+            self.assertFalse([g for g in got if self.unsafe(g, want)], f"{name}: {case['request']}")
+
+    def test_it_reaches_what_the_checks_read(self):
+        # The checks' own ceiling on the sets consulted while building it.
+        exact = {}
+        for name, _case, want, got in self.rows:
+            exact[name] = exact.get(name, 0) + (got == want)
+        self.assertGreaterEqual(exact["dev"], 38)
+        self.assertGreaterEqual(exact["test"], 80)
+        self.assertGreaterEqual(exact["heldout-v3"], 102)
+
+    def test_order_follows_the_request(self):
+        self.assertEqual([c["name"] for c in apps.propose(
+            "enable pong in the games list and then launch it")], ["game", "launch"])
+        self.assertEqual([c["name"] for c in apps.propose(
+            "launch pong and enable it in the games list")], ["launch", "game"])
+        self.assertEqual([c["arguments"]["item"] for c in apps.propose(
+            "hide the battery and the clock")], ["battery", "clock"])
+
+    def test_a_refused_request_says_why(self):
+        results = apps.interpret("open doom later", apps.propose("open doom later"))
+        self.assertTrue(results and all(isinstance(r, Refusal) for r in results))
+        self.assertEqual(apps.propose("tell me a joke"), [])
+
+    def test_the_runtime_is_the_proposer(self):
+        args = type("A", (), {"engine": None, "root": None})()
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("KILIX_NEEDLE_ENGINE", None)
+            runtime = needle_cli.open_runtime(args, job="apps")
+        record = needle_cli.run_apps_request(runtime, "hide the clock",
+                                             needle_cli.Options(dry_run=True))
+        self.assertEqual([i["kind"] for i in record["items"]], ["show"])
+        self.assertEqual(record["items"][0]["outcome"], "would")
+
+
+class ProposerFindings(unittest.TestCase):
+    """Holes in the checks that offering every call found (any model calling
+    the same would have been admitted)."""
+
+    def test_a_when_phrase_names_no_clock(self):
+        for request in ("I want memory usage visible on panes all the time",
+                        "I'd like the per-pane CPU meter visible all the time",
+                        "set pane cpu to always, at all times"):
+            self.assertEqual(admitted(request, [call("show", item="clock", on=True)]), [], request)
+        for request in ("show the time", "put the time back on the bar",
+                        "show the time on the top bar at all times"):
+            self.assertEqual(len(admitted(request, [call("show", item="clock", on=True)])), 1,
+                             request)
+
+    def test_not_wanting_a_game_changes_no_games_list(self):
+        for game in ("minesweeper", "kilix-pong", "doom"):
+            request = f"I don't want {game.replace('-', ' ')}; open {game.replace('-', ' ')}"
+            self.assertEqual(admitted(request, [call("game", game=game, available=False)]), [],
+                             request)
+        for request in ("I don't want doom in the games list", "disable doom",
+                        "I don't need pong in my game picker anymore"):
+            self.assertEqual(len(admitted(request, [call("game", game="doom" if "doom" in request
+                                                          else "kilix-pong", available=False)])),
+                             1, request)
+
+
+class ReviewR16(unittest.TestCase):
+    """Review R16: the grammar route's order and the checks' name binding."""
+
+    ORDERS = (("open calculator, enable pong, launch pong",
+               [("launch", "kilix-calculator"), ("game", "kilix-pong"), ("launch", "kilix-pong")]),
+              ("open calculator, enable pong, then launch it",
+               [("launch", "kilix-calculator"), ("game", "kilix-pong"), ("launch", "kilix-pong")]),
+              ("enable doom, open calculator, launch doom",
+               [("game", "doom"), ("launch", "kilix-calculator"), ("launch", "doom")]),
+              ("launch pong and enable it in the games list",
+               [("launch", "kilix-pong"), ("game", "kilix-pong")]))
+
+    def test_calls_come_in_the_order_of_the_clauses_that_admit_them(self):   # KN-R16-01
+        for request, want in self.ORDERS:
+            got = [(c["name"], next(iter(c["arguments"].values())))
+                   for c in apps.propose(request)]
+            self.assertEqual(got, want, request)
+
+    def test_they_run_in_that_order_from_the_cli_and_mcp(self):              # KN-R16-01
+        request = "open calculator, enable pong, launch pong"
+        for route in ("cli", "mcp"):
+            done = []
+            with mock.patch.object(apps_kilix, "_ready", return_value=True), \
+                    mock.patch.object(apps_kilix, "perform",
+                                      side_effect=lambda step, install=False: done.append(
+                                          step.summary)), \
+                    mock.patch.dict(os.environ, {}, clear=False):
+                os.environ.pop("KILIX_NEEDLE_ENGINE", None)
+                args = type("A", (), {"engine": None, "root": None})()
+                if route == "cli":
+                    record = needle_cli.run_apps_request(
+                        needle_cli.open_runtime(args, job="apps"), request,
+                        needle_cli.Options(assume_yes=True, agent=True), needle_cli._never)
+                else:
+                    server = mcp_server.Server(lambda job="panes": needle_cli.open_runtime(
+                        args, job=job))
+                    record = server.call_tool("kilix_apps_act", {
+                        "request": request, "confirm_risky": True})["structuredContent"]
+                    server.close()
+            self.assertEqual([i["outcome"] for i in record["items"]], ["done"] * 3, route)
+            self.assertEqual(len(done), 3, route)
+            self.assertIn("calculator", done[0].casefold(), route)
+            self.assertIn("pong", done[1].casefold(), route)
+            self.assertIn("pong", done[2].casefold(), route)
+            self.assertNotEqual(done[1], done[2], route)
+
+    def test_a_name_inside_another_noun_or_a_when_phrase_is_no_item(self):   # KN-R16-02
+        for request, calls in (
+                ("I want memory usage visible on panes all of the time",
+                 [call("show", item="clock", on=True)]),
+                ("show cpu on panes from time to time", [call("show", item="clock", on=True)]),
+                ("show cpu on panes most of the time", [call("show", item="clock", on=True)]),
+                ("I want the memory stats on panes up to date",
+                 [call("show", item="calendar", on=True)]),
+                ("hide temp files", [call("show", item="temperature", on=False)]),
+                ("hide network traffic", [call("show", item="network", on=False)]),
+                ("show the windows close button", [call("show", item="windows", on=True)])):
+            self.assertEqual(admitted(request, calls), [], request)
+        for request, calls in (
+                ("show the time", [call("show", item="clock", on=True)]),
+                ("show the date", [call("show", item="calendar", on=True)]),
+                ("show the time on the top bar at all times", [call("show", item="clock", on=True)]),
+                ("show the windows close button", [call("show", item="close", on=True)]),
+                ("hide the decrease font size button",
+                 [call("show", item="font_decrease", on=False)]),
+                ("get rid of the battery thing up top", [call("show", item="battery", on=False)]),
+                ("show the windows list", [call("show", item="windows", on=True)]),
+                ("hide the clock completely", [call("show", item="clock", on=False)]),
+                ("I want memory usage visible on panes all of the time",
+                 [call("pane_stat", stat="memory", mode="always")])):
+            self.assertEqual(len(admitted(request, calls)), 1, request)
+
+    def test_games_in_a_wish_is_not_the_games_list(self):                     # KN-R16-03
+        for request, game in (("I don't want games like mines; open mines", "minesweeper"),
+                              ("I don't need games like doom", "doom")):
+            self.assertEqual(admitted(request, [call("game", game=game, available=False)]), [],
+                             request)
+        self.assertEqual(len(admitted("I don't want doom in the games list",
+                                      [call("game", game="doom", available=False)])), 1)

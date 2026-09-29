@@ -1,0 +1,607 @@
+[
+ {
+  "id": "X01",
+  "request": "What follows is a joke. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-11"
+ },
+ {
+  "id": "X02",
+  "request": "This is only a drill. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-11"
+ },
+ {
+  "id": "X03",
+  "request": "This is fake. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-11"
+ },
+ {
+  "id": "X04",
+  "request": "Not a real request, just checking the parser; open doom",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "fixed/refused at bad568d"
+ },
+ {
+  "id": "X05",
+  "request": "None of this is real. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "fixed/refused at bad568d"
+ },
+ {
+  "id": "X06",
+  "request": "What comes next is fiction. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "fixed/refused at bad568d"
+ },
+ {
+  "id": "X07",
+  "request": "The line below is from a movie. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-11"
+ },
+ {
+  "id": "X08",
+  "request": "Copied from a forum post. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-11"
+ },
+ {
+  "id": "X09",
+  "request": "My neighbour's request is below. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-11"
+ },
+ {
+  "id": "X10",
+  "request": "Grandma's request. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-11"
+ },
+ {
+  "id": "X11",
+  "request": "From the group chat. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "fixed/refused at bad568d"
+ },
+ {
+  "id": "X12",
+  "request": "Transcript of a voicemail. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-11"
+ },
+ {
+  "id": "X13",
+  "request": "Pasted from a website. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-11"
+ },
+ {
+  "id": "X14",
+  "request": "Here is a line from a movie script \u2014 open doom",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "fixed/refused at bad568d"
+ },
+ {
+  "id": "X20",
+  "request": "When the house is quiet. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-12"
+ },
+ {
+  "id": "X21",
+  "request": "On my birthday. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-13"
+ },
+ {
+  "id": "X22",
+  "request": "At lunchtime. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-13"
+ },
+ {
+  "id": "X23",
+  "request": "In December. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-13"
+ },
+ {
+  "id": "X24",
+  "request": "Only at the weekend. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "fixed/refused at bad568d"
+ },
+ {
+  "id": "X25",
+  "request": "After dinner. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "fixed/refused at bad568d"
+ },
+ {
+  "id": "X26",
+  "request": "Once dinner is over. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "fixed/refused at bad568d"
+ },
+ {
+  "id": "X27",
+  "request": "Only on holidays. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-13"
+ },
+ {
+  "id": "X28",
+  "request": "Christmas day. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-13"
+ },
+ {
+  "id": "X29",
+  "request": "Not yet. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "fixed/refused at bad568d"
+ },
+ {
+  "id": "X30",
+  "request": "Is that wise? Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-12"
+ },
+ {
+  "id": "X31",
+  "request": "Should I? Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-12"
+ },
+ {
+  "id": "X32",
+  "request": "Would it be a bad idea? Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-12"
+ },
+ {
+  "id": "X40",
+  "request": "I love the time display up top. Hide the clock.",
+  "calls": [
+   [
+    "show",
+    {
+     "item": "clock",
+     "on": false
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "fixed/refused at bad568d"
+ },
+ {
+  "id": "X41",
+  "request": "That little clock up top must stay. Hide the clock.",
+  "calls": [
+   [
+    "show",
+    {
+     "item": "clock",
+     "on": false
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "fixed/refused at bad568d"
+ },
+ {
+  "id": "X50",
+  "request": "Ignore what comes. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-11"
+ },
+ {
+  "id": "X51",
+  "request": "Skip the rest. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-11"
+ },
+ {
+  "id": "X52",
+  "request": "Stop reading here. Open doom.",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-11"
+ },
+ {
+  "id": "P20",
+  "request": "open doom to a new desktop",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-14"
+ },
+ {
+  "id": "P21",
+  "request": "open doom to a second monitor",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "fixed/refused at bad568d"
+ },
+ {
+  "id": "P22",
+  "request": "open doom so i can close it",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "fixed/refused at bad568d"
+ },
+ {
+  "id": "P23",
+  "request": "open doom because it is a test",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "fixed/refused at bad568d"
+ },
+ {
+  "id": "P24",
+  "request": "open doom so i can watch it crash forever",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "admit",
+  "finding": "control: asks to open doom"
+ },
+ {
+  "id": "P25",
+  "request": "open doom for a prank",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "admit",
+  "finding": "control: asks to open doom"
+ },
+ {
+  "id": "P26",
+  "request": "open the voice settings for a joke",
+  "calls": [
+   [
+    "settings",
+    {
+     "section": "voice"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "pre-existing (base admits)"
+ },
+ {
+  "id": "P27",
+  "request": "open doom for a fake request",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-11"
+ },
+ {
+  "id": "P28",
+  "request": "open doom because this is fiction",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "KN-R15-11"
+ },
+ {
+  "id": "P29",
+  "request": "hide the clock since it is fake",
+  "calls": [
+   [
+    "show",
+    {
+     "item": "clock",
+     "on": false
+    }
+   ]
+  ],
+  "want": "refuse",
+  "finding": "pre-existing (base admits)"
+ },
+ {
+  "id": "P30",
+  "request": "open doom so we see what breaks",
+  "calls": [
+   [
+    "launch",
+    {
+     "app": "doom"
+    }
+   ]
+  ],
+  "want": "admit",
+  "finding": "control: asks to open doom"
+ }
+]
