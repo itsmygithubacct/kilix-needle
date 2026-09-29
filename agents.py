@@ -1071,29 +1071,41 @@ def exact_calls(request: str) -> list | None:
     return calls
 
 
-# A launch with no task, however it is said, at the end of the request: "Do not
-# give it a task", "Leave the task blank; do not send it any task", "with no task
-# or prompt", "Then stop." Only whole clauses at the end go; any other "not"
-# still refuses the request.
+# A launch with no task, however it is said, at the end of the request. The rule
+# is structural, not a list of phrasings: a clause whose negation's object is
+# the task ("no task", "without a prompt", "do not <any verb> it a task or
+# prompt after startup", "leave the task blank") removes the task and never
+# negates the launch; "leave the session open", "then stop" and "start it" say
+# nothing more. Only whole clauses at the end go; any other "not" still
+# refuses the request.
+_TASK = r"(?:task|prompt|instructions?|message|input|assignment)s?"
+_TASKS = (rf"(?:(?:a|an|any|the|its|some)\s+)?(?:(?:initial|first|starting|opening|new|further)\s+)?{_TASK}"
+          rf"(?:\s*(?:/|or|and)\s*(?:(?:a|an|any)\s+)?{_TASK})*")
+_WHO = rf"(?:(?:to\s+)?(?:it|them|the\s+(?:agent|session|(?:{_AGENT_WORDS})\s+session)|{_AGENT_WORDS})\s+)?"
+_WHEN = (r"(?:\s+(?:into|to|for|in)\s+(?:it|them|the\s+(?:session|agent)))?"
+         r"(?:\s+(?:after|at|on|upon|during|when|once)\s+(?:the\s+)?(?:startup|start-up|start|launch|"
+         r"opening|it\s+(?:starts|opens|launches))|\s+(?:yet|for\s+now|at\s+all|initially))?")
+_NO_TASK_CLAUSE = (
+    rf"(?:with\s+)?(?:no|zero)\s+{_TASKS}"
+    rf"|without\s+(?:(?:giving|sending|passing|providing|assigning)\s+{_WHO})?{_TASKS}"
+    rf"|(?:(?:please\s+)?(?:do\s+not|don'?t|never)|no\s+need\s+to)\s+[a-z]+(?:\s+(?:in|over|along|up))?\s+{_WHO}{_TASKS}"
+    rf"|(?:give|send|pass|provide|assign)\s+{_WHO}no\s+{_TASKS}"
+    rf"|(?:leave|keep)\s+(?:the\s+|its\s+)?{_TASKS}\s+(?:blank|empty|unset)"
+    rf"|{_TASKS}\s+(?:blank|empty|none)"
+    rf"|(?:it|{_AGENT_WORDS}|the\s+(?:agent|session))\s+(?:(?:should|will|must|can|is\s+to)\s+)?"
+    rf"(?:get|gets|have|has|receive|receives|need|needs|take|takes)\s+no\s+{_TASKS}")
+_NEUTRAL_CLAUSE = (
+    r"(?:then\s+)?(?:stop(?:\s+there)?|that'?s\s+all|nothing\s+else)"
+    r"|(?:(?:and\s+)?then\s+)?(?:start|launch|open|run)\s+it(?:\s+up)?"
+    rf"|(?:just\s+)?(?:leave|keep)\s+(?:the\s+(?:session|agent|tab)|it|{_AGENT_WORDS})\s+"
+    r"(?:open|idle|running|there|waiting|as\s+is)(?:\s+(?:with\s+no|without\s+(?:a\s+|any\s+)?)\s*" + _TASK + r")?")
 _NO_TASK = re.compile(
     # "with no task" may follow plain space; every other clause needs a real break
     # (". Then stop", "; do not send it any task"): "open codex in X to please stop"
     # keeps its task text, and is refused as before.
-    r"(?:\s+(?:(?:with\s+)?(?:no|without\s+(?:a\s+|any\s+)?)"
-    r"|without\s+giving\s+(?:it|the\s+agent|the\s+session)\s+(?:a\s+|any\s+))\s*(?:initial\s+)?(?:task|prompt|instructions?)"
-    r"(?:\s+or\s+(?:task|prompt|instructions?))?(?:\s+(?:yet|for\s+now))?\s*[.!]*$)"
-    r"|(?:[.,;:]\s*|\s+-\s+|\s+and\s+)"
-    r"(?:(?:then\s+)?(?:stop(?:\s+there)?|that'?s\s+all|nothing\s+else|leave\s+it\s+(?:there|idle))"
-    # "...with no task; start it and then stop": "start it" repeats the launch.
-    r"|(?:(?:and\s+)?then\s+)?(?:start|launch|open|run)\s+it(?:\s+up)?"
-    r"|(?:leave|keep)\s+(?:the\s+|its\s+)?(?:task|prompt)(?:\s*/\s*(?:task|prompt))?\s+(?:blank|empty)"
-    r"|(?:leave|keep)\s+(?:the\s+session|the\s+agent|it)\s+idle(?:\s+with\s+no\s+(?:task|prompt))?"
-    r"|(?:do\s+not|don'?t)\s+(?:give|send|pass|provide)\s+(?:it|the\s+agent|them|the\s+session)\s+"
-    r"(?:a\s+|any\s+)?(?:initial\s+)?(?:task|prompt|instructions?|message)"
-    r"|give\s+(?:it|the\s+agent|them)\s+no\s+(?:task|prompt|instructions?)"
-    r"|(?:with\s+)?(?:no|without\s+(?:a\s+|any\s+)?)\s*(?:initial\s+)?(?:task|prompt|instructions?)"
-    r"(?:\s+or\s+(?:task|prompt|instructions?))?)"
-    r"(?:\s+(?:yet|for\s+now))?\s*[.!]*$", re.I)
+    rf"(?:\s+(?:(?:with\s+)?(?:no|zero)\s+{_TASKS}"
+    rf"|without\s+(?:(?:giving|sending|passing|providing|assigning)\s+{_WHO})?{_TASKS}){_WHEN}\s*[.!]*$)"
+    rf"|(?:[.,;:]\s*(?:and\s+)?|\s+-\s+|\s+and\s+)(?:{_NO_TASK_CLAUSE}|{_NEUTRAL_CLAUSE}){_WHEN}\s*[.!]*$", re.I)
 
 
 def _launch_plain(text: str) -> str:
@@ -1112,6 +1124,22 @@ def _launch_plain(text: str) -> str:
     return " ".join(text.split()).strip()
 
 
+_SAID_NO_TASK = re.compile(rf"(?:^|[\s.,;:-])(?:{_NO_TASK_CLAUSE}){_WHEN}\s*[.!]*$", re.I)
+
+
+def _says_no_task(original: str, plain: str) -> bool:
+    """Whether a clause taken off the end said there is no task."""
+    left = original
+    for _ in range(4):
+        if _SAID_NO_TASK.search(left):
+            return True
+        shorter = _NO_TASK.sub("", left)
+        if shorter == left:
+            return False
+        left = shorter
+    return False
+
+
 def parse(request: str, dirs: dict | None = FIXTURE_DIRS) -> list | None:
     """The actions the request states, as Want tuples, or None."""
     text = str(request)
@@ -1122,8 +1150,13 @@ def parse(request: str, dirs: dict | None = FIXTURE_DIRS) -> list | None:
     text = " ".join(text.split())
     if len(text) > MAX_REQUEST:
         return None
-    text = _launch_plain(text)
-    got = _Reader(text, dirs).read() if text else None
+    plain = _launch_plain(text)
+    got = _Reader(plain, dirs).read() if plain else None
+    # "start codex in X to fix the build. Do not send a prompt": a task and "no
+    # task" both; the request says it both ways and is not read.
+    if got and plain != " ".join(text.split()) and _says_no_task(" ".join(text.split()), plain) \
+            and any(k == "prompt" for w in got for k, _ in w.args):
+        return None
     return list(got) if got else None
 
 

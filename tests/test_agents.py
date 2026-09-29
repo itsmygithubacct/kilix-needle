@@ -854,6 +854,22 @@ class LunaBenchmarkLaunches(unittest.TestCase):
         self.assertEqual(agents.exact_calls("tell codex in /tmp/w1: run the tests, then stop")[0]["arguments"]["text"],
                          "run the tests, then stop")
 
+    def test_a_negation_of_the_task_removes_the_task_never_the_launch(self):
+        plain = [{"name": "agent", "arguments": {"agent": "codex", "dir": self.PATH}}]
+        for tail in (" with no task. Do not send a prompt or task after startup.",
+                     " with no task; leave the session open", ". Please do not enter a prompt.",
+                     " and do not type any task into it", " without sending it a task",
+                     ", leave the prompt empty, and leave the session idle.", ". It should get no task.",
+                     "; never hand it a task", ". No need to give it instructions.", ", no prompt yet"):
+            with self.subTest(tail=tail):
+                self.assertEqual(agents.exact_calls(f"start codex in {self.PATH}{tail}"), plain)
+        for tail in (". do not let it touch the tests", "; don't start it", ", and never close it",
+                     ". do not open a task file", ". It should have no network",
+                     # a task and "no task" both: said both ways
+                     " to fix the build. Do not send a prompt", " to fix the build. It should get no task."):
+            with self.subTest(tail=tail):
+                self.assertIsNone(agents.exact_calls(f"start codex in {self.PATH}{tail}"))
+
     def test_waits_and_messages_are_exact_too(self):
         self.assertEqual(agents.exact_calls("tell codex in /tmp/w1: run the tests"),
                          [{"name": "tell", "arguments": {"session": "codex@/tmp/w1", "text": "run the tests"}}])
