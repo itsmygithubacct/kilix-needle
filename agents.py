@@ -1094,8 +1094,15 @@ _NO_TASK_CLAUSE = (
     rf"|{_TASKS}\s+(?:blank|empty|none)"
     rf"|(?:it|{_AGENT_WORDS}|the\s+(?:agent|session))\s+(?:(?:should|will|must|can|is\s+to)\s+)?"
     rf"(?:get|gets|have|has|receive|receives|need|needs|take|takes)\s+no\s+{_TASKS}")
+# The caller stopping after the launch: "do not wait, message, or perform any
+# further actions". Only these verbs; any other "not" stays refused.
+_FURTHER = r"(?:any(?:thing)?\s+)?(?:further|additional|other|more|else)(?:\s+(?:actions?|steps?))?"
+_STOPPING = (r"(?:wait(?:\s+for\s+(?:it|the\s+(?:agent|session)))?|message(?:\s+(?:it|the\s+(?:agent|session)))?"
+             r"|send\s+(?:it\s+)?(?:any\s+)?messages?|act\s+further"
+             rf"|(?:perform|do|take)\s+(?:any\s+|anything\s+)?{_FURTHER}|do\s+anything(?:\s+(?:further|else|more))?)")
 _NEUTRAL_CLAUSE = (
-    r"(?:then\s+)?(?:stop(?:\s+there)?|that'?s\s+all|nothing\s+else)"
+    rf"(?:do\s+not|don'?t|never)\s+{_STOPPING}(?:(?:\s*,\s*|\s+)(?:(?:or|and|nor)\s+)?{_STOPPING})*"
+    r"|(?:then\s+)?(?:stop(?:\s+there)?|that'?s\s+all|nothing\s+else)"
     r"|(?:(?:and\s+)?then\s+)?(?:start|launch|open|run)\s+it(?:\s+up)?"
     rf"|(?:just\s+)?(?:leave|keep)\s+(?:the\s+(?:session|agent|tab)|it|{_AGENT_WORDS})\s+"
     r"(?:open|idle|running|there|waiting|as\s+is)(?:\s+(?:with\s+no|without\s+(?:a\s+|any\s+)?)\s*" + _TASK + r")?")
