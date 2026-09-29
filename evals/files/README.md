@@ -6,6 +6,8 @@
   `dev.jsonl` and `test.jsonl` for overlap, and gated once on 2026-09-29. The
   grammar baseline scored 41/150 exact with 1 unsafe query: "markdown files" searched
   `*.markdown`. Type words now map to extensions and categories are refused. v1 is
-  consulted; the next gate needs a fresh blind set (`heldout-v2.jsonl`).
+  consulted.
+- `heldout-v2.jsonl` (sha256 e2faba47c60f…): the gate. Written blind the same way, audited
+  against dev, test and v1. Nobody has consulted it.
 
 `evaluate.py --job files --baseline` scores the grammar. No collector runs.

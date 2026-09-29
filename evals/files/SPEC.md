@@ -31,7 +31,8 @@ Every query needs a scope, and the request must name it. The scope is one of:
 | an explicit directory starting with `/`, `~/` or `./` | that path, exactly as written |
 
 No scope named ("find my pdfs") means `[]`. So does an unbounded one ("everywhere",
-"my whole disk", "the computer"). A path with `..` or `.` components is `[]`.
+"my whole disk", "the computer"). A path with a `..` component, or a `.` component anywhere
+but a leading `./`, is `[]`.
 
 ## The four queries
 

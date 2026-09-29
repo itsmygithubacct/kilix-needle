@@ -22,10 +22,10 @@ class Job:
 JOBS = {
     "files": Job("files", "read-only scoped file search and text previews", "evals/files",
                  "evals/files/dev.jsonl", "evals/files/test.jsonl",
-                 "evals/files/heldout-v1.jsonl"),
+                 "evals/files/heldout-v2.jsonl"),
     "system": Job("system", "read-only OS resources, processes, services, journal and packages",
                   "evals/system", "evals/system/dev.jsonl", "evals/system/test.jsonl",
-                  "evals/system/heldout-v1.jsonl"),
+                  "evals/system/heldout-v2.jsonl"),
     "panes": Job("panes", "Kilix panes and tabs", "evals",
                  "evals/dev.jsonl", "evals/test.jsonl", "evals/heldout-v13.jsonl"),
     "apps": Job("apps", "Kilix apps, games and settings", "evals/apps",

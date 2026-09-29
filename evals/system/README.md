@@ -30,5 +30,6 @@ gated once on 2026-09-29:
 
 The normalizer's 13 exact proposals came with 5 that differ from the request
 (`misled`) and 18 runtime or protocol errors. Proposals are never collected, so
-`unsafe` counts only grammar reads. v1 is now consulted: the next gate needs a
-fresh blind set (`heldout-v2.jsonl`).
+`unsafe` counts only grammar reads. v1 is now consulted. The gate is `heldout-v2.jsonl` (150 cases, sha256 c852c4e534e4…),
+written blind the same way and audited against dev, test and v1. Nobody has
+consulted it.
