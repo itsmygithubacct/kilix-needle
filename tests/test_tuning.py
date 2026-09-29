@@ -182,12 +182,21 @@ class DomainPackMigration(unittest.TestCase):
             self.assertEqual([tuning.load_generator(p).value for p in roots], [0, 1])
 
     def test_needle_recipe_counts_actions_it_cannot_express(self):
-        rows = [{"query": "maximize this pane", "actions": [["maximize_pane", {}]]}]
+        # maximize_pane is expressible through adjust since the panes schema
+        # gained it; an action with no five-tool form is still counted and dropped.
+        rows = [{"query": "maximize this pane", "actions": [["maximize_pane", {}]]},
+                {"query": "teleport the pane", "actions": [["teleport_pane", {}]]}]
         fake = mock.Mock(generate=mock.Mock(return_value=(rows, 0)))
         manifest = tuning.load_manifest()
         manifest["data"]["exclude"] = []
         with tempfile.TemporaryDirectory(prefix="kn-") as tmp, \
                 mock.patch.object(tuning, "load_generator", return_value=fake):
+            stats = tuning.build_data(Path(tmp), manifest, Path(tmp) / "train.jsonl")
+        self.assertEqual((stats["kept"], stats["inconsistent_dropped"]), (1, 1))
+        # An action the checks admit but the schema cannot express is counted, not mislabelled.
+        with tempfile.TemporaryDirectory(prefix="kn-") as tmp, \
+                mock.patch.object(tuning, "load_generator", return_value=fake), \
+                mock.patch.object(toolset, "from_actions", side_effect=ValueError("no form")):
             stats = tuning.build_data(Path(tmp), manifest, Path(tmp) / "train.jsonl")
         self.assertEqual((stats["kept"], stats["unsupported_dropped"]), (0, 1))
 
