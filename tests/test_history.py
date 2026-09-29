@@ -130,9 +130,6 @@ class History(unittest.TestCase):
         self.assertEqual((entry["caller"], entry["job"], entry["dry_run"]), ("agent", "apps", True))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class ReviewR17(unittest.TestCase):
     """Review R17: the writer's file safety, bounds and failure isolation."""
@@ -406,3 +403,7 @@ class ReviewR17Round3(unittest.TestCase):
             if path.exists():
                 self.lines(name)        # every line parses
         self.assertTrue((self.folder / "requests.1.jsonl").exists())
+
+
+if __name__ == "__main__":
+    unittest.main()
