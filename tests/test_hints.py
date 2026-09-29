@@ -65,5 +65,16 @@ class Hints(unittest.TestCase):
                 self.assertEqual(needle_cli._named_job(job, request), expected)
 
 
+    def test_a_whole_command_line_for_another_job_gets_that_jobs_sentence(self):
+        for request in ('kilix-needle system --agent --json "what version of jq is installed"', "is jq installed"):
+            with self.subTest(request=request):
+                hint = needle_cli._hint("agents", request,
+                                        {"status": 1, "items": [{"kind": "agent", "outcome": "refused"}]})
+                self.assertIn('kilix-needle system "is jq installed"', hint)
+                self.assertIn("kilix_system_read", hint)
+        self.assertIn('kilix-needle system "show memory"',
+                      needle_cli._hint("panes", "show memory", {"status": 1, "items": []}))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -264,8 +264,22 @@ def _named_job(job: str, request: str) -> tuple[str, list, str] | None:
     return (target, flags, " ".join(words)) if words else None
 
 
+_COMMAND_LINE = re.compile(r"^\s*kilix-needle\s+(?:--[\w-]+\s+)*(?P<job>agents|apps|system|files)\s+"
+                           r"(?:--[\w-]+\s+)*(?P<q>[\"']?)(?P<request>.+?)(?P=q)\s*$")
+
+
+def _unwrapped(request: str) -> tuple[str | None, str]:
+    """A whole "kilix-needle system --json "is jq installed"" line sent as a
+    request: the job it names and the request inside it."""
+    m = _COMMAND_LINE.match(request)
+    return (m["job"], m["request"]) if m else (None, request)
+
+
 def _other_job(job: str, request: str) -> str | None:
     """A job whose own grammar reads the request, when it is not this one."""
+    named, request = _unwrapped(request)
+    if named and named != job:
+        return named
     try:
         if job != "agents":
             import agents
@@ -295,8 +309,19 @@ def _hint(job: str, request: str, result: dict) -> str | None:
         return None
     other = _other_job(job, request)
     if other:
-        return (f"this reads as a request for the {other} job: {_CLI[other]} REQUEST "
-                f"(MCP: {_MCP[other]})")
+        inner = _unwrapped(request)[1]
+        sentence = None
+        if other == "system":
+            # the system job's own accepted sentence, when it reads the request back
+            try:
+                import system_agent
+                import system_job
+                sentence = system_agent.canonical(inner) or (inner if system_job._parse(inner) else None)
+            except Exception:       # noqa: BLE001 - a hint never breaks a request
+                sentence = None
+        said = json.dumps(sentence or inner) if (sentence or inner != request) else "REQUEST"
+        return (f"this reads as a request for the {other} job: {_CLI[other]} {said} "
+                f"(MCP: {_MCP.get(other, _CLI[other])})")
     examples = _EXAMPLES.get(job)
     if isinstance(examples, dict):
         kinds = [i.get("kind") for i in items if i.get("kind") in examples]
