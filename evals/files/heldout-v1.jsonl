@@ -1,0 +1,150 @@
+{"request": "find files with \"invoice\" in the name in Downloads", "expect": [["find_files", {"scope": "Downloads", "name": "invoice", "extension": "", "modified": "any"}]], "tag": "name"}
+{"request": "anything called \"budget\" in my documents?", "expect": [["find_files", {"scope": "Documents", "name": "budget", "extension": "", "modified": "any"}]], "tag": "name"}
+{"request": "where is the file named \"resume_final\"? should be somewhere in documents", "expect": [["find_files", {"scope": "Documents", "name": "resume_final", "extension": "", "modified": "any"}]], "tag": "name"}
+{"request": "look in projects for files whose name contains \"Makefile\"", "expect": [["find_files", {"scope": "projects", "name": "Makefile", "extension": "", "modified": "any"}]], "tag": "name"}
+{"request": "search here for filenames containing \"test_\"", "expect": [["find_files", {"scope": "here", "name": "test_", "extension": "", "modified": "any"}]], "tag": "name"}
+{"request": "in research, find files with \"draft\" in the filename", "expect": [["find_files", {"scope": "research", "name": "draft", "extension": "", "modified": "any"}]], "tag": "name"}
+{"request": "got any files named \"Q3-report\" in downloads", "expect": [["find_files", {"scope": "Downloads", "name": "Q3-report", "extension": "", "modified": "any"}]], "tag": "name"}
+{"request": "show me files in this directory with \"config\" in their name", "expect": [["find_files", {"scope": "here", "name": "config", "extension": "", "modified": "any"}]], "tag": "name"}
+{"request": "can u find files w/ \"screenshot\" in the name in my downloads", "expect": [["find_files", {"scope": "Downloads", "name": "screenshot", "extension": "", "modified": "any"}]], "tag": "name"}
+{"request": "research: files with 'notes' in the name", "expect": [["find_files", {"scope": "research", "name": "notes", "extension": "", "modified": "any"}]], "tag": "name"}
+{"request": "which files in projects have \"README\" in the name?", "expect": [["find_files", {"scope": "projects", "name": "README", "extension": "", "modified": "any"}]], "tag": "name"}
+{"request": "filenames containing \"2025\" in my documents", "expect": [["find_files", {"scope": "Documents", "name": "2025", "extension": "", "modified": "any"}]], "tag": "name"}
+{"request": "find \"setup\" in file names under projects", "expect": [["find_files", {"scope": "projects", "name": "setup", "extension": "", "modified": "any"}]], "tag": "name"}
+{"request": "in the current directory, any file names containing \"backup\"?", "expect": [["find_files", {"scope": "here", "name": "backup", "extension": "", "modified": "any"}]], "tag": "name"}
+{"request": "look thru downloads for a file with \"Setup-x64\" in its name", "expect": [["find_files", {"scope": "Downloads", "name": "Setup-x64", "extension": "", "modified": "any"}]], "tag": "name"}
+{"request": "files in Documents whose names include \"IMG_20\"", "expect": [["find_files", {"scope": "Documents", "name": "IMG_20", "extension": "", "modified": "any"}]], "tag": "name"}
+{"request": "i need the files in research that have \"results_v2\" in their names", "expect": [["find_files", {"scope": "research", "name": "results_v2", "extension": "", "modified": "any"}]], "tag": "name"}
+{"request": "in this project find files whose name has \"handler\" in it", "expect": [["find_files", {"scope": "here", "name": "handler", "extension": "", "modified": "any"}]], "tag": "name"}
+{"request": "dig up anything in my documents with \"Tax Return\" in the filename", "expect": [["find_files", {"scope": "Documents", "name": "Tax Return", "extension": "", "modified": "any"}]], "tag": "name"}
+{"request": "anything in downloads with \"(1)\" in the name? duplicates piling up", "expect": [["find_files", {"scope": "Downloads", "name": "(1)", "extension": "", "modified": "any"}]], "tag": "name"}
+{"request": "find pdfs in downloads", "expect": [["find_files", {"scope": "Downloads", "name": "", "extension": "pdf", "modified": "any"}]], "tag": "type"}
+{"request": "python files in this project", "expect": [["find_files", {"scope": "here", "name": "", "extension": "py", "modified": "any"}]], "tag": "type"}
+{"request": "show markdown files in research", "expect": [["find_files", {"scope": "research", "name": "", "extension": "md", "modified": "any"}]], "tag": "type"}
+{"request": "list the text files in my documents", "expect": [["find_files", {"scope": "Documents", "name": "", "extension": "txt", "modified": "any"}]], "tag": "type"}
+{"request": "any .csv files in Downloads?", "expect": [["find_files", {"scope": "Downloads", "name": "", "extension": "csv", "modified": "any"}]], "tag": "type"}
+{"request": "json files under projects pls", "expect": [["find_files", {"scope": "projects", "name": "", "extension": "json", "modified": "any"}]], "tag": "type"}
+{"request": "where are my docx files in documents", "expect": [["find_files", {"scope": "Documents", "name": "", "extension": "docx", "modified": "any"}]], "tag": "type"}
+{"request": "find all the zip files sitting in my downloads", "expect": [["find_files", {"scope": "Downloads", "name": "", "extension": "zip", "modified": "any"}]], "tag": "type"}
+{"request": "rust source files here", "expect": [["find_files", {"scope": "here", "name": "", "extension": "rs", "modified": "any"}]], "tag": "type"}
+{"request": "in research are there any jupyter notebooks (.ipynb)?", "expect": [["find_files", {"scope": "research", "name": "", "extension": "ipynb", "modified": "any"}]], "tag": "type"}
+{"request": ".sh files in projects", "expect": [["find_files", {"scope": "projects", "name": "", "extension": "sh", "modified": "any"}]], "tag": "type"}
+{"request": "mp4s in Downloads", "expect": [["find_files", {"scope": "Downloads", "name": "", "extension": "mp4", "modified": "any"}]], "tag": "type"}
+{"request": "find PDF files in research", "expect": [["find_files", {"scope": "research", "name": "", "extension": "pdf", "modified": "any"}]], "tag": "type"}
+{"request": ".yml files in this directory?", "expect": [["find_files", {"scope": "here", "name": "", "extension": "yml", "modified": "any"}]], "tag": "type"}
+{"request": "show me the .log files here", "expect": [["find_files", {"scope": "here", "name": "", "extension": "log", "modified": "any"}]], "tag": "type"}
+{"request": "xlsx files in my documents", "expect": [["find_files", {"scope": "Documents", "name": "", "extension": "xlsx", "modified": "any"}]], "tag": "type"}
+{"request": "what .iso files are taking room in downloads", "expect": [["find_files", {"scope": "Downloads", "name": "", "extension": "iso", "modified": "any"}]], "tag": "type"}
+{"request": "gimme the .ts files in projects", "expect": [["find_files", {"scope": "projects", "name": "", "extension": "ts", "modified": "any"}]], "tag": "type"}
+{"request": "html files in the current directory", "expect": [["find_files", {"scope": "here", "name": "", "extension": "html", "modified": "any"}]], "tag": "type"}
+{"request": "find .tex files in research", "expect": [["find_files", {"scope": "research", "name": "", "extension": "tex", "modified": "any"}]], "tag": "type"}
+{"request": "Downloads — which files got saved there today?", "expect": [["find_files", {"scope": "Downloads", "name": "", "extension": "", "modified": "today"}]], "tag": "date"}
+{"request": "what did i edit yesterday in my documents folder", "expect": [["find_files", {"scope": "Documents", "name": "", "extension": "", "modified": "yesterday"}]], "tag": "date"}
+{"request": "research folder: show me files updated during the past 7 days", "expect": [["find_files", {"scope": "research", "name": "", "extension": "", "modified": "last 7 days"}]], "tag": "date"}
+{"request": "files modified in the past 3 days in projects", "expect": [["find_files", {"scope": "projects", "name": "", "extension": "", "modified": "last 3 days"}]], "tag": "date"}
+{"request": "pdfs in my downloads from today", "expect": [["find_files", {"scope": "Downloads", "name": "", "extension": "pdf", "modified": "today"}]], "tag": "date"}
+{"request": "show files changed in the last 14 days here", "expect": [["find_files", {"scope": "here", "name": "", "extension": "", "modified": "last 14 days"}]], "tag": "date"}
+{"request": "python files edited yesterday in projects", "expect": [["find_files", {"scope": "projects", "name": "", "extension": "py", "modified": "yesterday"}]], "tag": "date"}
+{"request": "which files in my documents were modified in the last 30 days", "expect": [["find_files", {"scope": "Documents", "name": "", "extension": "", "modified": "last 30 days"}]], "tag": "date"}
+{"request": "research files from the past 2 days", "expect": [["find_files", {"scope": "research", "name": "", "extension": "", "modified": "last 2 days"}]], "tag": "date"}
+{"request": "find stuff in this directory modified today", "expect": [["find_files", {"scope": "here", "name": "", "extension": "", "modified": "today"}]], "tag": "date"}
+{"request": "downloads: anything modified in the last 5 days?", "expect": [["find_files", {"scope": "Downloads", "name": "", "extension": "", "modified": "last 5 days"}]], "tag": "date"}
+{"request": "markdown files in research changed this week", "expect": [["find_files", {"scope": "research", "name": "", "extension": "md", "modified": "last 7 days"}]], "tag": "date"}
+{"request": "which of my documents mention \"routing number\"?", "expect": [["search_text", {"scope": "Documents", "text": "routing number"}]], "tag": "text"}
+{"request": "is \"XXX-HACK\" written anywhere in the files in this directory", "expect": [["search_text", {"scope": "here", "text": "XXX-HACK"}]], "tag": "text"}
+{"request": "grep projects for \"import torch\"", "expect": [["search_text", {"scope": "projects", "text": "import torch"}]], "tag": "text"}
+{"request": "find text files in research containing \"p < 0.05\"", "expect": [["search_text", {"scope": "research", "text": "p < 0.05"}]], "tag": "text"}
+{"request": "look for \"hunter2\" in downloads", "expect": [["search_text", {"scope": "Downloads", "text": "hunter2"}]], "tag": "text"}
+{"request": "in this project, which files mention \"API_KEY\"?", "expect": [["search_text", {"scope": "here", "text": "API_KEY"}]], "tag": "text"}
+{"request": "search research for the exact phrase \"confidence interval\"", "expect": [["search_text", {"scope": "research", "text": "confidence interval"}]], "tag": "text"}
+{"request": "any files in documents with \"Dear Sir\" in them?", "expect": [["search_text", {"scope": "Documents", "text": "Dear Sir"}]], "tag": "text"}
+{"request": "find \"localhost:8080\" in projects", "expect": [["search_text", {"scope": "projects", "text": "localhost:8080"}]], "tag": "text"}
+{"request": "which text files in my downloads contain \"order #4471\"", "expect": [["search_text", {"scope": "Downloads", "text": "order #4471"}]], "tag": "text"}
+{"request": "search this directory for \"FIXME:\"", "expect": [["search_text", {"scope": "here", "text": "FIXME:"}]], "tag": "text"}
+{"request": "grep for \"def main\" in the current directory", "expect": [["search_text", {"scope": "here", "text": "def main"}]], "tag": "text"}
+{"request": "in Documents, look for files that say \"lease agreement\"", "expect": [["search_text", {"scope": "Documents", "text": "lease agreement"}]], "tag": "text"}
+{"request": "search projects for 'unsafe {'", "expect": [["search_text", {"scope": "projects", "text": "unsafe {"}]], "tag": "text"}
+{"request": "does anything in research contain \"Figure 3\"?", "expect": [["search_text", {"scope": "research", "text": "Figure 3"}]], "tag": "text"}
+{"request": "find files here containing \"Copyright 2024\"", "expect": [["search_text", {"scope": "here", "text": "Copyright 2024"}]], "tag": "text"}
+{"request": "look through my documents for the text \"wifi password\"", "expect": [["search_text", {"scope": "Documents", "text": "wifi password"}]], "tag": "text"}
+{"request": "search downloads for \"Tracking Number:\"", "expect": [["search_text", {"scope": "Downloads", "text": "Tracking Number:"}]], "tag": "text"}
+{"request": "downloads is nearly full, which files are eating the most room?", "expect": [["list_files", {"scope": "Downloads", "order": "size"}]], "tag": "size"}
+{"request": "rank my documents from largest to smallest", "expect": [["list_files", {"scope": "Documents", "order": "size"}]], "tag": "size"}
+{"request": "what are the fattest files in this project", "expect": [["list_files", {"scope": "here", "order": "size"}]], "tag": "size"}
+{"request": "show the biggest stuff in research", "expect": [["list_files", {"scope": "research", "order": "size"}]], "tag": "size"}
+{"request": "which files in projects are the largest", "expect": [["list_files", {"scope": "projects", "order": "size"}]], "tag": "size"}
+{"request": "list files here by size, biggest first", "expect": [["list_files", {"scope": "here", "order": "size"}]], "tag": "size"}
+{"request": "what are the heaviest files in Downloads", "expect": [["list_files", {"scope": "Downloads", "order": "size"}]], "tag": "size"}
+{"request": "my documents - largest first please", "expect": [["list_files", {"scope": "Documents", "order": "size"}]], "tag": "size"}
+{"request": "top space hogs in the current directory", "expect": [["list_files", {"scope": "here", "order": "size"}]], "tag": "size"}
+{"request": "largest files under research pls", "expect": [["list_files", {"scope": "research", "order": "size"}]], "tag": "size"}
+{"request": "what did i change most recently in documents", "expect": [["list_files", {"scope": "Documents", "order": "modified"}]], "tag": "recent"}
+{"request": "newest files in downloads", "expect": [["list_files", {"scope": "Downloads", "order": "modified"}]], "tag": "recent"}
+{"request": "latest files here?", "expect": [["list_files", {"scope": "here", "order": "modified"}]], "tag": "recent"}
+{"request": "recently modified files in projects", "expect": [["list_files", {"scope": "projects", "order": "modified"}]], "tag": "recent"}
+{"request": "show me what's newest in research", "expect": [["list_files", {"scope": "research", "order": "modified"}]], "tag": "recent"}
+{"request": "most recently edited stuff in this directory", "expect": [["list_files", {"scope": "here", "order": "modified"}]], "tag": "recent"}
+{"request": "list downloads newest first", "expect": [["list_files", {"scope": "Downloads", "order": "modified"}]], "tag": "recent"}
+{"request": "what have i been working on in projects lately", "expect": [["list_files", {"scope": "projects", "order": "modified"}]], "tag": "recent"}
+{"request": "my documents, most recent first", "expect": [["list_files", {"scope": "Documents", "order": "modified"}]], "tag": "recent"}
+{"request": "latest modified files in research", "expect": [["list_files", {"scope": "research", "order": "modified"}]], "tag": "recent"}
+{"request": "show me the start of \"README.md\" here", "expect": [["preview_file", {"scope": "here", "path": "README.md"}]], "tag": "preview"}
+{"request": "preview \"notes/todo.txt\" in documents", "expect": [["preview_file", {"scope": "Documents", "path": "notes/todo.txt"}]], "tag": "preview"}
+{"request": "peek at \"src/main.rs\" in projects", "expect": [["preview_file", {"scope": "projects", "path": "src/main.rs"}]], "tag": "preview"}
+{"request": "what's at the top of \"results/summary.csv\" in research?", "expect": [["preview_file", {"scope": "research", "path": "results/summary.csv"}]], "tag": "preview"}
+{"request": "show the first few lines of \"install.log\" in Downloads", "expect": [["preview_file", {"scope": "Downloads", "path": "install.log"}]], "tag": "preview"}
+{"request": "can i see the beginning of \"docs/intro.md\" in this project", "expect": [["preview_file", {"scope": "here", "path": "docs/intro.md"}]], "tag": "preview"}
+{"request": "head of \"config.toml\" in the current directory", "expect": [["preview_file", {"scope": "here", "path": "config.toml"}]], "tag": "preview"}
+{"request": "preview 'paper/abstract.txt' in research", "expect": [["preview_file", {"scope": "research", "path": "paper/abstract.txt"}]], "tag": "preview"}
+{"request": "display the beginning of \"letter.txt\" from my documents", "expect": [["preview_file", {"scope": "Documents", "path": "letter.txt"}]], "tag": "preview"}
+{"request": "show the top of \"scripts/build.sh\" from projects", "expect": [["preview_file", {"scope": "projects", "path": "scripts/build.sh"}]], "tag": "preview"}
+{"request": "let me see the start of \"Meeting Notes.txt\" in my documents", "expect": [["preview_file", {"scope": "Documents", "path": "Meeting Notes.txt"}]], "tag": "preview"}
+{"request": "glance at \"data/labels.txt\" in research", "expect": [["preview_file", {"scope": "research", "path": "data/labels.txt"}]], "tag": "preview"}
+{"request": "find pdfs in ~/Pictures/scans", "expect": [["find_files", {"scope": "~/Pictures/scans", "name": "", "extension": "pdf", "modified": "any"}]], "tag": "scope"}
+{"request": "largest files in /var/log", "expect": [["list_files", {"scope": "/var/log", "order": "size"}]], "tag": "scope"}
+{"request": "search ./src for \"panic!\"", "expect": [["search_text", {"scope": "./src", "text": "panic!"}]], "tag": "scope"}
+{"request": "newest files in ~/Desktop", "expect": [["list_files", {"scope": "~/Desktop", "order": "modified"}]], "tag": "scope"}
+{"request": "preview \"index.html\" in ./site", "expect": [["preview_file", {"scope": "./site", "path": "index.html"}]], "tag": "scope"}
+{"request": "files with \"backup\" in the name under /mnt/data", "expect": [["find_files", {"scope": "/mnt/data", "name": "backup", "extension": "", "modified": "any"}]], "tag": "scope"}
+{"request": "python files in ~/code/tools", "expect": [["find_files", {"scope": "~/code/tools", "name": "", "extension": "py", "modified": "any"}]], "tag": "scope"}
+{"request": "what's biggest in /tmp", "expect": [["list_files", {"scope": "/tmp", "order": "size"}]], "tag": "scope"}
+{"request": "anything in ~/Music modified today?", "expect": [["find_files", {"scope": "~/Music", "name": "", "extension": "", "modified": "today"}]], "tag": "scope"}
+{"request": "grep /etc/nginx for \"server_name\"", "expect": [["search_text", {"scope": "/etc/nginx", "text": "server_name"}]], "tag": "scope"}
+{"request": "mp3 files in ~/Music/podcasts", "expect": [["find_files", {"scope": "~/Music/podcasts", "name": "", "extension": "mp3", "modified": "any"}]], "tag": "scope"}
+{"request": "most recent files in ./build", "expect": [["list_files", {"scope": "./build", "order": "modified"}]], "tag": "scope"}
+{"request": "delete all the zip files in downloads", "expect": [], "tag": "refusal"}
+{"request": "move \"report.pdf\" from downloads to documents", "expect": [], "tag": "refusal"}
+{"request": "rename \"draft.md\" in research to \"final.md\"", "expect": [], "tag": "refusal"}
+{"request": "hunt down the \".docx\" files for me", "expect": [], "tag": "refusal"}
+{"request": "search everywhere for \"password\"", "expect": [], "tag": "refusal"}
+{"request": "find all python files on my whole disk", "expect": [], "tag": "refusal"}
+{"request": "include the dotfiles when you list what's in projects", "expect": [], "tag": "refusal"}
+{"request": "preview \".env\" here", "expect": [], "tag": "refusal"}
+{"request": "find files in documents similar to \"proposal.docx\"", "expect": [], "tag": "refusal"}
+{"request": "anything in research about climate change?", "expect": [], "tag": "refusal"}
+{"request": "which downloads are bigger than 500 MB", "expect": [], "tag": "refusal"}
+{"request": "find pdfs in downloads and then delete them", "expect": [], "tag": "refusal"}
+{"request": "don't search my documents", "expect": [], "tag": "refusal"}
+{"request": "if there is a \"README.md\" here, show it to me", "expect": [], "tag": "refusal"}
+{"request": "each friday, check research for new markdown files", "expect": [], "tag": "refusal"}
+{"request": "preview \"../secrets.txt\" in projects", "expect": [], "tag": "refusal"}
+{"request": "newest files in ./logs/../private", "expect": [], "tag": "refusal"}
+{"request": "open that file", "expect": [], "tag": "refusal"}
+{"request": "show me the PDF I downloaded yesterday", "expect": [], "tag": "refusal"}
+{"request": "search documents for invoice stuff", "expect": [], "tag": "refusal"}
+{"request": "find files named report something in research", "expect": [], "tag": "refusal"}
+{"request": "zip up the research folder", "expect": [], "tag": "refusal"}
+{"request": "email \"cv.pdf\" in documents to my boss", "expect": [], "tag": "refusal"}
+{"request": "upload the newest file in downloads to my drive", "expect": [], "tag": "refusal"}
+{"request": "open \"main.py\" in projects in vim", "expect": [], "tag": "refusal"}
+{"request": "how many files are in downloads?", "expect": [], "tag": "refusal"}
+{"request": "fix the typo in \"README.md\" here", "expect": [], "tag": "refusal"}
+{"request": "smallest files here", "expect": [], "tag": "refusal"}
+{"request": "files under 10kb in documents", "expect": [], "tag": "refusal"}
+{"request": "list the pictures in downloads", "expect": [], "tag": "refusal"}
+{"request": "search the computer for \"ssh key\"", "expect": [], "tag": "refusal"}
+{"request": "copy \"notes.txt\" here to ~/backup", "expect": [], "tag": "refusal"}
+{"request": "find \"budget\" in documents and also list the biggest files in downloads", "expect": [], "tag": "refusal"}
+{"request": "never mind, don't list recent files in research", "expect": [], "tag": "refusal"}
+{"request": "newest files in ~/.config", "expect": [], "tag": "refusal"}
+{"request": "find files with names roughly like \"reciept\" in downloads", "expect": [], "tag": "refusal"}

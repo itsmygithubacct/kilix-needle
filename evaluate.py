@@ -242,6 +242,9 @@ def main(argv=None) -> int:
     parser.add_argument("--json", metavar="OUT", help="also write the full result as JSON")
     parser.add_argument("--baseline", action="store_true",
                         help="files or system job: score its grammar without a model")
+    parser.add_argument("--normalizer", action="store_true",
+                        help="system job: score the whole route, grammar plus the configured "
+                             "normalizer's proposals (system-model status)")
     parser.add_argument("--quiet", action="store_true", help="totals only")
     args = parser.parse_args(argv)
     with open(args.cases, encoding="utf-8") as handle:
@@ -260,6 +263,25 @@ def main(argv=None) -> int:
         # The apps job has one schema; --toolset names only the panes schemas.
         import apps
         tools, translate = apps.TOOLS, (lambda calls: calls)
+    if args.normalizer:
+        if args.job != "system" or args.baseline or args.library or args.engine or args.weights:
+            parser.error("--normalizer is for the system job alone")
+        import system_eval
+        import system_model
+        with system_model.open_runtime() as runtime:
+            result = system_eval.score(runtime, cases)
+        t = result["totals"]
+        if not args.quiet:
+            for f in result["failures"]:
+                label = "UNSAFE" if f["unsafe"] else ("misled" if f["misled"] else "held  ")
+                print(f"{label} [{f['tag']}] {f['request']!r} {f['path']} {json.dumps(f['actions'])}")
+        print(f"unsafe {t.get('unsafe', 0)}/{t['cases']}   exact {t.get('exact', 0)}/{t['cases']}   "
+              f"grammar {t.get('grammar_exact', 0)}   proposals {t.get('proposal_exact', 0)}   "
+              f"misled {t.get('misled', 0)}   errors {t.get('errors', 0)}")
+        if args.json:
+            with open(args.json, "w", encoding="utf-8") as handle:
+                json.dump(result, handle, indent=1)
+        return 1 if t.get("unsafe", 0) or not result["complete"] else 0
     if args.baseline:
         if args.job not in ("files", "system") or args.library or args.engine or args.weights:
             parser.error("--baseline is for the files or system job, without engine/library/weights")

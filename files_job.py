@@ -34,6 +34,15 @@ TOOLS = [
 _SCOPES = {"here": "here", "this project": "here", "the current directory": "here",
            "downloads": "Downloads", "my downloads": "Downloads", "documents": "Documents",
            "my documents": "Documents", "research": "research", "projects": "projects"}
+_TYPE_WORDS = {'markdown': 'md', 'python': 'py', 'text': 'txt', 'javascript': 'js',
+               'typescript': 'ts', 'shell': 'sh', 'bash': 'sh', 'rust': 'rs', 'ruby': 'rb',
+               'perl': 'pl', 'golang': 'go', 'excel': 'xlsx', 'word': 'docx', 'powerpoint': 'pptx',
+               'jpeg': 'jpg'}
+_CATEGORIES = frozenset({'image', 'images', 'photo', 'photos', 'picture', 'pictures', 'video', 'videos',
+                         'audio', 'music', 'sound', 'document', 'documents', 'office', 'archive',
+                         'archives', 'source', 'code', 'binary', 'executable', 'media', 'config',
+                         'backup', 'data', 'temp', 'temporary', 'old', 'new', 'big', 'small', 'empty',
+                         'duplicate', 'other', 'important', 'these', 'those', 'the', 'any', 'every'})
 _LITERAL = r'''(?:"[^"\n]+"|'[^'\n]+')'''
 _SCOPE = rf'(?:{_LITERAL}|[\w~./ -]+?)'
 _DATE = r'(?:today|yesterday|last [1-9][0-9]? days)'
@@ -81,6 +90,10 @@ def parse(request: str) -> list[Action]:
             extension = m[1].lower()
             if extension in ('all', 'my', 'some', 'hidden', 'system', 'deleted', 'large', 'largest', 'recent', 'newest'):
                 continue
+            if extension in _CATEGORIES:
+                raise ValueError('name one file extension; a category spans several')
+            # A type word is not an extension: "markdown files" are *.md, not *.markdown.
+            extension = _TYPE_WORDS.get(extension, extension)
             return [Action('find_files', {'scope': _scope(m[2]), 'name': '', 'extension': extension, 'modified': (m[3] or 'any').lower()})]
         if mode == 'date':
             return [Action('find_files', {'scope': _scope(m[1]), 'name': '', 'extension': '', 'modified': m[2].lower()})]

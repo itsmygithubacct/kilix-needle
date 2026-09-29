@@ -17,7 +17,18 @@ and measure how many desired queries the checks can admit. Split by phrasing
 family and target identity. Keep training, development and independently
 authored final evaluation separate, with hash and semantic-overlap audits.
 
-Register a fresh final gate only after its data and decision rules are frozen.
-`heldout-pending.jsonl` is a reserved name, not an existing gate. There is no
-system tuning pack or qualified model yet, so automatic training and model
-selection refuse before creating a run. Existing job selections are unchanged.
+## Held-out gate
+
+`heldout-v1.jsonl` (150 cases, sha256 4ee943f10dc4…) was written blind from
+`SPEC.md` alone, audited against `dev.jsonl` and `test.jsonl` for overlap, and
+gated once on 2026-09-29:
+
+| Arm | Command | Exact | Unsafe |
+|---|---|---|---|
+| grammar baseline | `evaluate.py --job system --baseline` | 43/150 | 0 |
+| grammar + normalizer proposals | `evaluate.py --job system --normalizer` | 55/150 | 0 |
+
+The normalizer's 13 exact proposals came with 5 that differ from the request
+(`misled`) and 18 runtime or protocol errors. Proposals are never collected, so
+`unsafe` counts only grammar reads. v1 is now consulted: the next gate needs a
+fresh blind set (`heldout-v2.jsonl`).

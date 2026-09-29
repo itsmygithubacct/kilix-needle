@@ -1,0 +1,150 @@
+{"request": "is my swap getting used much", "expect": [["resources", {"kind": "memory"}]], "tag": "resources"}
+{"request": "load avg?", "expect": [["resources", {"kind": "cpu"}]], "tag": "resources"}
+{"request": "disk space left?", "expect": [["resources", {"kind": "disk"}]], "tag": "resources"}
+{"request": "df for /home please", "expect": [["resources", {"kind": "disk", "path": "/home"}]], "tag": "resources"}
+{"request": "how much space is left on /var", "expect": [["resources", {"kind": "disk", "path": "/var"}]], "tag": "resources"}
+{"request": "give me the full picture: memory, cpu load, disks", "expect": [["resources", {"kind": "all"}]], "tag": "resources"}
+{"request": "quick health snapshot - mem, load and storage", "expect": [["resources", {"kind": "all"}]], "tag": "resources"}
+{"request": "am i running low on memory", "expect": [["resources", {"kind": "memory"}]], "tag": "resources"}
+{"request": "what's the cpu load been over the last 15 min", "expect": [["resources", {"kind": "cpu"}]], "tag": "resources"}
+{"request": "is /srv/backups nearly full", "expect": [["resources", {"kind": "disk", "path": "/srv/backups"}]], "tag": "resources"}
+{"request": "free -h", "expect": [["resources", {"kind": "memory"}]], "tag": "resources"}
+{"request": "uptime load numbers pls", "expect": [["resources", {"kind": "cpu"}]], "tag": "resources"}
+{"request": "how much room does /mnt/data have left", "expect": [["resources", {"kind": "disk", "path": "/mnt/data"}]], "tag": "resources"}
+{"request": "memroy usage?", "expect": [["resources", {"kind": "memory"}]], "tag": "resources"}
+{"request": "whats the load like on this machine", "expect": [["resources", {"kind": "cpu"}]], "tag": "resources"}
+{"request": "any free space on /boot? kernel updates keep complaining", "expect": [["resources", {"kind": "disk", "path": "/boot"}]], "tag": "resources"}
+{"request": "check storage capacity", "expect": [["resources", {"kind": "disk"}]], "tag": "resources"}
+{"request": "how much of my ram is actually in use vs available", "expect": [["resources", {"kind": "memory"}]], "tag": "resources"}
+{"request": "is the filesystem at /var/lib/docker filling up", "expect": [["resources", {"kind": "disk", "path": "/var/lib/docker"}]], "tag": "resources"}
+{"request": "show me memory, cpu and disk all at once", "expect": [["resources", {"kind": "all"}]], "tag": "resources"}
+{"request": "what's eating my ram", "expect": [["processes", {"sort": "memory"}]], "tag": "processes"}
+{"request": "top 5 cpu hogs", "expect": [["processes", {"sort": "cpu", "limit": 5}]], "tag": "processes"}
+{"request": "which processes use the most memory?", "expect": [["processes", {"sort": "memory"}]], "tag": "processes"}
+{"request": "show me the 20 heaviest processes by cpu", "expect": [["processes", {"sort": "cpu", "limit": 20}]], "tag": "processes"}
+{"request": "something is pegging the cpu, what is it", "expect": [["processes", {"sort": "cpu"}]], "tag": "processes"}
+{"request": "list the top 3 memory users", "expect": [["processes", {"sort": "memory", "limit": 3}]], "tag": "processes"}
+{"request": "ps sorted by rss, top 15", "expect": [["processes", {"sort": "memory", "limit": 15}]], "tag": "processes"}
+{"request": "biggest single process by memory?", "expect": [["processes", {"sort": "memory", "limit": 1}]], "tag": "processes"}
+{"request": "whats using all my cpu", "expect": [["processes", {"sort": "cpu"}]], "tag": "processes"}
+{"request": "top 50 procs by mem", "expect": [["processes", {"sort": "memory", "limit": 50}]], "tag": "processes"}
+{"request": "which program is hogging RAM right now", "expect": [["processes", {"sort": "memory"}]], "tag": "processes"}
+{"request": "fans are screaming, which processes are burning cpu", "expect": [["processes", {"sort": "cpu"}]], "tag": "processes"}
+{"request": "show 8 processes with the highest cpu usage", "expect": [["processes", {"sort": "cpu", "limit": 8}]], "tag": "processes"}
+{"request": "top two memory consumers", "expect": [["processes", {"sort": "memory", "limit": 2}]], "tag": "processes"}
+{"request": "who's using the most cpu, give me 25 of them", "expect": [["processes", {"sort": "cpu", "limit": 25}]], "tag": "processes"}
+{"request": "the single most cpu hungry process", "expect": [["processes", {"sort": "cpu", "limit": 1}]], "tag": "processes"}
+{"request": "memory hogs", "expect": [["processes", {"sort": "memory"}]], "tag": "processes"}
+{"request": "rank processes by cpu", "expect": [["processes", {"sort": "cpu"}]], "tag": "processes"}
+{"request": "top 12 by resident memory", "expect": [["processes", {"sort": "memory", "limit": 12}]], "tag": "processes"}
+{"request": "which 30 processes are using the most memory", "expect": [["processes", {"sort": "memory", "limit": 30}]], "tag": "processes"}
+{"request": "any failed services?", "expect": [["services", {"state": "failed"}]], "tag": "services"}
+{"request": "is nginx running", "expect": [["services", {"unit": "nginx"}]], "tag": "services"}
+{"request": "status of docker", "expect": [["services", {"unit": "docker"}]], "tag": "services"}
+{"request": "systemctl --failed", "expect": [["services", {"state": "failed"}]], "tag": "services"}
+{"request": "hey can u pull up how avahi-daemon is doing", "expect": [["services", {"unit": "avahi-daemon"}]], "tag": "services"}
+{"request": "is NetworkManager up?", "expect": [["services", {"unit": "NetworkManager"}]], "tag": "services"}
+{"request": "check bluetooth.service", "expect": [["services", {"unit": "bluetooth.service"}]], "tag": "services"}
+{"request": "which of my user services have failed", "expect": [["services", {"state": "failed", "scope": "user"}]], "tag": "services"}
+{"request": "systemctl --user status pipewire", "expect": [["services", {"unit": "pipewire", "scope": "user"}]], "tag": "services"}
+{"request": "is cups ok", "expect": [["services", {"unit": "cups"}]], "tag": "services"}
+{"request": "postgresql@16-main status?", "expect": [["services", {"unit": "postgresql@16-main"}]], "tag": "services"}
+{"request": "show every loaded service", "expect": [["services", {}]], "tag": "services"}
+{"request": "what units are sitting in a failed state", "expect": [["services", {"state": "failed"}]], "tag": "services"}
+{"request": "systemctl --user list-units", "expect": [["services", {"scope": "user"}]], "tag": "services"}
+{"request": "is sshd active", "expect": [["services", {"unit": "sshd"}]], "tag": "services"}
+{"request": "is cron running?", "expect": [["services", {"unit": "cron"}]], "tag": "services"}
+{"request": "whats the state of apache2", "expect": [["services", {"unit": "apache2"}]], "tag": "services"}
+{"request": "wireplumber status, it's a user service", "expect": [["services", {"unit": "wireplumber", "scope": "user"}]], "tag": "services"}
+{"request": "systemctl status containerd", "expect": [["services", {"unit": "containerd"}]], "tag": "services"}
+{"request": "list my user services", "expect": [["services", {"scope": "user"}]], "tag": "services"}
+{"request": "show recent logs", "expect": [["journal", {}]], "tag": "journal"}
+{"request": "errors in the journal from today", "expect": [["journal", {"boot": "any", "since": "today", "priority": "err"}]], "tag": "journal"}
+{"request": "nginx logs from the last 2 hours", "expect": [["journal", {"unit": "nginx", "boot": "any", "since": "2 hours ago"}]], "tag": "journal"}
+{"request": "logs from the previous boot", "expect": [["journal", {"boot": "previous"}]], "tag": "journal"}
+{"request": "any warnings since yesterday", "expect": [["journal", {"boot": "any", "since": "yesterday", "priority": "warning"}]], "tag": "journal"}
+{"request": "journalctl -u docker -n 20", "expect": [["journal", {"unit": "docker", "limit": 20}]], "tag": "journal"}
+{"request": "what did ssh log during the last boot", "expect": [["journal", {"unit": "ssh", "boot": "previous"}]], "tag": "journal"}
+{"request": "errors from last boot", "expect": [["journal", {"boot": "previous", "priority": "err"}]], "tag": "journal"}
+{"request": "show me journal entries since 2026-09-20", "expect": [["journal", {"boot": "any", "since": "2026-09-20"}]], "tag": "journal"}
+{"request": "last 100 log lines", "expect": [["journal", {"limit": 100}]], "tag": "journal"}
+{"request": "my user journal, errors only", "expect": [["journal", {"scope": "user", "priority": "err"}]], "tag": "journal"}
+{"request": "pipewire user logs from the past 30 minutes", "expect": [["journal", {"unit": "pipewire", "scope": "user", "boot": "any", "since": "30 minutes ago"}]], "tag": "journal"}
+{"request": "bluetooth errors across all boots", "expect": [["journal", {"unit": "bluetooth", "boot": "any", "priority": "err"}]], "tag": "journal"}
+{"request": "cups logs this boot", "expect": [["journal", {"unit": "cups"}]], "tag": "journal"}
+{"request": "what's been logged in the last 45 min", "expect": [["journal", {"boot": "any", "since": "45 minutes ago"}]], "tag": "journal"}
+{"request": "postgresql@16-main warnings from the past 3 days", "expect": [["journal", {"unit": "postgresql@16-main", "boot": "any", "since": "3 days ago", "priority": "warning"}]], "tag": "journal"}
+{"request": "show the 10 most recent error messages", "expect": [["journal", {"priority": "err", "limit": 10}]], "tag": "journal"}
+{"request": "NetworkManager log for today", "expect": [["journal", {"unit": "NetworkManager", "boot": "any", "since": "today"}]], "tag": "journal"}
+{"request": "containerd journal for the past hour", "expect": [["journal", {"unit": "containerd", "boot": "any", "since": "1 hour ago"}]], "tag": "journal"}
+{"request": "logs from the previous boot since yesterday", "expect": [["journal", {"boot": "previous", "since": "yesterday"}]], "tag": "journal"}
+{"request": "warnings from all boots, just 5", "expect": [["journal", {"boot": "any", "priority": "warning", "limit": 5}]], "tag": "journal"}
+{"request": "apache2 logs since 2026-09-01", "expect": [["journal", {"unit": "apache2", "boot": "any", "since": "2026-09-01"}]], "tag": "journal"}
+{"request": "any errors in the last 90 minutes?", "expect": [["journal", {"boot": "any", "since": "90 minutes ago", "priority": "err"}]], "tag": "journal"}
+{"request": "my user logs from the previous boot", "expect": [["journal", {"scope": "user", "boot": "previous"}]], "tag": "journal"}
+{"request": "sshd journal, 40 lines", "expect": [["journal", {"unit": "sshd", "limit": 40}]], "tag": "journal"}
+{"request": "is curl installed", "expect": [["packages", {"operation": "status", "target": "curl"}]], "tag": "packages"}
+{"request": "which package provides /usr/bin/rg", "expect": [["packages", {"operation": "owner", "target": "/usr/bin/rg"}]], "tag": "packages"}
+{"request": "what package owns the ls command", "expect": [["packages", {"operation": "owner", "target": "ls"}]], "tag": "packages"}
+{"request": "is the ffmpeg package installed?", "expect": [["packages", {"operation": "status", "target": "ffmpeg"}]], "tag": "packages"}
+{"request": "dpkg -S /etc/ssh/sshd_config", "expect": [["packages", {"operation": "owner", "target": "/etc/ssh/sshd_config"}]], "tag": "packages"}
+{"request": "is build-essential installed?", "expect": [["packages", {"operation": "status", "target": "build-essential"}]], "tag": "packages"}
+{"request": "where does the jq command come from, package-wise", "expect": [["packages", {"operation": "owner", "target": "jq"}]], "tag": "packages"}
+{"request": "is libssl3 on this box", "expect": [["packages", {"operation": "status", "target": "libssl3"}]], "tag": "packages"}
+{"request": "which deb put /usr/lib/x86_64-linux-gnu/libz.so.1 there", "expect": [["packages", {"operation": "owner", "target": "/usr/lib/x86_64-linux-gnu/libz.so.1"}]], "tag": "packages"}
+{"request": "do i have postgresql-16 installed", "expect": [["packages", {"operation": "status", "target": "postgresql-16"}]], "tag": "packages"}
+{"request": "who ships the htop command", "expect": [["packages", {"operation": "owner", "target": "htop"}]], "tag": "packages"}
+{"request": "check if python3-venv is installed", "expect": [["packages", {"operation": "status", "target": "python3-venv"}]], "tag": "packages"}
+{"request": "what package does /usr/sbin/nginx belong to", "expect": [["packages", {"operation": "owner", "target": "/usr/sbin/nginx"}]], "tag": "packages"}
+{"request": "is git installed here", "expect": [["packages", {"operation": "status", "target": "git"}]], "tag": "packages"}
+{"request": "which package gives me the rsync command", "expect": [["packages", {"operation": "owner", "target": "rsync"}]], "tag": "packages"}
+{"request": "check memory and show the top 5 memory processes", "expect": [["resources", {"kind": "memory"}], ["processes", {"sort": "memory", "limit": 5}]], "tag": "compound"}
+{"request": "is nginx running? and show its errors from today", "expect": [["services", {"unit": "nginx"}], ["journal", {"unit": "nginx", "boot": "any", "since": "today", "priority": "err"}]], "tag": "compound"}
+{"request": "any failed services, and the error logs from this boot", "expect": [["services", {"state": "failed"}], ["journal", {"priority": "err"}]], "tag": "compound"}
+{"request": "is htop installed and what's using the most cpu", "expect": [["packages", {"operation": "status", "target": "htop"}], ["processes", {"sort": "cpu"}]], "tag": "compound"}
+{"request": "disk space on /var and the last 20 log lines", "expect": [["resources", {"kind": "disk", "path": "/var"}], ["journal", {"limit": 20}]], "tag": "compound"}
+{"request": "load average then the top cpu processes", "expect": [["resources", {"kind": "cpu"}], ["processes", {"sort": "cpu"}]], "tag": "compound"}
+{"request": "docker status plus its logs from the previous boot", "expect": [["services", {"unit": "docker"}], ["journal", {"unit": "docker", "boot": "previous"}]], "tag": "compound"}
+{"request": "who owns /usr/bin/python3 and is python3-pip installed", "expect": [["packages", {"operation": "owner", "target": "/usr/bin/python3"}], ["packages", {"operation": "status", "target": "python3-pip"}]], "tag": "compound"}
+{"request": "ram, cpu and disk overview, then list failed units", "expect": [["resources", {"kind": "all"}], ["services", {"state": "failed"}]], "tag": "compound"}
+{"request": "status of cups and bluetooth", "expect": [["services", {"unit": "cups"}], ["services", {"unit": "bluetooth"}]], "tag": "compound"}
+{"request": "memory usage, biggest 3 memory procs, and warnings in the last hour", "expect": [["resources", {"kind": "memory"}], ["processes", {"sort": "memory", "limit": 3}], ["journal", {"boot": "any", "since": "1 hour ago", "priority": "warning"}]], "tag": "compound"}
+{"request": "check my user services for failures and show my user log errors", "expect": [["services", {"state": "failed", "scope": "user"}], ["journal", {"scope": "user", "priority": "err"}]], "tag": "compound"}
+{"request": "is postgresql@16-main up, and how full is /var/lib/postgresql", "expect": [["services", {"unit": "postgresql@16-main"}], ["resources", {"kind": "disk", "path": "/var/lib/postgresql"}]], "tag": "compound"}
+{"request": "is sshd running and which package owns /usr/sbin/sshd", "expect": [["services", {"unit": "sshd"}], ["packages", {"operation": "owner", "target": "/usr/sbin/sshd"}]], "tag": "compound"}
+{"request": "top cpu processes and the cpu load too", "expect": [["processes", {"sort": "cpu"}], ["resources", {"kind": "cpu"}]], "tag": "compound"}
+{"request": "restart nginx", "expect": [], "tag": "refusal"}
+{"request": "show me the docker status then restart it", "expect": [], "tag": "refusal"}
+{"request": "check the service status", "expect": [], "tag": "refusal"}
+{"request": "is that package installed?", "expect": [], "tag": "refusal"}
+{"request": "status of nginx*", "expect": [], "tag": "refusal"}
+{"request": "logs for php*-fpm", "expect": [], "tag": "refusal"}
+{"request": "logs since 2026-02-30", "expect": [], "tag": "refusal"}
+{"request": "top 0 processes by memory", "expect": [], "tag": "refusal"}
+{"request": "show 200 journal lines", "expect": [], "tag": "refusal"}
+{"request": "how full is var/log", "expect": [], "tag": "refusal"}
+{"request": "don't check the disk", "expect": [], "tag": "refusal"}
+{"request": "show failed services, never mind", "expect": [], "tag": "refusal"}
+{"request": "if memory is low, list the top processes", "expect": [], "tag": "refusal"}
+{"request": "in an hour, show me the cpu load", "expect": [], "tag": "refusal"}
+{"request": "my friend said to run systemctl status sshd", "expect": [], "tag": "refusal"}
+{"request": "what's my ip address", "expect": [], "tag": "refusal"}
+{"request": "gpu utilization?", "expect": [], "tag": "refusal"}
+{"request": "who is logged in right now", "expect": [], "tag": "refusal"}
+{"request": "what's in /etc/fstab", "expect": [], "tag": "refusal"}
+{"request": "why is my laptop so slow", "expect": [], "tag": "refusal"}
+{"request": "vacuum the journal down to 100M", "expect": [], "tag": "refusal"}
+{"request": "uninstall snapd", "expect": [], "tag": "refusal"}
+{"request": "kill whatever is using the most memory", "expect": [], "tag": "refusal"}
+{"request": "upgrade everything and tell me if curl is installed", "expect": [], "tag": "refusal"}
+{"request": "disable bluetooth", "expect": [], "tag": "refusal"}
+{"request": "open nginx.conf and fix the typo", "expect": [], "tag": "refusal"}
+{"request": "reboot and then show logs from the previous boot", "expect": [], "tag": "refusal"}
+{"request": "is any lib* package installed", "expect": [], "tag": "refusal"}
+{"request": "which package owns ./configure", "expect": [], "tag": "refusal"}
+{"request": "show logs from 1000 days ago", "expect": [], "tag": "refusal"}
+{"request": "what would happen if i stopped cups", "expect": [], "tag": "refusal"}
+{"request": "how hot is the cpu running", "expect": [], "tag": "refusal"}
+{"request": "delete old logs in /var/log", "expect": [], "tag": "refusal"}
+{"request": "top 51 cpu processes", "expect": [], "tag": "refusal"}
+{"request": "which package does this file belong to", "expect": [], "tag": "refusal"}

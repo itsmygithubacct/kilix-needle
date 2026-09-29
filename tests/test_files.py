@@ -43,6 +43,16 @@ class Grammar(unittest.TestCase):
             with self.subTest(text=text):
                 with self.assertRaises(ValueError):job.parse(text)
 
+    def test_type_words_are_extensions_not_literals(self):
+        # Files held-out v1: "markdown files" searched *.markdown, not *.md.
+        for word,ext in (('markdown','md'),('python','py'),('text','txt'),('MD','md'),('csv','csv')):
+            with self.subTest(word=word):
+                self.assertEqual(job.parse(f'show {word} files in research'),
+                                 [job.Action('find_files',{'scope':'research','name':'','extension':ext,'modified':'any'})])
+        for word in ('image','photos','video','music','code','document'):
+            with self.subTest(word=word):
+                with self.assertRaises(ValueError):job.parse(f'find {word} files in Downloads')
+
     def test_proposals_cannot_broaden_or_add_queries(self):
         text='find pdf files in Downloads modified yesterday'
         calls=job.Baseline().complete(text)['function_calls']

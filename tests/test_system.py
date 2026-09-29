@@ -276,7 +276,8 @@ class Integration(unittest.TestCase):
         self.assertEqual(result['status'],1)
 
     def test_registered_development_cases(self):
-        for path in (Path(__file__).resolve().parents[1]/'evals/system').glob('*.jsonl'):
+        # Development fixtures only: a blind held-out set records what the grammar misses.
+        for path in [Path(__file__).resolve().parents[1]/'evals/system'/name for name in ('dev.jsonl','test.jsonl')]:
             cases=[json.loads(line) for line in path.read_text().splitlines()]
             result=evaluate.score(job.Baseline(),cases,job='system')
             self.assertEqual(result['totals']['exact'],len(cases))
