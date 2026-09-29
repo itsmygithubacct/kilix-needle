@@ -37,7 +37,8 @@ _REQUEST = {"type": "string",
             "description": "e.g. 'split right', 'close the htop pane'"}
 TOOL_LIST = [
     {"name": "kilix_plan",
-     "description": "Preview a plain request about Kilix panes and tabs. Runs nothing.",
+     "description": "Preview a panes or tabs request; runs nothing. kilix_act runs the same "
+                    "checks, so call it directly.",
      "inputSchema": {"type": "object", "properties": {"request": _REQUEST},
                      "required": ["request"], "additionalProperties": False}},
     {"name": "kilix_act",
@@ -58,15 +59,15 @@ _APPS_REQUEST = {"type": "string",
                                 "'set speech rate to 200 wpm'"}
 TOOL_LIST += [
     {"name": "kilix_apps_plan",
-     "description": "Preview a request about Kilix apps, games, settings, audio, music, "
-                    "voice or text size. Changes and installs nothing; readiness checks may "
-                    "query audio and music and refresh Kilix's app directory.",
+     "description": "Preview an apps, games or settings request; changes and installs nothing "
+                    "(readiness checks may query audio and refresh the app directory). "
+                    "kilix_apps_act runs the same checks.",
      "inputSchema": {"type": "object", "properties": {"request": _APPS_REQUEST},
                      "required": ["request"], "additionalProperties": False}},
     {"name": "kilix_apps_act",
-     "description": "Do it: open an app or game in a new tab, change a Kilix setting or "
+     "description": "Do it: open an app or game in a new tab, change a setting or "
                     "indicator, control audio, music, voice or text size, query status. "
-                    "Queries and opening settings need no confirmation; everything else needs "
+                    "Queries and opening settings need no yes; everything else needs "
                     "confirm_risky and a plainly stated request. Anything that may install "
                     "waits for a person.",
      "inputSchema": {"type": "object", "properties": {
@@ -80,14 +81,14 @@ _AGENTS_REQUEST = {"type": "string",
                                   "'tell the claude session in the os repo to run the suite'"}
 TOOL_LIST += [
     {"name": "kilix_agents_plan",
-     "description": "Preview a request about coding-agent sessions (claude, codex, grok, "
-                    "qwen-omp): start, wait, message. Runs nothing.",
+     "description": "Preview a coding-agent request (claude, codex, grok, qwen-omp: start, "
+                    "wait, message); runs nothing. kilix_agents_act runs the same checks.",
      "inputSchema": {"type": "object", "properties": {"request": _AGENTS_REQUEST},
                      "required": ["request"], "additionalProperties": False}},
     {"name": "kilix_agents_act",
      "description": "Do it: start an agent in a directory (new tab or split; optional task, "
                     "model, resume; trusts the folder for that client), wait until a session "
-                    "is idle or asks something, or message a session (held while it waits on "
+                    "is idle or asks something, or message a session (held while it awaits "
                     "an approval). The request is the consent. Approval skips follow Kilix's "
                     "coding-yolo setting. Anything no action accounts for refuses the whole "
                     "request.",
@@ -127,7 +128,8 @@ _LOG_PROPERTIES = {
     "operation": {"type": "string", "enum": ["events", "brief", "search", "source"],
                   "default": "events"},
     "file": {"type": "string", "description": "recorded-log file"},
-    "provider": {"type": "string", "enum": ["claude", "codex", "raw", "grok", "omp"]},
+    "provider": {"type": "string", "enum": ["claude", "codex", "raw", "grok", "omp"],
+                 "description": "with file: raw, or the session's client"},
     "session": {"type": "string", "description": "pane ID or unique session title"},
     "event_id": {"type": "string"},
     "kind": {"type": "string"},
@@ -166,7 +168,8 @@ def _logs_arguments(arguments):
         if ("file" in arguments) == ("session" in arguments):
             raise ValueError("select exactly one logs file or session")
         if "file" in arguments and "provider" not in arguments:
-            raise ValueError("logs file requires provider")
+            raise ValueError("logs file requires provider: raw for a plain text log, or "
+                             "claude, codex, grok or omp for that client's session file")
         if operation == "search" and "query" not in arguments:
             raise ValueError("logs search requires query")
 

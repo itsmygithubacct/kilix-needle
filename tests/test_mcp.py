@@ -188,6 +188,28 @@ class TokenCost(unittest.TestCase):
         self.assertIn("refused", text)
 
 
+class FirstCallRight(unittest.TestCase):
+    """Luna route benchmark (2026-09-29): every kilix_logs_read of a plain file first failed on
+    the missing provider, and agents called a _plan tool before its _act 67 times. Each is a
+    whole extra model round trip (~14k tokens)."""
+
+    def test_the_schema_and_the_error_both_name_the_provider_to_use(self):
+        spec = next(t for t in mcp_server.TOOL_LIST if t["name"] == "kilix_logs_read")
+        self.assertIn("raw", spec["inputSchema"]["properties"]["provider"]["description"])
+        replies, _ = converse([call(1, "kilix_logs_read", file="/tmp/app.log",
+                                    operation="search", query="x")])
+        message = replies[0]["error"]["message"]
+        self.assertIn("raw for a plain text log", message)
+        self.assertIn("codex", message)
+
+    def test_each_plan_tool_says_its_act_tool_runs_the_same_checks(self):
+        tools = {t["name"]: t["description"] for t in mcp_server.TOOL_LIST}
+        for plan, act in (("kilix_plan", "kilix_act"), ("kilix_apps_plan", "kilix_apps_act"),
+                          ("kilix_agents_plan", "kilix_agents_act")):
+            with self.subTest(plan=plan):
+                self.assertIn(f"{act} runs the same checks", tools[plan])
+
+
 class FuzzyUnderMcp(unittest.TestCase):
     """Review R8 mutant G01: a whole-word target is never acted on through MCP."""
 
