@@ -324,7 +324,8 @@ Recording never changes what a request does or returns:
 ## The apps job
 
 `kilix-needle apps "…"` launches Kilix apps and games and changes Kilix
-settings. The MCP tools are `kilix_apps_plan` and `kilix_apps_act`.
+settings. It also has exact commands for audio, playback, voice, text size and
+system status. The MCP tools are `kilix_apps_plan` and `kilix_apps_act`.
 
 ```sh
 kilix-needle apps "open the pdf viewer"          # a new tab running kilix-pdf
@@ -332,7 +333,19 @@ kilix-needle apps "hide the clock and the battery"
 kilix-needle apps "show memory on panes always"
 kilix-needle apps "disable doom in the games list"
 kilix-needle apps --dry-run "take me to the voice settings"
+kilix-needle apps "list audio devices"
+kilix-needle apps --dry-run "mute microphone"
+kilix-needle apps --yes "set system volume to 40%"
+kilix-needle apps --yes "pause music"
+kilix-needle apps "show memory usage"
 ```
+
+The [exact controls](docs/apps-controls.md) are checked before anything else.
+- **Shape:** each needs one complete command, with typed and bounded arguments
+  (`app_controls.parse`).
+- **Confirmation:** changes require it; status queries don't.
+- **Dependencies:** they don't install any audio, voice or media dependencies.
+- **Answers:** anything they don't recognise goes to the apps grammar below.
 
 No model answers apps requests. The job has five tools: `launch`, `show`,
 `pane_stat`, `game` and `settings`. `apps.propose` offers every call those tools
@@ -417,8 +430,8 @@ Every call passes `apps.py`'s checks:
 - installs, updates and removals, except a launch a person confirms;
 - bulk changes;
 - transcript budgets and turning session logging off;
-- voice engines, models and devices;
-- volume levels;
+- voice engines, models and voice-specific device overrides (the system
+  default input and output are available through the exact controls);
 - closing apps (that's the panes job).
 
 **Accuracy.** Stock Needle 2 gets 29 of 40 dev and 58 of 90 test requests

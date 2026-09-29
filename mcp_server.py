@@ -56,12 +56,14 @@ TOOL_LIST = [
 
 
 _APPS_REQUEST = {"type": "string",
-                 "description": "a plain request about Kilix apps, games or settings, e.g. "
-                                "'open solitaire', 'hide the clock', 'disable doom'"}
+                 "description": "a plain request about Kilix apps, games, settings or controls, e.g. "
+                                "'open solitaire', 'mute microphone', 'pause music', "
+                                "'set speech rate to 200 wpm', 'show memory usage'"}
 TOOL_LIST += [
     {"name": "kilix_apps_plan",
-     "description": "Show what a plain request would do to Kilix apps, games and settings. "
-                    "Changes no setting and installs nothing. It runs Kilix's own readiness "
+     "description": "Show what a plain request would do to Kilix apps, games, settings, "
+                    "audio, music, voice or text size. Changes no setting and installs nothing; "
+                    "audio devices and the running music player may be queried for readiness. It runs Kilix's own readiness "
                     "checks in an isolated Python; they may create Kilix's empty apps "
                     "directory and refresh a managed checkout's git index.",
      "inputSchema": {"type": "object", "properties": {"request": _APPS_REQUEST},
@@ -70,7 +72,9 @@ TOOL_LIST += [
      "description": "Carry out a plain request on Kilix apps, games and settings: open an "
                     "app or game in a new tab, show or hide a top-bar indicator or pane "
                     "button, set the pane CPU/memory readout, make a game available or not, "
-                    "open a settings section. Everything but opening a settings section needs "
+                    "open a settings section; control audio, music, voice and text size, or "
+                    "query system status (exact phrasings only). Read-only queries and opening "
+                    "a settings section need no confirmation; everything else needs "
                     "confirm_risky=true and a plain request (each action in a canonical form, "
                     "nothing else said but courtesy). A launch that may install waits for a "
                     "person: dosbox, apps built from system sources and the host tools "

@@ -23,6 +23,7 @@ import time
 from typing import Callable
 
 from actions import LEGACY_TOOLS, Action, Refusal, interpret, plain
+import app_controls
 import asset
 import history
 import jobs
@@ -131,7 +132,7 @@ def run_request(engine: Engine, request: str, options: Options,
         request, getattr(engine, "translate", lambda c: c)(calls), options, confirm))
 
 
-def _recorded(job: str, engine, request: str, options: Options, run) -> dict:
+def _recorded(job: str, engine, request: str, options: Options, run, exact=None) -> dict:
     """Check the prompt, ask the engine, run its calls, and record the request
     in the local history (history.py) whatever happens."""
     started = time.monotonic()
@@ -141,6 +142,9 @@ def _recorded(job: str, engine, request: str, options: Options, run) -> dict:
             request = checked = check_prompt(request)
         except ValueError as error:
             result = {"request": request, "status": 1, "note": str(error), "items": []}
+            return result
+        if exact is not None and (result := exact(request)) is not None:
+            engine = type("Exact", (), {"label": "control"})()   # recorded as the exact route
             return result
         engine.reset()
         calls = engine.complete(request).get("function_calls") or []
@@ -336,8 +340,14 @@ def run_agents_calls(request: str, calls: list, options: Options, *,
 def run_apps_request(engine, request: str, options: Options,
                      confirm: Callable[[str], bool] = _terminal_confirm) -> dict:
     """One apps-job request, as the same record as run_request."""
+    def control(request):
+        # Exact, model-independent controls (audio, music, voice, text size,
+        # status): one whole request, one typed action (app_controls.py).
+        found = app_controls.parse(request)
+        return None if found is None else app_controls.run(found, request, options, confirm)
     return _recorded("apps", engine, request, options, lambda request, calls: run_apps_calls(
-        request, getattr(engine, "translate", lambda c: c)(calls), options, confirm))
+        request, getattr(engine, "translate", lambda c: c)(calls), options, confirm),
+        exact=control)
 
 
 def run_apps_calls(request: str, calls: list, options: Options,
@@ -447,6 +457,8 @@ def render(record: dict) -> str:
             lines.append(f"  failed: {item['reason']}")
         else:
             lines.append(f"  done: {item['summary']}")
+            if "result" in item:
+                lines.append(json.dumps(item["result"], ensure_ascii=True, indent=2))
     return "\n".join(lines)
 
 

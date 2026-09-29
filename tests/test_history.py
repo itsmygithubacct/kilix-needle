@@ -405,5 +405,22 @@ class ReviewR17Round3(unittest.TestCase):
         self.assertTrue((self.folder / "requests.1.jsonl").exists())
 
 
+class Controls(unittest.TestCase):
+    def setUp(self):
+        shutil.rmtree(history.directory(), ignore_errors=True)
+        os.environ.pop("KILIX_NEEDLE_HISTORY", None)
+
+    def test_an_exact_control_is_recorded_as_the_control_route(self):
+        import app_controls_backend as backend
+        with mock.patch.object(backend, "prepare", return_value=mock.Mock(
+                summary="mute the microphone", public=lambda: {})):
+            needle_cli.run_apps_request(grammar(), "mute microphone", needle_cli.Options(dry_run=True))
+        (entry,) = [json.loads(l) for l in
+                    (history.directory() / "requests.jsonl").read_text().splitlines()]
+        self.assertEqual((entry["engine"], entry["calls"], entry["items"][0]["outcome"]),
+                         ("control", None, "would"))
+        self.assertEqual(entry["items"][0]["kind"], "audio")
+
+
 if __name__ == "__main__":
     unittest.main()
