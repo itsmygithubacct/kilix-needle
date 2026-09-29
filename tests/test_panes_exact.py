@@ -24,13 +24,42 @@ class Forms(unittest.TestCase):
         }
         for request, (kind, args) in cases.items():
             with self.subTest(request=request):
-                self.assertEqual(panes_exact.admitted(request), [{"name": kind, "arguments": args}])
+                self.assertEqual(panes_exact.admitted(request)[0], [{"name": kind, "arguments": args}])
 
     def test_anything_more_is_left_to_the_model(self):
         for request in ("close the pane titled bench-target and tab 2", "don't close pane 70",
                         "close the pane titled bench-target if the build fails",
-                        "close whichever pane", "close the pane titled", "run make in the build pane",
+                        "close whichever pane", "close the pane titled", "run make tomorrow in the build pane",
                         "my boss said close tab 2", "close tab 2 - no wait, never mind"):
+            with self.subTest(request=request):
+                self.assertIsNone(panes_exact.admitted(request))
+
+
+class LunaWordings(unittest.TestCase):
+    """gpt-6-luna Needle rerun: the pane wordings that still reached the model."""
+    def test_each_is_read_as_its_canonical_sentence(self):
+        cmd = "touch /tmp/sent-1"
+        cases = {
+            'close the pane titled "bench-target" in this tab': "close the pane titled bench-target",
+            f"In the pane titled bench-target in this tab, type `{cmd}` and press Enter.":
+                f"run '{cmd}' in the pane titled bench-target",
+            f'In the pane titled "bench-target" in this tab, type `{cmd}` at the shell prompt and press Enter.':
+                f"run '{cmd}' in the pane titled bench-target",
+            f"In the pane titled bench-target, type and run: {cmd}": f"run '{cmd}' in the pane titled bench-target",
+            f"Type and press Enter: {cmd} in pane titled bench-target": f"run '{cmd}' in the pane titled bench-target",
+            f"Run the command {cmd} in the pane titled bench-target in this tab.":
+                f"run '{cmd}' in the pane titled bench-target",
+            "Split right and run bash.": "split right",
+            "Open a new pane directly to the right of the pane you are running in. It should run a shell.":
+                "split right",
+            "split right and run htop": "split right and run htop",
+        }
+        for request, sentence in cases.items():
+            with self.subTest(request=request):
+                self.assertEqual(panes_exact.admitted(request)[1], sentence)
+
+    def test_an_unquoted_command_is_only_program_and_arguments(self):
+        for request in ("Run touch tomorrow in pane bench-target", "run make if the tests pass in pane 2"):
             with self.subTest(request=request):
                 self.assertIsNone(panes_exact.admitted(request))
 
@@ -46,6 +75,17 @@ class Route(unittest.TestCase):
             record = needle_cli.run_request(engine, "go to the notes pane", needle_cli.Options(dry_run=True))
         engine.complete.assert_not_called()
         self.assertEqual([(i["kind"], i["outcome"]) for i in record["items"]], [("go_to_pane", "would")])
+
+    def test_an_agents_request_sent_to_the_panes_job_runs_as_the_agents_job(self):
+        engine = mock.Mock()
+        os.makedirs("/tmp/kn-agent-abc", exist_ok=True)
+        with FakeKilix(desktop()):
+            record = needle_cli.run_request(
+                engine, "Start an interactive Codex coding-agent session in a new tab, working in the "
+                        "directory /tmp/kn-agent-abc. Do not give it a task.", needle_cli.Options(dry_run=True))
+        engine.complete.assert_not_called()
+        self.assertEqual(record["job"], "agents")
+        self.assertEqual([i["kind"] for i in record["items"]], ["agent"])
 
     def test_other_requests_still_go_to_the_model(self):
         engine = mock.Mock()

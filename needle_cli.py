@@ -166,7 +166,25 @@ def run_request(engine: Engine, request: str, options: Options,
         # through the same checks, resolution and confirmation.
         import panes_exact
         found = panes_exact.admitted(request)
-        return run_calls(request, found, options, confirm) if found else None
+        if not found:
+            # An agents request sent to the panes job (the bare CLI): run it as the
+            # agents job when that job's grammar reads it completely (gpt-6-luna
+            # rerun: CLI launches 1/9, the panes model ran out of its token budget).
+            import agents
+            launch = agents.exact_calls(request)
+            if launch:
+                record = run_agents_calls(request, launch, options)
+                record["job"] = "agents"
+                return record
+            return None
+        calls, canonical = found
+        # Checked and confirmed as the canonical sentence it was read as; the
+        # history keeps the words the person or agent sent.
+        record = run_calls(canonical, calls, options, confirm)
+        record["request"] = request
+        if canonical.casefold() != " ".join(request.split()).strip(" .!").casefold():
+            record["read_as"] = canonical       # only when it differs: no echo
+        return record
 
     return _recorded("panes", engine, request, options, lambda request, calls: run_calls(
         request, getattr(engine, "translate", lambda c: c)(calls), options, confirm), exact=exact)

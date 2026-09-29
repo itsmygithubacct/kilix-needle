@@ -972,9 +972,9 @@ def _bound_to_unit(mentions: list[str], text: str, unit_words: list[str]) -> boo
     units = "|".join(re.escape(word) for word in unit_words)
     for mention in mentions:
         word = re.escape(mention)
-        if re.search(rf"(?<![\w]){word}\s+(?:{units})\b"
+        if re.search(rf"(?<![\w]){word}[\"'`]?\s+(?:{units})\b"
                      rf"|\b(?:{units})\s+(?:(?:called|named|titled|labell?ed|running|with|number)\s+"
-                     rf"|(?:on|to|at)\s+(?:the\s+)?)?{word}(?![\w])",
+                     rf"|(?:on|to|at)\s+(?:the\s+)?)?[\"'`]?{word}(?![\w])",
                      text, re.IGNORECASE):
             return True
     return False
@@ -993,15 +993,20 @@ def _unquoted(text: str) -> str:
 
 def _clauses(prompt: str) -> list[str]:
     """Split conjunctions outside quoted commands; apostrophes in words are not quotes."""
-    bounds = list(_CLAUSE.finditer(_unquoted(prompt)))
+    # Quoted spans are blanked with a placeholder, not spaces: a separator's \s*
+    # swallowed blank space, and "type `touch /x` and press Enter" lost its
+    # command into the "and" between clauses.
+    masked = re.sub(r"(?<![\w])(['\"`])(?:\\.|(?!\1).)*?\1", lambda m: "\x00" * len(m[0]), prompt)
+    bounds = list(_CLAUSE.finditer(masked))
     starts = [0] + [m.end() for m in bounds]
     ends = [m.start() for m in bounds] + [len(prompt)]
     return [prompt[a:b] for a, b in zip(starts, ends)]
 
 
 # "in the vim pane, run make": a location said before the command's clause.
-_FRONTED = re.compile(r"^\s*(?:over\s+)?(?:in|into|on|at)\s+(?:the\s+)?(?:[\w.+-]+\s+){0,2}"
-                      r"(?:pane|window|split)\s*$", re.I)
+_FRONTED = re.compile(r"^\s*(?:over\s+)?(?:in|into|on|at)\s+(?:the\s+)?(?:(?:[\w.+-]+\s+){0,2}"
+                      r"(?:pane|window|split)|(?:pane|window|split)\s+(?:(?:titled|named|called|labell?ed)\s+)?"
+                      r"[\"'`]?[\w.+@:-]+[\"'`]?)(?:\s+in\s+(?:this|the\s+current)\s+tab)?\s*$", re.I)
 # "go to the chat pane and type clear there": "there" is the pane just gone to.
 _GONE_TO = re.compile(r"^\s*(?:go|switch|jump|move|head|hop)\s+(?:over\s+)?to\s+"
                       r"((?:the\s+)?(?:[\w.+-]+\s+){0,2}(?:pane|window|split))\s*$", re.I)
