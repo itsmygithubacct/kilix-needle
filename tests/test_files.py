@@ -284,3 +284,14 @@ class FilesHistory(unittest.TestCase):
             record = cli.run('find pdf files in Downloads', engine=engine)
         collector.assert_not_called()
         self.assertEqual(record["status"], 1)
+
+
+class FilesEvaluateExit(unittest.TestCase):
+    def test_the_baseline_evaluation_exits_cleanly(self):                   # KN-R19-03
+        import subprocess, sys
+        from pathlib import Path
+        repo = Path(__file__).resolve().parents[1]
+        done = subprocess.run([sys.executable, "-B", str(repo / "evaluate.py"),
+                               str(repo / "evals/files/dev.jsonl"), "--job", "files", "--baseline",
+                               "--quiet"], capture_output=True, text=True, timeout=120, cwd=repo)
+        self.assertEqual(done.returncode, 0, done.stderr[-500:])

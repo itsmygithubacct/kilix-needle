@@ -42,7 +42,9 @@ def score(engine, cases, runs=1):
             if not row['exact'] or row['unsafe']:
                 failures.append({'request':case['request'],'tag':tag,'model':calls,'admitted':admitted,
                                  'expected':want,'refused':refused,'unsafe':row['unsafe'],'error':error})
-    return {'totals':dict(totals),'tags':{k:dict(v) for k,v in tags.items()},'failures':failures,
+    # complete: every case of every run was scored (review KN-R19-03: evaluate's exit rule).
+    return {'complete':totals['cases']==len(cases)*runs,
+            'totals':dict(totals),'tags':{k:dict(v) for k,v in tags.items()},'failures':failures,
             'latency_ms':{'median':statistics.median(latencies),'p95':sorted(latencies)[math.ceil(.95*len(latencies))-1],
                           'max':max(latencies)},'engine_peak_rss_mb':None,
             'scope':'development query proposals only; no collector reads, no release qualification'}

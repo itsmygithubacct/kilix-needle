@@ -511,12 +511,29 @@ def plain(prompt: str, actions: list) -> str | None:
 # A condition or a time says the action is not for now: "if the build fails,
 # close the logs pane", "close it tomorrow" (review: held-out v10). "before"
 # and "after" stay: "the tab before this one" is a place.
-_WHEN = re.compile(r"(?<![\w-])(?:if|unless|when|whenever|once|as soon as|tomorrow|"
-                   r"tonight|later|later on|in an? (?:minute|hour|bit|while)|"
-                   r"in \d+ (?:seconds?|secs?|minutes?|mins?|hours?)|at \d{1,2}(?::\d\d)?"
-                   r"(?: ?[ap]m)?)(?![\w-])", re.IGNORECASE)
+_WEEKDAY = r"(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)"
+_COUNT = r"(?:a|an|one|two|three|four|five|ten|twenty|thirty|a few|a couple of|\d+)"
+_UNIT = r"(?:seconds?|secs?|minutes?|mins?|hours?|hrs?|days?|weeks?|months?)"
+_EVENT_VERB = (r"(?:finish(?:es|ed)?|complete[sd]?|end(?:s|ed)?|stop(?:s|ped)?|fail(?:s|ed)?|"
+               r"pass(?:es|ed)?|succeed(?:s|ed)?|crash(?:es|ed)?|exit(?:s|ed)?|is done|are done|"
+               r"is over|done)")
+# A condition or a time says the action is not for now: "if the build fails,
+# close the logs pane", "close it at noon", "after the backup finishes"
+# (held-out v10, review R19). A place is no time: "the tab before this one",
+# "the pane after this one" stay.
+_WHEN = re.compile(
+    rf"(?<![\w-])(?:if|unless|when|whenever|once|as soon as|provided|providing|assuming|"
+    rf"in case|tomorrow|tonight|later|later on|soon|eventually|next {_WEEKDAY}|next week|"
+    rf"next month|this (?:morning|afternoon|evening|weekend)|on {_WEEKDAY}|{_WEEKDAY}|"
+    rf"at (?:noon|midnight|\d{{1,2}}(?::\d\d)?(?: ?[ap]\.?m\.?)?)|"
+    rf"in {_COUNT} {_UNIT}|in an? (?:minute|hour|bit|while|moment|sec|second)|"
+    rf"after (?:the |my |your |our |this |that |it |i |you |we )?[\w-]+(?: [\w-]+)? {_EVENT_VERB}|"
+    rf"after (?:lunch|dinner|breakfast|work|the meeting|the call|a (?:while|bit|minute)))(?![\w-])",
+    re.IGNORECASE)
 # Courtesy that only sounds conditional (review R2's legitimate rows): "if
-# you can", "when you get a chance", "once and for all".
+# you can", "when you get a chance", "once and for all". Only as a whole
+# clause: "if you can reach the server, close ..." is a condition (review
+# KN-R19-01).
 _COURTEOUS_WHEN = re.compile(
     r"(?<![\w-])(?:if (?:you|u) (?:can|could|would|will|wouldn't mind|don't mind|do not mind|"
     r"please|like|want|have a (?:sec|second|moment|minute))|if (?:that's|that is|it's|it is) "
@@ -525,11 +542,15 @@ _COURTEOUS_WHEN = re.compile(
     r"when(?:ever)? (?:you|u) (?:get|have) a (?:chance|moment|sec|second|minute)|"
     r"whenever you can|when you can|once and for all|"
     # the executor already types only at a shell prompt
-    r"if (?:it's|it is|its) (?:idle|free|at (?:a|the) prompt))(?![\w-])", re.IGNORECASE)
+    r"if (?:it's|it is|its) (?:idle|free|at (?:a|the) prompt))"
+    r"(?=\s*(?:$|[,.;!?]|\b(?:and|then|please|thanks)\b))", re.IGNORECASE)
+# A name said as a name is data: "the pane named Tomorrow" (review KN-R19-02).
+_SAID_NAME = re.compile(r"(?<![\w-])(?:named|called|titled|labell?ed)\s+\S+", re.IGNORECASE)
 
 
 def _says_when(prompt: str, calls: list) -> bool:
-    """A condition or time outside the text a call types or starts."""
+    """A condition or time outside the text a call types or starts, and outside
+    a name said as a name."""
     text = prompt
     for call in calls if isinstance(calls, list) else []:
         args = call.get("arguments") if isinstance(call, dict) else None
@@ -538,6 +559,7 @@ def _says_when(prompt: str, calls: list) -> bool:
             if isinstance(value, str) and value.strip():
                 text = text.replace(value.strip(), " ")
     text = re.sub(r"([\"'`]).*?\1", " ", text)
+    text = _SAID_NAME.sub(" ", text)
     return bool(_WHEN.search(_COURTEOUS_WHEN.sub(" ", text)))
 
 

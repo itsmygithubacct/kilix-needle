@@ -1632,3 +1632,29 @@ class HeldOutV10(unittest.TestCase):
             name = "maximize_pane" if prompt.startswith("maximize") else "close_pane"
             with self.subTest(prompt=prompt):
                 self.assertTrue(any(isinstance(r, Action) for r in interpret(prompt, [call(name, pane=pane)])))
+
+
+class ReviewR19(unittest.TestCase):
+    """Review R19: deferred and conditional closes; names that are time words."""
+
+    def test_deferred_and_conditional_closes_are_not_now(self):             # KN-R19-01
+        close = [call("close_pane", pane="logs")]
+        for prompt in ("Close the logs pane at noon", "Close the logs pane in two minutes",
+                       "Close the logs pane next week", "Close the logs pane after the backup finishes",
+                       "Close the logs pane provided the build fails",
+                       "If you can reach the server, close the logs pane",
+                       "When you are done building, close the logs pane",
+                       "close the logs pane on friday"):
+            with self.subTest(prompt=prompt):
+                self.assertFalse([r for r in interpret(prompt, close) if isinstance(r, Action)])
+        for prompt in ("close the logs pane if you can", "when you get a chance, close the logs pane",
+                       "close the logs pane when you are done", "if you would, close the logs pane"):
+            with self.subTest(prompt=prompt):
+                self.assertTrue([r for r in interpret(prompt, close) if isinstance(r, Action)])
+
+    def test_a_name_said_as_a_name_is_no_time(self):                        # KN-R19-02
+        for name in ("Tomorrow", "Tonight"):
+            with self.subTest(name=name):
+                self.assertTrue([r for r in interpret(f"Close the pane named {name}",
+                                                      [call("close_pane", pane=name)])
+                                 if isinstance(r, Action)])
