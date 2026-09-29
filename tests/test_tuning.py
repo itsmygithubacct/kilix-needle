@@ -268,11 +268,15 @@ class Recipe(unittest.TestCase):
             rows = [json.loads(line) for line in (Path(tmp) / "train.jsonl").read_text().splitlines()]
         self.assertIn("resize_supp2.json", stats["supplement_files"])
         self.assertEqual(stats["kept"], len(rows))
-        self.assertIn("resize_pane", stats["capped"])
+        # No action shape exceeds the cap, whether or not the cap had to act
+        # (with the open_pane supplement, resize fell under it).
         shares = {}
         for r in rows:
             shares[tuning._shape(r["answers"])] = shares.get(tuning._shape(r["answers"]), 0) + 1
-        self.assertLessEqual(max(shares.values()), stats["capped"]["resize_pane"][1])
+        cap = manifest["data"]["cap_share"]
+        for shape, (_before, after) in stats.get("capped", {}).items():
+            self.assertLessEqual(shares.get(shape, 0), after)
+        self.assertLessEqual(max(shares.values()) / len(rows), cap + 0.01)
 
 
 class QuantisationAwareTraining(unittest.TestCase):
