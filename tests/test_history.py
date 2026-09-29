@@ -325,3 +325,84 @@ class ReviewR17Round2(unittest.TestCase):
         for n in range(1, history.KEEP):
             self.assertEqual(stat.S_IMODE((self.folder / f"requests.{n}.jsonl").stat().st_mode),
                              0o600, n)
+
+
+class ReviewR17Round3(unittest.TestCase):
+    """Review R17 round 3: reasons by origin; healing at a real boundary, before rotation."""
+
+    def setUp(self):
+        shutil.rmtree(history.directory(), ignore_errors=True)
+        os.environ.pop("KILIX_NEEDLE_HISTORY", None)
+        history._warned = False
+        self.addCleanup(setattr, history, "_warned", False)
+        self.folder = history.directory()
+        os.environ["KITTY_WINDOW_ID"] = "300"
+        self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
+
+    def quiet(self):
+        return mock.patch.object(sys, "stderr", io.StringIO())
+
+    def lines(self, name="requests.jsonl"):
+        return [json.loads(l) for l in (self.folder / name).read_text().splitlines()]
+
+    def panes(self, request, pane):
+        with FakeKilix(desktop()), self.quiet():
+            return needle_cli.run_request(
+                Engine([{"name": "go_to_pane", "arguments": {"pane": pane}}]), request,
+                needle_cli.Options(dry_run=True))
+
+    def test_unresolved_and_failed_reasons_stay_out(self):                 # KN-R17-301
+        record = self.panes("go to the bash pane", "bash")
+        self.assertIn("build (bash)", record["items"][0]["reason"])   # the caller still sees it
+        import kilix
+        with mock.patch.object(kilix, "snapshot",
+                               side_effect=kilix.KilixError("error for pane 999: private-title")):
+            self.panes("go to the left pane", "left")
+        text = json.dumps(self.lines())
+        for secret in ("build (bash)", "301", "private-title", "999"):
+            self.assertNotIn(secret, text)
+
+    def test_the_checks_reasons_are_kept(self):
+        with self.quiet():
+            needle_cli.run_apps_request(grammar(), "open doom later", needle_cli.Options(dry_run=True))
+            needle_cli.run_apps_request(grammar(), "open doom", needle_cli.Options(agent=True))
+        refused, skipped = self.lines()
+        self.assertIn("when", refused["items"][0]["reason"])
+        self.assertEqual(skipped["items"][0]["outcome"], "skipped")
+        self.assertIn("person", skipped["items"][0]["reason"])
+
+    def seed(self, tail: bytes):
+        self.folder.mkdir(parents=True, exist_ok=True)
+        (self.folder / "requests.jsonl").write_bytes(b'{"request": "kept"}\n' + tail)
+
+    def test_healing_cuts_only_at_a_newline_it_saw(self):                   # KN-R17-302
+        edge = 2 * history.MAX_ENTRY
+        for length, heals in ((1, True), (edge - 21, True), (edge - 20, True), (edge + 1, False)):
+            with self.subTest(length=length):
+                self.seed(b"x" * length)
+                before = (self.folder / "requests.jsonl").read_bytes()
+                with self.quiet():
+                    needle_cli.run_apps_request(grammar(), "hide the clock",
+                                                needle_cli.Options(dry_run=True))
+                after = (self.folder / "requests.jsonl").read_bytes()
+                if heals:
+                    self.assertEqual([l.get("request") for l in self.lines()], ["kept", "hide the clock"])
+                else:
+                    self.assertEqual(after, before)        # untouched, the entry dropped
+
+    def test_a_short_read_never_cuts(self):                                 # KN-R17-302
+        self.seed(b'{"request": "half')
+        before = (self.folder / "requests.jsonl").read_bytes()
+        with mock.patch.object(os, "pread", side_effect=lambda fd, n, off: b""), self.quiet():
+            needle_cli.run_apps_request(grammar(), "hide the clock", needle_cli.Options(dry_run=True))
+        self.assertEqual((self.folder / "requests.jsonl").read_bytes(), before)
+
+    def test_no_partial_line_is_rotated_into_an_archive(self):             # KN-R17-303
+        self.seed(b'{"request": "half')
+        with mock.patch.object(history, "MAX_BYTES", 300), self.quiet():
+            needle_cli.run_apps_request(grammar(), "hide the clock", needle_cli.Options(dry_run=True))
+        for name in ("requests.jsonl", "requests.1.jsonl"):
+            path = self.folder / name
+            if path.exists():
+                self.lines(name)        # every line parses
+        self.assertTrue((self.folder / "requests.1.jsonl").exists())

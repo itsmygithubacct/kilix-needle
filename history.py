@@ -51,6 +51,7 @@ MAX_ENTRY = 64 * 1024           # one serialised entry, whatever it holds
 MAX_TEXT = 4000                 # the request, and each text field of a call or an item
 LOCK_WAIT = 0.25                # seconds; a busier history drops the entry
 ITEM_FIELDS = ("kind", "args", "outcome", "reason")
+REASONED = frozenset({"refused", "skipped"})     # reasons from the checks and confirmation
 _OFF = {"0", "off", "no", "false"}
 _PARTS = ("kilix-apps", "kilix-needle", "history")
 _warned = False
@@ -192,18 +193,34 @@ def _append(folder: int, line: bytes) -> None:
         os.close(fd)
 
 
+def _read_at(fd: int, size: int, offset: int) -> bytes:
+    data = b""
+    while len(data) < size:
+        chunk = os.pread(fd, size - len(data), offset + len(data))
+        if not chunk:
+            raise OSError(errno.EIO, "the history ended early while it was read")
+        data += chunk
+    return data
+
+
 def _heal(fd: int) -> None:
-    """End the file at a whole line before appending. A write whose rollback
-    failed, or a process that died mid-write, leaves a partial last line; it
-    is cut back to the last newline, or the entry is dropped if that fails
-    (review KN-R17-203)."""
+    """End the file at a whole line before anything is added. A write whose
+    rollback failed, or a process that died mid-write, leaves a partial last
+    line. It is cut back to just after the last newline, or to nothing when the
+    whole file is that line. When no newline lies within 2 * MAX_ENTRY of the end
+    (a file this writer could not have made), the history is not touched and
+    the entry is dropped (reviews KN-R17-203, KN-R17-302)."""
     size = os.fstat(fd).st_size
-    if size == 0 or os.pread(fd, 1, size - 1) == b"\n":
+    if size == 0 or _read_at(fd, 1, size - 1) == b"\n":
         return
     window = min(size, 2 * MAX_ENTRY)
-    tail = os.pread(fd, window, size - window)
-    cut = tail.rfind(b"\n")
-    os.ftruncate(fd, size - window + cut + 1 if cut >= 0 else (0 if window == size else size - window))
+    cut = _read_at(fd, window, size - window).rfind(b"\n")
+    if cut >= 0:
+        os.ftruncate(fd, size - window + cut + 1)
+    elif window == size:
+        os.ftruncate(fd, 0)
+    else:
+        raise Unsafe("the history ends in an overlong partial line; nothing was added")
 
 
 def _repair_archives(folder: int) -> None:
@@ -230,10 +247,11 @@ def _text(value, limit: int = MAX_TEXT):
 
 def entry(job: str, given, checked, engine, calls, options, result: dict, seconds: float) -> dict:
     # The admitted action (kind, args) and why it did not run are the data. A
-    # display summary names resolved panes and titles, and a runtime failure's
-    # text may too, so neither is kept (review KN-R17-202).
+    # display summary names resolved panes and titles, and so can an unresolved
+    # or failed action's text, so only the reasons the checks and confirmation
+    # give are kept (reviews KN-R17-202, KN-R17-301).
     items = [{k: item[k] for k in ITEM_FIELDS if k in item
-              and not (k == "reason" and item.get("outcome") == "failed")}
+              and not (k == "reason" and item.get("outcome") not in REASONED)}
              for item in result.get("items", []) if isinstance(item, dict)]
     text = given if isinstance(given, str) else str(given)
     out = {
@@ -282,10 +300,17 @@ def record(job: str, given, checked, engine, calls, options, result: dict,
             _warn("the request history was busy; an entry was not recorded")
             return
         try:
-            if _exists(folder, "requests.jsonl") and \
-                    os.stat("requests.jsonl", dir_fd=folder, follow_symlinks=False).st_size \
-                    + len(line) > MAX_BYTES:
-                _rotate(folder)
+            # Heal before rotating, so no partial line is carried into an
+            # archive (review KN-R17-303).
+            if _exists(folder, "requests.jsonl"):
+                active = _open_file(folder, "requests.jsonl", os.O_RDWR)
+                try:
+                    _heal(active)
+                    size = os.fstat(active).st_size
+                finally:
+                    os.close(active)
+                if size + len(line) > MAX_BYTES:
+                    _rotate(folder)
             _repair_archives(folder)
             _append(folder, line)
         finally:
