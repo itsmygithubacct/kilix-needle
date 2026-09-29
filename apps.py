@@ -460,11 +460,26 @@ _PLACE = re.compile(
     r"button|buttons|list|area|row|strip|toolbar|window|windows|terminal|here|there|"
     r"controls?|icons?|indicators?|widgets?|topbar|statusbar|at|in|on|for|me|us)(?:\s+|$))+")
 _PREPOSITION = re.compile(r"(?:on|in|from|at|into|onto|to|out of|off of|off)$")
+_PLACE_TAIL = re.compile(r"completely|entirely|altogether|permanently|fully|totally|now|"
+                         r"please|again|too|for good|immediately")
 # The object of these is what they describe: "pictures of the clock", "files
 # about the clock" (review KN-R16-303).
 _DESCRIBED = re.compile(r"(?:^|\s)(?:(?<!rid )(?<!out )(?<!off )(?<!instead )of|about|regarding|"
                         r"named|called|containing|pictures? of|files? of)"
                         r"\s+(?:(?:the|my|a|an|this|that|some)\s+)?$")
+
+
+_LIST_QUALIFIER = (r"(?:in|on|from|off|into|out of) (?:the |my |our |this |that )?"
+                   r"(?:games? )?(?:list|picker|menu)")
+
+
+def _game_object(text: str) -> bool:
+    """The clause is one game's name, and at most where it is listed:
+    "pong", "pong in the games list" (review KN-R16-501)."""
+    shape = re.fullmatch(rf"(?:(?:the|my|a|an) )?(?P<name>.+?)(?: {_LIST_QUALIFIER})?"
+                         r"(?: (?:please|too|as well))?", text)
+    return bool(shape) and any(_is_name(LAUNCH_NAMES, game, shape["name"])
+                               for game in AVAILABILITY)
 
 
 def _names_the_item(clause: str, match: re.Match) -> bool:
@@ -491,13 +506,15 @@ def _names_the_item(clause: str, match: re.Match) -> bool:
             place = re.match(r"\s*(.*?)\s*(?:[,;:.!?](?:\s|$)|$|" + _MASK + r"|\b(?:and|then|"
                              r"but|please|too|now|again|so|when|while)\b)", after)
             words = place.group(1) if place else after
-            # "from the top bar completely": a word that ends an object may
-            # close the place too (review KN-R16-402).
+            if not words:
+                # "turn the clock on", "take it off": a particle, not a place
+                return word in ("on", "off")
+            # "from the top bar completely": an adverb may close a place,
+            # never stand for one (reviews KN-R16-402, -502).
             tail = words.split()
-            while tail and _OBJECT_END.match(tail[-1]) and not _PLACE.fullmatch(tail[-1]):
+            while tail and _PLACE_TAIL.fullmatch(tail[-1]):
                 tail.pop()
-            words = " ".join(tail)
-            return not words or bool(_PLACE.fullmatch(words))
+            return bool(tail) and bool(_PLACE.fullmatch(" ".join(tail)))
         return bool(_OBJECT_END.match(word))
 
 
@@ -975,15 +992,18 @@ def _admit(name: str, args: dict, reading: Reading) -> Action | Refusal:
             # (reviews KN-R16-03, KN-R16-201).
             wish = (re.search(_NEGATED_WANT, part.verb)
                     or any(re.search(pattern, part.verb) for pattern in _WISH))
-            # A list named by a game in the coordinated group scopes all of
-            # its games: "I want doom and pong in the games list" (review
-            # KN-R16-304); "and a screenshot of the games list" names no game,
-            # so it scopes nothing (review KN-R16-401).
+            # A list named by a game object in the coordinated group scopes
+            # all of its games: "I want doom and pong in the games list"
+            # (review KN-R16-304). A continuation is a game object only when
+            # it is a game's name and at most that list: "a screenshot of
+            # the games list" and "the pong games list screenshot" are other
+            # objects, lend no scope and change no game (KN-R16-401, -501).
+            if wish and part.bare and not _game_object(part.text):
+                continue
             group = " ".join(p.text for p in parts if p.verb == part.verb
-                             and any(_mentions(LAUNCH_NAMES, g, p.text) for g in AVAILABILITY))
+                             and (not p.bare or _game_object(p.text)))
             list_scope = re.search(
-                r"\b(?:in|on|from|off|into|out of) (?:the |my |our |this |that )?"
-                r"(?:games? )?(?:list|picker|menu)\b|\bgames? (?:list|picker|menu)\b",
+                rf"\b{_LIST_QUALIFIER}\b|\bgames? (?:list|picker|menu)\b",
                 part.verb + " " + group)
             wish_only = wish and not (
                 _GAME_VERB.search(part.verb) or _GAME_VERB.search(part.text)

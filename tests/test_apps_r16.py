@@ -272,3 +272,31 @@ class Round4(unittest.TestCase):
         for request in ("hide the clock in the thememenu", "hide the clock on terminalstatus"):
             with self.subTest(request=request):
                 self.assertEqual(admitted(request), [])
+
+
+class Round5(unittest.TestCase):
+    """Review R16 round 5: game objects in wishes; a place must remain."""
+
+    def test_a_game_named_inside_another_object_is_no_game_object(self):   # KN-R16-501
+        for request in ("I want doom and the pong games list screenshot",
+                        "I want doom and pong's games list screenshot",
+                        "I want doom and pictures of pong in the games list"):
+            with self.subTest(request=request):
+                self.assertFalse([a for a in admitted(request) if a[0] == "game"])
+        for request in ("I want doom and pong in the games list",
+                        "I want doom in the games list and pong",
+                        "enable doom and pong in the games list", "disable doom and pong"):
+            with self.subTest(request=request):
+                self.assertEqual(len(admitted(request)), 2)
+
+    def test_a_tail_never_stands_for_a_place(self):                         # KN-R16-502
+        for request in ("hide clock in permanently", "hide clock in completely permanently",
+                        "hide clock in it", "hide clock in that", "hide clock in from",
+                        "hide clock in completely, battery"):
+            with self.subTest(request=request):
+                self.assertEqual(admitted(request), [])
+        for request in ("turn the clock on", "take the clock off",
+                        "hide the clock from the top bar completely",
+                        "hide the clock on the top bar now"):
+            with self.subTest(request=request):
+                self.assertEqual(len(admitted(request)), 1)
