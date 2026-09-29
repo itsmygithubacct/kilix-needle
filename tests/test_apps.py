@@ -765,8 +765,17 @@ class Runner(unittest.TestCase):
             "    return name != 'disabled'\n"
             "def game_ready(name):\n"
             "    if name == 'exits':\n        raise SystemExit(0)\n"
-            "    return None if name == 'missing' else '/bin/game'\n"
-            "def ensure(name):\n    raise SystemExit(7)\n")
+            "    return None if name in ('missing', 'stored', 'unstored', 'stored-app') else '/bin/game'\n"
+            "def ensure(name):\n    raise SystemExit(7)\n"
+            "import types\n"
+            "_spec = lambda kind, there: types.SimpleNamespace(kind=kind, source_type='git', there=there)\n"
+            "CONTENT_CATALOG = {'stored': _spec('game', True), 'unstored': _spec('game', False),\n"
+            "                   'stored-app': _spec('app', True)}\n"
+            "def _content_root(spec):\n    return '/games-root'\n"
+            "class _Installer:\n"
+            "    def __init__(self, root):\n        assert root == '/games-root'\n"
+            "    def ready(self, spec):\n        return '/games-root/x' if spec.there else None\n"
+            "kilix_content = types.SimpleNamespace(Installer=_Installer)\n")
         (home / "kilix").write_text("#!/bin/sh\necho \"PLAYED $*\"\n")
         (home / "kilix").chmod(0o755)
         return home
@@ -778,7 +787,9 @@ class Runner(unittest.TestCase):
                  ("app", "git-missing"): False, ("app", "system-app"): False,
                  ("app", "custom-app"): False, ("app", "unknown"): False,
                  ("game", "doom"): True, ("game", "disabled"): False, ("game", "missing"): False,
-                 ("game", "exits"): False}
+                 ("game", "exits"): False,
+                 # in the content store with no games-config entry: play fetches nothing
+                 ("game", "stored"): True, ("game", "unstored"): False, ("game", "stored-app"): False}
         with mock.patch.object(apps_kilix, "_kilix_home", return_value=home):
             for (kind, name), ready in cases.items():
                 self.assertEqual(apps_kilix._ready(kind, name), ready, (kind, name))
@@ -800,7 +811,8 @@ class Runner(unittest.TestCase):
     def test_a_game_tab_asks_kilix_again_before_playing(self):                   # KN-R12-202
         home = self.stand_in_kilix()
         env = {"PATH": f"{home}:/usr/bin:/bin", "HOME": str(home)}
-        for game, played in (("doom", True), ("missing", False), ("disabled", False),
+        for game, played in (("doom", True), ("stored", True), ("unstored", False),
+                             ("missing", False), ("disabled", False),
                              ("raises", False), ("exits", False)):                    # R12 RM55
             done = subprocess.run(["python3", "-I", "-B", "-c", apps_kilix.GAME_GUARD, "kilix", game],
                                   env=env, stdin=subprocess.DEVNULL, capture_output=True,

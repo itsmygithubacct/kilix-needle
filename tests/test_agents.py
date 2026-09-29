@@ -843,7 +843,8 @@ class LunaBenchmarkLaunches(unittest.TestCase):
         for tail in (". Leave the task blank; do not send it any task.", " with no task or prompt",
                      ". Do not give it a task. Then stop.", ", no prompt", ". Give the agent no task.",
                      ". Do not give it a task; leave its task/prompt empty. Then stop.",
-                     " without giving it a task.", ". Leave the session idle with no task."):
+                     " without giving it a task.", ". Leave the session idle with no task.",
+                     " with no task; start it and then stop"):
             request = f"start an interactive Codex session in a new tab, working in {self.PATH}{tail}"
             with self.subTest(tail=tail):
                 self.assertEqual(agents.exact_calls(request),

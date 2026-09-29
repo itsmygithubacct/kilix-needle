@@ -61,7 +61,16 @@ def ready(home, kind, name):
     sys.path[:0] = [home + "/config", home + "/desktop"]
     if kind == "game":
         import games
-        return bool(games.game_enabled(name)) and bool(games.game_ready(name))
+        if not games.game_enabled(name):
+            return False
+        if games.game_ready(name):
+            return True
+        # A catalog game already in Kilix's content store with no games-config
+        # entry yet: `games play` finds it there (Installer.ensure's first
+        # check) and fetches nothing, so it is ready too.
+        spec = games.CONTENT_CATALOG.get(name)
+        return bool(spec and spec.kind == "game" and spec.source_type == "git"
+                    and games.kilix_content.Installer(games._content_root(spec)).ready(spec))
     import content_app
     from kilix_sdk import content
     from kilix_sdk._content_runtime import apps_root

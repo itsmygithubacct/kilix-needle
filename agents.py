@@ -1084,6 +1084,8 @@ _NO_TASK = re.compile(
     r"(?:\s+or\s+(?:task|prompt|instructions?))?(?:\s+(?:yet|for\s+now))?\s*[.!]*$)"
     r"|(?:[.,;:]\s*|\s+-\s+|\s+and\s+)"
     r"(?:(?:then\s+)?(?:stop(?:\s+there)?|that'?s\s+all|nothing\s+else|leave\s+it\s+(?:there|idle))"
+    # "...with no task; start it and then stop": "start it" repeats the launch.
+    r"|(?:(?:and\s+)?then\s+)?(?:start|launch|open|run)\s+it(?:\s+up)?"
     r"|(?:leave|keep)\s+(?:the\s+|its\s+)?(?:task|prompt)(?:\s*/\s*(?:task|prompt))?\s+(?:blank|empty)"
     r"|(?:leave|keep)\s+(?:the\s+session|the\s+agent|it)\s+idle(?:\s+with\s+no\s+(?:task|prompt))?"
     r"|(?:do\s+not|don'?t)\s+(?:give|send|pass)\s+(?:it|the\s+agent|them|the\s+session)\s+"
