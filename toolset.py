@@ -39,7 +39,8 @@ TOOLS = [
      "parameters": {"type": "object", "properties": {"kind": _KIND, "which": _WHICH},
                     "required": ["kind", "which"]}},
     {"name": "adjust",
-     "description": "Change the current tab: its layout, its name, or the size of this pane",
+     "description": "Change the current tab or a pane: layout, tab name, pane size; maximize "
+                    "or restore a pane, rename a pane, swap with a neighbour, move the tab",
      "parameters": {"type": "object", "properties": {
          "layout": {"type": "string", "enum": list(LAYOUTS),
                     "description": "grid; stack shows one pane at a time; vertical is side "
@@ -47,7 +48,19 @@ TOOLS = [
          "tab_name": {"type": "string", "description": "a new name for the tab"},
          "resize": {"type": "string", "enum": list(DIRECTIONS)},
          "amount": {"type": "integer", "minimum": 1, "maximum": 50,
-                    "description": "cells to resize by, only if the user gives a number"}},
+                    "description": "cells to resize by, only if the user gives a number"},
+         "maximize": {"type": "string", "enum": ["maximize", "restore"],
+                      "description": "show one pane full-size, or restore the layout"},
+         "pane_name": {"type": "string", "description": "a new name for a pane"},
+         "pane": {"type": "string",
+                  "description": "which pane to maximize or rename, if not this one"},
+         "swap_with": {"type": "string", "enum": ["left", "right", "above", "below"],
+                       "description": "swap this pane with its neighbour on that side"},
+         "move_tab": {"type": "string", "enum": ["left", "right"],
+                      "description": "move this tab left or right in the tab bar"},
+         "tab_position": {"type": "integer", "minimum": 1, "maximum": 9,
+                          "description": "move this tab to that position, only if the user "
+                                         "gives one"}},
          "required": []}},
     {"name": "run_in_pane",
      "description": "Type a command into an existing pane and press enter",
@@ -57,6 +70,11 @@ TOOLS = [
          "command": {"type": "string", "description": "the exact command text"}},
          "required": ["pane", "command"]}},
 ]
+
+
+# What adjust can change; an adjust call with none of them reaches the checks as is.
+ADJUSTS = frozenset({"layout", "tab_name", "resize", "maximize", "pane_name", "swap_with",
+                     "move_tab", "tab_position"})
 
 
 def to_actions(calls) -> list:
@@ -90,7 +108,26 @@ def to_actions(calls) -> list:
                 if "amount" in args:
                     resize["amount"] = args["amount"]
                 out.append({"name": "resize_pane", "arguments": resize})
-            if not {"layout", "tab_name", "resize"} & set(args):
+            target = {"pane": args["pane"]} if "pane" in args else {}
+            if "maximize" in args:
+                maximize = dict(target)
+                if args["maximize"] == "restore":
+                    maximize["restore"] = True
+                elif args["maximize"] != "maximize":
+                    maximize["maximize"] = args["maximize"]     # for the checks to refuse
+                out.append({"name": "maximize_pane", "arguments": maximize})
+            if "pane_name" in args:
+                out.append({"name": "rename_pane", "arguments": {**target, "name": args["pane_name"]}})
+            if "swap_with" in args:
+                out.append({"name": "swap_panes", "arguments": {"side": args["swap_with"]}})
+            if "move_tab" in args or "tab_position" in args:
+                move = {}
+                if "move_tab" in args:
+                    move["direction"] = args["move_tab"]
+                if "tab_position" in args:
+                    move["position"] = args["tab_position"]
+                out.append({"name": "move_tab", "arguments": move})
+            if not ADJUSTS & set(args):
                 out.append({"name": "adjust", "arguments": args})
         elif name == "run_in_pane":
             out.append(call)
@@ -123,6 +160,25 @@ def from_actions(actions) -> list[dict]:
             calls.append({"name": "adjust", "arguments": resize})
         elif kind == "run_in_pane":
             calls.append({"name": "run_in_pane", "arguments": dict(args)})
+        elif kind == "maximize_pane":
+            maximize = {"maximize": "restore" if args.get("restore") else "maximize"}
+            if args.get("pane", "current") != "current":
+                maximize["pane"] = args["pane"]
+            calls.append({"name": "adjust", "arguments": maximize})
+        elif kind == "rename_pane":
+            rename = {"pane_name": args["name"]}
+            if args.get("pane", "current") != "current":
+                rename["pane"] = args["pane"]
+            calls.append({"name": "adjust", "arguments": rename})
+        elif kind == "swap_panes":
+            calls.append({"name": "adjust", "arguments": {"swap_with": args["side"]}})
+        elif kind == "move_tab":
+            move = {}
+            if "direction" in args:
+                move["move_tab"] = args["direction"]
+            if "position" in args:
+                move["tab_position"] = args["position"]
+            calls.append({"name": "adjust", "arguments": move})
         else:
             raise ValueError(f"no five-tool form for {kind}")
     return calls

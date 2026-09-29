@@ -48,6 +48,38 @@ class Translate(unittest.TestCase):
         self.assertLessEqual(len(toolset.TOOLS), 5)
 
 
+class NewActions(unittest.TestCase):
+    """maximize/restore, rename pane, swap panes and move tab reach the model
+    through adjust, so retrieval still sees five tools."""
+
+    def test_adjust_reaches_the_four_actions(self):
+        cases = [(call("adjust", maximize="maximize"), [call("maximize_pane")]),
+                 (call("adjust", maximize="restore"), [call("maximize_pane", restore=True)]),
+                 (call("adjust", maximize="maximize", pane="htop"), [call("maximize_pane", pane="htop")]),
+                 (call("adjust", pane_name="logs"), [call("rename_pane", name="logs")]),
+                 (call("adjust", pane_name="db", pane="left"), [call("rename_pane", pane="left", name="db")]),
+                 (call("adjust", swap_with="left"), [call("swap_panes", side="left")]),
+                 (call("adjust", move_tab="right"), [call("move_tab", direction="right")]),
+                 (call("adjust", tab_position=3), [call("move_tab", position=3)])]
+        for five, ten in cases:
+            self.assertEqual(toolset.to_actions([five]), ten, five)
+        reached = {c["name"] for _, ten in cases for c in ten}
+        self.assertEqual(reached, {"maximize_pane", "rename_pane", "swap_panes", "move_tab"})
+
+    def test_a_bad_maximize_value_reaches_the_checks(self):
+        [result] = interpret("maximize this pane",
+                             toolset.to_actions([call("adjust", maximize="explode")]))
+        self.assertIsInstance(result, Refusal)
+
+    def test_checks_admit_them_through_adjust(self):
+        for request, five in (("maximize this pane", call("adjust", maximize="maximize")),
+                              ("swap this pane with the left one", call("adjust", swap_with="left")),
+                              ("move this tab to the right", call("adjust", move_tab="right"))):
+            results = interpret(request, toolset.to_actions([five]))
+            self.assertTrue(results and not any(isinstance(r, Refusal) for r in results),
+                            (request, results))
+
+
 class Inverse(unittest.TestCase):
     def test_round_trip_for_every_action(self):
         actions = [["open_pane", {"side": "left", "program": "htop", "name": "x"}],
@@ -56,7 +88,11 @@ class Inverse(unittest.TestCase):
                    ["go_to_tab", {"tab": "next"}], ["arrange_panes", {"layout": "grid"}],
                    ["rename_tab", {"name": "api"}], ["resize_pane", {"direction": "wider", "amount": 3}],
                    ["resize_pane", {"direction": "taller"}],
-                   ["run_in_pane", {"pane": "left", "command": "ls"}]]
+                   ["run_in_pane", {"pane": "left", "command": "ls"}],
+                   ["maximize_pane", {}], ["maximize_pane", {"restore": True}],
+                   ["maximize_pane", {"pane": "htop"}], ["rename_pane", {"name": "logs"}],
+                   ["rename_pane", {"pane": "left", "name": "db"}], ["swap_panes", {"side": "left"}],
+                   ["move_tab", {"direction": "right"}], ["move_tab", {"position": 3}]]
         back = toolset.to_actions(toolset.from_actions(actions))
         self.assertEqual([[c["name"], c["arguments"]] for c in back], actions)
 

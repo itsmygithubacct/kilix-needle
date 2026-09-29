@@ -422,8 +422,8 @@ def build_data(library: Path, manifest: dict, out: Path, job: str = jobs.DEFAULT
         if len(admitted) != len(row["actions"]):
             inconsistent += 1   # a training answer the tool would refuse teaches nothing
             continue
-        # The Needle 2 compatibility recipe still has only ten actions.
-        # New kilix-ml-only templates must not crash or silently mislabel it.
+        # Every action the checks admit has a five-tool form; one that does not
+        # (a new kilix-ml template ahead of the schema) is counted, not mislabelled.
         try:
             answers = toolset.from_actions(row["actions"])
         except ValueError:
