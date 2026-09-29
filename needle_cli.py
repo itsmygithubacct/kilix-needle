@@ -27,7 +27,7 @@ import app_controls
 import asset
 import history
 import jobs
-from engine import Engine, EngineError, check_prompt
+from engine import Engine, EngineError, check_prompt, reply_calls
 import kilix
 from libengine import LibEngine, LibEngineError
 import toolset
@@ -57,6 +57,31 @@ class Runtime:
 
     def complete(self, text: str) -> dict:
         return self.engine.complete(text)
+
+
+class LazyRuntime:
+    """A runtime opened on first use and closed once, whatever happens."""
+
+    def __init__(self, factory):
+        self.factory, self.runtime = factory, None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        if self.runtime is not None:
+            self.runtime.close()
+
+    def __getattr__(self, name):
+        if self.runtime is None:
+            runtime = self.factory()
+            try:
+                runtime.__enter__()
+            except BaseException:
+                runtime.close()
+                raise
+            self.runtime = runtime
+        return getattr(self.runtime, name)
 
 
 def open_runtime(args, *, may_install: bool = False, job: str = jobs.DEFAULT) -> Runtime:
@@ -147,7 +172,12 @@ def _recorded(job: str, engine, request: str, options: Options, run, exact=None)
             engine = type("Exact", (), {"label": "control"})()   # recorded as the exact route
             return result
         engine.reset()
-        calls = engine.complete(request).get("function_calls") or []
+        calls, unusable = reply_calls(engine.complete(request))
+        if unusable:
+            # nothing from an error-marked or malformed reply runs (review KN-R18-04)
+            result = {"request": request, "status": 1, "items": [],
+                      "note": f"the engine's reply could not be used: {unusable}"}
+            return result
         result = run(request, calls)
         return result
     finally:
@@ -622,7 +652,10 @@ def main(argv: list[str] | None = None) -> int:
     modes = dict(dry_run=args.dry_run, assume_yes=args.yes, as_json=args.json,
                  agent=args.agent, under_overlay=args.under_overlay, job=job)
     try:
-        runtime = open_runtime(args, may_install=not args.agent, job=job)
+        # An exact apps control needs no engine at all (review KN-R18-03): the
+        # apps runtime opens on the first request that needs it.
+        runtime = (LazyRuntime(lambda: open_runtime(args, may_install=not args.agent, job=job))
+                   if job == "apps" else open_runtime(args, may_install=not args.agent, job=job))
     except asset.AssetError as error:
         print(f"kilix-needle: {error}", file=sys.stderr)
         return 2
@@ -644,7 +677,7 @@ def main(argv: list[str] | None = None) -> int:
                     return status
                 if line.strip():
                     status = handle(engine, line, **modes)
-    except (EngineError, LibEngineError) as error:
+    except (asset.AssetError, EngineError, LibEngineError) as error:
         print(f"kilix-needle: {error}", file=sys.stderr)
         return 2
     except KeyboardInterrupt:

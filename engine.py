@@ -29,6 +29,31 @@ class EngineError(RuntimeError):
     """The engine could not be started or did not answer usefully."""
 
 
+def reply_calls(reply) -> tuple[list, str | None]:
+    """The calls in an engine reply, or why the reply is not usable.
+
+    The one rule for running a reply and for scoring it (review R18, KN-R18-04
+    and -05). An error-marked reply is not used at all, even with calls in
+    it; a reply whose calls are malformed is an error, not "no action". A
+    reply with no function_calls key is a reply with no calls.
+    """
+    if not isinstance(reply, dict):
+        return [], "the engine reply is not an object"
+    if reply.get("error") or reply.get("type") == "error" or reply.get("success") is False \
+            or reply.get("reason") == "runtime_failure":
+        return [], str(reply.get("error") or "the engine reported a runtime failure")
+    if "function_calls" not in reply:
+        return [], None
+    raw = reply["function_calls"]
+    if not isinstance(raw, list):
+        return [], "the engine function_calls is not a list"
+    for call in raw:
+        if not isinstance(call, dict) or not isinstance(call.get("name"), str) \
+                or not isinstance(call.get("arguments", {}), dict):
+            return [], "the engine returned a malformed call"
+    return raw, None
+
+
 def check_prompt(text: str) -> str:
     """Return the prompt stripped, or raise ValueError naming the problem."""
     text = text.strip()

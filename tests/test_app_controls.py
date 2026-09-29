@@ -397,3 +397,78 @@ class SocketAdapters(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReviewR18(unittest.TestCase):
+    """Review R18: agent authority, linked socket paths, no engine for controls,
+    and one reply rule for running and scoring."""
+
+    def mocked(self):
+        step = mock.Mock(summary="mute the microphone", public=lambda: {})
+        return (mock.patch.object(backend, "prepare", return_value=step),
+                mock.patch.object(backend, "perform", return_value={"ok": True}))
+
+    def test_an_agent_changes_only_with_the_advance_yes(self):             # KN-R18-01
+        prepare, perform = self.mocked()
+        with prepare, perform as done:
+            held = needle_cli.run_apps_request(None, "mute microphone", needle_cli.Options(agent=True))
+            done.assert_not_called()
+            yes = needle_cli.run_apps_request(None, "mute microphone",
+                                              needle_cli.Options(agent=True, assume_yes=True))
+        self.assertEqual((held["items"][0]["outcome"], yes["items"][0]["outcome"]), ("skipped", "done"))
+
+    def test_a_linked_parent_directory_is_refused(self):                     # KN-R18-02
+        import socket as socketlib
+        import tempfile
+        with tempfile.TemporaryDirectory(prefix="kn-") as tmp:
+            real = os.path.join(tmp, "real")
+            os.mkdir(real)
+            server = socketlib.socket(socketlib.AF_UNIX, socketlib.SOCK_STREAM)
+            server.bind(os.path.join(real, "control.sock"))
+            server.listen(1)
+            try:
+                os.symlink(real, os.path.join(tmp, "alias"))
+                with self.assertRaisesRegex(backend.ControlError, "link"):
+                    backend.connect(os.path.join(tmp, "alias", "control.sock"), socketlib.SOCK_STREAM)
+                backend.connect(os.path.join(real, "control.sock"), socketlib.SOCK_STREAM).close()
+            finally:
+                server.close()
+
+    def test_controls_need_no_engine_from_mcp_or_the_cli(self):            # KN-R18-03
+        broken = mock.Mock(side_effect=needle_cli.asset.AssetError("engine missing"))
+        server = mcp_server.Server(broken)
+        with mock.patch.object(backend, "command", return_value="font_size 14"):
+            plan = server.call_tool("kilix_apps_plan", {"request": "show text size"})
+        self.assertFalse(plan["isError"])
+        broken.assert_not_called()
+        with mock.patch.object(needle_cli, "open_runtime", broken), \
+                mock.patch.object(backend, "command", return_value="font_size 14"), \
+                mock.patch("sys.stdout", new_callable=io.StringIO), \
+                mock.patch("sys.stderr", new_callable=io.StringIO):
+            self.assertEqual(needle_cli.main(["apps", "show", "text", "size"]), 0)
+            self.assertEqual(needle_cli.main(["apps", "hide", "the", "clock"]), 2)
+
+    def test_an_error_marked_or_malformed_reply_runs_and_scores_nothing(self):  # KN-R18-04, -05
+        import evaluate
+        replies = [{"success": False, "error": "truncated",
+                    "function_calls": [{"name": "launch", "arguments": {"app": "doom"}}]},
+                   {"function_calls": None}, {"function_calls": [123]}, {"function_calls": [{}]},
+                   {"function_calls": [{"name": "launch", "arguments": None}]}]
+        for reply in replies:
+            engine = mock.Mock()
+            engine.complete.return_value = reply
+            engine.translate = lambda calls: calls
+            with mock.patch.object(needle_cli, "run_apps_calls") as runner:
+                record = needle_cli.run_apps_request(engine, "open doom", needle_cli.Options())
+            runner.assert_not_called()
+            self.assertEqual((record["status"], record["items"]), (1, []), reply)
+            report = evaluate.score(engine, [{"request": "open doom", "expect": [], "tag": "bait"}],
+                                    job="apps")
+            totals = report["totals"] if "totals" in report else report
+            self.assertEqual((totals["errors"], totals["exact"]), (1, 0), reply)
+        engine = mock.Mock()
+        engine.complete.return_value = {"success": True}      # no calls key: no calls, no error
+        with mock.patch.object(needle_cli, "run_apps_calls", return_value={"status": 0}) as runner:
+            needle_cli.run_apps_request(engine, "tell me a joke", needle_cli.Options())
+        runner.assert_called_once()
+

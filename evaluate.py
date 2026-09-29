@@ -30,7 +30,7 @@ from actions import LEGACY_TOOLS, TOOLS, Action, Refusal, interpret
 import asset
 import jobs
 from libengine import LibEngineError
-from engine import Engine, EngineError
+from engine import Engine, EngineError, reply_calls
 from libengine import LibEngine
 import toolset
 
@@ -159,20 +159,10 @@ def score(engine: Engine, cases: list[dict], runs: int = 1, translate=lambda cal
                     except (LibEngineError, EngineError) as restart:
                         fatal_error = "engine restart failed: " + str(restart)
             latencies.append((time.perf_counter() - started) * 1000)
-            if not isinstance(reply, dict):
-                error = error or "the engine reply is not an object"
-                reply = {}
-            if reply.get("error") or reply.get("type") == "error" \
-                    or reply.get("success") is False or reply.get("reason") == "runtime_failure":
-                error = error or str(reply.get("error") or "the engine reported a runtime failure")
-            raw = reply.get("function_calls")
-            if raw is None:
-                raw = []
-            elif not isinstance(raw, list):
-                error = error or "the engine function_calls is not a list"
-                raw = []
-            # Error replies may contain partial calls. Production cannot use
-            # them, and an empty failure must not earn no-action exact credit.
+            # The same rule production runs replies by (engine.reply_calls): an
+            # error-marked or malformed reply runs nothing and earns no credit.
+            raw, reply_error = reply_calls(reply)
+            error = error or reply_error
             calls = translate(raw) if error is None else []
             results = check(case["request"], calls) if error is None else []
             admitted = [_norm(r.kind, r.args) for r in results if admitted_action(r)]

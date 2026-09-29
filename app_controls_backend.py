@@ -130,6 +130,9 @@ def voice_path():
 def connect(path, kind):
     """Require a real, same-user socket and check the connected peer on Linux."""
     try:
+        # No link anywhere on the path, not only the last part (review KN-R18-02).
+        if os.path.realpath(path) != os.path.abspath(path):
+            raise ControlError("control endpoint path goes through a link")
         info = os.lstat(path)
         if not stat.S_ISSOCK(info.st_mode) or info.st_uid != os.getuid():
             raise ControlError("control endpoint is not a same-user socket")

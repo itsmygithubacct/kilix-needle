@@ -8,6 +8,9 @@ expansion, not a newly trained classifier or a change to selected weights.
 
 Use `--dry-run` to see a plan, then `--yes` to execute without an interactive
 confirmation. MCP uses `confirm_risky: true` on `kilix_apps_act` for changes.
+On the command line, `--yes` is that same advance yes. For an agent
+(`--agent --yes`) it carries exactly the authority `confirm_risky` does, as
+for every kilix-needle job. `--agent` without `--yes` never changes anything.
 All changes, including pause, mute, speech and recording, require confirmation.
 Queries run directly. Plans may read audio devices or query the running player;
 they never send a mutation, start a daemon, or change settings. Host commands

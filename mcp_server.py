@@ -200,7 +200,9 @@ class Server:
         if not isinstance(confirm, bool):
             raise ValueError("confirm_risky must be true or false")
         try:
-            engine = self._ensure_engine(job)
+            # An exact apps control needs no engine (review KN-R18-03).
+            engine = (None if job == "apps" and needle_cli.app_controls.parse(request) is not None
+                      else self._ensure_engine(job))
         except (asset.AssetError, EngineError, LibEngineError) as error:
             return {"content": [{"type": "text", "text": f"kilix-needle unavailable: {error}"}],
                     "isError": True}
