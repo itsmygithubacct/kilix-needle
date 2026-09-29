@@ -1448,7 +1448,44 @@ def _admit(name: str, args: dict, prompt: str) -> Action | Refusal:
         if title.casefold() in _UNIT_NAMES or title.casefold() in ("panes", "tabs"):
             # measured (five-tool schema): "make this pane wider by 10" -> tab_name "pane"
             return Refusal(name, f"{title!r} is not a name for a tab")
-        return Action(name, {"name": title})
+        # The request must ask for a rename in the clause that holds the new name:
+        # measured (route benchmark, qat-6): "in the pane titled bench-target, type
+        # `touch /x` and press Enter" renamed the tab to the command, "type into
+        # the pane named t: ... Press Enter" renamed it "enter", and "rename the
+        # active pane to x" renamed the tab. A name that is typed, run or pressed
+        # is not a title, and a clause that names only a pane renames a pane.
+        for clause in _clauses(prompt):
+            at = re.search(r"(?<![\w-])" + re.escape(title) + r"(?![\w-])", clause, re.I)
+            if not at:
+                continue
+            before = clause[:at.start()]
+            if re.search(r"\b(?:type|typing|run|running|execute|enter|send|press|hit|paste)\b"
+                         r"[^,;]*$", before, re.I) and not re.search(
+                             r"\b(?:rename|retitle|relabel|call|name|title|label)\b[^,;]*$",
+                             before, re.I):
+                continue
+            rest = clause[:at.start()] + " " + clause[at.end():]
+            verb = re.search(r"\b(?:rename[sd]?|renaming|retitle|relabel|title[sd]?|call(?:ed)?|"
+                             r"name[sd]?|label(?:l?ed)?|reads)\b|\bmake (?:this |the |current |my )*tab\b",
+                             rest, re.I)
+            if verb is None or _negated(rest[:verb.start()]) or _REPORTED.search(rest[:verb.start()]):
+                continue
+            if _PANE_WORD.search(rest) and not _TAB_WORD.search(rest):
+                return Refusal(name, "the request renames a pane, not a tab")
+            return Action(name, {"name": title})
+        # Terse or split forms from the training corpus: "tab: logs", and "tab's
+        # for api, rename it accordingly" (the verb in the next clause).
+        if re.fullmatch(r"\s*tab\s*:\s*" + re.escape(title) + r"[.!?]*\s*", prompt, re.I):
+            return Action(name, {"name": title})
+        verb_anywhere = re.search(r"\b(?:rename|retitle|relabel)\b", prompt, re.I)
+        for clause in _clauses(prompt):
+            at = re.search(r"(?<![\w-])" + re.escape(title) + r"(?![\w-])", clause, re.I)
+            if (verb_anywhere and at and _TAB_WORD.search(clause) and not _PANE_WORD.search(clause)
+                    and not re.search(r"\b(?:type|typing|run|running|execute|enter|send|press|hit|"
+                                      r"paste)\b", clause[:at.start()], re.I)
+                    and not _negated(prompt) and not _REPORTED.search(clause[:at.start()])):
+                return Action(name, {"name": title})
+        return Refusal(name, f"no part of the request renames the tab to {title!r}")
 
     # resize_pane
     direction = _text(args, "direction")

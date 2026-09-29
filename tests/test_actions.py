@@ -1672,6 +1672,32 @@ class HeldOutV11(unittest.TestCase):
                          if isinstance(r, Action)])
 
 
+class RouteBenchmark(unittest.TestCase):
+    """Renames the checks admitted in the Codex route benchmark (2026-09-29, qat-6)."""
+    def admitted(self, prompt, name):
+        return [r for r in interpret(prompt, [call("rename_tab", name=name)]) if isinstance(r, Action)]
+
+    def test_a_typed_command_is_not_a_tab_title(self):
+        self.assertFalse(self.admitted(
+            "In the pane titled bench-target in this tab, type `touch /tmp/sent-1` and press Enter.",
+            "touch /tmp/sent-1"))
+        self.assertFalse(self.admitted(
+            "Type into the existing pane named bench-target in the current tab: touch /tmp/x. "
+            "Press Enter in that same pane.", "enter"))
+
+    def test_renaming_a_pane_is_not_renaming_the_tab(self):
+        self.assertFalse(self.admitted("Rename the active pane to su0g6c", "su0g6c"))
+
+    def test_tab_renames_still_pass(self):
+        for prompt, title in (("rename this tab to api", "api"), ("tab: logs", "logs"),
+                              ("this tab should be called frontend", "frontend"),
+                              ("label the tab i'm on Backend so i can find it", "Backend"),
+                              ("tab's for notes, rename it accordingly", "notes"),
+                              ("Hey, could you title this tab Metrics? Thanks!", "Metrics")):
+            with self.subTest(prompt=prompt):
+                self.assertTrue(self.admitted(prompt, title))
+
+
 class HeldOutV14(unittest.TestCase):
     def admitted(self, prompt, *calls):
         return [r for r in interpret(prompt, list(calls)) if isinstance(r, Action)]
