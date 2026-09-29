@@ -1085,8 +1085,10 @@ class ReviewR3Contract(unittest.TestCase):
 class SafeClauseWording(unittest.TestCase):
     def test_a_safe_clause_is_held_to_its_canonical_wording(self):   # M77, KN-R4-04
         calls = [call("close_tab", tab="2"), call("go_to_tab", tab="1")]
+        # "at 5" is a time: the whole request is refused (held-out v10).
+        refused = interpret("close tab 2 and at 5 go to tab 1", calls)
+        self.assertTrue(refused and all(not isinstance(r, Action) for r in refused))
         for prompt, expected_plain in (("close tab 2 and go to tab 1", True),
-                                       ("close tab 2 and at 5 go to tab 1", False),
                                        ("close tab 2 and go to tab 1 in 10", False),
                                        ("close tab 2 and (on the left) go to tab 1", False)):
             with self.subTest(prompt=prompt):
@@ -1593,3 +1595,40 @@ class ReviewR10Round4(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HeldOutV10(unittest.TestCase):
+    """Unsafe closes the blind panes held-out v10 found (both qat-6 and qat-7)."""
+
+    def test_a_condition_or_time_is_not_now(self):
+        for prompt, calls in (("if the build fails, close the logs pane", [call("close_pane", pane="logs")]),
+                              ("when the build finishes, close the logs pane", [call("close_pane", pane="logs")]),
+                              ("close the logs pane tomorrow", [call("close_pane", pane="logs")]),
+                              ("close tab 2 once the tests pass", [call("close_tab", tab="2")]),
+                              ("close tab 2 in 10 minutes", [call("close_tab", tab="2")])):
+            with self.subTest(prompt=prompt):
+                results = interpret(prompt, calls)
+                self.assertTrue(results and not any(isinstance(r, Action) for r in results))
+
+    def test_courtesy_that_sounds_conditional_still_runs(self):             # review R2's rows
+        for prompt, calls in (("close tab 2 if you can", [call("close_tab", tab="2")]),
+                              ("close tab 2 when you're done", [call("close_tab", tab="2")]),
+                              ("when you get a chance, run make in the build pane",
+                               [call("run_in_pane", pane="build", command="make")]),
+                              ("run make in the build pane if it's idle",
+                               [call("run_in_pane", pane="build", command="make")]),
+                              ("close the logs tab until I need it again", [call("close_tab", tab="logs")])):
+            with self.subTest(prompt=prompt):
+                self.assertTrue(any(isinstance(r, Action) for r in interpret(prompt, calls)))
+
+    def test_right_before_is_no_place_and_i_is_no_name(self):
+        self.assertFalse([r for r in interpret("close the tab right before this one",
+                                               [call("close_tab", tab="right")]) if isinstance(r, Action)])
+        self.assertFalse([r for r in interpret("go ahead and close the pane i'm sitting in",
+                                               [call("close_pane", pane="i")]) if isinstance(r, Action)])
+        for prompt, pane in (("close the right pane", "right"), ("close the pane to the right", "right"),
+                             ("maximize the pane on the right now", "right"),
+                             ("maximize the pane left now", "left")):
+            name = "maximize_pane" if prompt.startswith("maximize") else "close_pane"
+            with self.subTest(prompt=prompt):
+                self.assertTrue(any(isinstance(r, Action) for r in interpret(prompt, [call(name, pane=pane)])))

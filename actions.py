@@ -508,10 +508,47 @@ def plain(prompt: str, actions: list) -> str | None:
     return None
 
 
+# A condition or a time says the action is not for now: "if the build fails,
+# close the logs pane", "close it tomorrow" (review: held-out v10). "before"
+# and "after" stay: "the tab before this one" is a place.
+_WHEN = re.compile(r"(?<![\w-])(?:if|unless|when|whenever|once|as soon as|tomorrow|"
+                   r"tonight|later|later on|in an? (?:minute|hour|bit|while)|"
+                   r"in \d+ (?:seconds?|secs?|minutes?|mins?|hours?)|at \d{1,2}(?::\d\d)?"
+                   r"(?: ?[ap]m)?)(?![\w-])", re.IGNORECASE)
+# Courtesy that only sounds conditional (review R2's legitimate rows): "if
+# you can", "when you get a chance", "once and for all".
+_COURTEOUS_WHEN = re.compile(
+    r"(?<![\w-])(?:if (?:you|u) (?:can|could|would|will|wouldn't mind|don't mind|do not mind|"
+    r"please|like|want|have a (?:sec|second|moment|minute))|if (?:that's|that is|it's|it is) "
+    r"(?:ok|okay|alright|all right|fine)|if possible|if you would|"
+    r"when(?:ever)? (?:you're|you are|u r|ur) (?:done|finished|ready|free)|"
+    r"when(?:ever)? (?:you|u) (?:get|have) a (?:chance|moment|sec|second|minute)|"
+    r"whenever you can|when you can|once and for all|"
+    # the executor already types only at a shell prompt
+    r"if (?:it's|it is|its) (?:idle|free|at (?:a|the) prompt))(?![\w-])", re.IGNORECASE)
+
+
+def _says_when(prompt: str, calls: list) -> bool:
+    """A condition or time outside the text a call types or starts."""
+    text = prompt
+    for call in calls if isinstance(calls, list) else []:
+        args = call.get("arguments") if isinstance(call, dict) else None
+        for key in ("command", "program"):
+            value = args.get(key) if isinstance(args, dict) else None
+            if isinstance(value, str) and value.strip():
+                text = text.replace(value.strip(), " ")
+    text = re.sub(r"([\"'`]).*?\1", " ", text)
+    return bool(_WHEN.search(_COURTEOUS_WHEN.sub(" ", text)))
+
+
 def interpret(prompt: str, calls: list) -> list[Action | Refusal]:
     """Turn the engine's calls into admitted actions or named refusals."""
     prompt = normalize(prompt)
     results: list[Action | Refusal] = []
+    if _says_when(prompt, calls):
+        return [Refusal(str(call.get("name") if isinstance(call, dict) else call),
+                        "the request says when or on what condition, not now")
+                for call in (calls if isinstance(calls, list) else [])]
     for call in calls if isinstance(calls, list) else []:
         name = call.get("name") if isinstance(call, dict) else None
         args = call.get("arguments") if isinstance(call, dict) else None
@@ -701,7 +738,10 @@ _PLACING = frozenset({"over", "down", "up", "back", "there", "here", "yonder", "
                       "as", "right", "left", "below", "above", "also", "instead", "then", "too",
                       "for", "to", "on", "in", "at", "by", "from", "with", "and", "or", "so"})
 # Determiners, not names, in any position: "the other tab", "the same pane".
-_NEVER_A_NAME = frozenset({"other", "another", "same", "both", "all", "ones", "it", "them"})
+_NEVER_A_NAME = frozenset({"other", "another", "same", "both", "all", "ones", "it", "them",
+                           # the speaker, never a pane: "the pane i'm sitting in" (held-out v10)
+                           "i", "i'm", "im", "me", "my", "mine", "you", "your", "we", "us",
+                           "our", "he", "she", "they", "which", "where", "whichever"})
 
 
 def _names_a_target(word: str, key: str, prompt: str) -> bool:
@@ -748,6 +788,14 @@ def _named_target(name: str, key: str, args: dict, prompt: str) -> str | Refusal
     value = _target_value(raw, relative=key == "tab")
     if value is None:
         return Refusal(name, f"cannot tell which {key} {raw!r} means")
+    if value == "right" and re.search(
+            r"(?<![\w])right\s+(?:before|after|away|now|here|there|then|next to|behind|"
+            r"in front of)(?![\w])", prompt, re.IGNORECASE) and not re.search(
+            rf"(?<![\w])(?:(?:on|to|at) the right|right(?:\s+(?:hand|side|most|one|{key}s?|"
+            rf"panes?))?(?:[.,!?;]|$))", prompt, re.IGNORECASE):
+        # "the tab right before this one": right is how close, not where
+        # (held-out v10).
+        return Refusal(name, f"{value!r} does not say where here")
     if value.startswith("name:") and not _names_a_target(value[5:], key, prompt):
         # Measured (tuned Needle 3, held-out v8): "close the next tab over" ->
         # close_tab("over"), grounded because the word is in the request.

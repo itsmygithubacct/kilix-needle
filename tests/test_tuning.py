@@ -1,6 +1,7 @@
 """The tuner: data consistency, the gates, and model selection."""
 import io
 import json
+import re
 import os
 from pathlib import Path
 import sys
@@ -60,11 +61,23 @@ class Gates(unittest.TestCase):
 class Data(unittest.TestCase):
     def test_training_data_is_consistent_and_excludes_every_eval_request(self):
         manifest = tuning.load_manifest()
-        with tempfile.TemporaryDirectory(prefix="kn-") as tmp:
+        import actions
+        dropped, real = [], actions.interpret
+
+        def spy(query, calls):
+            results = real(query, calls)
+            if sum(isinstance(r, actions.Action) for r in results) != len(calls):
+                dropped.append(query)
+            return results
+        with tempfile.TemporaryDirectory(prefix="kn-") as tmp, \
+                mock.patch.object(actions, "interpret", spy):
             out = Path(tmp) / "train.jsonl"
             stats = tuning.build_data(tuning.LIBRARY, manifest, out)
             rows = [json.loads(line) for line in out.read_text().splitlines()]
-        self.assertEqual(stats["inconsistent_dropped"], 0)
+        # The only rows the checks refuse are "the pane right now", where right
+        # may be the side or "right now": ambiguous, so refused (held-out v10).
+        self.assertEqual(stats["inconsistent_dropped"], len(dropped))
+        self.assertTrue(all(re.search(r"\bthe pane right now$", q) for q in dropped), dropped)
         self.assertEqual(stats["kept"], len(rows))
         evals = set()
         for rel in manifest["data"]["exclude"]:
