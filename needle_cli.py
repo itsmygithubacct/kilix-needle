@@ -166,7 +166,7 @@ def _recorded(job: str, engine, request: str, options: Options, run, exact=None)
     """Check the prompt, ask the engine, run its calls, and record the request
     in the local history (history.py) whatever happens."""
     started = time.monotonic()
-    given, checked, calls, result = request, None, None, None
+    given, checked, calls, result, private = request, None, None, None, None
     try:
         try:
             request = checked = check_prompt(request)
@@ -182,13 +182,17 @@ def _recorded(job: str, engine, request: str, options: Options, run, exact=None)
             # nothing from an error-marked or malformed reply runs (review KN-R18-04)
             result = {"request": request, "status": 1, "items": [],
                       "note": f"the engine's reply could not be used: {unusable}"}
+            # the caller sees the engine's words; the history keeps none of them
+            # (review KN-R18-201)
+            private = dict(result, note="the engine's reply could not be used")
             return result
         result = run(request, calls)
         return result
     finally:
         try:        # never replaces the result or the exception on its way out
             history.record(job, given, checked, engine, calls, options,
-                           result or {"status": None, "note": "the request did not finish"},
+                           private or result or {"status": None,
+                                                 "note": "the request did not finish"},
                            time.monotonic() - started)
         except Exception:       # noqa: BLE001
             pass

@@ -220,7 +220,14 @@ class Server:
             raise ValueError("confirm_risky must be true or false")
         try:
             # An exact apps control needs no engine (review KN-R18-03).
-            engine = (None if job == "apps" and needle_cli.app_controls.parse(request) is not None
+            # Matched on the checked request, as the route itself matches it
+            # (review KN-R18-202: "show text size\n").
+            try:
+                checked = needle_cli.check_prompt(request)
+            except ValueError:
+                checked = None
+            engine = (None if job == "apps" and checked is not None
+                      and needle_cli.app_controls.parse(checked) is not None
                       else self._ensure_engine(job))
         except (asset.AssetError, EngineError, LibEngineError) as error:
             return {"content": [{"type": "text", "text": f"kilix-needle unavailable: {error}"}],

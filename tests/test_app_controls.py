@@ -472,3 +472,26 @@ class ReviewR18(unittest.TestCase):
             needle_cli.run_apps_request(engine, "tell me a joke", needle_cli.Options())
         runner.assert_called_once()
 
+
+
+class ReviewR18Round2(unittest.TestCase):
+    def test_runtime_error_text_never_reaches_the_history(self):            # KN-R18-201
+        import json, shutil
+        import history
+        shutil.rmtree(history.directory(), ignore_errors=True)
+        engine = mock.Mock()
+        engine.complete.return_value = {"success": False, "error": "private pane title zq-secret-9",
+                                        "function_calls": []}
+        record = needle_cli.run_request(engine, "close the left pane", needle_cli.Options(dry_run=True))
+        self.assertIn("zq-secret-9", record["note"])                       # the caller still sees it
+        text = (history.directory() / "requests.jsonl").read_text()
+        self.assertNotIn("zq-secret-9", text)
+        self.assertEqual(json.loads(text.splitlines()[-1])["note"], "the engine's reply could not be used")
+
+    def test_a_control_with_trailing_space_needs_no_engine_over_mcp(self):  # KN-R18-202
+        broken = mock.Mock(side_effect=needle_cli.asset.AssetError("engine missing"))
+        server = mcp_server.Server(broken)
+        with mock.patch.object(backend, "command", return_value="font_size 14"):
+            plan = server.call_tool("kilix_apps_plan", {"request": "show text size\n"})
+        self.assertFalse(plan["isError"])
+        broken.assert_not_called()
