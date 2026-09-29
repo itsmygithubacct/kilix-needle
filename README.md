@@ -301,8 +301,10 @@ message to a coding session. So:
 - **Files.** Every directory and file below `GPU_TERMINAL_HOME` is opened without
   following links, and must belong to you. The directory is set to `0700` and
   its files, archives included, to `0600`.
-- **Items.** Only an item's kind, arguments, outcome, reason and summary are
-  kept, never command lines or pane and broker identities.
+- **Items.** Only an item's kind, arguments and outcome are kept, with the
+  reason when the checks or confirmation stopped it. There are no display
+  summaries (they name resolved panes and their titles), no runtime error text,
+  no command lines, and no pane or broker identities.
 - **Size.** Each entry is at most 64 KB, with long text cut and marked. The file
   rotates at 8 MB, and eight files are kept.
 - **Turning it off.** Set `KILIX_NEEDLE_HISTORY=0` to record nothing.
@@ -310,7 +312,9 @@ message to a coding session. So:
 Recording never changes what a request does or returns:
 - An entry is dropped if another writer holds the history for more than a
   quarter of a second, or if a path is unsafe.
-- A write that can't complete is rolled back, so the file stays whole lines.
+- A write that can't complete is rolled back. A partial last line, from a
+  failed rollback or a crash, is cut away before the next write, so the file
+  stays whole lines.
 - A failure is reported at most once on stderr.
 
 ## The apps job

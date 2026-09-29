@@ -21,8 +21,9 @@ a message to a coding session, so:
   through the descriptor, archives included.
 - **Size.** Each entry is bounded (MAX_ENTRY, with long text marked as
   truncated), and the files rotate at MAX_BYTES, keeping KEEP of them.
-- **Items.** Only an item's kind, arguments, outcome, reason and summary are
-  kept, never command lines or pane and broker identities.
+- **Items.** Only an item's kind, arguments, outcome and the checks' reason are
+  kept: no display summaries (they name resolved panes and titles), no text of a
+  runtime failure, no command lines, and no pane or broker identities.
 - **Switching it off.** Set KILIX_NEEDLE_HISTORY=0 to record nothing.
 
 Recording never changes what a request does or returns:
@@ -49,7 +50,7 @@ KEEP = 8                        # requests.jsonl and requests.1.jsonl ... reques
 MAX_ENTRY = 64 * 1024           # one serialised entry, whatever it holds
 MAX_TEXT = 4000                 # the request, and each text field of a call or an item
 LOCK_WAIT = 0.25                # seconds; a busier history drops the entry
-ITEM_FIELDS = ("kind", "args", "outcome", "reason", "summary")
+ITEM_FIELDS = ("kind", "args", "outcome", "reason")
 _OFF = {"0", "off", "no", "false"}
 _PARTS = ("kilix-apps", "kilix-needle", "history")
 _warned = False
@@ -95,10 +96,13 @@ def _open_dir(parent: int | None, name: str, *, create: bool) -> int:
         except FileExistsError:
             pass
     fd = os.open(name, flags, dir_fd=parent)
-    if not _mine(os.fstat(fd), stat.S_ISDIR):
-        os.close(fd)
-        raise Unsafe(f"{name} is not a directory of this user's")
-    return fd
+    try:
+        if not _mine(os.fstat(fd), stat.S_ISDIR):
+            raise Unsafe(f"{name} is not a directory of this user's")
+        return fd
+    except BaseException:
+        os.close(fd)            # every failure closes what it opened (review KN-R17-201)
+        raise
 
 
 def _history_dir() -> int:
@@ -124,12 +128,15 @@ def _open_file(folder: int, name: str, flags: int) -> int:
     links or blocking on anything that is not a file, and set to 0600."""
     fd = os.open(name, flags | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK, 0o600,
                  dir_fd=folder)
-    info = os.fstat(fd)
-    if not _mine(info, stat.S_ISREG) or info.st_nlink != 1:
+    try:
+        info = os.fstat(fd)
+        if not _mine(info, stat.S_ISREG) or info.st_nlink != 1:
+            raise Unsafe(f"{name} is not a regular file of this user's")
+        os.fchmod(fd, 0o600)
+        return fd
+    except BaseException:
         os.close(fd)
-        raise Unsafe(f"{name} is not a regular file of this user's")
-    os.fchmod(fd, 0o600)
-    return fd
+        raise
 
 
 def _exists(folder: int, name: str) -> bool:
@@ -150,21 +157,26 @@ def _rotate(folder: int) -> None:
 
 def _lock(folder: int) -> int | None:
     fd = _open_file(folder, ".lock", os.O_WRONLY | os.O_CREAT)
-    deadline = time.monotonic() + LOCK_WAIT
-    while True:
-        try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            return fd
-        except BlockingIOError:
-            if time.monotonic() >= deadline:
-                os.close(fd)
-                return None
-            time.sleep(0.01)
+    try:
+        deadline = time.monotonic() + LOCK_WAIT
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return fd
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    os.close(fd)
+                    return None
+                time.sleep(0.01)
+    except BaseException:
+        os.close(fd)
+        raise
 
 
 def _append(folder: int, line: bytes) -> None:
-    fd = _open_file(folder, "requests.jsonl", os.O_WRONLY | os.O_APPEND | os.O_CREAT)
+    fd = _open_file(folder, "requests.jsonl", os.O_RDWR | os.O_APPEND | os.O_CREAT)
     try:
+        _heal(fd)
         start = os.fstat(fd).st_size
         written = 0
         try:
@@ -178,6 +190,29 @@ def _append(folder: int, line: bytes) -> None:
             raise
     finally:
         os.close(fd)
+
+
+def _heal(fd: int) -> None:
+    """End the file at a whole line before appending. A write whose rollback
+    failed, or a process that died mid-write, leaves a partial last line; it
+    is cut back to the last newline, or the entry is dropped if that fails
+    (review KN-R17-203)."""
+    size = os.fstat(fd).st_size
+    if size == 0 or os.pread(fd, 1, size - 1) == b"\n":
+        return
+    window = min(size, 2 * MAX_ENTRY)
+    tail = os.pread(fd, window, size - window)
+    cut = tail.rfind(b"\n")
+    os.ftruncate(fd, size - window + cut + 1 if cut >= 0 else (0 if window == size else size - window))
+
+
+def _repair_archives(folder: int) -> None:
+    """Every retained archive is checked and set to 0600 on each write, not
+    only when it rotates (review KN-R17-204)."""
+    for n in range(1, KEEP):
+        name = f"requests.{n}.jsonl"
+        if _exists(folder, name):
+            os.close(_open_file(folder, name, os.O_RDONLY))
 
 
 def _text(value, limit: int = MAX_TEXT):
@@ -194,7 +229,11 @@ def _text(value, limit: int = MAX_TEXT):
 
 
 def entry(job: str, given, checked, engine, calls, options, result: dict, seconds: float) -> dict:
-    items = [{k: item[k] for k in ITEM_FIELDS if k in item}
+    # The admitted action (kind, args) and why it did not run are the data. A
+    # display summary names resolved panes and titles, and a runtime failure's
+    # text may too, so neither is kept (review KN-R17-202).
+    items = [{k: item[k] for k in ITEM_FIELDS if k in item
+              and not (k == "reason" and item.get("outcome") == "failed")}
              for item in result.get("items", []) if isinstance(item, dict)]
     text = given if isinstance(given, str) else str(given)
     out = {
@@ -247,6 +286,7 @@ def record(job: str, given, checked, engine, calls, options, result: dict,
                     os.stat("requests.jsonl", dir_fd=folder, follow_symlinks=False).st_size \
                     + len(line) > MAX_BYTES:
                 _rotate(folder)
+            _repair_archives(folder)
             _append(folder, line)
         finally:
             os.close(lock)

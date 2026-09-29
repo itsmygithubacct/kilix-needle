@@ -10,6 +10,7 @@ import unittest
 from unittest import mock
 
 import support  # noqa: F401
+from support import FakeKilix, desktop
 
 import history
 import mcp_server
@@ -250,7 +251,7 @@ class ReviewR17(unittest.TestCase):
                 "cwd": "/tmp/private-work", "pane": 7}
         data = history.entry("agents", "start codex here", None, Engine(), [],
                              needle_cli.Options(), {"status": 0, "items": [item]}, 0.1)
-        self.assertEqual(set(data["items"][0]), {"kind", "args", "outcome", "summary"})
+        self.assertEqual(set(data["items"][0]), {"kind", "args", "outcome"})
         self.assertNotIn("abc", json.dumps(data))
 
     def test_the_request_is_kept_as_given(self):                            # KN-R17-07
@@ -259,3 +260,68 @@ class ReviewR17(unittest.TestCase):
         spaced, surrogate = self.lines()
         self.assertEqual((spaced["request"], spaced["checked"]), ("  hide the clock  ", "hide the clock"))
         self.assertEqual(surrogate["request"], "bad \ud800 request")
+
+
+class ReviewR17Round2(unittest.TestCase):
+    """Review R17 round 2: descriptors, resolved names, partial tails, archives."""
+
+    def setUp(self):
+        shutil.rmtree(history.directory(), ignore_errors=True)
+        os.environ.pop("KILIX_NEEDLE_HISTORY", None)
+        history._warned = False
+        self.addCleanup(setattr, history, "_warned", False)
+        self.folder = history.directory()
+
+    def run_one(self, request="hide the clock"):
+        with mock.patch.object(sys, "stderr", io.StringIO()):
+            return needle_cli.run_apps_request(grammar(), request, needle_cli.Options(dry_run=True))
+
+    def lines(self):
+        return [json.loads(l) for l in (self.folder / "requests.jsonl").read_text().splitlines()]
+
+    def test_no_descriptor_outlives_a_failure(self):                       # KN-R17-201
+        self.run_one()
+        real_fstat, real_fchmod = os.fstat, os.fchmod
+        import fcntl
+        faults = {"fstat": mock.patch.object(os, "fstat", side_effect=OSError(5, "EIO")),
+                  "fchmod": mock.patch.object(os, "fchmod", side_effect=lambda fd, mode: (
+                      real_fchmod(fd, mode) if mode != 0o600 else (_ for _ in ()).throw(
+                          OSError(5, "EIO")))),
+                  "flock": mock.patch.object(fcntl, "flock", side_effect=OSError(5, "EIO"))}
+        for name, fault in faults.items():
+            before = len(os.listdir("/proc/self/fd"))
+            with fault:
+                for _ in range(3):
+                    self.run_one()
+            self.assertEqual(len(os.listdir("/proc/self/fd")), before, name)
+
+    def test_resolved_pane_names_stay_out(self):                             # KN-R17-202
+        os.environ["KITTY_WINDOW_ID"] = "300"
+        self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
+        with FakeKilix(desktop()):
+            record = needle_cli.run_request(
+                Engine([{"name": "go_to_pane", "arguments": {"pane": "left"}}]),
+                "go to the left pane", needle_cli.Options(dry_run=True))
+        # resolved to pane 301 'build (bash)': neither is in the request
+        self.assertIn("build", record["items"][0]["summary"])
+        (entry,) = self.lines()
+        self.assertEqual(entry["items"], [{"kind": "go_to_pane", "args": {"pane": "left"},
+                                           "outcome": "would"}])
+
+    def test_a_partial_last_line_is_cut_before_the_next_entry(self):      # KN-R17-203
+        self.run_one("hide the clock")
+        with open(self.folder / "requests.jsonl", "ab") as handle:
+            handle.write(b'{"schema": 2, "request": "half a rec')        # a failed rollback or a crash
+        self.run_one("hide the wifi")
+        self.assertEqual([e["request"] for e in self.lines()], ["hide the clock", "hide the wifi"])
+
+    def test_archives_are_repaired_without_a_rotation(self):               # KN-R17-204
+        self.run_one()
+        for n in range(1, history.KEEP):
+            path = self.folder / f"requests.{n}.jsonl"
+            path.write_text("{}\n")
+            os.chmod(path, 0o644)
+        self.run_one()
+        for n in range(1, history.KEEP):
+            self.assertEqual(stat.S_IMODE((self.folder / f"requests.{n}.jsonl").stat().st_mode),
+                             0o600, n)
