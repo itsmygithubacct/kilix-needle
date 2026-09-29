@@ -138,11 +138,11 @@ class PlanTests(unittest.TestCase):
             ("screen went blank. what happened", ("resources", {"kind": "disk"})),
             ("cpu hogs", ("resources", {"kind": "cpu"})),
             ("show top ten cpu consumers", ("resources", {"kind": "cpu"})),
-            ("check whether cups is running", ("resources", {"kind": "all"})),
+            ("how is cups holding up", ("resources", {"kind": "all"})),
             ("check syncthing in the user session, just its status", ("services", {"scope": "user"})),
             ("which services failed yesterday", ("services", {"state": "failed"})),
             ("newest error from this boot", ("journal", {"priority": "err"})),
-            ("check whether bash is installed", ("packages", {"operation": "owner", "target": "bash"})),
+            ("is bash around on this box", ("packages", {"operation": "owner", "target": "bash"})),
             ("the errors from then", ("processes", {"sort": "memory"})),
         ]
         for request, call in denied:

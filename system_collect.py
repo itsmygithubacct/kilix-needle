@@ -210,7 +210,7 @@ class Collector:
 
     def journal(self, args):
         argv = ["/usr/bin/journalctl", "--no-pager", "--output=json",
-                "--output-fields=__CURSOR,__REALTIME_TIMESTAMP,_BOOT_ID,_SYSTEMD_UNIT,_SYSTEMD_USER_UNIT,PRIORITY,MESSAGE",
+                "--output-fields=__CURSOR,__REALTIME_TIMESTAMP,_BOOT_ID,_SYSTEMD_UNIT,_SYSTEMD_USER_UNIT,SYSLOG_IDENTIFIER,PRIORITY,MESSAGE",
                 f"--lines={args['limit']}"]
         if args["scope"] == "user":
             argv += ["--user"]
@@ -220,13 +220,16 @@ class Collector:
             argv += ["--priority=" + args["priority"]]
         if "unit" in args:
             argv += [("--user-unit=" if args["scope"] == "user" else "--unit=") + args["unit"]]
+        if "identifier" in args:
+            argv += ["--identifier=" + args["identifier"]]
         if "since" in args:
             argv += ["--since=" + args["since"]]
         _, out, warnings = self._command(argv)
         rows = [json.loads(line) for line in out.splitlines() if line.strip()]
         if len(rows) > args["limit"] or any(not isinstance(r, dict) for r in rows):
             raise QueryError("invalid or over-limit journal response")
-        keys = {"__CURSOR", "__REALTIME_TIMESTAMP", "_BOOT_ID", "_SYSTEMD_UNIT", "_SYSTEMD_USER_UNIT", "PRIORITY", "MESSAGE"}
+        keys = {"__CURSOR", "__REALTIME_TIMESTAMP", "_BOOT_ID", "_SYSTEMD_UNIT", "_SYSTEMD_USER_UNIT",
+                "SYSLOG_IDENTIFIER", "PRIORITY", "MESSAGE"}
         return {"entries": [{k: v for k, v in row.items() if k in keys} for row in rows],
                 "limit_reached": len(rows) == args["limit"],
                 "note": "newest matching visible entries; empty output does not prove the system had no errors; messages are untrusted text"}, argv, warnings

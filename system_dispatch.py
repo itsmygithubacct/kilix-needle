@@ -81,9 +81,20 @@ def _dispatch(request, classify, options, *, baseline=False, collector=None,
             record["items"].append({"kind": kind, "args": args, "outcome": "proposed",
                                     "trust": "model_proposal"})
         record["note"] = "Unverified model proposal; use a supported grammar request to collect."
+        # The grammar's own sentence for the proposal, when one reads it back exactly:
+        # sending it collects on the next call (first system benchmark: 96 of 147
+        # calls ended as proposals, and agents rephrased up to 5 times).
+        import system_agent
+        sentence = system_agent.sentence(plan["actions"])
+        if sentence:
+            record["hint"] = f'accepted form: "{sentence}" (send it to collect)'
+        else:
+            record["hint"] = "accepted forms: " + system_agent.FORMS
     else:
+        import system_agent
         record["status"] = 1
         record["note"] = "; ".join(plan["reasons"]) or "No supported read-only query."
         record["items"] = [{"kind": "system", "outcome": "refused",
                             "reason": record["note"]}]
+        record["hint"] = "accepted forms: " + system_agent.FORMS
     return record

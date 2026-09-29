@@ -32,7 +32,9 @@ TOOLS = [
          "scope": _enum("system", "user")}, "required": [], "additionalProperties": False}},
     {"name": "journal", "description": "Read recent journal records, with service, boot, time and priority filters",
      "parameters": {"type": "object", "properties": {
-         "unit": {"type": "string"}, "boot": _enum("current", "previous", "any"),
+         "unit": {"type": "string"},
+         "identifier": {"type": "string", "description": "syslog identifier (a program's log tag)"},
+         "boot": _enum("current", "previous", "any"),
          "since": {"type": "string", "description": "today, yesterday, N minutes/hours/days ago, or YYYY-MM-DD"},
          "priority": _enum("all", "err", "warning"), "scope": _enum("system", "user"),
          "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 50}},
@@ -84,6 +86,12 @@ def normalize(kind, args):
             raise ValueError("name one exact service")
         if not result["unit"].endswith(".service"):
             result["unit"] += ".service"
+    if "identifier" in result:
+        if (not re.fullmatch(UNIT, result["identifier"]) or result["identifier"].endswith(".")
+                or result["identifier"].lower() in ("the", "this", "that", "it")):
+            raise ValueError("name one exact program tag")
+        if "unit" in result:
+            raise ValueError("choose a service or a program tag, not both")
     if "path" in result and not re.fullmatch(PATH, result["path"]):
         raise ValueError("use an absolute filesystem path without wildcards or spaces")
     if kind == "resources" and result["kind"] not in ("disk", "all") and result["path"] != "/":
@@ -153,7 +161,8 @@ def _clause(text):
     if match(r"what failed during (?:this|the current) boot"):
         return [action("services", state="failed"), action("journal", priority="err")]
     m = match(rf"(?:show |read |list )?(?:the )?(?:(?P<scope>user|system) )?"
-              rf"(?P<kind>journal|logs|errors|warnings)(?: from (?:the )?(?P<unit>{UNIT}) service)?"
+              rf"(?P<kind>journal|logs|errors|warnings)(?: from (?:the )?(?P<unit>{UNIT}) service"
+              rf"| from (?:the )?program (?P<ident>{UNIT}))?"
               rf"(?: (?:from|during) (?P<boot>this|the current|the previous|all) boots?)?"
               rf"(?: since (?P<since>{SINCE}))?(?: (?:limit|last) (?P<limit>[0-9]+)(?: entries)?)?")
     if m:
@@ -161,6 +170,8 @@ def _clause(text):
                 "scope": (m["scope"] or "system").lower(), "limit": int(m["limit"] or 50)}
         if m["unit"]:
             args["unit"] = m["unit"]
+        if m["ident"]:
+            args["identifier"] = m["ident"]
         args["boot"] = {"this": "current", "the current": "current", "the previous": "previous", "all": "any"}.get(
             (m["boot"] or "").lower(), "any" if m["since"] else "current")
         if m["since"]:
@@ -176,6 +187,19 @@ def _clause(text):
 
 
 def parse(request):
+    """The queries the request states, or None. An agent's wording of one query is
+    read through its grammar sentence (system_agent.canonical)."""
+    found = _parse(request)
+    if found is None and isinstance(request, str) and len(request) <= 2048 \
+            and not any(ord(c) < 32 or ord(c) == 127 for c in request):
+        import system_agent
+        sentence = system_agent.canonical(request)
+        if sentence is not None:
+            found = _parse(sentence)
+    return found
+
+
+def _parse(request):
     if not isinstance(request, str) or not request or len(request) > 2048:
         return None
     # No control characters, multi-line text or executable syntax. Values keep case.
