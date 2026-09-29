@@ -65,7 +65,7 @@ class History(unittest.TestCase):
         self.assertEqual(apps["engine"], "grammar")
         self.assertEqual(apps["calls"], [{"name": "show", "arguments": {"item": "clock", "on": False}}])
         self.assertEqual([i["outcome"] for i in apps["items"]], ["would"])
-        self.assertEqual((apps["caller"], apps["dry_run"], apps["schema"]), ("person", True, 1))
+        self.assertEqual((apps["caller"], apps["dry_run"], apps["schema"]), ("person", True, 2))
         self.assertEqual(panes["engine"], "stub")
         self.assertGreaterEqual(apps["ms"], 0)
 
@@ -131,3 +131,131 @@ class History(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReviewR17(unittest.TestCase):
+    """Review R17: the writer's file safety, bounds and failure isolation."""
+
+    def setUp(self):
+        shutil.rmtree(history.directory(), ignore_errors=True)
+        os.environ.pop("KILIX_NEEDLE_HISTORY", None)
+        history._warned = False
+        self.addCleanup(setattr, history, "_warned", False)
+        self.folder = history.directory()
+
+    def run_one(self, request="hide the clock"):
+        return needle_cli.run_apps_request(grammar(), request, needle_cli.Options(dry_run=True))
+
+    def lines(self):
+        path = self.folder / "requests.jsonl"
+        return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+    def mode(self, path):
+        return stat.S_IMODE(os.lstat(path).st_mode)
+
+    def test_loose_modes_are_repaired_archives_included(self):              # KN-R17-01
+        self.folder.mkdir(parents=True)
+        os.chmod(self.folder, 0o777)
+        for name, mode in (("requests.jsonl", 0o644), (".lock", 0o666)):
+            (self.folder / name).write_text("")
+            os.chmod(self.folder / name, mode)
+        with mock.patch.object(history, "MAX_BYTES", 400):
+            for n in range(4):
+                self.run_one(f"hide the clock {n}")
+        self.assertEqual(self.mode(self.folder), 0o700)
+        for path in self.folder.iterdir():
+            self.assertEqual(self.mode(path), 0o600, path.name)
+
+    def test_links_and_special_files_are_never_used(self):                 # KN-R17-01
+        elsewhere = self.folder.parent / "elsewhere"
+        elsewhere.mkdir(parents=True)
+        (elsewhere / "target").write_text("keep\n")
+        os.symlink(elsewhere, self.folder)                  # a linked history directory
+        self.run_one()
+        self.assertEqual(os.listdir(elsewhere), ["target"])
+        os.unlink(self.folder)
+        self.folder.mkdir()
+        os.symlink(elsewhere / "target", self.folder / "requests.jsonl")   # a linked file
+        self.run_one()
+        os.unlink(self.folder / "requests.jsonl")
+        os.link(elsewhere / "target", self.folder / "requests.jsonl")      # a second hard link
+        self.run_one()
+        self.assertEqual((elsewhere / "target").read_text(), "keep\n")
+        os.unlink(self.folder / "requests.jsonl")
+        os.mkfifo(self.folder / "requests.jsonl")                           # never blocks
+        record = self.run_one()
+        self.assertEqual(record["items"][0]["outcome"], "would")
+
+    def test_a_held_lock_drops_the_entry_without_delaying_the_request(self):  # KN-R17-02
+        self.run_one()
+        import fcntl
+        import time
+        import threading
+        holder = os.open(self.folder / ".lock", os.O_WRONLY)
+        fcntl.flock(holder, fcntl.LOCK_EX)
+        done = []
+        worker = threading.Thread(target=lambda: done.append(self.run_one("hide the battery")))
+        try:
+            started = time.monotonic()
+            worker.start()
+            worker.join(2.0)
+            took = time.monotonic() - started
+            waited = worker.is_alive()
+        finally:
+            os.close(holder)            # a blocked writer finishes now, not forever
+            worker.join(5.0)
+        self.assertFalse(waited, "the request waited on the history lock")
+        self.assertEqual(done[0]["items"][0]["outcome"], "would")
+        self.assertLess(took, 2.0)
+        self.assertEqual([e["request"] for e in self.lines()], ["hide the clock"])
+
+    def test_a_failing_warning_never_replaces_a_result_or_an_exception(self):  # KN-R17-03
+        class Broken(io.StringIO):
+            def write(self, _text):
+                raise OSError(9, "stderr is gone")
+        with mock.patch.object(sys, "stderr", Broken()), \
+                mock.patch.object(history, "_append", side_effect=OSError(28, "disk full")):
+            self.assertEqual(self.run_one()["items"][0]["outcome"], "would")
+            history._warned = False
+            with self.assertRaisesRegex(RuntimeError, "engine broke"):
+                needle_cli.run_request(Engine(fail=True), "close the left pane",
+                                       needle_cli.Options(dry_run=True))
+
+    def test_a_short_write_leaves_whole_lines(self):                        # KN-R17-04
+        self.run_one("hide the clock")
+        real = os.write
+        calls = []
+
+        def short(fd, data):
+            calls.append(len(data))
+            if len(calls) == 1:
+                return real(fd, data[: len(data) // 2])
+            raise OSError(28, "disk full")
+        with mock.patch.object(os, "write", short), mock.patch.object(sys, "stderr", io.StringIO()):
+            self.run_one("hide the battery")
+        self.run_one("hide the wifi")
+        self.assertEqual([e["request"] for e in self.lines()], ["hide the clock", "hide the wifi"])
+
+    def test_an_entry_is_bounded_however_long_the_request(self):           # KN-R17-05
+        self.run_one("x" * 8_388_608)
+        size = (self.folder / "requests.jsonl").stat().st_size
+        self.assertLessEqual(size, history.MAX_ENTRY)
+        (entry,) = self.lines()
+        self.assertEqual(entry["request_chars"], 8_388_608)
+        self.assertIn("chars]", entry["request"])
+
+    def test_items_keep_only_their_meaning(self):                          # KN-R17-06
+        item = {"kind": "launch", "args": {"agent": "codex"}, "outcome": "would",
+                "summary": "start codex", "argv": ["kilix", "--expect-broker", "abc"],
+                "cwd": "/tmp/private-work", "pane": 7}
+        data = history.entry("agents", "start codex here", None, Engine(), [],
+                             needle_cli.Options(), {"status": 0, "items": [item]}, 0.1)
+        self.assertEqual(set(data["items"][0]), {"kind", "args", "outcome", "summary"})
+        self.assertNotIn("abc", json.dumps(data))
+
+    def test_the_request_is_kept_as_given(self):                            # KN-R17-07
+        self.run_one("  hide the clock  ")
+        self.run_one("bad \ud800 request")
+        spaced, surrogate = self.lines()
+        self.assertEqual((spaced["request"], spaced["checked"]), ("  hide the clock  ", "hide the clock"))
+        self.assertEqual(surrogate["request"], "bad \ud800 request")

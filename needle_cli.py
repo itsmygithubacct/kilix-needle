@@ -135,10 +135,10 @@ def _recorded(job: str, engine, request: str, options: Options, run) -> dict:
     """Check the prompt, ask the engine, run its calls, and record the request
     in the local history (history.py) whatever happens."""
     started = time.monotonic()
-    calls, result = None, None
+    given, checked, calls, result = request, None, None, None
     try:
         try:
-            request = check_prompt(request)
+            request = checked = check_prompt(request)
         except ValueError as error:
             result = {"request": request, "status": 1, "note": str(error), "items": []}
             return result
@@ -147,9 +147,12 @@ def _recorded(job: str, engine, request: str, options: Options, run) -> dict:
         result = run(request, calls)
         return result
     finally:
-        history.record(job, request, engine, calls, options,
-                       result or {"status": None, "note": "the request did not finish"},
-                       time.monotonic() - started)
+        try:        # never replaces the result or the exception on its way out
+            history.record(job, given, checked, engine, calls, options,
+                           result or {"status": None, "note": "the request did not finish"},
+                           time.monotonic() - started)
+        except Exception:       # noqa: BLE001
+            pass
 
 
 def run_calls(request: str, calls: list, options: Options,
