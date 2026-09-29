@@ -367,8 +367,12 @@ def _pane_phrases(target: str) -> list[str]:
         else:
             out.append(rf"(?:the )?{unit} {target}")
         return out
+    if target.startswith("id:"):
+        n = target[3:]
+        return [rf"(?:the )?(?:pane|window)\s*(?:id\s*)?[:#]?\s*{n}", rf"#{n}"]
     name = re.escape((target[5:] if target.startswith("name:") else target).casefold())
-    return [rf"(?:the |that )?{name} {unit}", rf"(?:the )?{unit} (?:called|named|titled|running) {name}"]
+    return [rf"(?:the |that )?{name} {unit}", rf"(?:the )?{unit} (?:called|named|titled|running) {name}",
+            rf"(?:the )?{unit} {name}"]
 
 
 # A word that is plainly an argument to a shell command, not English.
@@ -411,7 +415,8 @@ def _clause_forms(action) -> list[str]:
         command = _quoted(args["command"])
         forms = []
         for p in _pane_phrases(args["pane"]):
-            forms += [rf"{_RUN_WORDS} {command} (?:in|into) {p}", rf"in {p},? {_RUN_WORDS} {command}"]
+            forms += [rf"{_RUN_WORDS} (?:the command )?{command} (?:in|into) {p}",
+                      rf"in {p},? {_RUN_WORDS} (?:the command )?{command}"]
         if args["pane"] == "current":
             forms.append(rf"{_RUN_WORDS} {command} here")
         return forms
@@ -460,6 +465,11 @@ def plain(prompt: str, actions: list) -> str | None:
     text = _POLITE_HEAD.sub("", text)
     text = re.sub(r"[.!?]+$", "", text).strip()
     text = _POLITE_TAIL.sub("", text).strip()
+    if any(a.kind == "run_in_pane" for a in actions):
+        # Typing presses Enter already: "... and press enter" says nothing more.
+        text = re.sub(r"(?:,?\s+(?:and\s+|then\s+|and then\s+)?|[.;]\s+)(?:press|hit)\s+"
+                      r"(?:enter|return)(?:\s+(?:in|into)\s+(?:that|the|this)(?:\s+same)?\s+pane)?$",
+                      "", text).strip()
     risky = [a for a in actions if getattr(a, "risky", False)]
     if not risky:
         return None
@@ -597,9 +607,17 @@ def _hearsay(prompt: str) -> bool:
         and not _HEARSAY_SPEAKER.match(lead + " ")
 
 
+def _pane_colon_ids(prompt: str) -> str:
+    """ "pane:70", the form `kilix pane` prints, read as "pane 70" (outside quotes)."""
+    parts = re.split(r"""((?:`[^`]*`)|(?:"[^"]*")|(?:'[^']*'))""", prompt)
+    return "".join(p if i % 2 else re.sub(r"(?<![\w-])(pane|window):([0-9]{1,6})(?![\w-])",
+                                          r"\1 \2", p, flags=re.IGNORECASE)
+                   for i, p in enumerate(parts))
+
+
 def interpret(prompt: str, calls: list) -> list[Action | Refusal]:
     """Turn the engine's calls into admitted actions or named refusals."""
-    prompt = normalize(prompt)
+    prompt = _pane_colon_ids(normalize(prompt))
     results: list[Action | Refusal] = []
     if _says_when(prompt, calls):
         return [Refusal(str(call.get("name") if isinstance(call, dict) else call),
@@ -837,8 +855,26 @@ _BROWSERS = frozenset({"browser", "web browser", "chrome", "chromium", "firefox"
                        "brave", "opera", "vivaldi", "web", "website", "webpage", "web page"})
 
 
+def _pane_id(raw: str, prompt: str) -> str | None:
+    """"pane 70", "pane:70", "pane id 70", "window 70", "#70": a pane id, only
+    when the request itself says it that way (route benchmark 2026-09-29: "no
+    pane is called or running '70'")."""
+    m = re.fullmatch(r"\s*(?:(?:the\s+)?(?:pane|window)\s*(?:id\s*)?[:#]?\s*|#)?([0-9]{1,6})\s*",
+                     raw, re.IGNORECASE)
+    if not m:
+        return None
+    n = m.group(1)
+    said = re.search(rf"(?<![\w-])(?:(?:pane|window)\s*(?:id\s*)?[:#]?\s*|#){n}(?![\w-])",
+                     prompt, re.IGNORECASE)
+    return f"id:{int(n)}" if said else None
+
+
 def _named_target(name: str, key: str, args: dict, prompt: str) -> str | Refusal:
     raw = _text(args, key)
+    if key == "pane":
+        ident = _pane_id(raw, prompt)
+        if ident:
+            return ident
     # The introducing word is not part of the name: measured (fourteen tools),
     # "close the pane running top" -> pane "running top", which names no pane.
     raw = re.sub(rf"^{_AS_NAME}", "", raw.strip(), flags=re.IGNORECASE)
@@ -907,6 +943,8 @@ def _mentions(target: str) -> list[str]:
         return ["this", "current", "here", "active", "focused"]
     if target.startswith("name:"):
         return [target[5:]]
+    if target.startswith("id:"):
+        return [target[3:]]
     token = target
     return [token,
             *(word for word, side in _SIDE_WORDS.items() if side == token),

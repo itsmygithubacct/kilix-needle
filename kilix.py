@@ -127,6 +127,24 @@ def _shell_in_front(window: dict) -> bool:
     return bool(names) and all(name in _SHELLS for name in names)
 
 
+# Shells kitty's shell integration cannot reach never send prompt marks, so
+# `at_prompt` is always false for them. For these the out-of-band signals
+# decide alone: only the shell holds the terminal, and it is not in the
+# alternate screen (route benchmark 2026-09-29: every typing request into a
+# plain `sh` pane was refused, 0/7).
+_UNMARKED_SHELLS = frozenset("sh dash ash ksh mksh csh tcsh".split())
+
+
+def _ready_to_type(window: dict) -> bool:
+    if not _shell_in_front(window):
+        return False
+    if window.get("at_prompt") is True:
+        return True
+    names = [os.path.basename(str((p.get("cmdline") or [""])[0])).lstrip("-")
+             for p in window.get("foreground_processes") or []]
+    return all(name in _UNMARKED_SHELLS for name in names)
+
+
 def _program(window: dict) -> str:
     processes = window.get("foreground_processes") or []
     for process in processes:
@@ -232,6 +250,14 @@ class Tree:
                 if members and window.get("id") == members[-1]:
                     return window
             raise KilixError(f"the pane {ref} of the current one is not listed")
+        if ref.startswith("id:"):
+            # A pane id the request states ("pane 70", "pane:70", "#70"): the
+            # ids `kilix panes` prints are kitty window ids (route benchmark).
+            wanted = int(ref[3:])
+            for _tab, window in self._all_panes():
+                if window.get("id") == wanted:
+                    return window
+            raise KilixError(f"there is no pane {wanted}")
         name = ref[5:].casefold()
 
         # Review KN-04: a substring of a title, preferred in the current tab,
@@ -442,9 +468,10 @@ def _resolve(action: Action, tree: Tree) -> Step:
                        f"--increment={sign * args['amount']}"), None),))
     if kind == "run_in_pane":
         window = tree.pane(args["pane"], wrap=False)
-        if window.get("at_prompt") is not True or not _shell_in_front(window):
-            raise KilixError(f"{_describe_pane(window)} is not at a shell prompt; "
-                             "nothing will be typed into it")
+        if not _ready_to_type(window):
+            raise KilixError(f"{_describe_pane(window)} is not at a shell prompt (a program is "
+                             "running, or its shell reports no prompt marks); nothing will be "
+                             "typed into it")
         text = args["command"].encode("utf-8")
         if len(text) > MAX_TYPED:
             raise KilixError("the command is too long to type")
@@ -469,7 +496,7 @@ def still_at_prompt(window_id: int, *, under_overlay: bool = False) -> bool:
     "run vim notes.txt … and run make …" typed make into vim)."""
     tree = snapshot(under_overlay=under_overlay)
     window = next((w for _tab, w in tree._all_panes() if w.get("id") == window_id), None)
-    return window is not None and window.get("at_prompt") is True and _shell_in_front(window)
+    return window is not None and _ready_to_type(window)
 
 
 def perform(step: Step) -> None:

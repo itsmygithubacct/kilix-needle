@@ -397,6 +397,16 @@ class StillAtPrompt(unittest.TestCase):
         self.assertFalse(self.check(at_prompt=False))                                    # R03
         self.assertFalse(self.check(foreground_processes=[{"cmdline": ["ssh", "h"], "pid": 1}]))   # R02
 
+    def test_a_plain_sh_pane_is_ready_on_the_out_of_band_signals(self):
+        sh = [{"cmdline": ["sh"], "pid": 1}]
+        self.assertTrue(self.check(at_prompt=False, foreground_processes=sh))
+        self.assertTrue(self.check(at_prompt=False, foreground_processes=[{"cmdline": ["-dash"], "pid": 1}]))
+        # Still refused: a program in front, the alternate screen, or an
+        # integrable shell that reports no prompt.
+        self.assertFalse(self.check(at_prompt=False, foreground_processes=sh + [{"cmdline": ["vim"], "pid": 2}]))
+        self.assertFalse(self.check(at_prompt=False, foreground_processes=sh, in_alternate_screen=True))
+        self.assertFalse(self.check(at_prompt=False, foreground_processes=[{"cmdline": ["bash"], "pid": 1}]))
+
     def test_a_failed_read_is_not_ready(self):                                          # R04
         import needle_cli
         from unittest import mock

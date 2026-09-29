@@ -1698,6 +1698,34 @@ class RouteBenchmark(unittest.TestCase):
                 self.assertTrue(self.admitted(prompt, title))
 
 
+class RouteBenchmarkTargets(unittest.TestCase):
+    """Pane ids and plain typing forms agents used in the route benchmark."""
+    def test_a_pane_id_the_request_states_is_a_target(self):
+        for prompt, raw in (("close pane 70", "70"), ("close pane:70", "pane:70"),
+                            ("go to pane 12", "12")):
+            kind = "go_to_pane" if prompt.startswith("go") else "close_pane"
+            with self.subTest(prompt=prompt):
+                got = [r for r in interpret(prompt, [call(kind, pane=raw)]) if isinstance(r, Action)]
+                self.assertEqual([a.args for a in got], [{"pane": raw.split(":")[-1] and "id:" + raw.split(":")[-1]}])
+        self.assertFalse([r for r in interpret("close pane 70", [call("close_pane", pane="71")])
+                          if isinstance(r, Action)])
+        # Inside quotes, "pane:3" is text to type, not a target.
+        got = [r for r in interpret("run 'echo pane:3' in pane:70",
+                                    [call("run_in_pane", pane="70", command="echo pane:3")])
+               if isinstance(r, Action)]
+        self.assertEqual(got[0].args, {"pane": "id:70", "command": "echo pane:3"})
+
+    def test_plain_typing_forms_agents_use(self):
+        a = Action("run_in_pane", {"pane": "name:bench-target", "command": "touch /tmp/x"})
+        for prompt in ("type the command touch /tmp/x into pane bench-target",
+                       "run 'touch /tmp/x' in pane bench-target",
+                       "type `touch /tmp/x` into the bench-target pane and press enter"):
+            with self.subTest(prompt=prompt):
+                self.assertIsNone(plain(prompt, [a]))
+        self.assertIsNotNone(plain("type `touch /tmp/x` into the bench-target pane and press delete",
+                                   [a]))
+
+
 class HeldOutV14(unittest.TestCase):
     def admitted(self, prompt, *calls):
         return [r for r in interpret(prompt, list(calls)) if isinstance(r, Action)]
