@@ -1132,7 +1132,8 @@ def interpret(request: str, calls: list) -> list[Action | Refusal]:
 _P_HEAD = r"^(?:(?:please|pls|can you|could you|would you)\s+)?"
 _P_TAIL = r"(?:\s+(?:please|pls|now|for me|thanks|thank you))?$"
 _PLAIN_FORMS = {
-    "launch": [(r"(?:open|launch|start|play|run) (?:the )?(?P<name>.+?)", None)],
+    "launch": [(r"(?:open|launch|start|play|run) (?:the )?(?:(?:game|app) )?(?P<name>.+?)(?: (?:game|app))?"
+                r"(?: (?:in|on) kilix| in (?:a )?(?:new )?(?:kilix )?tab)?", None)],
     "show": [(r"(?:show|unhide) (?:the )?(?P<name>.+?)", True), (r"hide (?:the )?(?P<name>.+?)", False),
              (r"(?:turn|switch) on (?:the )?(?P<name>.+?)", True),
              (r"(?:turn|switch) off (?:the )?(?P<name>.+?)", False),

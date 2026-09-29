@@ -1339,6 +1339,9 @@ class InKilix(unittest.TestCase):
             with self.subTest(request=request):
                 self.assertEqual(apps.interpret(request, call)[0].kind, "launch")
                 self.assertNotIsInstance(apps.interpret(request, call)[0], Refusal)
+        for request in ("Open the game Super Kilix in Kilix.", "play super kilix in a new tab"):
+            with self.subTest(request=request):      # plain: a --yes covers it
+                self.assertIsNone(apps.plain(request, apps.interpret(request, call)))
         for request in ("open super kilix in kilix lights", "open super kilix in kilix land"):
             with self.subTest(request=request):
                 self.assertIsInstance(apps.interpret(request, call)[0], Refusal)
