@@ -39,6 +39,7 @@ import sys
 import tomllib
 
 import jobs
+import state
 
 REPO = Path(__file__).resolve().parent
 
@@ -59,8 +60,7 @@ def library_path(job: str = jobs.DEFAULT) -> Path:
 
 
 LIBRARY = library_path()
-APP_HOME = Path(os.environ.get("GPU_TERMINAL_HOME") or Path.home() / ".local" / "gpu_terminal") \
-    / "kilix-apps" / "kilix-needle"
+APP_HOME = state.home()
 SELECTION = APP_HOME / "model.json"
 SUPPLEMENT = REPO / "corpus-supplement"
 

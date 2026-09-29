@@ -29,8 +29,8 @@ def consistent_read(function):
 
 
 def default_path() -> Path:
-    root = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
-    return root / "kilix-needle" / "logs" / "index.sqlite3"
+    import state
+    return state.place("logs") / "index.sqlite3"
 
 
 def _private_dir(path: Path) -> None:

@@ -316,6 +316,25 @@ kilix-needle tune --job agents --select RUN   # a gated coding-session model
 
 A selection saved before jobs existed is read as the `panes` selection.
 
+## State
+
+Everything kilix-needle keeps lives in one directory,
+`$GPU_TERMINAL_HOME/kilix-apps/kilix-needle` (by default
+`~/.local/gpu_terminal/kilix-apps/kilix-needle`):
+
+| Path | What |
+|---|---|
+| `model.json` | each job's selected tuned model |
+| `tuning/` | tuning runs |
+| `history/` | request history |
+| `system-normalizer/` | the system normalizer profile and its verified objects |
+| `logs/index.sqlite3` | the logs reader's index (a rebuildable cache) |
+
+Older versions kept the normalizer profile and the logs index in
+`~/.local/share/kilix-needle`. The first use moves each one into the state
+directory; nothing is copied or left behind. `~/.config/kilix-needle/dirs.json`
+is configuration you edit, not state, and stays where it is.
+
 ## Request history
 
 Each panes, apps or agents request answered by kilix-needle's own engines,
@@ -582,7 +601,8 @@ kilix-needle system-model status
 ```
 
 The normalizer profile is stored at
-`~/.local/share/kilix-needle/system-normalizer/profile.json` by default.
+`~/.local/gpu_terminal/kilix-apps/kilix-needle/system-normalizer/profile.json`
+by default (see [State](#state)).
 `system-model configure` verifies and stores the supplied weights and runtime
 library; `status` reports their hashes, availability, and `proposal-only` role.
 This profile is separate from `tune --job ... --select` and is not configured by
@@ -854,6 +874,7 @@ real shape, including window groups.
 | `libengine.py` | `libneedle.so` in a worker, for tuned weights |
 | `asset.py` | admitting installed assets or pinned local copies; the first-use install |
 | `tuning.py` | `kilix-needle tune` |
+| `state.py` | the one state directory, and moving older data-home state into it |
 | `needle_cli.py` | the command line, prompt loop and runtime selection |
 | `mcp_server.py` | `kilix-needle mcp` |
 | `setup_surfaces.py` | `kilix-needle setup` |

@@ -15,6 +15,7 @@ import sys
 import tempfile
 
 import asset
+import state
 from libengine import LibEngine, LibEngineError
 import system_job
 
@@ -33,14 +34,39 @@ def profile_path() -> Path:
         if not path.is_absolute():
             raise SystemModelError("KILIX_NEEDLE_SYSTEM_PROFILE must be absolute")
         return path
-    data = os.environ.get("XDG_DATA_HOME")
-    if data:
-        root = Path(data)
-        if not root.is_absolute():
-            raise SystemModelError("XDG_DATA_HOME must be absolute")
-    else:
-        root = Path.home() / ".local/share"
-    return root / "kilix-needle/system-normalizer/profile.json"
+    return state.place("system-normalizer", _relocated) / "profile.json"
+
+
+def _relocated(old: Path, new: Path) -> None:
+    """The profile names its objects by absolute path: point them at the moved copies."""
+    path = new / "profile.json"
+    try:
+        config = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return                 # status and open_runtime report an unreadable profile
+    if not isinstance(config, dict):
+        return
+    changed = False
+    for kind in ("weights", "library"):
+        item = config.get(kind)
+        if isinstance(item, dict) and isinstance(item.get("path"), str) \
+                and Path(item["path"]).parent.parent.parent == old:
+            item["path"] = str(new / Path(item["path"]).relative_to(old))
+            changed = True
+    if not changed:
+        return
+    fd, temporary = tempfile.mkstemp(prefix=".profile-", dir=new)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as out:
+            json.dump(config, out, sort_keys=True)
+            out.write("\n")
+            out.flush()
+            os.fsync(out.fileno())
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def _digest_ok(value: str) -> bool:
