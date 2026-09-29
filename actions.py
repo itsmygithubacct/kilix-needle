@@ -560,6 +560,9 @@ def _says_when(prompt: str, calls: list) -> bool:
                 text = text.replace(value.strip(), " ")
     text = re.sub(r"([\"'`]).*?\1", " ", text)
     text = _SAID_NAME.sub(" ", text)
+    # "at once", "one at a time" say how many, not when (held-out v12).
+    text = re.sub(r"(?<![\w-])(?:all )?at once|(?:one |two )?at a time(?![\w-])", " ", text,
+                  flags=re.IGNORECASE)
     return bool(_WHEN.search(_COURTEOUS_WHEN.sub(" ", text)))
 
 
@@ -1287,6 +1290,15 @@ def _admit(name: str, args: dict, prompt: str) -> Action | Refusal:
         return Refusal(name, "the request does not ask to close anything")
     if name == "run_in_pane" and not _RUN_VERB.search(prompt):
         return Refusal(name, "the request does not ask to run or type a command")
+    if name == "run_in_pane":
+        command = _text(args, "command")
+        # An unquoted command does not run on into English: "type git status so
+        # I can see what's staged" would type the reason too (held-out v12).
+        quoted = [inner for _quote, inner in re.findall(r"([\"'`])(.*?)\1", prompt)]
+        if command and command not in quoted and re.search(
+                r"(?<![\w-])(?:so (?:that )?(?:i|we|you)|so i can|because|since i|in order to|"
+                r"to (?:see|check|find|know|make sure))(?![\w-])", command, re.IGNORECASE):
+            return Refusal(name, "the command runs on into the reason for it")
 
     if name in ("open_pane", "open_tab"):
         out = {}

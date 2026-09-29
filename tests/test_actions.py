@@ -1669,3 +1669,19 @@ class HeldOutV11(unittest.TestCase):
                                   if isinstance(r, Action)])
         self.assertTrue([r for r in interpret("close the logs tab", [call("close_tab", tab="logs")])
                          if isinstance(r, Action)])
+
+
+class HeldOutV12(unittest.TestCase):
+    def test_an_unquoted_command_does_not_type_its_reason(self):
+        self.assertFalse([r for r in interpret(
+            "over in the right pane, type git status so I can see what's staged",
+            [call("run_in_pane", pane="right", command="git status so I can see what's staged")])
+            if isinstance(r, Action)])
+        self.assertTrue([r for r in interpret('run "echo so I can" in the left pane',
+                                              [call("run_in_pane", pane="left", command="echo so I can")])
+                         if isinstance(r, Action)])
+
+    def test_at_once_and_at_a_time_are_no_times(self):
+        self.assertTrue([r for r in interpret(
+            "too many panes to read at once, just show me one at a time",
+            [call("arrange_panes", layout="stack")]) if isinstance(r, Action)])
