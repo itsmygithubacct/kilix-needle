@@ -107,7 +107,22 @@ def action(tool, **args):
     return Action(tool, normalize(tool, args))
 
 
+def ambiguous_owner(request):
+    """A definite generic object needs a name, not a guessed command target.
+
+    `owns file` and `owns the file command` still name the real file utility.
+    `owns the file` does not identify which file the caller means.
+    """
+    return isinstance(request, str) and bool(re.search(
+        r"\b(?:which|what) package (?:provides|owns) "
+        r"(?:the|this|that|my) (?:file|command|program|executable|path)"
+        r"\s*[?!.]*$", request.strip(), re.I))
+
+
 def _clause(text):
+    if ambiguous_owner(text):
+        return None
+
     def match(pattern):
         return re.fullmatch(pattern, text, re.I)
 

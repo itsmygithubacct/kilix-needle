@@ -74,6 +74,8 @@ def _bounds(request):
 
 
 def _preflight(request):
+    if job.ambiguous_owner(request):
+        return "clarify", "name the command or absolute file path for package ownership"
     if re.search(r"`|\$\(|;|&&|\|", request):
         return "decline", "command syntax is not supported"
     active = _active_text(request)
