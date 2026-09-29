@@ -81,7 +81,11 @@ class Home(unittest.TestCase):
         parsed = tomllib.loads(config.read_text())
         self.assertEqual(parsed["model"], "x")
         self.assertEqual(parsed["mcp_servers"]["kilix-needle"]["args"], ["mcp"])
-        self.assertIn("KITTY_WINDOW_ID", parsed["mcp_servers"]["kilix-needle"]["env_vars"])
+        forwarded = parsed["mcp_servers"]["kilix-needle"]["env_vars"]
+        # Route benchmark: without the storage root, Needle's own `kilix @ ls` was refused.
+        for name in ("KITTY_WINDOW_ID", "KITTY_LISTEN_ON", "KILIX_STORAGE_HOME",
+                     "GPU_TERMINAL_HOME", "KILIX_CONFIG_HOME", "KITTY_PUBLIC_KEY"):
+            self.assertIn(name, forwarded)
         self.assertIn("other", parsed["mcp_servers"])
 
     def test_an_edit_that_would_not_parse_leaves_the_file_alone(self):

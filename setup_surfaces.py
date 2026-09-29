@@ -9,7 +9,7 @@ Surfaces (NAME):
            overlay acting on the pane beneath it
   claude   `claude mcp add --scope user kilix-needle`
   codex    [mcp_servers.kilix-needle] in ~/.codex/config.toml, passing the
-           KITTY_* variables through
+           Kilix, GPU_TERMINAL_*, XDG and KITTY_* variables it needs through
   grok     `grok mcp add --scope user kilix-needle`
   omp      mcpServers.kilix-needle in ~/.omp/agent/mcp.json (the host omp;
            omp.sh's Docker sandbox cannot reach Kilix's abstract socket)
@@ -151,12 +151,25 @@ def _claude(undo, dry_run):
     return _run(["claude", "mcp", "add", "--scope", "user", NAME, "--", str(BIN), "mcp"], dry_run)
 
 
+# What the server and the `kilix` commands it runs read. Codex forwards only
+# what is named; with five names a non-default storage root broke Needle's own
+# `kilix @ ls` ("writable roots must be strict descendants of Kilix storage",
+# route benchmark 2026-09-29). An unset name is simply not passed.
+CODEX_ENV = ("KITTY_LISTEN_ON", "KITTY_WINDOW_ID", "KITTY_PUBLIC_KEY",
+             "KILIX_HOME", "KILIX_DATA_HOME", "KILIX_STORAGE_HOME", "KILIX_CONFIG_HOME",
+             "KILIX_SESSION_HOME", "KILIX_CACHE_HOME", "KILIX_CONTENT_ROOT",
+             "KILIX_RC_CONFIG_FILE", "KILIX_RC_PASSWORD_FILE", "KILIX_AMP_SOCKET",
+             "KILIX_NEEDLE_HISTORY", "KILIX_NEEDLE_SYSTEM_PROFILE",
+             "GPU_TERMINAL_HOME", "GPU_TERMINAL_SOURCE_HOME", "GPU_TERMINAL_SETTINGS_FILE",
+             "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME",
+             "XDG_RUNTIME_DIR")
+
+
 def _codex(undo, dry_run):
     body = (f"[mcp_servers.{NAME}]\n"
             f"command = {json.dumps(str(BIN))}\n"
             'args = ["mcp"]\n'
-            'env_vars = ["KITTY_LISTEN_ON", "KITTY_WINDOW_ID", "KILIX_DATA_HOME", '
-            '"KILIX_CONTENT_ROOT", "KILIX_CONFIG_HOME"]\n')
+            f"env_vars = {json.dumps(list(CODEX_ENV))}\n")
     return _edit(HOME / ".codex" / "config.toml", None if undo else body,
                  parse=tomllib.loads, dry_run=dry_run)
 
