@@ -308,3 +308,8 @@ class Round6(unittest.TestCase):
     def test_a_non_game_continuation_changes_no_game_when_scope_is_valid(self):  # KN-R16-602
         self.assertEqual(admitted("I want doom in the games list and a picture of pong"), [
             ("game", {"game": "doom", "available": True})])
+
+
+class ForMe(unittest.TestCase):
+    def test_courtesy_after_a_listed_wish(self):                           # KN-R16-601
+        self.assertEqual(len(admitted("I want doom and pong in the games list for me")), 2)

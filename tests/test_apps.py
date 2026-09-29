@@ -1107,9 +1107,8 @@ class ReviewR15Round2(unittest.TestCase):
 
 class ReviewR15Round4(unittest.TestCase):
     """Review R15 round 4: the rows that pin the shapes, the after-instruction
-    rule and the length cap; a purpose only after opening something. Known
-    issue (KN-R15-23, Low): "hide the clock so I can see it" is admitted by the
-    base's trailing-word reading as before; never plain, so always held."""
+    rule and the length cap; a purpose only after opening something.
+    KN-R15-23 ("hide the clock so I can see it") is closed in ReviewR18."""
 
     def test_the_shapes_are_whole_matches(self):
         for request in ("I'm back to write it down. Open doom.", "open doom for my work desktop",
@@ -1295,3 +1294,30 @@ class ReviewR16(unittest.TestCase):
                              request)
         self.assertEqual(len(admitted("I don't want doom in the games list",
                                       [call("game", game="doom", available=False)])), 1)
+
+
+class ReviewR18(unittest.TestCase):
+    """The next grammar round: purposes on changes, adverbs after a particle."""
+
+    def test_a_change_with_a_purpose_is_refused(self):                     # KN-R15-23
+        for request, calls in (("Hide the clock so I can see it.", [call("show", item="clock", on=False)]),
+                               ("Disable doom so I can take a look.",
+                                [call("game", game="doom", available=False)]),
+                               ("set pane cpu to always so I can check it",
+                                [call("pane_stat", stat="cpu", mode="always")])):
+            self.assertEqual(admitted(request, calls), [], request)
+        for request, calls in (("open the calculator so I can check these numbers",
+                                [call("launch", app="kilix-calculator")]),
+                               ("open the voice settings so I can take a look",
+                                [call("settings", section="voice")]),
+                               ("I'm up for a round of lander, and put the split up back",
+                                [call("show", item="split_up", on=True)])):
+            self.assertEqual(len(admitted(request, calls)), 1, request)
+
+    def test_a_particle_may_close_with_an_adverb(self):                    # KN-R16-601
+        for request, on in (("turn the clock on completely", True),
+                            ("turn the clock off permanently", False),
+                            ("take the clock off completely", False)):
+            self.assertEqual(admitted(request, [call("show", item="clock", on=on)]),
+                             [["show", {"item": "clock", "on": on}]], request)
+        self.assertEqual(admitted("hide clock in permanently", [call("show", item="clock", on=False)]), [])
