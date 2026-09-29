@@ -19,10 +19,12 @@ from dataclasses import dataclass
 import json
 import os
 import sys
+import time
 from typing import Callable
 
 from actions import LEGACY_TOOLS, Action, Refusal, interpret, plain
 import asset
+import history
 import jobs
 from engine import Engine, EngineError, check_prompt
 import kilix
@@ -125,14 +127,29 @@ def run_request(engine: Engine, request: str, options: Options,
     status 0 = done or nothing to do, 1 = something was refused, skipped or failed.
     Each item has "outcome": refused | unresolved | would | skipped | done | failed.
     """
+    return _recorded("panes", engine, request, options, lambda request, calls: run_calls(
+        request, getattr(engine, "translate", lambda c: c)(calls), options, confirm))
+
+
+def _recorded(job: str, engine, request: str, options: Options, run) -> dict:
+    """Check the prompt, ask the engine, run its calls, and record the request
+    in the local history (history.py) whatever happens."""
+    started = time.monotonic()
+    calls, result = None, None
     try:
-        request = check_prompt(request)
-    except ValueError as error:
-        return {"request": request, "status": 1, "note": str(error), "items": []}
-    engine.reset()
-    reply = engine.complete(request)
-    translate = getattr(engine, "translate", lambda calls: calls)
-    return run_calls(request, translate(reply.get("function_calls") or []), options, confirm)
+        try:
+            request = check_prompt(request)
+        except ValueError as error:
+            result = {"request": request, "status": 1, "note": str(error), "items": []}
+            return result
+        engine.reset()
+        calls = engine.complete(request).get("function_calls") or []
+        result = run(request, calls)
+        return result
+    finally:
+        history.record(job, request, engine, calls, options,
+                       result or {"status": None, "note": "the request did not finish"},
+                       time.monotonic() - started)
 
 
 def run_calls(request: str, calls: list, options: Options,
@@ -277,13 +294,8 @@ def run_agents_request(engine, request: str, options: Options,
                        confirm: Callable[[str], bool] = _terminal_confirm, *,
                        cwd: str | None = None) -> dict:
     """One agents-job request, as the same record as run_request."""
-    try:
-        request = check_prompt(request)
-    except ValueError as error:
-        return {"request": request, "status": 1, "note": str(error), "items": []}
-    engine.reset()
-    reply = engine.complete(request)
-    return run_agents_calls(request, reply.get("function_calls") or [], options, cwd=cwd)
+    return _recorded("agents", engine, request, options,
+                     lambda request, calls: run_agents_calls(request, calls, options, cwd=cwd))
 
 
 def run_agents_calls(request: str, calls: list, options: Options, *,
@@ -321,14 +333,8 @@ def run_agents_calls(request: str, calls: list, options: Options, *,
 def run_apps_request(engine, request: str, options: Options,
                      confirm: Callable[[str], bool] = _terminal_confirm) -> dict:
     """One apps-job request, as the same record as run_request."""
-    try:
-        request = check_prompt(request)
-    except ValueError as error:
-        return {"request": request, "status": 1, "note": str(error), "items": []}
-    engine.reset()
-    reply = engine.complete(request)
-    translate = getattr(engine, "translate", lambda calls: calls)
-    return run_apps_calls(request, translate(reply.get("function_calls") or []), options, confirm)
+    return _recorded("apps", engine, request, options, lambda request, calls: run_apps_calls(
+        request, getattr(engine, "translate", lambda c: c)(calls), options, confirm))
 
 
 def run_apps_calls(request: str, calls: list, options: Options,

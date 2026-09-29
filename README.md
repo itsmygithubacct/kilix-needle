@@ -273,6 +273,32 @@ kilix-needle tune --job agents --select RUN   # a gated coding-session model
 
 A selection saved before jobs existed is read as the `panes` selection.
 
+## Request history
+
+Every request to an action job (panes, apps, agents), from the CLI or MCP, is
+added to a local history:
+
+```
+~/.local/gpu_terminal/kilix-apps/kilix-needle/history/requests.jsonl
+```
+
+(`GPU_TERMINAL_HOME` moves it.) Each line is one request, holding:
+- the request as given, the job, and whether a person or an agent sent it;
+- what proposed its calls (`grammar`, or the model in use) and the raw calls;
+- what the checks admitted or refused and why, and each action's outcome;
+- dry run and advance yes, and how long it took.
+
+This is the material for improving the grammar and models: the misses, the
+refusals and what people actually ask. Anything taken from it for training or
+a grammar change must still be kept apart from the eval sets.
+
+The history never leaves the machine. Requests can hold private text, such as
+a message to a coding session, so the directory is `0700` and its files `0600`.
+- **Size:** the file rotates at 8 MB, and eight files are kept (`requests.1.jsonl` …).
+- **Turning it off:** set `KILIX_NEEDLE_HISTORY=0` to record nothing.
+- **Failures:** if the history can't be written, the request still runs as
+  before, and one warning goes to stderr.
+
 ## The apps job
 
 `kilix-needle apps "…"` launches Kilix apps and games and changes Kilix
