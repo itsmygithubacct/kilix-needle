@@ -300,3 +300,11 @@ class Round5(unittest.TestCase):
                         "hide the clock on the top bar now"):
             with self.subTest(request=request):
                 self.assertEqual(len(admitted(request)), 1)
+
+
+class Round6(unittest.TestCase):
+    """Review R16 round 6: the continuation-admission guard on its own."""
+
+    def test_a_non_game_continuation_changes_no_game_when_scope_is_valid(self):  # KN-R16-602
+        self.assertEqual(admitted("I want doom in the games list and a picture of pong"), [
+            ("game", {"game": "doom", "available": True})])
