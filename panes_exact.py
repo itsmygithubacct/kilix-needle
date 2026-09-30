@@ -119,7 +119,43 @@ def read(request: str) -> tuple[list, str] | None:
             return [{"name": kind, "arguments": args}], f"run {_quote(command)} in {_pane_words(found, pane)}"
         verb = "close" if kind == "close_pane" else "go to"
         return [{"name": kind, "arguments": args}], f"{verb} {_pane_words(found, pane)}"
-    return None
+    return _open_slots(text)
+
+
+# A plain shell pane opened to one side of the calling pane, however an agent
+# words it ("open a new shell pane directly to the right of the pane I am
+# running in", "split the pane I am running in to the right and open a shell in
+# the new pane"): one side word, an opening verb, and only words that name a
+# pane, a shell or the calling pane. A program, another pane's name, a number
+# or any other word leaves the request to the model.
+_OPEN_VERB = re.compile(r"\b(?:open|split|create|add|make|start|spawn)\b")
+_OPEN_SIDE = {"right": "right", "left": "left", "below": "below", "above": "above",
+              "down": "below", "up": "above", "under": "below", "beneath": "below"}
+_OPEN_WORDS = frozenset("""
+open opens opening split splits splitting create add make start spawn new a an another one fresh
+empty plain blank interactive default shell terminal pane panes split window it
+directly immediately just right to on of at side hand the this current my own that which where
+i i'm am you you're are we running working sitting in from and then with inside next please now
+""".split())
+
+
+def _open_slots(text: str):
+    low = text.lower()
+    if re.search(r"[0-9\"'`:]|\b(?:not|no|don'?t|never|tab|tabs|run|running\s+(?!in\b)|"
+                 r"with\s+(?!a\b|an\b)|titled|named|called)\b", low):
+        return None
+    if not _OPEN_VERB.search(low) or not re.search(r"\b(?:pane|shell|terminal|split)\b", low):
+        return None
+    # "open up a new pane": "up" after the verb is a particle, not a side
+    low = re.sub(r"\b(open|start|spin|split|make)\s+up\b", r"\1", low)
+    words = re.findall(r"[a-z][a-z']*", low)
+    sides = {_OPEN_SIDE[w] for w in words if w in _OPEN_SIDE}
+    if len(sides) != 1:
+        return None
+    if any(w not in _OPEN_WORDS and w not in _OPEN_SIDE for w in words):
+        return None
+    side = sides.pop()
+    return [{"name": "open_pane", "arguments": {"side": side}}], f"split {side}"
 
 
 def calls(request: str) -> list | None:

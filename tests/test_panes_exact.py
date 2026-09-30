@@ -64,6 +64,32 @@ class LunaWordings(unittest.TestCase):
                 self.assertIsNone(panes_exact.admitted(request))
 
 
+class OpenPaneParts(unittest.TestCase):
+    """A plain shell pane to one side, however an agent words it (luna-full A/B)."""
+
+    def test_each_side_is_read_as_split(self):
+        cases = {
+            "open a new shell pane directly to the right of the pane I am running in": "split right",
+            "split the pane I am running in to the right and open a shell in the new pane": "split right",
+            "split this pane to the right": "split right",
+            "Open a new terminal pane on the left side of my pane.": "split left",
+            "open a pane below this one": "split below",
+            "open up a new pane on the right": "split right",
+        }
+        for request, sentence in cases.items():
+            with self.subTest(request=request):
+                self.assertEqual(panes_exact.admitted(request)[1], sentence)
+
+    def test_anything_more_is_left_to_the_model(self):
+        for request in ("open up a new pane", "split the logs pane to the right", "open htop to the right",
+                        "split right of pane 70", "open a pane to the right in tab 2", "do not split right",
+                        "open a pane to the right or left", "open a shell to the right with vim",
+                        "close the pane to the right", "move the pane to the right",
+                        "open a pane to the right of the build pane", "open a pane up top"):
+            with self.subTest(request=request):
+                self.assertIsNone(panes_exact.admitted(request))
+
+
 class Route(unittest.TestCase):
     def setUp(self):
         os.environ["KITTY_WINDOW_ID"] = "300"

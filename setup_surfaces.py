@@ -169,7 +169,11 @@ def _codex(undo, dry_run):
     body = (f"[mcp_servers.{NAME}]\n"
             f"command = {json.dumps(str(BIN))}\n"
             'args = ["mcp"]\n'
-            f"env_vars = {json.dumps(list(CODEX_ENV))}\n")
+            f"env_vars = {json.dumps(list(CODEX_ENV))}\n"
+            # A model-route call can wait for the engine to start under load; Codex's
+            # own 60 s default gave up first (luna-full A/B, 2026-09-30).
+            "startup_timeout_sec = 30\n"
+            "tool_timeout_sec = 180\n")
     return _edit(HOME / ".codex" / "config.toml", None if undo else body,
                  parse=tomllib.loads, dry_run=dry_run)
 

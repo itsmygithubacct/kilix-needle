@@ -128,7 +128,7 @@ class Engine:
     # Startup is normally well under a second, but measured 13.9 s at load 22 on
     # 12 cores; a short limit fails exactly when the machine is busiest.
     def __init__(self, image, tools: list[dict], *, timeout: float = 60.0,
-                 startup: float = 60.0):
+                 startup: float = 120.0):
         self.image = image
         self.tools = tools
         self.timeout = timeout
