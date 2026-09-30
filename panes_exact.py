@@ -186,7 +186,11 @@ def _open_slots(text: str):
 # words around them. Anything else leaves the request to the model.
 _RUN_PANE = re.compile(r"(?:the\s+)?pane\s+(?:(?:titled|named|called|labell?ed)\s+"
                        r"(?:\"(?P<q>[^\"\n]+)\"|'(?P<s>[^'\n]+)'|`(?P<b>[^`\n]+)`|(?P<w>[\w.+@-]+(?::[\w.+@-]+)*))"
-                       r"|(?P<id>[0-9]{1,6})\b)", re.I)
+                       r"|(?P<id>[0-9]{1,6})\b"
+                       # "in pane bench-target": a bare name, never a word of the sentence
+                       r"|(?P<n>(?!(?:titled|named|called|labell?ed|the|this|that|and|or|i|you|it|to|in|into|on|"
+                       r"with|which|where|below|above|left|right|here|there|now|please|then|of|at|is)\b)"
+                       r"[\w.+@-]+(?::[\w.+@-]+)*))", re.I)
 _RUN_QUOTED = re.compile(r"`([^`\n]+)`|'([^'\n]+)'|\"([^\"\n]+)\"")
 _RUN_VERB = re.compile(r"\b(?:type|run|enter|execute)(?:\s+and\s+(?:run|execute|press\s+enter))?"
                        r"(?:\s+(?:the\s+|this\s+)?command)?(?:\s+exactly)?\s*:?\s+", re.I)
@@ -207,7 +211,7 @@ def _run_slots(text: str):
     if len(panes) != 1:
         return None
     found = panes[0].groupdict()
-    pane = _first(found, "q", "s", "b", "w", "id")
+    pane = _first(found, "q", "s", "b", "w", "id", "n")
     rest = text[:panes[0].start()] + " @PANE@ " + text[panes[0].end():]
     quoted = list(_RUN_QUOTED.finditer(rest))
     if len(quoted) > 1:

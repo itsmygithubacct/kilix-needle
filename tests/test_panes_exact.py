@@ -113,7 +113,8 @@ class TypingParts(unittest.TestCase):
                 f"type command `touch {self.LONG}` into pane titled build-box and press Enter",
                 f"Type this command in the pane titled build-box and press Enter: touch {self.LONG}",
                 f"type into pane titled build-box: touch {self.LONG}",
-                f"Type the command touch {self.LONG} (into the pane titled build-box)"):
+                f"Type the command touch {self.LONG} (into the pane titled build-box)",
+                f"Type the command touch {self.LONG} and press Enter in pane build-box."):
             with self.subTest(request=request):
                 calls, _ = panes_exact.admitted(request)
                 self.assertEqual(calls[0]["name"], "run_in_pane")
