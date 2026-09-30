@@ -942,13 +942,14 @@ def main(argv: list[str] | None = None) -> int:
     if job == "system":
         modes["baseline"] = args.baseline
     try:
-        # An exact apps control needs no engine at all (review KN-R18-03): the
-        # apps runtime opens on the first request that needs it. The system job
-        # runs without this runtime (_handle_system).
-        if job == "apps":
+        # An exact request needs no engine at all (review KN-R18-03): an apps
+        # control, an exact pane command, an agents launch its grammar reads. The
+        # runtime opens on the first request that needs it: loading it first made
+        # every exact panes CLI request wait ~3 s, and under load agents gave up on
+        # the command before it answered (luna-full benchmark, 2026-09-30). The
+        # system job runs without this runtime (_handle_system).
+        if job != "system":
             runtime = LazyRuntime(lambda: open_runtime(args, may_install=not args.agent, job=job))
-        elif job != "system":
-            runtime = open_runtime(args, may_install=not args.agent, job=job)
     except asset.AssetError as error:
         print(f"kilix-needle: {error}", file=sys.stderr)
         return 2

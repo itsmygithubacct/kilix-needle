@@ -37,6 +37,14 @@ def admitted(request, calls, dirs=agents.FIXTURE_DIRS):
             if isinstance(r, agents.Action)]
 
 
+
+def _use_engine(record):
+    """A mocked run that asks its engine, as a model-route request does."""
+    def run(engine, *args, **kwargs):
+        engine.reset()
+        return dict(record)
+    return run
+
 class Checks(unittest.TestCase):
     def test_the_dev_sets_answers_are_admitted(self):
         rows = [json.loads(line) for line in (REPO / "evals/agents/dev.jsonl").read_text().splitlines()]
@@ -529,8 +537,8 @@ class Mcp(unittest.TestCase):
             return runtime
         server = mcp_server.Server(factory)
         with mock.patch.object(needle_cli, "run_agents_request",
-                               return_value={"request": "x", "status": 0, "note": "",
-                                             "items": []}) as run, \
+                               side_effect=_use_engine({"request": "x", "status": 0, "note": "",
+                                                        "items": []})) as run, \
                 mock.patch.object(agents_kilix, "calling_cwd", return_value="/caller/repo"):
             server.call_tool("kilix_agents_plan", {"request": "open codex here"})
             self.assertTrue(run.call_args.args[2].dry_run)

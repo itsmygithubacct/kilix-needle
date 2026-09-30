@@ -206,6 +206,18 @@ def _result(record, is_error: bool, request=None) -> dict:
             "structuredContent": record, "isError": is_error}
 
 
+class _LazyEngine:
+    """A job's engine, loaded on first use: an exact request never loads it."""
+
+    def __init__(self, load):
+        self._load, self._engine = load, None
+
+    def __getattr__(self, name):
+        if self._engine is None:
+            self._engine = self._load()
+        return getattr(self._engine, name)
+
+
 class Server:
     def __init__(self, runtime_factory):
         self._runtime_factory = runtime_factory
@@ -279,33 +291,28 @@ class Server:
         confirm = arguments.get("confirm_risky", False)
         if not isinstance(confirm, bool):
             raise ValueError("confirm_risky must be true or false")
-        try:
-            # An exact apps control needs no engine (review KN-R18-03).
-            # Matched on the checked request, as the route itself matches it
-            # (review KN-R18-202: "show text size\n").
-            try:
-                checked = needle_cli.check_prompt(request)
-            except ValueError:
-                checked = None
-            engine = (None if job == "apps" and checked is not None
-                      and needle_cli.app_controls.parse(checked) is not None
-                      else self._ensure_engine(job))
-        except (asset.AssetError, EngineError, LibEngineError) as error:
-            return {"content": [{"type": "text", "text": f"kilix-needle unavailable: {error}"}],
-                    "isError": True}
+        # An exact request needs no engine (review KN-R18-03): an apps control, an
+        # exact pane command, an agents launch its grammar reads. The job's engine
+        # loads on the request's first use of it, so a new server's first exact
+        # call answers at once (luna-full benchmark, 2026-09-30).
+        engine = _LazyEngine(lambda: self._ensure_engine(job))
         options = needle_cli.Options(dry_run=name.endswith("_plan"),
                                      assume_yes=name.endswith("_act") and confirm, agent=True)
         run = {"apps": needle_cli.run_apps_request,
                "agents": needle_cli.run_agents_request}.get(job, needle_cli.run_request)
-        if job == "agents":
-            import agents_kilix
-            try:
-                caller_cwd = agents_kilix.calling_cwd()
-            except agents_kilix.AgentsError:
-                caller_cwd = None
-            record = run(engine, request, options, needle_cli._never, cwd=caller_cwd)
-        else:
-            record = run(engine, request, options, needle_cli._never)
+        try:
+            if job == "agents":
+                import agents_kilix
+                try:
+                    caller_cwd = agents_kilix.calling_cwd()
+                except agents_kilix.AgentsError:
+                    caller_cwd = None
+                record = run(engine, request, options, needle_cli._never, cwd=caller_cwd)
+            else:
+                record = run(engine, request, options, needle_cli._never)
+        except (asset.AssetError, EngineError, LibEngineError) as error:
+            return {"content": [{"type": "text", "text": f"kilix-needle unavailable: {error}"}],
+                    "isError": True}
         return _result(record, False, request)
 
     def handle(self, message: dict) -> dict | None:

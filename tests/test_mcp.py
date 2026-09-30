@@ -3,6 +3,7 @@ import io
 import json
 import os
 import unittest
+from unittest import mock
 
 from support import FakeKilix, desktop
 import mcp_server
@@ -102,7 +103,12 @@ class Tools(unittest.TestCase):
             self.assertEqual(fake.calls(), [])
         record = replies[0]["result"]["structuredContent"]
         self.assertEqual(record["items"][0]["outcome"], "would")
-        self.assertTrue(engine.closed)
+        # "close tab 2" is an exact pane command: the engine is never loaded
+        self.assertFalse(engine.closed)
+        with FakeKilix(desktop()):
+            _, engine = converse([call(1, "kilix_plan", request="close whichever tab is second")],
+                                 calls=[{"name": "close_tab", "arguments": {"tab": "2"}}])
+        self.assertTrue(engine.closed)        # a model-route request loads it, and serve closes it
 
     def test_act_needs_confirm_risky_for_a_close(self):
         request = [{"name": "close_pane", "arguments": {"pane": "left"}}]
@@ -249,6 +255,20 @@ class ElsewhereUnderMcp(unittest.TestCase):
             self.assertEqual(fake.calls(), [])
         item = replies[0]["result"]["structuredContent"]["items"][0]
         self.assertEqual(item["outcome"], "skipped")
+
+
+
+class ExactNeedsNoEngine(unittest.TestCase):
+    def test_an_exact_pane_command_on_the_cli_never_opens_the_runtime(self):
+        # luna-full benchmark: loading the engine first made every exact panes
+        # CLI request wait ~3 s, and agents gave up on the command.
+        out = io.StringIO()
+        with FakeKilix(desktop()), mock.patch.object(
+                needle_cli, "open_runtime", side_effect=AssertionError("runtime opened")), \
+                mock.patch("sys.stdout", out):
+            status = needle_cli.main(["--json", "--dry-run", "close tab 2"])
+        self.assertEqual(status, 0)
+        self.assertEqual(json.loads(out.getvalue())["items"][0]["outcome"], "would")
 
 
 if __name__ == "__main__":

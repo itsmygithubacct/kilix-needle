@@ -38,6 +38,14 @@ def admitted(request, calls):
     return [[r.kind, r.args] for r in apps.interpret(request, calls) if isinstance(r, apps.Action)]
 
 
+
+def _use_engine(record):
+    """A mocked run that asks its engine, as a model-route request does."""
+    def run(engine, *args, **kwargs):
+        engine.reset()
+        return dict(record)
+    return run
+
 class Tables(unittest.TestCase):
     def test_the_launch_table_is_the_catalog(self):
         catalog = json.loads((REPO / "third_party/kilix-content/src/kilix_content/catalog/"
@@ -974,7 +982,8 @@ class Mcp(unittest.TestCase):
             return runtime
         server = mcp_server.Server(factory)
         with mock.patch.object(needle_cli, "run_apps_request",
-                               return_value={"request": "x", "status": 0, "note": "", "items": []}) as run:
+                               side_effect=_use_engine({"request": "x", "status": 0, "note": "",
+                                                        "items": []})) as run:
             server.call_tool("kilix_apps_plan", {"request": "open solitaire"})
         self.assertEqual(made, ["apps"])
         self.assertTrue(run.call_args.args[2].dry_run)
