@@ -182,6 +182,12 @@ def run_request(engine: Engine, request: str, options: Options,
         # A canonical pane command needs no model (panes_exact); its calls go
         # through the same checks, resolution and confirmation.
         import panes_exact
+        if panes_exact.missing_command(request):
+            reason = "the typing request is missing the command text"
+            return {"request": request, "status": 1, "note": reason,
+                    "items": [{"kind": "run_in_pane", "args": {}, "outcome": "refused", "reason": reason}],
+                    "hint": 'include the command; e.g. kilix-needle --agent \'run "make test" in pane 70\'; '
+                            'single-quote the whole request so the shell preserves its command text'}
         found = panes_exact.admitted(request)
         if not found:
             # An agents request sent to the panes job (the bare CLI): run it as the

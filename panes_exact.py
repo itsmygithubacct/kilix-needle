@@ -90,10 +90,27 @@ _FIND_THEN = re.compile(rf"(?:find|locate|look\s+up|identify|get)\s+(?P<pane>{_p
                         re.I)
 
 
+_EMPTY_COMMAND = r"(?:\s+(?:''|\"\"|``))?"
+_MISSING_COMMAND = (
+    re.compile(rf"(?:in|into)\s+{_pane()},?\s+{_TYPE}{_EMPTY_COMMAND}{_ENTER}", re.I),
+    re.compile(rf"{_TYPE}{_EMPTY_COMMAND}\s+(?:in|into)\s+{_pane()}{_ENTER}", re.I),
+)
+
+
+def missing_command(request: str) -> bool:
+    """A complete typing form with its command absent, not a command of 'in' or 'and'."""
+    text = _TAIL.sub("", _HEAD.sub("", normalize(request).strip()))
+    for _ in range(3):
+        text = _RUN_NEUTRAL.sub("", text).strip()
+    return any(form.fullmatch(text) for form in _MISSING_COMMAND)
+
+
 def read(request: str) -> tuple[list, str] | None:
     """The one call an exact pane command states, and the canonical sentence it
     was read as, or None. The fullmatch allows only fixed filler around the
     values, so the canonical sentence says exactly what the request says."""
+    if missing_command(request):
+        return None
     text = _TAIL.sub("", _HEAD.sub("", normalize(request).strip()))
     found = _FIND_THEN.fullmatch(text)
     if found:
