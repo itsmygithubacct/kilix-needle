@@ -1049,6 +1049,9 @@ _LAUNCH_REWRITES = (
                 rf"(?:\s+coding[- ]agent|\s+agent)?\s+tab\s+in\s+(?P<d>[~/]\S*)", re.I), r"start \1 in \g<d>"),
     (re.compile(rf"^(?:open|start|create|launch)\s+(?:a\s+)?(?:new\s+)?tab\s+(?:running|with)\s+({_AGENT_WORDS})\s+"
                 rf"in\s+(?P<d>[~/]\S*)", re.I), r"start \1 in \g<d>"),
+    # "start Codex as an interactive coding-agent session in a new tab in /x"
+    (re.compile(rf"\b({_AGENT_WORDS})\s+as\s+an?\s+(?:new\s+)?(?:interactive\s+)?(?:coding[- ]agent\s+|agent\s+)?"
+                rf"session\b", re.I), r"\1"),
     (re.compile(r",? in a new tab\b", re.I), ""),
     (re.compile(r",? (?:working |running )?in (?:the )?(?:directory|folder|dir) (?=[~/])", re.I), " in "),
     (re.compile(r",? working in (?=[~/])", re.I), " in "),
@@ -1106,6 +1109,9 @@ _STOPPING = (r"(?:wait(?:\s+for\s+(?:it|the\s+(?:agent|session)))?|message(?:\s+
 _NEUTRAL_CLAUSE = (
     rf"(?:do\s+not|don'?t|never)\s+{_STOPPING}(?:(?:\s*,\s*|\s+)(?:(?:or|and|nor)\s+)?{_STOPPING})*"
     r"|(?:then\s+)?(?:stop(?:\s+there)?|that'?s\s+all|nothing\s+else)"
+    # "..., then stop the session": after a launch, agents mean they stop there;
+    # stopping the session just started would undo the request. Only after "then".
+    r"|(?:and\s+)?then\s+stop\s+(?:the\s+session|here)(?:\s+there)?"
     r"|(?:(?:and\s+)?then\s+)?(?:start|launch|open|run)\s+it(?:\s+up)?"
     rf"|(?:just\s+)?(?:leave|keep)\s+(?:the\s+(?:session|agent|tab)|it|{_AGENT_WORDS})\s+"
     r"(?:open|idle|running|there|waiting|as\s+is)(?:(?:\s*,\s*|\s+)(?:and\s+)?(?:open|idle|running|there|waiting))*"

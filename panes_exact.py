@@ -149,7 +149,17 @@ i i'm am you you're are we running working sitting in from and then with inside 
 """.split())
 
 
+_OPEN_SHELL_SENTENCE = re.compile(
+    r"[.;,]?\s*(?:and\s+)?(?:it\s+should\s+(?:run|start|open|have)|(?:then\s+)?(?:run|start|open)|with)\s+"
+    r"(?:a\s+|an\s+)?(?:new\s+|plain\s+|interactive\s+)?(?:shell|terminal|bash)"
+    r"(?:\s+(?:in|inside)\s+(?:it|the\s+new\s+pane|that\s+pane|the\s+pane))?\s*[.!]?\s*$", re.I)
+_OPEN_STOP = re.compile(r"[.;,]?\s*(?:and\s+)?then\s+stop\s*[.!]?\s*$", re.I)
+
+
 def _open_slots(text: str):
+    # "... to the right of the pane I am running in. It should run a shell. Then stop."
+    for _ in range(3):
+        text = _OPEN_STOP.sub("", _OPEN_SHELL_SENTENCE.sub("", text)).strip()
     low = text.lower()
     if re.search(r"[0-9\"'`:]|\b(?:not|no|don'?t|never|tab|tabs|run|running\s+(?!in\b)|"
                  r"with\s+(?!a\b|an\b)|titled|named|called)\b", low):
@@ -175,18 +185,18 @@ def _open_slots(text: str):
 # shell arguments after the typing verb), and only typing, Enter and filler
 # words around them. Anything else leaves the request to the model.
 _RUN_PANE = re.compile(r"(?:the\s+)?pane\s+(?:(?:titled|named|called|labell?ed)\s+"
-                       r"(?:\"(?P<q>[^\"\n]+)\"|'(?P<s>[^'\n]+)'|`(?P<b>[^`\n]+)`|(?P<w>[\w.+@:-]+))"
+                       r"(?:\"(?P<q>[^\"\n]+)\"|'(?P<s>[^'\n]+)'|`(?P<b>[^`\n]+)`|(?P<w>[\w.+@-]+(?::[\w.+@-]+)*))"
                        r"|(?P<id>[0-9]{1,6})\b)", re.I)
 _RUN_QUOTED = re.compile(r"`([^`\n]+)`|'([^'\n]+)'|\"([^\"\n]+)\"")
 _RUN_VERB = re.compile(r"\b(?:type|run|enter|execute)(?:\s+and\s+(?:run|execute|press\s+enter))?"
                        r"(?:\s+(?:the\s+|this\s+)?command)?(?:\s+exactly)?\s*:?\s+", re.I)
-_RUN_END = re.compile(r"\s+(?:and\s+(?:then\s+)?(?:press|hit)|then\s+(?:press|hit)|in(?:to)?\s+(?:the\s+)?"
-                      r"(?:shell\s+prompt|@PANE@)|@PANE@)\b|[.;]\s|[.;]?\s*$", re.I)
+_RUN_END = re.compile(r"\s+\(?(?:and\s+(?:then\s+)?(?:press|hit)|then\s+(?:press|hit)|in(?:to)?\s+(?:the\s+)?"
+                      r"(?:shell\s+prompt|@PANE@)|@PANE@)(?=\W|$)|[.;]\s|[.;]?\s*$", re.I)
 _RUN_NEUTRAL = re.compile(r"[.;,]?\s*(?:then\s+stop|do\s+not\s+do\s+anything\s+else|nothing\s+else|"
                           r"that'?s\s+all)\s*[.!]?\s*$", re.I)
 _RUN_WORDS = frozenset("""
 in into the this tab type run enter execute and press hit return key then at shell prompt of its
-exactly command please now it
+exactly command please now it following
 """.split())
 
 
@@ -202,7 +212,19 @@ def _run_slots(text: str):
     quoted = list(_RUN_QUOTED.finditer(rest))
     if len(quoted) > 1:
         return None
-    if quoted:
+    colon = re.search(r":\s+(?=[A-Za-z_/])", rest) if not quoted else None
+    if colon and "@PANE@" in rest[:colon.start()] and re.search(
+            r"\b(?:type|run|enter|execute)\b", rest[:colon.start()], re.I):
+        # "Type this command in the pane titled X and press Enter: CMD"; the
+        # command ends where any other does ("then press Enter", the end)
+        end = _RUN_END.search(rest, colon.end())
+        command = rest[colon.end():end.start()].strip()
+        words = command.split()
+        if not words or not re.fullmatch(r"[A-Za-z_/][\w./+-]*", words[0]) \
+                or not all(_SHELL_ARGUMENT.fullmatch(w) for w in words[1:]):
+            return None
+        rest = rest[:colon.start()] + " @CMD@ " + rest[end.start():]
+    elif quoted:
         command = next(g for g in quoted[0].groups() if g)
         rest = rest[:quoted[0].start()] + " @CMD@ " + rest[quoted[0].end():]
     else:

@@ -75,6 +75,11 @@ class OpenPaneParts(unittest.TestCase):
             "Open a new terminal pane on the left side of my pane.": "split left",
             "open a pane below this one": "split below",
             "open up a new pane on the right": "split right",
+            "Open a new pane directly to the right of the pane I am running in. It should run a shell.": "split right",
+            "Open a new pane directly to the right of the pane you are running in. It should run a shell. "
+            "Then stop.": "split right",
+            "Open a new pane directly to the right of the pane I am running in. Run a shell in the new pane.":
+                "split right",
         }
         for request, sentence in cases.items():
             with self.subTest(request=request):
@@ -105,7 +110,10 @@ class TypingParts(unittest.TestCase):
                 "Do not do anything else.",
                 f"Type and run touch {self.LONG} in the shell prompt of the pane titled build-box in this tab.",
                 f"type the command touch {self.LONG} and press Enter in the pane titled build-box",
-                f"type command `touch {self.LONG}` into pane titled build-box and press Enter"):
+                f"type command `touch {self.LONG}` into pane titled build-box and press Enter",
+                f"Type this command in the pane titled build-box and press Enter: touch {self.LONG}",
+                f"type into pane titled build-box: touch {self.LONG}",
+                f"Type the command touch {self.LONG} (into the pane titled build-box)"):
             with self.subTest(request=request):
                 calls, _ = panes_exact.admitted(request)
                 self.assertEqual(calls[0]["name"], "run_in_pane")
@@ -120,7 +128,10 @@ class TypingParts(unittest.TestCase):
                         "type touch /tmp/a then wait 5 seconds in the pane titled x",
                         "In the pane titled x, type ls later",
                         "run touch /tmp/a in the pane titled x unless it is busy",
-                        "In the pane titled x, do not type ls"):
+                        "In the pane titled x, do not type ls",
+                        "type into pane titled x: rm -rf / ; reboot",
+                        "type into pane titled x: touch /tmp/a then wait",
+                        "Type the command touch /tmp/a (into the pane titled x) if idle"):
             with self.subTest(request=request):
                 self.assertIsNone(panes_exact.admitted(request))
 
