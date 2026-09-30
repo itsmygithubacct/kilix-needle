@@ -152,6 +152,83 @@ class FindThen(unittest.TestCase):
                 self.assertIsNone(panes_exact.admitted(request))
 
 
+class RelativeNavigation(unittest.TestCase):
+    def test_order_phrases_are_read_as_navigation(self):
+        cases = {
+            "the tab before this one": ("tab", "previous"),
+            "Go to the tab before this one.": ("tab", "previous"),
+            "switch to the pane before this one": ("pane", "previous"),
+            "focus the tab after this one": ("tab", "next"),
+            "jump to the pane after this one": ("pane", "next"),
+            "whichever pane comes next": ("pane", "next"),
+            "focus whichever pane comes next": ("pane", "next"),
+            "please switch to whichever tab comes next, thanks": ("tab", "next"),
+            "the next tab": ("tab", "next"),
+            "switch to the previous tab": ("tab", "previous"),
+        }
+        for request, (unit, target) in cases.items():
+            with self.subTest(request=request):
+                self.assertEqual(panes_exact.admitted(request), (
+                    [{"name": f"go_to_{unit}", "arguments": {unit: target}}],
+                    f"go to the {target} {unit}"))
+
+    def test_extra_actions_times_and_conditions_are_not_exact(self):
+        for request in ("close the tab before this one", "close whichever pane comes next",
+                        "focus whichever pane comes next if it is idle",
+                        "go to the tab before this one and close it",
+                        "focus the tab after this one tomorrow",
+                        "go to the tab before the build tab",
+                        "go to whichever pane comes next week",
+                        "don't focus whichever pane comes next",
+                        "my boss said go to the tab before this one",
+                        "is the tab before this one active?"):
+            with self.subTest(request=request):
+                self.assertIsNone(panes_exact.admitted(request))
+
+    def test_navigation_counts_from_the_caller_and_wraps_without_the_model(self):
+        os.environ["KITTY_WINDOW_ID"] = "300"
+        self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
+        engine = mock.Mock()
+        cases = {
+            "go to the tab before this one": ["focus-tab", "--match=id:20"],
+            "focus whichever pane comes next": ["focus-window", "--match=id:301"],
+            "the pane before this one": ["focus-window", "--match=id:302"],
+            "the tab after this one": ["focus-tab", "--match=id:10"],
+        }
+        for request, command in cases.items():
+            with self.subTest(request=request), FakeKilix(desktop()) as fake:
+                record = needle_cli.run_request(engine, request, needle_cli.Options(agent=True))
+                self.assertEqual(record["status"], 0)
+                self.assertEqual(record["items"][0]["outcome"], "done")
+                self.assertEqual(fake.calls(), [(command, None)])
+                self.assertEqual(record["request"], request)
+        engine.complete.assert_not_called()
+
+    def test_relative_names_still_refuse_ambiguity_and_explicit_titles_remain_names(self):
+        os.environ["KITTY_WINDOW_ID"] = "300"
+        self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
+        engine = mock.Mock()
+        for unit in ("tab", "pane"):
+            tree = desktop()
+            if unit == "tab":
+                tree[0]["tabs"][0]["title"] = "next"
+            else:
+                tree[0]["tabs"][2]["windows"][2]["title"] = "next"
+            with self.subTest(unit=unit), FakeKilix(tree) as fake:
+                record = needle_cli.run_request(engine, f"whichever {unit} comes next",
+                                                needle_cli.Options(agent=True))
+                self.assertEqual(record["status"], 1)
+                self.assertEqual(record["items"][0]["outcome"], "unresolved")
+                self.assertIn("ambiguous", record["items"][0]["reason"])
+                self.assertEqual(fake.calls(), [])
+        with FakeKilix(tree) as fake:
+            record = needle_cli.run_request(engine, "focus the pane titled 'next'",
+                                            needle_cli.Options(agent=True))
+            self.assertEqual(record["status"], 0)
+            self.assertEqual(fake.calls(), [(["focus-window", "--match=id:302"], None)])
+        engine.complete.assert_not_called()
+
+
 class Route(unittest.TestCase):
     def setUp(self):
         os.environ["KITTY_WINDOW_ID"] = "300"

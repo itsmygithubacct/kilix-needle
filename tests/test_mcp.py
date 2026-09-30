@@ -84,7 +84,7 @@ class Protocol(unittest.TestCase):
         self.assertEqual([r["error"]["code"] for r in replies[:3]], [-32602] * 3)
 
     def test_missing_engine_is_a_tool_error_not_a_crash(self):
-        replies, _ = converse([call(1, "kilix_plan", request="next tab")],
+        replies, _ = converse([call(1, "kilix_plan", request="move to the next tab")],
                               fail="needle2 is not installed")
         result = replies[0]["result"]
         self.assertTrue(result["isError"])

@@ -168,7 +168,7 @@ class AgentMode(unittest.TestCase):
 
     def test_json_record_shape(self):
         status, _, out = self.run_agent(
-            "next tab", {"name": "go_to_tab", "arguments": {"tab": "next"}}, dry_run=True)
+            "go to the next tab", {"name": "go_to_tab", "arguments": {"tab": "next"}}, dry_run=True)
         record = json.loads(out)
         self.assertEqual(set(record), {"request", "status", "note", "items"})
         self.assertEqual(record["items"][0]["outcome"], "would")

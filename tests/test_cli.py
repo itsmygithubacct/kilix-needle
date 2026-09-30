@@ -52,8 +52,8 @@ class Handle(unittest.TestCase):
         finally:
             sys.stdin, sys.stdout = saved
 
-    def test_safe_action_runs_without_asking(self):
-        status, calls, out, engine = self.run_request("next tab", call("go_to_tab", tab="next"))
+    def test_safe_model_action_runs_without_asking(self):
+        status, calls, out, engine = self.run_request("move to the next tab", call("go_to_tab", tab="next"))
         self.assertEqual((status, calls), (0, [(["focus-tab", "--match=id:10"], None)]))
         self.assertNotIn("[y/N]", out)
         self.assertEqual(engine.resets, 1)  # each request starts a fresh session

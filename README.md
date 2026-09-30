@@ -195,6 +195,9 @@ What an agent should know (measured in a Codex route benchmark, 2026-09-29):
   check and confirmation: close, go to or type into a pane named by title,
   name, side or id, and close or go to tab N. Examples: "close the pane titled
   build in this tab", "run 'make' in pane 70", "go to tab 2" (`panes_exact.py`).
+  Navigation also reads "go to the tab before this one" and "focus whichever
+  pane comes next" directly. Next/previous count from the caller's pane or tab
+  and wrap at an edge; an ambiguous title still refuses resolution.
 - **A yes given in advance covers these typing forms:** "run 'X' in the NAME
   pane", "type the command X into pane NAME", with an optional "and press
   Enter".

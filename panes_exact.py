@@ -62,6 +62,27 @@ _FORMS = (
 )
 _SIDES = {"down": "below", "up": "above"}
 
+# Relative navigation names an order, not a title or a spatial neighbour.
+# Match the whole request so a time, condition or second action stays with
+# the model. Resolution still counts from the caller and checks ambiguity.
+_NAVIGATE = r"(?:(?:go\s+to|switch\s+to|focus|jump\s+to)\s+)?"
+_RELATIVE_FORMS = (
+    ("previous", re.compile(_NAVIGATE + r"(?:the\s+)?(?P<unit>tab|pane)\s+before\s+this\s+one", re.I)),
+    ("next", re.compile(_NAVIGATE + r"(?:the\s+)?(?P<unit>tab|pane)\s+after\s+this\s+one", re.I)),
+    ("next", re.compile(_NAVIGATE + r"(?:whichever|the)\s+(?P<unit>tab|pane)\s+comes\s+next", re.I)),
+    ("previous", re.compile(_NAVIGATE + r"(?:the\s+)?previous\s+(?P<unit>tab|pane)", re.I)),
+    ("next", re.compile(_NAVIGATE + r"(?:the\s+)?next\s+(?P<unit>tab|pane)", re.I)),
+)
+
+
+def _relative_navigation(text: str):
+    for target, form in _RELATIVE_FORMS:
+        found = form.fullmatch(text)
+        if found:
+            unit = found["unit"].lower()
+            return [{"name": f"go_to_{unit}", "arguments": {unit: target}}], f"go to the {target} {unit}"
+    return None
+
 
 def _first(found: dict, *keys):
     return next((found[k] for k in keys if found.get(k)), None)
@@ -146,7 +167,7 @@ def read(request: str) -> tuple[list, str] | None:
             return [{"name": kind, "arguments": args}], f"run {_quote(command)} in {_pane_words(found, pane)}"
         verb = "close" if kind == "close_pane" else "go to"
         return [{"name": kind, "arguments": args}], f"{verb} {_pane_words(found, pane)}"
-    return _open_slots(text) or _run_slots(text)
+    return _relative_navigation(text) or _open_slots(text) or _run_slots(text)
 
 
 # A plain shell pane opened to one side of the calling pane, however an agent
