@@ -870,11 +870,17 @@ class LunaBenchmarkLaunches(unittest.TestCase):
                      ", leave the prompt empty, and leave the session idle.", ". It should get no task.",
                      ". Leave the task/prompt empty. Do not wait, message, or perform any further actions.",
                      "; do not message it or take any further steps",
+                     " with no task or initial prompt",
+                     " with no task. Then stop; do not wait or send it any task.",
+                     " with no task or initial prompt. Leave the session open and idle.",
+                     ". Do not provide a task or initial prompt.",
                      "; never hand it a task", ". No need to give it instructions.", ", no prompt yet"):
             with self.subTest(tail=tail):
                 self.assertEqual(agents.exact_calls(f"start codex in {self.PATH}{tail}"), plain)
         for tail in (". do not let it touch the tests", "; don't start it", ", and never close it",
                      ". Do not wait to run the tests.", ". Do not run anything.", ". Do not wait, delete the repo.",
+                     ". Do not wait or delete it.", ". Leave the session open and delete it.",
+                     " to fix it. Do not send it any task.",
                      ". do not open a task file", ". It should have no network",
                      # a task and "no task" both: said both ways
                      " to fix the build. Do not send a prompt", " to fix the build. It should get no task."):

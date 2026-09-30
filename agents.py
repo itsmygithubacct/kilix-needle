@@ -1079,8 +1079,9 @@ def exact_calls(request: str) -> list | None:
 # nothing more. Only whole clauses at the end go; any other "not" still
 # refuses the request.
 _TASK = r"(?:task|prompt|instructions?|message|input|assignment)s?"
-_TASKS = (rf"(?:(?:a|an|any|the|its|some)\s+)?(?:(?:initial|first|starting|opening|new|further)\s+)?{_TASK}"
-          rf"(?:\s*(?:/|or|and)\s*(?:(?:a|an|any)\s+)?{_TASK})*")
+_TASK_MOD = r"(?:(?:initial|first|starting|opening|new|further)\s+)?"
+_TASKS = (rf"(?:(?:a|an|any|the|its|some)\s+)?{_TASK_MOD}{_TASK}"
+          rf"(?:\s*(?:/|or|and)\s*(?:(?:a|an|any)\s+)?{_TASK_MOD}{_TASK})*")
 _WHO = rf"(?:(?:to\s+)?(?:it|them|the\s+(?:agent|session|(?:{_AGENT_WORDS})\s+session)|{_AGENT_WORDS})\s+)?"
 _WHEN = (r"(?:\s+(?:into|to|for|in)\s+(?:it|them|the\s+(?:session|agent)))?"
          r"(?:\s+(?:after|at|on|upon|during|when|once)\s+(?:the\s+)?(?:startup|start-up|start|launch|"
@@ -1099,13 +1100,16 @@ _NO_TASK_CLAUSE = (
 _FURTHER = r"(?:any(?:thing)?\s+)?(?:further|additional|other|more|else)(?:\s+(?:actions?|steps?))?"
 _STOPPING = (r"(?:wait(?:\s+for\s+(?:it|the\s+(?:agent|session)))?|message(?:\s+(?:it|the\s+(?:agent|session)))?"
              r"|send\s+(?:it\s+)?(?:any\s+)?messages?|act\s+further"
+             # a no-task verb in the same list: "do not wait or send it any task"
+             rf"|(?:give|send|pass|provide|assign|type|enter)\s+{_WHO}{_TASKS}"
              rf"|(?:perform|do|take)\s+(?:any\s+|anything\s+)?{_FURTHER}|do\s+anything(?:\s+(?:further|else|more))?)")
 _NEUTRAL_CLAUSE = (
     rf"(?:do\s+not|don'?t|never)\s+{_STOPPING}(?:(?:\s*,\s*|\s+)(?:(?:or|and|nor)\s+)?{_STOPPING})*"
     r"|(?:then\s+)?(?:stop(?:\s+there)?|that'?s\s+all|nothing\s+else)"
     r"|(?:(?:and\s+)?then\s+)?(?:start|launch|open|run)\s+it(?:\s+up)?"
     rf"|(?:just\s+)?(?:leave|keep)\s+(?:the\s+(?:session|agent|tab)|it|{_AGENT_WORDS})\s+"
-    r"(?:open|idle|running|there|waiting|as\s+is)(?:\s+(?:with\s+no|without\s+(?:a\s+|any\s+)?)\s*" + _TASK + r")?")
+    r"(?:open|idle|running|there|waiting|as\s+is)(?:(?:\s*,\s*|\s+)(?:and\s+)?(?:open|idle|running|there|waiting))*"
+    r"(?:\s+(?:with\s+no|without\s+(?:a\s+|any\s+)?)\s*" + _TASK + r")?")
 _NO_TASK = re.compile(
     # "with no task" may follow plain space; every other clause needs a real break
     # (". Then stop", "; do not send it any task"): "open codex in X to please stop"
