@@ -83,11 +83,21 @@ def _pane_words(found: dict, pane: str) -> str:
     return f"the pane titled {_quote(pane) if ' ' in pane else pane}"
 
 
+# "Find the pane titled X in this tab and close it": finding is how an agent
+# says which pane; the action is the verb that follows, on "it".
+_FIND_THEN = re.compile(rf"(?:find|locate|look\s+up|identify|get)\s+(?P<pane>{_pane('f')})"
+                        r"(?:\s*,)?\s+(?:and\s+)?(?:then\s+)?(?P<verb>close|kill|focus|go\s+to|switch\s+to)\s+it",
+                        re.I)
+
+
 def read(request: str) -> tuple[list, str] | None:
     """The one call an exact pane command states, and the canonical sentence it
     was read as, or None. The fullmatch allows only fixed filler around the
     values, so the canonical sentence says exactly what the request says."""
     text = _TAIL.sub("", _HEAD.sub("", normalize(request).strip()))
+    found = _FIND_THEN.fullmatch(text)
+    if found:
+        text = f"{found['verb']} {found['pane']}"
     for kind, form in _FORMS:
         m = form.fullmatch(text)
         if not m:

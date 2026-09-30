@@ -125,6 +125,21 @@ class TypingParts(unittest.TestCase):
                 self.assertIsNone(panes_exact.admitted(request))
 
 
+class FindThen(unittest.TestCase):
+    def test_find_a_pane_and_act_on_it(self):
+        cases = {"Find the pane titled bench-x in this tab and close it.": "close the pane titled bench-x",
+                 "locate the pane titled logs and then focus it": "go to the pane titled logs",
+                 "find pane 70 and close it": "close pane 70"}
+        for request, sentence in cases.items():
+            with self.subTest(request=request):
+                self.assertEqual(panes_exact.admitted(request)[1], sentence)
+        for request in ("Find the pane titled x and close it and the one next to it",
+                        "find the pane titled x and delete it", "find the pane titled x and close tab 2",
+                        "find the pane titled x and close it if idle"):
+            with self.subTest(request=request):
+                self.assertIsNone(panes_exact.admitted(request))
+
+
 class Route(unittest.TestCase):
     def setUp(self):
         os.environ["KITTY_WINDOW_ID"] = "300"
