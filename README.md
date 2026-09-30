@@ -60,6 +60,16 @@ MCP exposes `kilix_files_plan` and `kilix_files_read`. Searches have explicit
 scopes and bounded coverage; no trained files model is claimed. See
 [the files guide](docs/files.md) for supported language, limits and evaluation.
 
+## Tmux sessions
+
+`kilix-needle tmux --socket /absolute/private.sock REQUEST` controls an
+explicit tmux server with a deterministic grammar and no model. It supports
+list/new/read/send/type/key/rename/close. `send` inserts quoted literal text;
+`type` inserts it and submits a separate Enter, with command completion
+reported as unknown. Input and close require `--yes` or interactive consent.
+MCP offers `kilix_tmux_plan` and `kilix_tmux_act`, both requiring `socket`.
+See [the tmux guide](docs/tmux.md) for forms, discovery and limits.
+
 ## What it can do
 
 | Request | Action | Runs |
@@ -185,7 +195,7 @@ Kilix's abstract socket.
 What an agent should know (measured in a Codex route benchmark, 2026-09-29):
 
 - **Each job has its own command:** `kilix-needle agents`, `apps`, `system`,
-  `files` and `logs`. The bare command is the panes job only. A refused record
+  `files`, `logs` and `tmux`. The bare command is the panes job only. A refused record
   carries `hint`: the job whose grammar reads the request, or one accepted
   phrasing for what was refused. Restate the request once in that form rather
   than guessing.
@@ -302,7 +312,7 @@ backslash is refused.
 
 ## Jobs
 
-kilix-needle has three action jobs and three read-only jobs:
+kilix-needle has four action jobs and three read-only jobs:
 
 | Job | CLI | Scope |
 | --- | --- | --- |
@@ -312,6 +322,7 @@ kilix-needle has three action jobs and three read-only jobs:
 | `files` | `kilix-needle files REQUEST` | Read-only file search, listings and previews in a named scope |
 | `system` | `kilix-needle system REQUEST` | Read resources, processes, services, journal entries and installed package information |
 | logs | `kilix-needle logs …` | Read and search local pane logs, with citations |
+| `tmux` | `kilix-needle tmux --socket PATH REQUEST` | Exact tmux session and pane control on an explicit socket |
 
 ### How each job understands a request
 
@@ -327,12 +338,13 @@ The checks decide; a proposer that invents a call gets it refused.
 | `files` | the grammar; a trained research model was not promoted | Scopes and filters must be exact; the model refused too rarely (4/40) |
 | `system` | the grammar first, then a tuned normalizer that only *proposes* for unfamiliar wording | The grammar is exact but narrow; model proposals never collect on their own |
 | logs | a baseline reader, no model | It reads, it doesn't act |
+| `tmux` | a whole-request grammar, no model | One explicit operation with exact targets and literal input |
 
 A default changes only by measurement on a **blind held-out set**. Such a set is
 written from a specification by a session that sees no code, no training data and
 no other set, and each set gates once. A change also needs an independent review.
 
-Jobs have separate eval sets and model selections (`jobs.py`). Selecting a tuned
+Model-backed jobs have separate eval sets and model selections (`jobs.py`). Selecting a tuned
 execution model for one job never changes another job's model, and a model gated
 for one job can't be selected for another. The `system` job's separate
 `system-model` profile does not select or promote an execution model; automatic

@@ -190,6 +190,20 @@ for _operation in ("plan", "read"):
             "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20}},
             "required": ["request"], "additionalProperties": False}})
 
+for _operation in ("plan", "act"):
+    _tmux_properties = {
+        "request": {"type": "string", "maxLength": 66560},
+        "socket": {"type": "string", "description": "absolute private tmux socket; no fallback"}}
+    if _operation == "act":
+        _tmux_properties["confirm_risky"] = {"type": "boolean", "default": False}
+    TOOL_LIST.append({
+        "name": "kilix_tmux_" + _operation,
+        "description": ("Plan one tmux request: validate/resolve only; no mutation." if _operation == "plan" else
+                        'One tmux request: list/new/read/send/type/key/rename/close. Quote text. '
+                        'send adds no Enter; type submits, completion unknown. Input/close needs confirm_risky.'),
+        "inputSchema": {"type": "object", "properties": _tmux_properties,
+                        "required": ["request", "socket"], "additionalProperties": False}})
+
 
 def _result(record, is_error: bool, request=None) -> dict:
     """One record, sent once as compact text and once structured.
@@ -241,6 +255,11 @@ class Server:
             runtime.close()
 
     def call_tool(self, name: str, arguments: dict) -> dict:
+        if name in ("kilix_tmux_plan", "kilix_tmux_act"):
+            import tmux_cli
+            record = tmux_cli.mcp(arguments, plan=name.endswith("_plan"))
+            return _result(record, record["status"] != 0,
+                           arguments.get("request") if isinstance(arguments, dict) else None)
         if name in ("kilix_files_plan", "kilix_files_read"):
             import files_cli
             record = files_cli.mcp(arguments, plan=name.endswith("_plan"))

@@ -6,6 +6,7 @@
     kilix-needle system "is jq installed"           # read-only machine state
     kilix-needle files 'find files named "x" in here'
     kilix-needle logs search --session NAME --query TEXT
+    kilix-needle tmux --socket /abs/socket 'list sessions'
 
 Agents: act directly with `--agent --json --yes`. A refused request runs
 nothing, so a `--dry-run` first only adds a call; a refused record carries
@@ -801,6 +802,9 @@ def _render_system_suggestion(plan: dict) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["tmux"]:
+        from tmux_cli import main as tmux_main
+        return tmux_main(argv[1:])
     if argv[:1] == ["files"]:
         from files_cli import main as files_main
         return files_main(argv[1:])

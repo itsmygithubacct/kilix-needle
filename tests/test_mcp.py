@@ -67,7 +67,7 @@ class Protocol(unittest.TestCase):
                          ["kilix_plan", "kilix_act", "kilix_apps_plan", "kilix_apps_act",
                           "kilix_agents_plan", "kilix_agents_act", "kilix_system_plan",
                           "kilix_system_read", "kilix_system_suggest", "kilix_logs_read",
-                          "kilix_files_plan", "kilix_files_read"])
+                          "kilix_files_plan", "kilix_files_read", "kilix_tmux_plan", "kilix_tmux_act"])
         self.assertEqual(replies[2]["error"]["code"], -32601)
         self.assertEqual(replies[3]["error"]["code"], -32700)   # the "not json" line
         self.assertEqual(len(replies), 4)                       # the notification got no reply
@@ -156,14 +156,18 @@ class TokenCost(unittest.TestCase):
     def test_tool_list_stays_small(self):
         replies, _ = converse([{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}])
         tools = replies[0]["result"]["tools"]
-        self.assertLessEqual(len(json.dumps(tools)), 6800)
+        existing = [t for t in tools if not t["name"].startswith("kilix_tmux_")]
+        tmux = [t for t in tools if t["name"].startswith("kilix_tmux_")]
+        self.assertLessEqual(len(json.dumps(existing)), 6800)
+        self.assertLessEqual(len(json.dumps(tmux)), 1100)
 
         def described(node):
             if isinstance(node, dict):
                 return sum(len(v) if k == "description" and isinstance(v, str) else described(v)
                            for k, v in node.items())
             return sum(map(described, node)) if isinstance(node, list) else 0
-        self.assertLessEqual(described(tools), 2800)
+        self.assertLessEqual(described(existing), 2800)
+        self.assertLessEqual(described(tmux), 300)
 
     def test_result_is_one_compact_record_without_the_echoed_request(self):
         with FakeKilix(desktop()):
