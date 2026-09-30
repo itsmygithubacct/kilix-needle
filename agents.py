@@ -1056,6 +1056,7 @@ _LAUNCH_REWRITES = (
     (re.compile(r",? in a new tab\b", re.I), ""),
     (re.compile(r",? (?:working |running )?in (?:the )?(?:directory|folder|dir) (?=[~/])", re.I), " in "),
     (re.compile(r",? working in (?=[~/])", re.I), " in "),
+    (re.compile(r"^(?P<head>[^:]*?),? working directory (?=[~/])", re.I), r"\g<head> in "),
 )
 
 
@@ -1090,6 +1091,7 @@ _WHO = rf"(?:(?:to\s+)?(?:it|them|the\s+(?:agent|session|(?:{_AGENT_WORDS})\s+se
 _WHEN = (r"(?:\s+(?:into|to|for|in)\s+(?:it|them|the\s+(?:session|agent)))?"
          r"(?:\s+(?:after|at|on|upon|during|when|once)\s+(?:the\s+)?(?:startup|start-up|start|launch|"
          r"opening|it\s+(?:starts|opens|launches))|\s+(?:yet|for\s+now|at\s+all|initially))?")
+_LEAVE_SESSION = rf"(?:leave|keep)\s+(?:the\s+(?:new\s+)?(?:session|agent|tab)|it|{_AGENT_WORDS})"
 _NO_TASK_CLAUSE = (
     rf"(?:with\s+)?(?:no|zero)\s+{_TASKS}"
     rf"|without\s+(?:(?:giving|sending|passing|providing|assigning)\s+{_WHO})?{_TASKS}"
@@ -1097,6 +1099,7 @@ _NO_TASK_CLAUSE = (
     rf"|(?:give|send|pass|provide|assign)\s+{_WHO}no\s+{_TASKS}"
     rf"|(?:leave|keep)\s+(?:the\s+|its\s+)?{_TASKS}\s+(?:blank|empty|unset)"
     rf"|{_TASKS}\s+(?:blank|empty|none)"
+    rf"|{_LEAVE_SESSION}\s+(?:with\s+no\s+|without\s+){_TASKS}"
     rf"|(?:it|{_AGENT_WORDS}|the\s+(?:agent|session))\s+(?:(?:should|will|must|can|is\s+to)\s+)?"
     rf"(?:get|gets|have|has|receive|receives|need|needs|take|takes)\s+no\s+{_TASKS}")
 # The caller stopping after the launch: "do not wait, message, or perform any
@@ -1115,6 +1118,7 @@ _NEUTRAL_CLAUSE = (
     # stopping the session just started would undo the request. Only after "then".
     r"|(?:and\s+)?then\s+stop\s+(?:the\s+session|here)(?:\s+there)?"
     r"|(?:(?:and\s+)?then\s+)?(?:start|launch|open|run)\s+it(?:\s+up)?"
+    rf"|{_LEAVE_SESSION}\s+at\s+(?:the|its)\s+interactive\s+prompt"
     rf"|(?:just\s+)?(?:leave|keep)\s+(?:the\s+(?:session|agent|tab)|it|{_AGENT_WORDS})\s+"
     r"(?:open|idle|running|there|waiting|as\s+is)(?:(?:\s*,\s*|\s+)(?:and\s+)?(?:open|idle|running|there|waiting))*"
     r"(?:\s+(?:with\s+no|without\s+(?:a\s+|any\s+)?)\s*" + _TASK + r")?")

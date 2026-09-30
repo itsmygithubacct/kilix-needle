@@ -37,7 +37,9 @@ def _pane(prefix: str = "") -> str:
 _QUOTED = r"(?:'(?P<sq>[^'\n]+)'|\"(?P<dq>[^\"\n]+)\"|`(?P<bq>[^`\n]+)`)"
 # An unquoted command: a program, then only plain shell arguments ("touch /x/y").
 _UNQUOTED = r"(?P<uq>[A-Za-z_][\w.+-]*(?:\s+\S+)*?)"
-_TYPE = r"(?:type|run|enter|execute)(?:\s+and\s+(?:run|press\s+enter))?(?:\s+(?:the\s+command|exactly))?:?"
+_TYPE = (r"(?:type\s+and\s+press\s+enter\s+on:|"
+         r"(?:type|run|enter|execute)(?:\s+and\s+(?:run|press\s+enter))?"
+         r"(?:\s+(?:the\s+command|exactly))?:?)")
 _ENTER = (r"(?:\s+at\s+(?:the|its)\s+(?:shell\s+)?prompt)?"
           r"(?:,?\s+(?:and\s+)?(?:then\s+)?(?:press|hit)\s+(?:enter|return))?")
 _SIDE = r"(?P<side>right|left|below|above|down|up)"
@@ -190,7 +192,7 @@ i i'm am you you're are we running working sitting in from and then with inside 
 _OPEN_SHELL_SENTENCE = re.compile(
     r"[.;,]?\s*(?:and\s+)?(?:it\s+should\s+(?:run|start|open|have)|(?:then\s+)?(?:run|start|open)|with)\s+"
     r"(?:a\s+|an\s+)?(?:new\s+|plain\s+|interactive\s+)?(?:shell|terminal|bash)"
-    r"(?:\s+(?:in|inside)\s+(?:it|the\s+new\s+pane|that\s+pane|the\s+pane))?\s*[.!]?\s*$", re.I)
+    r"(?:\s+(?:there|(?:in|inside)\s+(?:it|the\s+new\s+pane|that\s+pane|the\s+pane)))?\s*[.!]?\s*$", re.I)
 _OPEN_STOP = re.compile(r"[.;,]?\s*(?:and\s+)?then\s+stop\s*[.!]?\s*$", re.I)
 
 

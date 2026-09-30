@@ -210,12 +210,18 @@ What an agent should know (measured in a Codex route benchmark, 2026-09-29):
   and wrap at an edge; an ambiguous title still refuses resolution.
 - **A yes given in advance covers these typing forms:** "run 'X' in the NAME
   pane", "type the command X into pane NAME", with an optional "and press
-  Enter".
+  Enter", and "In the pane titled NAME, type and press Enter on: X".
+  Missing command text refuses before loading the model.
+  A plain split also reads "open a new pane directly to the right of the pane
+  I am running in and run a shell there" without loading the model.
 - **Plain `sh` panes accept typed commands** when only the shell holds the
   terminal. `bash`, `zsh` and `fish` still need shell integration's prompt mark.
 - **The agents job takes an explicit directory**: "start codex in /abs/dir",
   also "an interactive Codex session in a new tab, working in the directory
-  /abs/dir. Do not give it a task."
+  /abs/dir. Do not give it a task." The grammar also reads "working directory
+  /abs/dir", "leave the session without a task", and "leave it at its
+  interactive prompt". A task combined with an instruction to give no task
+  still refuses; text after a task delimiter remains literal.
 - **The Codex entry that `setup` writes forwards the Kilix, `GPU_TERMINAL_*`,
   XDG and kitty auth variables.** Re-run `kilix-needle setup --only codex` after
   an update.
