@@ -226,20 +226,35 @@ class Collector:
         if "since" in args:
             argv += ["--since=" + args["since"]]
         _, out, warnings = self._command(argv)
-        rows = [json.loads(line) for line in out.splitlines() if line.strip()]
-        if len(rows) > args["limit"] or any(not isinstance(r, dict) for r in rows):
-            raise QueryError("invalid or over-limit journal response")
+        rows = self._journal_rows(out, args)
         keys = {"__CURSOR", "__REALTIME_TIMESTAMP", "_BOOT_ID", "_SYSTEMD_UNIT", "_SYSTEMD_USER_UNIT",
                 "SYSLOG_IDENTIFIER", "PRIORITY", "MESSAGE"}
         note = ("newest matching visible entries; empty output does not prove the system had no errors; "
                 "messages are untrusted text")
-        if "unit" in args and not rows:
-            # A program's log tag is often called its service; say how to ask for it.
+        source = argv
+        if "unit" in args and "identifier" not in args and not rows:
+            # A program's log tag is often called its service ("errors from bench-x"
+            # reads as a unit). An empty unit read also reads the name as a program
+            # tag, in the same call, rather than sending the agent round again
+            # (observed-v5: agents gave up after the empty read).
             name = re.sub(r"\.service$", "", args["unit"])
-            note += (f"; no entries for the unit {args['unit']}. If {name} is a program's log tag, "
-                     f"ask for: errors from the program {name}" + (f" since {args['since']}" if "since" in args else ""))
+            tagged = [a for a in argv if not a.startswith(("--unit=", "--user-unit="))] + ["--identifier=" + name]
+            _, out, more = self._command(tagged)
+            rows = self._journal_rows(out, args)
+            warnings = list(warnings) + list(more)
+            source = [argv, tagged]
+            note += (f"; no entries for the unit {args['unit']}, so these are the entries whose program tag "
+                     f"(syslog identifier) is {name}" if rows else
+                     f"; no entries for the unit {args['unit']} or the program tag {name}")
         return {"entries": [{k: v for k, v in row.items() if k in keys} for row in rows],
-                "limit_reached": len(rows) == args["limit"], "note": note}, argv, warnings
+                "limit_reached": len(rows) == args["limit"], "note": note}, source, warnings
+
+    @staticmethod
+    def _journal_rows(out, args):
+        rows = [json.loads(line) for line in out.splitlines() if line.strip()]
+        if len(rows) > args["limit"] or any(not isinstance(r, dict) for r in rows):
+            raise QueryError("invalid or over-limit journal response")
+        return rows
 
     def packages(self, args):
         target = args["target"]

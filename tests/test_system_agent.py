@@ -86,14 +86,33 @@ class ReviewedShapes(unittest.TestCase):
             with self.subTest(bad=bad):
                 self.assertIsNone(reads(bad))
 
-    def test_an_empty_service_read_names_the_program_tag_sentence(self):
+    ARGS = {"unit": "nightly-sync.service", "since": "10 minutes ago", "scope": "system", "boot": "any",
+            "priority": "err", "limit": 50}
+    ENTRY = '{"MESSAGE": "sync failed code=7", "SYSLOG_IDENTIFIER": "nightly-sync", "PRIORITY": "3"}\n'
+
+    def test_an_empty_unit_read_also_reads_the_program_tag(self):
         import system_collect
         collector = system_collect.Collector()
-        with mock.patch.object(collector, "_command", return_value=(0, "", [])):
-            data, _argv, _warn = collector.journal({"unit": "nightly-sync.service", "since": "10 minutes ago",
-                                                    "scope": "system", "boot": "any", "priority": "err",
-                                                    "limit": 50})
-        self.assertIn("errors from the program nightly-sync since 10 minutes ago", data["note"])
+        with mock.patch.object(collector, "_command", side_effect=[(0, "", []), (0, self.ENTRY, [])]) as run:
+            data, source, _warn = collector.journal(dict(self.ARGS))
+        first, second = (c.args[0] for c in run.call_args_list)
+        self.assertIn("--unit=nightly-sync.service", first)
+        self.assertIn("--identifier=nightly-sync", second)
+        self.assertFalse(any(a.startswith("--unit=") for a in second))
+        self.assertEqual(source, [first, second])
+        self.assertEqual(data["entries"][0]["MESSAGE"], "sync failed code=7")
+        self.assertIn("program tag (syslog identifier) is nightly-sync", data["note"])
+
+    def test_both_empty_say_so_and_a_unit_with_entries_is_read_once(self):
+        import system_collect
+        collector = system_collect.Collector()
+        with mock.patch.object(collector, "_command", side_effect=[(0, "", []), (0, "", [])]):
+            data, _source, _warn = collector.journal(dict(self.ARGS))
+        self.assertIn("no entries for the unit nightly-sync.service or the program tag nightly-sync", data["note"])
+        with mock.patch.object(collector, "_command", return_value=(0, self.ENTRY, [])) as run:
+            data, _source, _warn = collector.journal(dict(self.ARGS))
+        self.assertEqual(run.call_count, 1)
+        self.assertEqual(len(data["entries"]), 1)
 
 
 class Sentences(unittest.TestCase):
@@ -193,6 +212,25 @@ class SlotReaders(unittest.TestCase):
                         "dpkg -s jq && reboot"):
             with self.subTest(request=request):
                 self.assertIsNone(system_agent.canonical(request))
+
+    def test_a_name_given_two_kinds_is_its_tag(self):
+        cases = {
+            "Show journal errors for service/program tag sync-q1 from the last 15 minutes": "sync-q1",
+            "Find errors from the last 15 minutes for service or program tag sync-q1": "sync-q1",
+            "Find journal errors for the job or service tagged sync-q1 from the last 15 minutes": "sync-q1",
+            "Show journal errors from the last 15 minutes for job/service tag sync-q1": "sync-q1",
+            "Find the error logged by job sync-q1 in the last 15 minutes": "sync-q1",
+            "Find the error for the recently failed item tagged sync-q1 from the last 15 minutes": "sync-q1",
+        }
+        for request, name in cases.items():
+            with self.subTest(request=request):
+                got = reads(request)
+                self.assertEqual(got[0][0], "journal")
+                self.assertEqual(got[0][1].get("identifier"), name)
+                self.assertEqual(got[0][1].get("since"), "15 minutes ago")
+        self.assertEqual(reads("errors from the ssh service")[0][1].get("unit"), "ssh.service")
+        # a bare name reads as a unit; the collector falls back to its tag when the unit is empty
+        self.assertIn("unit", reads("What error code did sync-q1 log in the last 15 minutes?")[0][1])
 
     def test_conflicts_and_pointers_stay_unread(self):
         for request in ("show warning-level logs at priority err", "show errors from that boot",

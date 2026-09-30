@@ -330,6 +330,7 @@ are were been since ago and to that this machine right now here up display print
 current boot query dump tail see new occurred happened written wrote emitted produced reported output
 program process app application tag tagged identifier syslog_identifier named called its it's
 pull grab bring collect retrieve report records record under whose i need want wrote write writes
+at line code codes value reports job jobs item items daemon script worker failed recently or
 """.split())
 _J_NOUNS = frozenset("""services service processes process packages package memory disk cpu users user
 failures boots boot today yesterday who lines
@@ -459,9 +460,18 @@ def _journal_slots(text: str) -> str | None:
         found["scope"] = "user"
     t = re.sub(r"\buser\b", " ", t)
     # unit or program tag
+    # "service or program tag X", "program/service tag X", "job or service tagged X": a name
+    # given two kinds at once is read by its tag, the one a program's log is filed under
+    take(rf"\b(?:(?:service|program|job|process|app|daemon)\s*(?:/|\s+or\s+)\s*)+"
+         rf"(?:service|program|job|process|app|daemon)\s+(?:log\s+)?(?:(?:tagged|tag|named|called|identifier)\b)?\s*"
+         rf"(?!(?:or|and|from|for|in|the|tag|tagged|named|called|identifier|log)\b)({UNIT})", "ident")
     for pat, key in ((rf"\b({UNIT}\.service)\b", "unit"),
-                     (rf"\b(?:service|unit)\s+({UNIT})", "unit"),
-                     (rf"\b({UNIT})\s+service\b", "unit")):
+                     # "service or program tag X": "or" and "tag" are never a unit's name
+                     (rf"\b(?:service|unit)\s+(?!(?:or|and|tag|tagged|program|process|job|name|named|called|log|logs|file|unit|service)\\b)({UNIT})", "unit"),
+                     # "for service/program tag X", "job or service tagged X": the word before
+                     # "service" is a name only when it is not a word of the sentence
+                     (rf"\b(?!(?:for|from|or|and|the|a|an|of|by|to|in|on|at|with|job|program|process|tag|this|that|"
+                      rf"my|any|each|which|what|whose|systemd)\b)({UNIT})\s+service\b", "unit")):
         if key not in found:
             take(pat, key)
     words = [w for w in re.findall(r"[a-z0-9][a-z0-9_.@:+-]*|'s", t) if w != "'s"]
@@ -469,14 +479,17 @@ def _journal_slots(text: str) -> str | None:
     # One name left with no "program" or "tag" word is a service (the tool's own
     # reading); an empty read of it names the program-tag sentence.
     named = bool(left) and re.search(
-        rf"\b(?:(?:for|from|of|by)\s+(?:the\s+)?|(?:program|tag|tagged|identifier|unit|service)\s+(?:is\s+|[=:]\s*)?)"
+        rf"\b(?:(?:for|from|of|by)\s+(?:the\s+)?|(?:program|tag|tagged|identifier|unit|service|process|job|item|"
+        rf"daemon|script|worker)\s+(?:is\s+|[=:]\s*)?)"
         rf"{re.escape(left[0])}\b"
-        rf"|\b{re.escape(left[0])}\s+(?:has\s+|have\s+)?(?:logged|wrote|written|emitted|produced|reported)\b|\b{re.escape(left[0])}(?:'s)?\s+"
+        rf"|\b{re.escape(left[0])}\s+(?:has\s+|have\s+)?(?:logged|wrote|written|emitted|produced|reported)\b"
+        rf"|\bdid\s+{re.escape(left[0])}\s+(?:log|write|emit|report)\b|\b{re.escape(left[0])}(?:'s)?\s+"
         rf"(?:(?:user|system|journal|recent|latest)\s+)?(?:logs?|errors?|warnings?|journal|entries|messages|log\s+lines)\b",
         text, re.I)
     if "ident" not in found and "unit" not in found and len(left) == 1 and re.fullmatch(UNIT, left[0]) \
             and not left[0].isdigit() and left[0] not in _J_NOUNS and named:
-        tagged = re.search(rf"\b(?:program|process|app|application|tag|tagged|identifier)\b", text, re.I)
+        tagged = re.search(rf"\b(?:program|process|app|application|tag|tagged|identifier|job|item|daemon|script|"
+                           rf"worker)\b", text, re.I)
         # Unit names and tags are case-sensitive: take the name as it was written.
         said = re.search(rf"(?<![\w.@:-]){re.escape(left[0])}(?![\w.@:-])", text, re.I)
         found["ident" if tagged else "unit"] = said.group(0) if said else left[0]
