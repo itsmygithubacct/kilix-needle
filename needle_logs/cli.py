@@ -8,6 +8,7 @@ from pathlib import Path
 
 from . import facts, query
 from .index import Index
+from .hints import journal_hint
 
 SCHEMA = "kilix.logs.read/v1"
 ARGUMENTS = {"operation", "file", "provider", "session", "cache_path", "event_id", "session_id",
@@ -17,6 +18,16 @@ ARGUMENTS = {"operation", "file", "provider", "session", "cache_path", "event_id
 def _error(code: str, message: str, status: int) -> dict:
     return {"schema": SCHEMA, "status": "error", "exit_status": status,
             "events": [], "errors": [{"code": code, "message": message[:1024]}]}
+
+
+def _source_error(code, message, status, arguments):
+    result = _error(code, message, status)
+    operation = arguments.get("operation", "events")
+    if operation in ("events", "brief", "search") and (
+            (code == "not_found" and arguments.get("session")) or
+            (code == "source_open_failed" and arguments.get("file"))):
+        result["hint"] = journal_hint(arguments.get("session") or arguments.get("file"))
+    return result
 
 
 def read(arguments: dict) -> dict:
@@ -57,7 +68,10 @@ def read(arguments: dict) -> dict:
         if operation in ("events", "brief", "search"):
             session = arguments.get("session")
             if bool(path) == bool(session):
-                return _error("invalid_input", "select exactly one file or session", 2)
+                result = _error("invalid_input", "select exactly one file or session", 2)
+                if not path and not session:
+                    result["hint"] = journal_hint(arguments.get("query"))
+                return result
             expected_session = None
             if session:
                 from .resolve import resolve_source, check_binding
@@ -126,11 +140,11 @@ def read(arguments: dict) -> dict:
         return _error(exc.code, str(exc), 2 if exc.code in ("invalid_input", "cursor_invalid") else 1)
     except (ValueError, TypeError, KeyError) as exc:
         code = getattr(exc, "code", "invalid_input")
-        return _error(code, str(exc), 1 if code in ("source_changed", "source_unavailable", "snapshot_unavailable", "snapshot_timeout", "snapshot_limit") else 2)
+        return _source_error(code, str(exc), 1 if code in ("source_changed", "source_unavailable", "snapshot_unavailable", "snapshot_timeout", "snapshot_limit") else 2, arguments)
     except (OSError, ImportError, RuntimeError) as exc:
-        return _error(getattr(exc, "code", "read_error"), str(exc), 1)
+        return _source_error(getattr(exc, "code", "read_error"), str(exc), 1, arguments)
     except Exception as exc:
-        return _error(getattr(exc, "code", "read_error"), str(exc), 1)
+        return _source_error(getattr(exc, "code", "read_error"), str(exc), 1, arguments)
 
 
 def _parser() -> argparse.ArgumentParser:

@@ -253,6 +253,12 @@ The private local SQLite cache contains excerpts of the source logs. CLI
 evidence rules; it has no action-engine or confirmation path. Only the CLI
 exposes cache clearing.
 
+System-journal errors use `kilix_system_read`, for example
+`errors from the program my-worker in the last 15 minutes`. A logs search
+without a source, an unmatched session selector, or a file that cannot be
+opened returns this routing hint. The hint reads no journal entries; use
+the program tag and time window from the original request in the next call.
+
 Raw recording support is deliberately limited: terminal control sequences,
 redraws, binary data, and unfinished lines produce explicit partial coverage.
 It does not reconstruct a terminal screen or infer speakers from rendered

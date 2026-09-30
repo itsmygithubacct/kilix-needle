@@ -160,6 +160,10 @@ def _logs_arguments(arguments):
         if "enum" in prop and value not in prop["enum"]:
             raise ValueError(f"unsupported logs {key}")
     operation = arguments.get("operation", "events")
+    if operation != "source" and "file" not in arguments and "session" not in arguments:
+        from needle_logs.hints import journal_hint
+        raise ValueError("select exactly one logs file or session. " +
+                         journal_hint(arguments.get("query")))
     if operation == "source":
         if "event_id" not in arguments:
             raise ValueError("logs source requires event_id")
