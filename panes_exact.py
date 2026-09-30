@@ -114,12 +114,12 @@ def read(request: str) -> tuple[list, str] | None:
                 # Unquoted, only a program and plain shell arguments: English after
                 # a program may be a condition or a delay that would be typed too.
                 if not words or not all(_SHELL_ARGUMENT.fullmatch(w) for w in words[1:]):
-                    return None
+                    return _run_slots(text)     # it reads the command's end by its parts
             args["command"] = command
             return [{"name": kind, "arguments": args}], f"run {_quote(command)} in {_pane_words(found, pane)}"
         verb = "close" if kind == "close_pane" else "go to"
         return [{"name": kind, "arguments": args}], f"{verb} {_pane_words(found, pane)}"
-    return _open_slots(text)
+    return _open_slots(text) or _run_slots(text)
 
 
 # A plain shell pane opened to one side of the calling pane, however an agent
@@ -156,6 +156,65 @@ def _open_slots(text: str):
         return None
     side = sides.pop()
     return [{"name": "open_pane", "arguments": {"side": side}}], f"split {side}"
+
+
+# Typing a command into a titled pane, however an agent words it ("In the pane
+# titled X in this tab, type exactly: CMD then press Enter. Then stop.", "Type
+# `CMD` and press Enter in the pane titled `X`"): exactly one titled or
+# numbered pane, one command (the only quoted text, or a program and plain
+# shell arguments after the typing verb), and only typing, Enter and filler
+# words around them. Anything else leaves the request to the model.
+_RUN_PANE = re.compile(r"(?:the\s+)?pane\s+(?:(?:titled|named|called|labell?ed)\s+"
+                       r"(?:\"(?P<q>[^\"\n]+)\"|'(?P<s>[^'\n]+)'|`(?P<b>[^`\n]+)`|(?P<w>[\w.+@:-]+))"
+                       r"|(?P<id>[0-9]{1,6})\b)", re.I)
+_RUN_QUOTED = re.compile(r"`([^`\n]+)`|'([^'\n]+)'|\"([^\"\n]+)\"")
+_RUN_VERB = re.compile(r"\b(?:type|run|enter|execute)(?:\s+and\s+(?:run|execute|press\s+enter))?"
+                       r"(?:\s+(?:the\s+|this\s+)?command)?(?:\s+exactly)?\s*:?\s+", re.I)
+_RUN_END = re.compile(r"\s+(?:and\s+(?:then\s+)?(?:press|hit)|then\s+(?:press|hit)|in(?:to)?\s+(?:the\s+)?"
+                      r"(?:shell\s+prompt|@PANE@)|@PANE@)\b|[.;]\s|[.;]?\s*$", re.I)
+_RUN_NEUTRAL = re.compile(r"[.;,]?\s*(?:then\s+stop|do\s+not\s+do\s+anything\s+else|nothing\s+else|"
+                          r"that'?s\s+all)\s*[.!]?\s*$", re.I)
+_RUN_WORDS = frozenset("""
+in into the this tab type run enter execute and press hit return key then at shell prompt of its
+exactly command please now it
+""".split())
+
+
+def _run_slots(text: str):
+    for _ in range(3):
+        text = _RUN_NEUTRAL.sub("", text).strip()
+    panes = list(_RUN_PANE.finditer(text))
+    if len(panes) != 1:
+        return None
+    found = panes[0].groupdict()
+    pane = _first(found, "q", "s", "b", "w", "id")
+    rest = text[:panes[0].start()] + " @PANE@ " + text[panes[0].end():]
+    quoted = list(_RUN_QUOTED.finditer(rest))
+    if len(quoted) > 1:
+        return None
+    if quoted:
+        command = next(g for g in quoted[0].groups() if g)
+        rest = rest[:quoted[0].start()] + " @CMD@ " + rest[quoted[0].end():]
+    else:
+        verb = _RUN_VERB.search(rest)
+        if not verb:
+            return None
+        end = _RUN_END.search(rest, verb.end())
+        command = rest[verb.end():end.start()].strip() if end else ""
+        words = command.split()
+        if not words or "@PANE@" in command or not re.fullmatch(r"[A-Za-z_/][\w./+-]*", words[0]) \
+                or not all(_SHELL_ARGUMENT.fullmatch(w) for w in words[1:]):
+            return None
+        rest = rest[:verb.end()] + " @CMD@ " + rest[end.start():]
+    if not _RUN_VERB.search(rest.replace("@CMD@", "x")) and not re.search(r"\b(?:type|run|enter|execute)\b", rest, re.I):
+        return None
+    left = [w for w in re.findall(r"[A-Za-z@][\w@']*", rest) if w not in ("@PANE@", "@CMD@")]
+    if any(w.lower() not in _RUN_WORDS for w in left):
+        return None
+    words_found = {"id": pane} if found.get("id") else {"t": pane}
+    args = {"pane": pane, "command": command}
+    return [{"name": "run_in_pane", "arguments": args}], \
+        f"run {_quote(command)} in {_pane_words(words_found, pane)}"
 
 
 def calls(request: str) -> list | None:

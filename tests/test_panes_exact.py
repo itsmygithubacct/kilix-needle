@@ -90,6 +90,41 @@ class OpenPaneParts(unittest.TestCase):
                 self.assertIsNone(panes_exact.admitted(request))
 
 
+class TypingParts(unittest.TestCase):
+    """A command typed into a titled pane, however an agent words it (luna-full A/B)."""
+
+    LONG = "/tmp/bench-work/some/very/long/path/that/agents/send/verbatim/shard2/marker-a1b2c3"
+
+    def test_each_is_read_as_run_in_the_pane(self):
+        for request in (
+                f"In pane titled build-box, type /bin/touch {self.LONG} and press Enter.",
+                f"In the pane titled build-box in this tab, type `touch {self.LONG}` and press Enter. Then stop.",
+                f"Type `touch {self.LONG}` and press Enter in the pane titled `build-box` in this tab.",
+                f"In the pane titled build-box, type and run this command: touch {self.LONG}",
+                f"In the pane titled build-box in this tab, type exactly: touch {self.LONG} then press Enter. "
+                "Do not do anything else.",
+                f"Type and run touch {self.LONG} in the shell prompt of the pane titled build-box in this tab.",
+                f"type the command touch {self.LONG} and press Enter in the pane titled build-box",
+                f"type command `touch {self.LONG}` into pane titled build-box and press Enter"):
+            with self.subTest(request=request):
+                calls, _ = panes_exact.admitted(request)
+                self.assertEqual(calls[0]["name"], "run_in_pane")
+                self.assertEqual(calls[0]["arguments"]["pane"], "build-box")
+                self.assertTrue(calls[0]["arguments"]["command"].endswith(self.LONG))
+
+    def test_anything_more_is_left_to_the_model(self):
+        for request in ("In the pane titled x, type touch /tmp/a and press Enter if it is idle",
+                        "type touch /tmp/a in the pane titled a and in the pane titled b",
+                        "In the pane titled x, type rm -rf / and press Enter. Do not press Enter.",
+                        "In the pane titled x type `ls` and `pwd`",
+                        "type touch /tmp/a then wait 5 seconds in the pane titled x",
+                        "In the pane titled x, type ls later",
+                        "run touch /tmp/a in the pane titled x unless it is busy",
+                        "In the pane titled x, do not type ls"):
+            with self.subTest(request=request):
+                self.assertIsNone(panes_exact.admitted(request))
+
+
 class Route(unittest.TestCase):
     def setUp(self):
         os.environ["KITTY_WINDOW_ID"] = "300"
