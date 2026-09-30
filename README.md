@@ -44,6 +44,39 @@ omp. It is idempotent: `--undo` reverses it, edited files are backed up, and
 a TOML or JSON edit that would not parse is not written. `--only NAME,...`
 limits it to some surfaces.
 
+The desktop's **Enable Kilix Workflows** integration uses a separate model
+interface:
+
+```sh
+kilix-needle workflows status --json   # read-only; exit 0 ready, 1 needs attention
+kilix-needle workflows setup          # interactive licence acceptance/acquisition
+```
+
+Kilix supplies `KILIX_CONTENT_ROOT`; a standalone call may pass `--root` with
+an absolute Content root. Status emits at most 16 KiB of JSON with schema
+`kilix.workflows/v1`, `ready`, `status` (`ready` or `not-ready`), `detail`,
+`required_assets`, `assets`, `models`, and `errors`. Each asset reports `id`,
+`version`, `path`, `state` (`ready`, `missing`, `corrupt`, `agreement-required`,
+or `unavailable`), and `error`. Model rows report `kind`, `job`, `state`, and
+`error`. Readiness verifies the current catalog, shared licence receipts and
+all installed member bytes; it starts no engine and writes nothing.
+
+The base `needle2` asset is required. A selected panes/agents tuned model also
+needs `needle2-runtime` unless an explicitly configured pinned library is
+verified. Configured system profiles verify their own managed weights and
+library. Training assets are not required. Grammar and structured actions
+remain usable without models. Readiness describes verified files and licence
+coverage; it does not measure inference or restore model context.
+
+Setup acquires only missing current assets through Content's typed licence
+flow. An exact current receipt is reused on retry, and a nonblocking lock per
+Content root prevents overlapping setup sessions. Setup verifies readiness
+again before succeeding. It never trains, promotes selections, downloads
+custom weights, or replaces a corrupt selected asset: remove/repair that asset
+explicitly before retrying. Invalid custom model selections/profiles need
+explicit repair. `KILIX_NEEDLE_ENGINE` overrides are unsupported by this desktop
+interface and must be unset. There is no unattended acceptance flag.
+
 ## File search
 
 `kilix-needle files` adds scoped, read-only filename and text search, large/recent

@@ -9,7 +9,7 @@ all:
 		{ echo "third_party/kilix-content is missing: run git submodule update --init"; exit 1; }
 	@test -f third_party/kilix-tui-utils/src/kilix_rollout/records.py || \
 		{ echo "third_party/kilix-tui-utils is missing: run git submodule update --init"; exit 1; }
-	@$(PYTHON) -B -c 'import needle_cli, mcp_server, tuning' && echo "kilix-needle: ready"
+	@$(PYTHON) -B -c 'import needle_cli, mcp_server, tuning, workflows' && echo "kilix-needle: ready"
 
 test:
 	$(PYTHON) -B -m unittest discover -s tests -v

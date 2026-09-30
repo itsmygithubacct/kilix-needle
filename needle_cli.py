@@ -803,6 +803,9 @@ def _render_system_suggestion(plan: dict) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["workflows"]:
+        from workflows import main as workflows_main
+        return workflows_main(argv[1:])
     if argv[:1] == ["action"]:
         from action_cli import main as action_main
         return action_main(argv[1:])
