@@ -35,6 +35,7 @@ request says in a directory position (a path, "here", or a name, optionally
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import lru_cache
 import bisect
 import re
 import unicodedata
@@ -366,6 +367,10 @@ class _Reader:
         self.n = len(request)
         self.polite = False
         self.dead = set()               # (pos, state) where the rest has no reading
+        # Backtracking can revisit identical payload text at different spans.
+        # Its checks depend only on the text and marker, not the actions.
+        # Keep the cache bounded and local to this request.
+        self.payload_ok = lru_cache(maxsize=1024)(_payload_ok)
         # Where, once for the whole request, a session clause (a wait, a
         # condition, a message or launch to a session) or a timed wait starts
         # at a word, and where a wait or condition on a session starts: a
@@ -479,7 +484,7 @@ class _Reader:
         for sep in _PAYLOAD_END.finditer(self.low, start):
             text = Payload(self.org[start:sep.start()])
             if strict and not _SEQUENCE.fullmatch(sep[0]) and not _WAIT_OR_WHEN.match(
-                    self.low, sep.end()) or not _payload_ok(text, weak, tell and not strict):
+                    self.low, sep.end()) or not self.payload_ok(text, weak, tell and not strict):
                 continue
             if _SUBORDINATE.search(_lower(text.text)):
                 break
@@ -499,7 +504,7 @@ class _Reader:
         # (KN-R14-71).
         if _within(self.wait_at, start, end):
             return None
-        return acts + (make(text),) if _payload_ok(text, weak, tell and not strict) else None
+        return acts + (make(text),) if self.payload_ok(text, weak, tell and not strict) else None
 
     def launch(self, pos, acts):
         front = None
