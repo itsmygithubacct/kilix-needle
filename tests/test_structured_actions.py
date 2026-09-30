@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -37,6 +38,55 @@ def receipt(req, status=None):
 
 
 class Adapters(unittest.TestCase):
+    def test_actions_menu_dispatches_only_selected_tools_without_loading_model(self):
+        factory = mock.Mock(side_effect=AssertionError("model loaded"))
+        server = mcp_server.Server(factory, tools="actions")
+        full = mcp_server.Server(factory)
+        listed = server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+        names = [tool["name"] for tool in listed["result"]["tools"]]
+        self.assertEqual(names, ["kilix_action_plan", "kilix_action_act", "kilix_action_status"])
+        self.assertEqual(len(full.handle({"id": 2, "method": "tools/list"})["result"]["tools"]), 17)
+        for tool in mcp_server.TOOL_LIST:
+            if tool["name"] in names:
+                continue
+            result = server.handle({"id": 3, "method": "tools/call",
+                                    "params": {"name": tool["name"], "arguments": {"request": "split right"}}})
+            self.assertEqual(result["error"]["code"], -32602)
+        with mock.patch("action_backend.dispatch", side_effect=lambda req: receipt(req)) as dispatch:
+            denied = server.call_tool("kilix_action_act", {"request": request()})
+            self.assertTrue(denied["isError"])
+            dispatch.assert_not_called()
+            accepted = server.call_tool("kilix_action_act", {"request": request(), "confirm_risky": True})
+            self.assertTrue(accepted["structuredContent"]["delivery_verified"])
+            dispatch.assert_called_once()
+        factory.assert_not_called()
+        self.assertEqual(server._runtimes, {})
+
+    def test_actions_selection_round_trips_through_stdio_cli(self):
+        messages = [{"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+                    {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                     "params": {"name": "kilix_act", "arguments": {"request": "split right"}}}]
+        done = subprocess.run([sys.executable, "-B", str(Path(needle_cli.__file__)), "mcp", "--tools", "actions"],
+                              input="".join(json.dumps(m) + "\n" for m in messages),
+                              capture_output=True, text=True, timeout=10)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        replies = [json.loads(line) for line in done.stdout.splitlines()]
+        self.assertEqual(len(replies[0]["result"]["tools"]), 3)
+        self.assertEqual(replies[1]["error"]["code"], -32602)
+        with self.assertRaises(ValueError):
+            mcp_server.Server(mock.Mock(), tools="action")
+
+    def test_empty_stdin_and_millisecond_timeout_never_dispatch(self):
+        for raw in ("", " \n", json.dumps({**request(), "timeout": 30000})):
+            with mock.patch("sys.stdin", io.StringIO(raw)), \
+                    mock.patch("sys.stdout", new_callable=io.StringIO) as output, \
+                    mock.patch("action_backend.dispatch") as dispatch:
+                self.assertEqual(needle_cli.main(["action", "--yes", "--request-json", "-"]), 1)
+            result = json.loads(output.getvalue())
+            self.assertEqual(result["status"], "blocked")
+            self.assertIn("seconds" if raw.strip() else "pipe JSON", result["error"])
+            dispatch.assert_not_called()
+
     def test_cli_mcp_parity_and_no_engine_or_asset_loading(self):
         server = mcp_server.Server(mock.Mock(side_effect=AssertionError("no model")))
         for operation in backend.OPERATIONS:

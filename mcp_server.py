@@ -1,6 +1,9 @@
 """kilix-needle as an MCP tool server over stdio, for agent harnesses.
 
-    kilix-needle mcp [--engine FILE] [--root DIR]
+    kilix-needle mcp [--tools all|actions] [--engine FILE] [--root DIR]
+
+--tools actions lists and accepts only kilix_action_plan, kilix_action_act and
+kilix_action_status, without loading a model. The default all keeps every tool.
 
 Two tools per job, so a harness's own approval setting can tell them apart:
 
@@ -214,8 +217,8 @@ for _action in ("plan", "act", "status"):
     TOOL_LIST.append({
         "name": "kilix_action_" + _action,
         "description": {"plan": "Preview a structured action; no model, no mutation.",
-                        "act": "Execute pane.open, agent.launch or agent.deliver with exact identities and consent. No model. Receipt verifies creation/delivery, never acknowledgment/completion.",
-                        "status": "Read a prior operation receipt by ID and exact identities; never resubmit."}[_action],
+                        "act": "Execute pane.open, agent.launch or agent.deliver with exact identities and consent. Call directly; plan is optional. No model. Receipt verifies creation/delivery, never acknowledgment/completion.",
+                        "status": "Recover a missing or uncertain receipt by ID and exact identities; never resubmit. Skip routine preflight and follow-up after a verified receipt."}[_action],
         "annotations": {"readOnlyHint": _action != "act", "destructiveHint": False},
         "inputSchema": {"type": "object", "properties": _properties,
                         "required": ["request"], "additionalProperties": False}})
@@ -253,9 +256,15 @@ class _LazyEngine:
 
 
 class Server:
-    def __init__(self, runtime_factory):
+    def __init__(self, runtime_factory, *, tools="all"):
+        if tools not in ("all", "actions"):
+            raise ValueError("tools must be all or actions")
         self._runtime_factory = runtime_factory
         self._runtimes = {}
+        action_names = ("kilix_action_plan", "kilix_action_act", "kilix_action_status")
+        self._tools = [tool for tool in TOOL_LIST
+                       if tools == "all" or tool["name"] in action_names]
+        self._tool_names = frozenset(tool["name"] for tool in self._tools)
 
     def _ensure_engine(self, job: str = "panes"):
         if job not in self._runtimes:
@@ -271,6 +280,8 @@ class Server:
             runtime.close()
 
     def call_tool(self, name: str, arguments: dict) -> dict:
+        if not isinstance(name, str) or name not in self._tool_names:
+            raise ValueError("unknown tool in selected tool set")
         if name in ("kilix_action_plan", "kilix_action_act", "kilix_action_status"):
             record = action_cli.mcp(arguments, plan=name.endswith("_plan"), status=name.endswith("_status"))
             return _result(record, action_cli.action_backend.exit_status(record) != 0)
@@ -370,7 +381,7 @@ class Server:
             elif method == "ping":
                 result = {}
             elif method == "tools/list":
-                result = {"tools": TOOL_LIST}
+                result = {"tools": self._tools}
             elif method == "tools/call":
                 params = message.get("params") or {}
                 result = self.call_tool(params.get("name"), params.get("arguments") or {})
@@ -383,8 +394,8 @@ class Server:
         return {"jsonrpc": "2.0", "id": ident, "result": result}
 
 
-def serve(runtime_factory, stdin=sys.stdin, stdout=sys.stdout) -> int:
-    server = Server(runtime_factory)
+def serve(runtime_factory, stdin=sys.stdin, stdout=sys.stdout, *, tools="all") -> int:
+    server = Server(runtime_factory, tools=tools)
     try:
         for line in stdin:
             if not line.strip():

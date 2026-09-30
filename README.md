@@ -73,11 +73,14 @@ See [the tmux guide](docs/tmux.md) for forms, discovery and limits.
 ## Structured actions
 
 Scripts and MCP callers can bypass language parsing with
-`kilix-needle action --yes --request-json -`. It shares Kilix's
+`kilix-needle action --yes --request-json - < action.json`. It shares Kilix's
 `kilix.actions/v1` controller for `pane.open`, `agent.launch`, `agent.deliver`,
 and read-only `operation.status`. Every request names its operation ID and exact
 source/target pane and broker identities. No model is loaded or installed.
 MCP offers `kilix_action_plan`, `kilix_action_act`, and `kilix_action_status`.
+Use `kilix-needle mcp --tools actions` to expose only these three tools;
+the default `--tools all` retains the full menu. Optional `timeout` values are
+seconds (1–60, default 15). Receipt status is for missing or uncertain results.
 Receipts explicitly separate verified creation or delivery from unverified
 agent startup, acknowledgment, and completion. See [canonical JSON requests
 and consent rules](docs/actions.md).

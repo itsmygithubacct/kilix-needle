@@ -10,12 +10,17 @@ Obtain pane IDs and broker identities from the Kilix pane snapshot. `source`
 must match the inherited caller. The controller rechecks both identities before
 each side effect and refuses missing, stale, or ambiguous identities.
 
-Save this as `action.json`, substituting the inspected identities and an existing
-absolute directory:
+Pass the JSON in the same invocation, substituting the inspected identities and
+an existing absolute directory:
 
-```json
+```sh
+kilix-needle action --yes --request-json - <<'JSON'
 {"schema":"kilix.actions/v1","operation_id":"build-001","operation":"pane.open","source":{"pane_id":1,"broker":"aaaaaaaaaaaaaaaa"},"target":{"pane_id":2,"broker":"bbbbbbbbbbbbbbbb"},"params":{"argv":["/bin/sh"],"cwd":"/abs/project","title":"build","placement":"split","direction":"right","bias":50}}
+JSON
 ```
+
+Or save the JSON as `action.json` and redirect it. A preview is optional; an
+authorized action performs the same checks directly:
 
 ```sh
 kilix-needle action --dry-run --request-json - < action.json
@@ -44,7 +49,11 @@ new operation ID, `operation: "agent.deliver"`, and:
 
 `mode: "defer"` queues the message when supported. Text including its operation
 ID marker must fit the controller's 900-byte wire limit. Unknown fields are
-refused. Requests are limited to 16 KiB; `timeout` is optional, 1–60 seconds.
+refused. Requests are limited to 16 KiB. `timeout` is optional and measured in
+**seconds**, from 1 to 60, default 15. Omit it for routine calls or use
+`"timeout": 15`; millisecond values such as `15000` are invalid. Empty stdin is
+refused: `--request-json -` needs a pipe, a quoted here-document, or file
+redirection in the same invocation.
 CLI always prints one compact JSON receipt. Mutations require `--yes` or
 interactive consent; stdin JSON requires `--yes` because stdin cannot also carry
 consent. `--agent` never prompts.
@@ -55,12 +64,27 @@ To inspect `build-001`, keep its exact source/target, change `operation` to
 an operation ID with the identical mutation returns its receipt with
 `duplicate: true`; conflicting reuse is refused. After uncertainty, inspect the
 existing ID before deciding what to do next.
+Skip routine status preflight for a fresh operation and another lookup after a
+verified receipt. Keep that receipt and operation ID for recovery.
 
 MCP exposes `kilix_action_plan`, `kilix_action_act`, and `kilix_action_status`.
 Each accepts `{"request": REQUEST_OBJECT}`. Act additionally requires
 `"confirm_risky": true` to authorize mutation; plan/act accept mutation
 operations, and status accepts `operation.status` only. Both MCP result forms
 contain the same compact receipt as CLI.
+
+For an agent using only structured actions, start the server with:
+
+```sh
+kilix-needle mcp --tools actions
+```
+
+This mode lists and accepts only the three `kilix_action_*` tools. Requests for
+other tools fail before dispatch or model loading. `--tools all` is the default
+and retains every existing tool. Each server keeps its own selection; consent,
+identity checks and receipt behavior are identical in both modes. Configure the
+client's server arguments as `["mcp", "--tools", "actions"]` to opt in. The
+selection is a tool surface, not an operating-system sandbox.
 
 `planned` verifies identities without mutation. `created` verifies a new pane
 and includes its exact identity in `evidence.pane`. `submitted` and `deferred`
@@ -70,7 +94,8 @@ operation has not reached mutation intent; `uncertain` means mutation may have
 begun or its outcome could not be verified. `blocked` and `not_found` also carry
 no completion claim. These four statuses return a nonzero CLI status, and MCP
 marks them as errors. The structured route has contract tests and isolated
-integration checks; no token savings or paid-model benchmark is claimed.
+integration checks. Token and latency savings depend on the client workflow;
+measure them for the selected tool menu.
 
 Discovery uses `KILIX_ACTION_MODULE_ROOT` when explicitly set to an absolute
 Kilix config directory. Otherwise it uses `KILIX_NEEDLE_KILIX` (a source directory

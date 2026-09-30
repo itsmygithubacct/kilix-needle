@@ -7,7 +7,9 @@
 The JSON schema is kilix.actions/v1. A mutation needs --yes or interactive
 consent; operation.status is read-only and needs no consent. Reuse an operation
 ID to query its receipt; submission never proves agent acknowledgment or task
-completion. See docs/actions.md for complete canonical requests.
+completion. timeout is in seconds (1–60, default 15); omit it for routine calls.
+With --request-json -, pipe or redirect JSON in the same invocation.
+See docs/actions.md for complete canonical requests.
 """
 from __future__ import annotations
 
@@ -49,7 +51,8 @@ def request_schema(*, status=False) -> dict:
         "source": IDENTITY_SCHEMA, "target": IDENTITY_SCHEMA,
         "params": {"type": "object", "properties": {} if status else PARAM_PROPERTIES,
                    "additionalProperties": False},
-        "timeout": {"type": "number", "minimum": 1, "maximum": 60},
+        "timeout": {"type": "number", "minimum": 1, "maximum": 60, "default": 15,
+                    "description": "Seconds, not milliseconds. Omit to use 15 seconds."},
         "dry_run": {"type": "boolean", "default": False}},
         "required": ["schema", "operation_id", "operation", "source", "target", "params"],
         "additionalProperties": False}
@@ -121,6 +124,8 @@ def main(argv=None) -> int:
         raw = sys.stdin.read(action_backend.MAX_REQUEST + 1) if args.request_json == "-" else args.request_json
         if len(raw.encode()) > action_backend.MAX_REQUEST:
             raise ValueError("action request exceeds 16384 bytes")
+        if not raw.strip():
+            raise ValueError("empty request; pipe JSON or redirect a file into --request-json - in the same invocation")
         request = json.loads(raw, object_pairs_hook=action_backend.unique_object)
         receipt = run(request, dry_run=args.dry_run, assume_yes=args.yes, agent=args.agent, confirm=confirm)
     except (ValueError, UnicodeError) as exc:

@@ -879,10 +879,12 @@ def main(argv: list[str] | None = None) -> int:
         parser = argparse.ArgumentParser(prog="kilix-needle mcp",
                                          description=mcp_server.__doc__,
                                          formatter_class=argparse.RawDescriptionHelpFormatter)
+        parser.add_argument("--tools", choices=("all", "actions"), default="all",
+                            help="tool menu and dispatch selection (default: all)")
         parser.add_argument("--engine", metavar="FILE")
         parser.add_argument("--root")
         args = parser.parse_args(argv[1:])
-        return mcp_server.serve(lambda job=jobs.DEFAULT: open_runtime(args, job=job))
+        return mcp_server.serve(lambda job=jobs.DEFAULT: open_runtime(args, job=job), tools=args.tools)
 
     job = jobs.DEFAULT
     if argv[:1] == ["apps"]:
