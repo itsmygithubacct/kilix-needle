@@ -334,7 +334,7 @@ def _hint(job: str, request: str, result: dict) -> str | None:
             named = re.search(r"\bpane\s+(?:titled|named|called)\s+(\"[^\"]+\"|'[^']+'|[\w.+@:-]+)", request, re.I)
             pane = f"the pane titled {named.group(1)}" if named else "the logs pane"
             return (f"this job acts on panes and does not report them (pane ids and titles: "
-                    f"`kilix panes list`); accepted forms: go to {pane}  |  "
+                    f"`kilix pane list`); accepted forms: go to {pane}  |  "
                     f"close {pane}  |  run 'make test' in {pane}  |  split right and run htop")
         return None
     return f"accepted forms: {examples}" if examples else None
