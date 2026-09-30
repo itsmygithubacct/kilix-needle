@@ -205,6 +205,22 @@ for _operation in ("plan", "act"):
                         "required": ["request", "socket"], "additionalProperties": False}})
 
 
+import action_cli
+
+for _action in ("plan", "act", "status"):
+    _properties = {"request": action_cli.request_schema(status=_action == "status")}
+    if _action == "act":
+        _properties["confirm_risky"] = {"type": "boolean", "default": False}
+    TOOL_LIST.append({
+        "name": "kilix_action_" + _action,
+        "description": {"plan": "Preview a structured action; no model, no mutation.",
+                        "act": "Execute pane.open, agent.launch or agent.deliver with exact identities and consent. No model. Receipt verifies creation/delivery, never acknowledgment/completion.",
+                        "status": "Read a prior operation receipt by ID and exact identities; never resubmit."}[_action],
+        "annotations": {"readOnlyHint": _action != "act", "destructiveHint": False},
+        "inputSchema": {"type": "object", "properties": _properties,
+                        "required": ["request"], "additionalProperties": False}})
+
+
 def _result(record, is_error: bool, request=None) -> dict:
     """One record, sent once as compact text and once structured.
 
@@ -255,6 +271,9 @@ class Server:
             runtime.close()
 
     def call_tool(self, name: str, arguments: dict) -> dict:
+        if name in ("kilix_action_plan", "kilix_action_act", "kilix_action_status"):
+            record = action_cli.mcp(arguments, plan=name.endswith("_plan"), status=name.endswith("_status"))
+            return _result(record, action_cli.action_backend.exit_status(record) != 0)
         if name in ("kilix_tmux_plan", "kilix_tmux_act"):
             import tmux_cli
             record = tmux_cli.mcp(arguments, plan=name.endswith("_plan"))

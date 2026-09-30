@@ -70,6 +70,18 @@ reported as unknown. Input and close require `--yes` or interactive consent.
 MCP offers `kilix_tmux_plan` and `kilix_tmux_act`, both requiring `socket`.
 See [the tmux guide](docs/tmux.md) for forms, discovery and limits.
 
+## Structured actions
+
+Scripts and MCP callers can bypass language parsing with
+`kilix-needle action --yes --request-json -`. It shares Kilix's
+`kilix.actions/v1` controller for `pane.open`, `agent.launch`, `agent.deliver`,
+and read-only `operation.status`. Every request names its operation ID and exact
+source/target pane and broker identities. No model is loaded or installed.
+MCP offers `kilix_action_plan`, `kilix_action_act`, and `kilix_action_status`.
+Receipts explicitly separate verified creation or delivery from unverified
+agent startup, acknowledgment, and completion. See [canonical JSON requests
+and consent rules](docs/actions.md).
+
 ## What it can do
 
 | Request | Action | Runs |

@@ -67,7 +67,8 @@ class Protocol(unittest.TestCase):
                          ["kilix_plan", "kilix_act", "kilix_apps_plan", "kilix_apps_act",
                           "kilix_agents_plan", "kilix_agents_act", "kilix_system_plan",
                           "kilix_system_read", "kilix_system_suggest", "kilix_logs_read",
-                          "kilix_files_plan", "kilix_files_read", "kilix_tmux_plan", "kilix_tmux_act"])
+                          "kilix_files_plan", "kilix_files_read", "kilix_tmux_plan", "kilix_tmux_act",
+                          "kilix_action_plan", "kilix_action_act", "kilix_action_status"])
         self.assertEqual(replies[2]["error"]["code"], -32601)
         self.assertEqual(replies[3]["error"]["code"], -32700)   # the "not json" line
         self.assertEqual(len(replies), 4)                       # the notification got no reply
@@ -156,10 +157,12 @@ class TokenCost(unittest.TestCase):
     def test_tool_list_stays_small(self):
         replies, _ = converse([{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}])
         tools = replies[0]["result"]["tools"]
-        existing = [t for t in tools if not t["name"].startswith("kilix_tmux_")]
+        existing = [t for t in tools if not t["name"].startswith(("kilix_tmux_", "kilix_action_"))]
         tmux = [t for t in tools if t["name"].startswith("kilix_tmux_")]
+        actions = [t for t in tools if t["name"].startswith("kilix_action_")]
         self.assertLessEqual(len(json.dumps(existing)), 6800)
         self.assertLessEqual(len(json.dumps(tmux)), 1100)
+        self.assertLessEqual(len(json.dumps(actions)), 10000)
 
         def described(node):
             if isinstance(node, dict):
