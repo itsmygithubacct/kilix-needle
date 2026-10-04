@@ -7,3 +7,6 @@
 [submodule "third_party/kilix-tui-utils"]
 	path = third_party/kilix-tui-utils
 	url = https://github.com/itsmygithubacct/kilix-tui-utils.git
+[submodule "third_party/kilix-transcript-clean"]
+	path = third_party/kilix-transcript-clean
+	url = https://github.com/itsmygithubacct/kilix-transcript-clean.git

@@ -9,6 +9,7 @@ import os
 import select
 import stat
 import subprocess
+import sys
 import time
 import tempfile
 from .normalize import stable_id
@@ -34,6 +35,37 @@ def _readers():
         return module.adapt_record
     except (ImportError, OSError, AttributeError) as exc:
         raise SourceError("adapter_unavailable", "pinned kilix_rollout.records is unavailable") from exc
+
+
+_REPLAY_MODULE = "_needle_pinned_transcript_clean"
+
+
+def _replayer():
+    """Load the pinned screen replay by path, or None when it is not checked out.
+
+    A raw pane transcript is the PTY output of whatever ran in the pane. A
+    full-screen program redraws in place, so its text only exists once the
+    screen is replayed; kilix-transcript-clean does that and returns the lines
+    in reading order.
+    """
+    loaded = sys.modules.get(_REPLAY_MODULE)
+    if loaded is not None:
+        return loaded.clean_bytes
+    package = (Path(__file__).resolve().parents[1] / "third_party" / "kilix-transcript-clean"
+               / "src" / "kilix_transcript_clean")
+    if not (package / "__init__.py").is_file():
+        return None
+    try:
+        spec = importlib.util.spec_from_file_location(
+            _REPLAY_MODULE, package / "__init__.py", submodule_search_locations=[str(package)])
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[_REPLAY_MODULE] = module
+        spec.loader.exec_module(module)
+        return module.clean_bytes
+    except (ImportError, OSError, AttributeError, SyntaxError):
+        for name in [key for key in sys.modules if key.split(".")[0] == _REPLAY_MODULE]:
+            del sys.modules[name]
+        return None
 
 
 def _open_bound(path: str, binding: dict) -> tuple[int, int]:
@@ -208,9 +240,12 @@ def _read_source_once(path: str, provider: str, *, max_bytes: int = DEFAULT_MAX_
                                       "message": "source byte limit reached"})
             errors.append({"code": "byte_limit", "message": "source byte limit reached"})
         def add_record(item, start, end, sequence, origin):
+            # Replayed lines all span the whole snapshot, so their position in
+            # the replay is what tells them apart.
+            replay = (origin["replay"]["line"],) if "replay" in origin else ()
             records.append({"schema": RECORD_SCHEMA, "source_id": source_id,
                 "session_id": source["session_id"], "generation": generation,
-                "record_id": stable_id("rec-", generation, start, origin.get("json_pointer", "")),
+                "record_id": stable_id("rec-", generation, start, origin.get("json_pointer", ""), *replay),
                 "sequence": sequence, "timestamp": item["timestamp"],
                 "timestamp_basis": item["timestamp_basis"], "role": item["role"],
                 "channel": item["channel"], "turn_id": item["turn_id"],
@@ -225,6 +260,35 @@ def _read_source_once(path: str, provider: str, *, max_bytes: int = DEFAULT_MAX_
                 lines = []
                 gaps = [{"code": "source_timeout", "byte_start": 0, "byte_end": len(data),
                          "message": "normalization exceeded deadline"}]
+            clean = (_replayer() if any(gap["code"] == "terminal_controls" for gap in gaps)
+                     else None)
+            if clean is not None:
+                # Terminal controls mean cursor redraws: replay the screen and
+                # export what it showed. A screen line cannot be traced to one
+                # byte range, so each record spans the snapshot and carries
+                # its replay position instead.
+                transcript = clean(data)
+                lines, gaps = [], []
+                if time.monotonic() > deadline:
+                    gaps = [{"code": "source_timeout", "byte_start": 0, "byte_end": len(data),
+                             "message": "normalization exceeded deadline"}]
+                else:
+                    source["replay"] = {
+                        "tool": "kilix-transcript-clean",
+                        "rotated": bool(transcript.source.get("rotated")),
+                        "size_recorded": bool(transcript.source.get("size_recorded")),
+                        "programs": [section.provider for section in transcript.sections]}
+                    sequence = 0
+                    for section in transcript.sections:
+                        for text in section.lines:
+                            if not text.strip():
+                                continue
+                            add_record({"timestamp": None, "timestamp_basis": "unknown",
+                                        "role": "unknown", "channel": "message", "turn_id": None,
+                                        "tool_call_id": None, "text": text}, 0, len(data), sequence,
+                                       {"replay": {"line": sequence, "program": section.provider}})
+                            sequence += 1
+                    coverage["processed_bytes"] = len(data)
             for seq, (start, end, value) in enumerate(lines):
                 if time.monotonic() > deadline:
                     coverage["gaps"].append({"code": "source_timeout", "byte_start": start,

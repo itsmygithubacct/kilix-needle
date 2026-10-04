@@ -301,6 +301,17 @@ ambiguous selectors fail. `--file` requires an explicit provider: `claude`,
 `codex`, or `raw`. Zstandard archives additionally require `zstd`. The pinned
 `third_party/kilix-tui-utils` submodule supplies structured adapters.
 
+A raw pane recording that contains terminal controls is replayed on a virtual
+screen by the pinned `third_party/kilix-transcript-clean` submodule. Records
+are the lines that screen showed, in reading order, without the program's
+status lines and prompt boxes. This covers full-screen programs such as Grok,
+omp and the shell around them. A screen line cannot be traced to one byte
+range, so each replayed record spans the whole snapshot. Its `origin.replay`
+gives its line number and the program that drew it, and the source's `replay`
+says whether the recording's start was cut and whether it carried the pane
+size. Without the submodule, such a recording is reported as a
+`terminal_controls` gap, as before.
+
 Events cite exact Unicode spans in canonical records, which retain byte and
 JSON-pointer origins. The baseline extracts user requests/questions, assistant
 answer excerpts, and narrow test/error lines in structured tool output. An

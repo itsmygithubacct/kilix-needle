@@ -57,8 +57,35 @@ class SourceTests(unittest.TestCase):
         self.assertTrue(all(r["role"] == "unknown" and r["quality"] == "approximate" for r in out["records"]))
         self.path.write_bytes(b"old\rnew\n")
         out = read_source(str(self.path), "raw")
+        self.assertEqual([r["text"] for r in out["records"]], ["new"])
+        self.assertEqual(out["coverage"]["gaps"], [])
+        self.assertEqual(out["source"]["replay"]["tool"], "kilix-transcript-clean")
+        with patch("needle_logs.sources._replayer", return_value=None):
+            out = read_source(str(self.path), "raw")
         self.assertEqual(out["records"], [])
         self.assertEqual(out["coverage"]["gaps"][0]["code"], "terminal_controls")
+
+    def test_raw_full_screen_program_is_replayed(self):
+        # A program that redraws in place: each frame repaints the same rows,
+        # so only replaying the screen recovers what was shown, once each.
+        frames = []
+        for n in range(1, 6):
+            rows = "".join(f"\x1b[{i};1Hline {i}\x1b[K" for i in range(1, n + 1))
+            frames.append(f"\x1b[?2026h{rows}\x1b[{n + 2};1H\u280b working\x1b[K\x1b[?2026l")
+        data = ("\x1b_kilix-transcript;rows=10;cols=40\x1b\\\x1b[?1049h" + "".join(frames)
+                + "\x1b[?1049l$ done\r\n").encode()
+        self.path.write_bytes(data)
+        out = read_source(str(self.path), "raw")
+        texts = [r["text"] for r in out["records"]]
+        self.assertEqual(texts[:5], [f"line {i}" for i in range(1, 6)])
+        self.assertEqual(texts[-1], "$ done")
+        self.assertEqual(len({r["record_id"] for r in out["records"]}), len(texts))
+        self.assertEqual([r["origin"]["replay"]["line"] for r in out["records"]],
+                         list(range(len(texts))))
+        self.assertTrue(all(r["origin"]["byte_start"] == 0 and r["origin"]["byte_end"] == len(data)
+                            and r["quality"] == "approximate" for r in out["records"]))
+        self.assertTrue(out["source"]["replay"]["size_recorded"])
+        self.assertFalse(out["source"]["replay"]["rotated"])
 
     def test_invalid_utf8_is_a_gap(self):
         self.path.write_bytes(b"\xff\n")
@@ -197,10 +224,18 @@ class ReviewRegressionTests(unittest.TestCase):
         self.assertNotEqual(second["source"]["generation"], third["source"]["generation"])
 
     def test_raw_gaps_cover_unread_suffix(self):
-        for data in (b"good\n\xff\nlater\n", "good\n\u009bfake\nlater\n".encode()):
-            self.path.write_bytes(data)
+        data = b"good\n\xff\nlater\n"
+        self.path.write_bytes(data)
+        out = read_source(self.path, "raw")
+        self.assertEqual(out["coverage"]["gaps"][0]["byte_end"], len(data))
+        # Unicode terminal controls are replayed, and never reach the text.
+        data = "good\r\n\u009bfake\u202e\r\nlater\r\n".encode()
+        self.path.write_bytes(data)
+        out = read_source(self.path, "raw")
+        self.assertEqual([r["text"] for r in out["records"]], ["good", "fake", "later"])
+        with patch("needle_logs.sources._replayer", return_value=None):
             out = read_source(self.path, "raw")
-            self.assertEqual(out["coverage"]["gaps"][0]["byte_end"], len(data))
+        self.assertEqual(out["coverage"]["gaps"][0]["byte_end"], len(data))
 
     def test_plain_archive_is_rejected(self):
         path = self.path.with_suffix(".zst")
