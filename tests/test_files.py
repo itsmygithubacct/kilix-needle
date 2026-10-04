@@ -55,8 +55,9 @@ class Grammar(unittest.TestCase):
 
     def test_agent_wordings_of_a_name_search(self):
         # gpt-6-luna route benchmark: 1 of 9 file searches got through.
-        want = lambda scope: [job.Action('find_files', {'scope': scope, 'name': 'quartz-ledger-',
-                                                        'extension': '', 'modified': 'any'})]
+        want = lambda scope, prefix: [job.Action('find_files', {
+            'scope': scope, 'name': 'quartz-ledger-', 'extension': '', 'modified': 'any',
+            **({'name_match': 'prefix'} if prefix else {})})]
         for text, scope in (('Find files whose name starts with quartz-ledger- in /tmp/w', '/tmp/w'),
                             ('Find files anywhere under /tmp/w whose basename starts with "quartz-ledger-". '
                              'Return the full path(s) only.', '/tmp/w'),
@@ -65,14 +66,41 @@ class Grammar(unittest.TestCase):
                             ('find quartz-ledger-* files in this directory', 'here'),
                             ('search filename quartz-ledger- in here', 'here')):
             with self.subTest(text=text):
-                self.assertEqual(job.parse(text), want(scope))
+                self.assertEqual(job.parse(text), want(scope, not text.startswith('search filename')))
+
+    def test_prefix_proposals_cannot_broaden_to_substring(self):
+        text = 'find files whose name starts with "ledger-" in here'
+        calls = job.Baseline().complete(text)['function_calls']
+        self.assertEqual(calls[0]['arguments']['name_match'], 'prefix')
+        del calls[0]['arguments']['name_match']
+        self.assertIsInstance(job.interpret(text, calls)[0], Refusal)
+
+    def test_quoted_name_keeps_a_literal_asterisk(self):
+        self.assertEqual(job.parse('find files named "ledger-*" in here')[0].args['name'], 'ledger-*')
+
+    def test_name_search_rejects_a_second_scope_and_its_constraints(self):
+        for request in ('find files under /tmp/one whose name starts with ledger- in /tmp/two',
+                        'find files in /tmp/one named ledger in /tmp/one and delete them'):
+            with self.subTest(request=request):
+                with self.assertRaisesRegex(ValueError, 'one file scope'):
+                    job.parse(request)
+
+    def test_prefix_recovery_and_mcp_guidance_keep_the_matching_semantics(self):
+        with self.assertRaisesRegex(ValueError, 'find files starting with "ledger-" in here'):
+            job.parse('find files whose name starts with ledger-')
+        with self.assertRaisesRegex(ValueError, 'starting with "PREFIX"'):
+            job.parse('list visible regular files whose basename starts with ledger-')
+        for tool in mcp_server.TOOL_LIST:
+            if tool['name'] in ('kilix_files_plan', 'kilix_files_read'):
+                self.assertIn('starting with "PREFIX"', tool['description'])
+                self.assertIn('not a glob', tool['description'])
 
     def test_help_and_a_missing_scope_say_what_is_accepted(self):
         for text in ('files --help', 'help'):
             with self.subTest(text=text):
                 with self.assertRaisesRegex(ValueError, 'find files named "NAME" in SCOPE'):
                     job.parse(text)
-        with self.assertRaisesRegex(ValueError, 'find files named "quartz-ledger-" in here'):
+        with self.assertRaisesRegex(ValueError, 'find files starting with "quartz-ledger-" in here'):
             job.parse('find files named quartz-ledger-*')
         for text in ('find files named a*b in here', 'delete files named x in here',
                      'find files named x in here and delete them'):
@@ -109,6 +137,17 @@ class Collectors(unittest.TestCase):
         self.assertEqual([x['relative_path'] for x in out['results']],['report.pdf'])
         self.assertEqual(out['scope'],str(self.root));self.assertTrue(out['complete'])
         self.assertFalse(self.collect('find pdf files in here modified today')['results'])
+    def test_prefix_excludes_a_matching_substring_in_an_unrelated_name(self):
+        for name in ('ledger-real.cfg', 'copy-ledger-decoy.cfg', 'LEDGER-upper.cfg'):
+            (self.root/name).write_text('k=v\n')
+        for request in ('find files whose name starts with "ledger-" in here',
+                        'find ledger-* files in here'):
+            with self.subTest(request=request):
+                result = self.collect(request)
+                self.assertEqual({r['relative_path'] for r in result['results']},
+                                 {'ledger-real.cfg', 'LEDGER-upper.cfg'})
+        result = self.collect('find files named "ledger-" in here')
+        self.assertEqual(len(result['results']), 3)
     def test_literal_text_and_lines(self):
         out=self.collect('find text "PipeWire" in here')
         self.assertEqual(len(out['results']),1)

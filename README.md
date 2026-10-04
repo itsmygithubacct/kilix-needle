@@ -101,6 +101,9 @@ list/new/read/send/type/key/rename/close. `send` inserts quoted literal text;
 `type` inserts it and submits a separate Enter, with command completion
 reported as unknown. Input and close require `--yes` or interactive consent.
 MCP offers `kilix_tmux_plan` and `kilix_tmux_act`, both requiring `socket`.
+For literal input with mixed quotes, use `--request-json` on the CLI or a
+`request` object with `operation`, `target` and `text` in MCP. `send` adds no
+Enter; `type` submits. Existing confirmation and validation still apply.
 See [the tmux guide](docs/tmux.md) for forms, discovery and limits.
 
 ## Structured actions

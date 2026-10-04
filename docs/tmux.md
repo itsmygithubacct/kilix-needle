@@ -55,6 +55,32 @@ Enter Tab Escape BSpace Space Up Down Left Right Home End PageUp PageDown
 Delete C-c C-d C-u C-a C-e C-l
 ```
 
+For text containing every quote style, pass a structured literal request.
+The CLI accepts `--request-json JSON`, or `--request-json -` to read JSON from
+stdin. MCP accepts the same object in `request`:
+
+```json
+{"operation":"send","target":"%3","text":"literal ' \" ` $HOME ;"}
+```
+
+Use `send` to leave the text pending, `type` to add Enter. JSON decoding is
+the only decoding step; the text has the same size and control-character
+limits as the grammar. Confirmation, exact target resolution and dry-run
+behavior remain the same. Do not shell-interpolate literal text into a
+request. To submit an already pending line, use `press Enter in %3` without
+retyping the line.
+
+If the user specifically requests native tmux, `send-keys -l` still subjects
+arguments to tmux's command parser and can consume a trailing semicolon.
+Load the literal bytes from stdin using `load-buffer -b UNIQUE -`, then
+`paste-buffer -d -r -b UNIQUE -t PANE` on the same explicit `-S SOCKET`.
+Choose a fresh buffer name and remove only that buffer if the paste fails.
+Do not append a newline or Enter unless submission was requested.
+For a JSON-encoded payload, decode the original encoded string once with a
+JSON parser. Its escape backslashes are not literal input bytes. Before
+pasting, compare `save-buffer -b UNIQUE -` with the decoded payload; if the
+bytes differ, remove only the fresh buffer and report the mismatch.
+
 Send, type, key and close require interactive confirmation or `--yes`.
 `--agent` never prompts. Refusal cannot be overridden with confirmation.
 `--dry-run` validates and resolves the request without mutation; a read plan

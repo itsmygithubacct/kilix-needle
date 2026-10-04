@@ -73,9 +73,13 @@ def collect(query, *, cwd, home, limit=20, now=None):
     fields = {'find_files': {'scope', 'name', 'extension', 'modified'},
               'search_text': {'scope', 'text'}, 'list_files': {'scope', 'order'},
               'preview_file': {'scope', 'path'}}
+    def valid_fields(kind, args):
+        required = fields[kind]
+        allowed = required | ({'name_match'} if kind == 'find_files' else set())
+        return required <= set(args) <= allowed
     if (not isinstance(query, dict) or set(query) != {'kind', 'args'}
             or not isinstance(query['kind'], str) or query['kind'] not in fields
-            or not isinstance(query['args'], dict) or set(query['args']) != fields[query['kind']]
+            or not isinstance(query['args'], dict) or not valid_fields(query['kind'], query['args'])
             or any(not isinstance(v, str) or len(v.encode('utf-8')) > 4096 for v in query['args'].values())
             or type(limit) is not int or not 1 <= limit <= MAX_RESULTS):
         raise ValueError('invalid bounded file query')
@@ -88,7 +92,9 @@ def collect(query, *, cwd, home, limit=20, now=None):
     if k == 'search_text' and not a['text']:
         raise ValueError('text search requires a literal substring')
     if k == 'find_files' and (not re.fullmatch(r'[a-z0-9]*', a['extension']) or
-            not re.fullmatch(r'any|today|yesterday|last [1-9][0-9]? days', a['modified'])):
+            not re.fullmatch(r'any|today|yesterday|last [1-9][0-9]? days', a['modified']) or
+            a.get('name_match', 'contains') not in ('contains', 'prefix') or
+            (a.get('name_match') == 'prefix' and not a['name'])):
         raise ValueError('unsupported file filters')
     local_calendar = now is None
     started = time.monotonic(); now = now or dt.datetime.now().astimezone()
@@ -176,7 +182,11 @@ def collect(query, *, cwd, home, limit=20, now=None):
                                 continue
                             if not stat.S_ISREG(st.st_mode):skip('special');continue
                             if kind=='find_files':
-                                if args['name'].casefold() not in name.casefold():continue
+                                wanted = args['name'].casefold()
+                                found = name.casefold()
+                                if args.get('name_match') == 'prefix':
+                                    if not found.startswith(wanted):continue
+                                elif wanted not in found:continue
                                 if args['extension'] and Path(name).suffix.casefold()!='.'+args['extension']:continue
                                 if not lo<=st.st_mtime<hi:continue
                             if kind=='search_text':

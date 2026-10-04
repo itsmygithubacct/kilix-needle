@@ -29,8 +29,9 @@ there is no shell expansion, regular expression, or semantic/vector search.
 | Form | Meaning |
 |---|---|
 | `find files named "NAME" in SCOPE` | Case-insensitive filename substring |
+| `find files starting with "PREFIX" in SCOPE` | Case-insensitive filename prefix |
 | `find EXT files in SCOPE` | Case-insensitive final extension, e.g. `pdf`, `py` |
-| Either form followed by `modified today`, `modified yesterday`, or `modified last N days` | Modification-time filter; N is 1–99 |
+| Any filename form above followed by `modified today`, `modified yesterday`, or `modified last N days` | Modification-time filter; N is 1–99 |
 | `find files in SCOPE modified today` | Time filter without a name/type restriction |
 | `find text "TEXT" in SCOPE` | Case-sensitive literal content search |
 | `show largest files in SCOPE` | Largest first |
@@ -41,6 +42,16 @@ there is no shell expansion, regular expression, or semantic/vector search.
 `show large`, and `list newest` are also supported. Ambiguous recollections,
 compound commands, negations, deletion requests and unsupported filters are
 refused as a whole, rather than silently dropping part of the request.
+
+`whose name starts with` and a bare trailing-star form such as `ledger-*`
+select a prefix. A quoted name in the `named` form stays a literal substring,
+including any asterisk. Prefix queries do not match text in the middle of a name.
+
+A trailing `(visible regular files only)` or `(skip hidden entries and symlinks)`
+is accepted because these restrictions already apply. They can also be combined
+as `(visible regular files only, skip hidden entries and symlinks)`; `hidden`
+and `hidden files` are accepted in place of `hidden entries`. Other filters and
+additional instructions must still match the supported language.
 
 Every request states its scope: `here`/`this project`/`the current directory`,
 `Downloads`, `Documents`, `research`, `projects`, or an explicit absolute path,

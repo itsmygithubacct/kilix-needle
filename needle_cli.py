@@ -368,6 +368,9 @@ def _recorded(job: str, engine, request: str, options: Options, run, exact=None)
             # nothing from an error-marked or malformed reply runs (review KN-R18-04)
             result = {"request": request, "status": 1, "items": [],
                       "note": f"the engine's reply could not be used: {unusable}"}
+            hint = _hint(job, request, result)
+            if hint:
+                result["hint"] = hint
             # the caller sees the engine's words; the history keeps none of them
             # (review KN-R18-201)
             private = dict(result, note="the engine's reply could not be used")
@@ -500,6 +503,10 @@ def run_calls(request: str, calls: list, options: Options,
                                or not options.assume_yes
                                else f"needs a person's yes: the request is not a plain "
                                     f"instruction ({unplain})")
+            if (options.agent and not options.assume_yes and not hold and not broken
+                    and unplain is None and not step.fuzzy and not step.elsewhere and not own):
+                entry["hint"] = ("For an action the user explicitly authorized, retry with --yes "
+                                 "(MCP: confirm_risky=true). Otherwise ask the user first.")
             record["status"] = 1
             continue
         if step.types_into is not None:
@@ -996,7 +1003,15 @@ def main(argv: list[str] | None = None) -> int:
                     status = (_handle_system(args, line, modes) if job == "system" else
                               handle(engine, line, **modes))
     except (asset.AssetError, EngineError, LibEngineError) as error:
-        print(f"kilix-needle: {error}", file=sys.stderr)
+        hint = ("Exact commands still work without the model: split right; "
+                "kilix-needle agents 'start codex in /absolute/project'. "
+                "Use kilix-needle --help for job syntax; use kilix-needle workflows status "
+                "to inspect model readiness before setup.")
+        if args.json:
+            print(json.dumps({"request": " ".join(args.request), "job": job, "status": 2,
+                              "note": str(error), "hint": hint, "items": []}))
+        else:
+            print(f"kilix-needle: {error}\n{hint}", file=sys.stderr)
         return 2
     except KeyboardInterrupt:
         print("\nkilix-needle: interrupted", file=sys.stderr)

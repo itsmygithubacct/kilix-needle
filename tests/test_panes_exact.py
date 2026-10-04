@@ -100,6 +100,21 @@ class TypingParts(unittest.TestCase):
 
     LONG = "/tmp/bench-work/some/very/long/path/that/agents/send/verbatim/shard2/marker-a1b2c3"
 
+    def test_exact_commands_and_quoted_pane_names_preserve_the_full_path(self):
+        command = f"touch {self.LONG}"
+        requests = [
+            f'type the exact command `{command}` in the shell prompt of the pane titled "build-box" and press Enter',
+            f'In this tab, find the pane titled "build-box" at a shell prompt. Type {command} and press Enter in that pane.',
+            *(f'Type "{command}" and press Enter in pane {quote}build-box{quote}.' for quote in ('"', "'", '`')),
+        ]
+        for request in requests:
+            with self.subTest(request=request):
+                calls, _ = panes_exact.admitted(request)
+                self.assertEqual(calls, [{"name":"run_in_pane", "arguments":{"pane":"build-box", "command":command}}])
+        for suffix in (' if it is idle', ' but do not press Enter', ' and close tab 2'):
+            with self.subTest(suffix=suffix):
+                self.assertIsNone(panes_exact.admitted(requests[0]+suffix))
+
     def test_each_is_read_as_run_in_the_pane(self):
         for request in (
                 f"In pane titled build-box, type /bin/touch {self.LONG} and press Enter.",

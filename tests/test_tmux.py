@@ -83,6 +83,36 @@ class Grammar(unittest.TestCase):
 
 
 class Dispatch(unittest.TestCase):
+    def test_structured_literals_keep_consent_and_reject_ambiguous_requests(self):
+        payload = {'operation': 'send', 'target': '%9', 'text': ' café\t\'"`$HOME; '}
+        backend = mock.Mock(side_effect=lambda r: reply(r, target='%9', sent=len(r['text']), submitted=False))
+        self.assertEqual(tmux_cli.run(payload, socket='/tmp/s', agent=True, backend=backend)['status'], 1)
+        backend.assert_not_called()
+        with mock.patch('tmux_backend.dispatch', backend):
+            self.assertEqual(tmux_cli.mcp({'request': payload, 'socket': '/tmp/s', 'confirm_risky': True})['status'], 0)
+        self.assertEqual(backend.call_args.args[0]['text'], payload['text'])
+        backend.reset_mock()
+        for bad in (None, [], {**payload, 'extra': 1}, {**payload, 'operation': 'key'},
+                    {**payload, 'target': 'ambiguous*'}, {**payload, 'target': '%' + '1'*161},
+                    *({**payload, 'text': t} for t in ('', 'x'*65537, 'x\n', 'x\r', '\0', '\ud800'))):
+            with self.subTest(bad=str(bad)[:100]):
+                self.assertEqual(tmux_cli.run(bad, socket='/tmp/s', assume_yes=True, backend=backend)['status'], 2)
+        backend.assert_not_called()
+
+    def test_json_stdin_is_data_and_invalid_json_never_dispatches(self):
+        payload = {'operation': 'send', 'target': '%9', 'text': ' café\t\'"`$HOME; '}
+        backend = mock.Mock(side_effect=lambda r: reply(r, target='%9', sent=len(r['text']), submitted=False))
+        with mock.patch('tmux_backend.dispatch', backend), mock.patch('sys.stdin', io.StringIO(json.dumps(payload))), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(tmux_cli.main(['--socket', '/tmp/s', '--yes', '--json', '--request-json', '-']), 0)
+        self.assertEqual(backend.call_args.args[0]['text'], payload['text'])
+        self.assertEqual(json.loads(out.getvalue())['status'], 0)
+        backend.reset_mock()
+        for raw in ('[]', 'null', '{broken', json.dumps({**payload, 'text': 'x\n'})):
+            with mock.patch('tmux_backend.dispatch', backend), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(tmux_cli.main(['--socket', '/tmp/s', '--yes', '--json', '--request-json', raw]), 2)
+        backend.assert_not_called()
+
     def test_refusals_and_socket_validation_precede_all_backend_access(self):
         backend = mock.Mock(side_effect=AssertionError("backend must not run"))
         for request, socket in (("list sessions", None), ("list sessions", "relative"),
@@ -379,6 +409,46 @@ class PrivateIntegration(unittest.TestCase):
                         self.assertEqual(result["result"]["data"]["completion"], "unknown")
                     self.wait_file(receipts / "enter")
                     self.assertEqual((receipts / "enter").read_bytes(), b"\r")
+
+    def test_structured_and_file_literal_transport_all_quote_styles(self):
+        payload = ' café\t\'"`$HOME $(never_run) ;'
+        listener = self.root / 'raw_listener.py'
+        listener.write_text('import os,sys,tty\nfrom pathlib import Path\n'
+                            'tty.setraw(0)\nr=Path(sys.argv[1]); size=int(sys.argv[2])\n'
+                            '(r/"ready").touch()\ndata=b""\n'
+                            'while len(data)<size: data+=os.read(0,size-len(data))\n'
+                            '(r/"payload").write_bytes(data)\n'
+                            '(r/"enter").write_bytes(os.read(0,1))\n')
+        text_file = self.root / 'text'
+        text_file.write_text(payload, encoding='utf-8')
+        for mode in ('module', 'cli'):
+            with self.select(mode):
+                for route in ('json', 'mcp', 'file', 'stdin'):
+                    receipts = self.root / (mode + '-' + route)
+                    receipts.mkdir()
+                    name = mode + '_' + route
+                    self.tmux('new-session', '-d', '-s', name, sys.executable, str(listener),
+                              str(receipts), str(len(payload.encode())))
+                    self.wait_file(receipts / 'ready')
+                    request = {'operation': 'send', 'target': name, 'text': payload}
+                    if route == 'mcp':
+                        result = self.mcp(request, confirm=True)
+                        self.assertEqual(result['status'], 0)
+                    elif route == 'json':
+                        with mock.patch('sys.stdin', io.StringIO(json.dumps(request))), contextlib.redirect_stdout(io.StringIO()):
+                            self.assertEqual(needle_cli.main(['tmux', '--socket', self.socket, '--yes', '--request-json', '-']), 0)
+                    else:
+                        proc = subprocess.run([str(self.backend_root/'bin/kilix-tmux'), '--socket', self.socket,
+                                               '--json', 'send', name, '--text-file',
+                                               '-' if route == 'stdin' else str(text_file)],
+                                              input=payload, capture_output=True, text=True, timeout=5)
+                        self.assertEqual(proc.returncode, 0, proc.stderr + proc.stdout)
+                    self.wait_file(receipts / 'payload')
+                    self.assertEqual((receipts / 'payload').read_bytes(), payload.encode())
+                    self.assertFalse((receipts / 'enter').exists())
+                    self.mcp(f'press Enter in {name}', confirm=True)
+                    self.wait_file(receipts / 'enter')
+                    self.assertEqual((receipts / 'enter').read_bytes(), b'\r')
 
 
 if __name__ == "__main__":

@@ -18,14 +18,14 @@ import tmux_backend
 import tmux_job
 
 
-def run(request: str, *, socket: str, dry_run=False, assume_yes=False, agent=False, confirm=None,
+def run(request: str | dict, *, socket: str, dry_run=False, assume_yes=False, agent=False, confirm=None,
         backend=None) -> dict:
     record = {"request": request, "job": "tmux", "status": 2}
     try:
         if any(type(value) is not bool for value in (dry_run, assume_yes, agent)):
             raise ValueError("tmux dry_run, assume_yes and agent must be booleans")
         socket = tmux_job.socket_path(socket)
-        action = tmux_job.parse(request)
+        action = tmux_job.literal_request(request) if isinstance(request, dict) else tmux_job.parse(request)
     except ValueError as exc:
         record.update(note=str(exc), hint=tmux_job.USAGE)
         return record
@@ -56,7 +56,7 @@ def render(record: dict) -> str:
 def mcp(arguments, *, plan=False) -> dict:
     allowed = {"request", "socket"} | (set() if plan else {"confirm_risky"})
     if (not isinstance(arguments, dict) or set(arguments) - allowed
-            or not isinstance(arguments.get("request"), str)
+            or not isinstance(arguments.get("request"), (str, dict))
             or not isinstance(arguments.get("socket"), str)
             or type(arguments.get("confirm_risky", False)) is not bool):
         raise ValueError("tmux tools require request, explicit socket and optional act confirm_risky")
@@ -72,7 +72,8 @@ def main(argv=None) -> int:
     parser.add_argument("--yes", action="store_true", help="allow a plain send/type/key/close request")
     parser.add_argument("--agent", action="store_true", help="never prompt for confirmation")
     parser.add_argument("--json", action="store_true")
-    parser.add_argument("request", nargs="+", help=tmux_job.USAGE)
+    parser.add_argument("request", nargs="*", help=tmux_job.USAGE)
+    parser.add_argument("--request-json", help="literal send/type object, or - for JSON on stdin")
     args = parser.parse_args(argv)
 
     def confirm(question):
@@ -82,7 +83,21 @@ def main(argv=None) -> int:
         return sys.stdin.readline(16).strip().casefold() in ("y", "yes")
 
     try:
-        record = run(" ".join(args.request), socket=args.socket, dry_run=args.dry_run,
+        request = " ".join(args.request)
+        if args.request_json is not None:
+            if args.request:
+                parser.error("choose request text or --request-json, not both")
+            try:
+                limit = 12 * tmux_job.MAX_TEXT + 1024  # includes escaped Unicode pairs
+                raw = sys.stdin.read(limit + 1) if args.request_json == "-" else args.request_json
+                if len(raw) > limit:
+                    raise ValueError("literal JSON exceeds size limit")
+                request = tmux_job.literal_request(json.loads(raw))
+            except (ValueError, TypeError, UnicodeError) as error:
+                record = {"job": "tmux", "status": 2, "note": str(error)}
+                print(json.dumps(record) if args.json else render(record))
+                return 2
+        record = run(request, socket=args.socket, dry_run=args.dry_run,
                      assume_yes=args.yes, agent=args.agent, confirm=confirm)
         print(json.dumps(record, ensure_ascii=True) if args.json else render(record))
         return record["status"]

@@ -190,7 +190,7 @@ i i'm am you you're are we running working sitting in from and then with inside 
 
 
 _OPEN_SHELL_SENTENCE = re.compile(
-    r"[.;,]?\s*(?:and\s+)?(?:it\s+should\s+(?:run|start|open|have)|(?:then\s+)?(?:run|start|open)|with)\s+"
+    r"[.;,]?\s*(?:and\s+)?(?:it\s+should\s+(?:run|start|open|have)|(?:then\s+)?(?:run|start|open)|running|with)\s+"
     r"(?:a\s+|an\s+)?(?:new\s+|plain\s+|interactive\s+)?(?:shell|terminal|bash)"
     r"(?:\s+(?:there|(?:in|inside)\s+(?:it|the\s+new\s+pane|that\s+pane|the\s+pane)))?\s*[.!]?\s*$", re.I)
 _OPEN_STOP = re.compile(r"[.;,]?\s*(?:and\s+)?then\s+stop\s*[.!]?\s*$", re.I)
@@ -201,6 +201,8 @@ def _open_slots(text: str):
     for _ in range(3):
         text = _OPEN_STOP.sub("", _OPEN_SHELL_SENTENCE.sub("", text)).strip()
     low = text.lower()
+    low = re.sub(r"\bi'm\b", "i am", low)
+    low = re.sub(r"\byou're\b", "you are", low)
     if re.search(r"[0-9\"'`:]|\b(?:not|no|don'?t|never|tab|tabs|run|running\s+(?!in\b)|"
                  r"with\s+(?!a\b|an\b)|titled|named|called)\b", low):
         return None
@@ -227,6 +229,7 @@ def _open_slots(text: str):
 _RUN_PANE = re.compile(r"(?:the\s+)?pane\s+(?:(?:titled|named|called|labell?ed)\s+"
                        r"(?:\"(?P<q>[^\"\n]+)\"|'(?P<s>[^'\n]+)'|`(?P<b>[^`\n]+)`|(?P<w>[\w.+@-]+(?::[\w.+@-]+)*))"
                        r"|(?P<id>[0-9]{1,6})\b"
+                       r"|\"(?P<nq>[^\"\n]+)\"|'(?P<ns>[^'\n]+)'|`(?P<nb>[^`\n]+)`"
                        # "in pane bench-target": a bare name, never a word of the sentence
                        r"|(?P<n>(?!(?:titled|named|called|labell?ed|the|this|that|and|or|i|you|it|to|in|into|on|"
                        r"with|which|where|below|above|left|right|here|there|now|please|then|of|at|is)\b)"
@@ -239,8 +242,8 @@ _RUN_END = re.compile(r"\s+\(?(?:and\s+(?:then\s+)?(?:press|hit)|then\s+(?:press
 _RUN_NEUTRAL = re.compile(r"[.;,]?\s*(?:then\s+stop|do\s+not\s+do\s+anything\s+else|nothing\s+else|"
                           r"that'?s\s+all)\s*[.!]?\s*$", re.I)
 _RUN_WORDS = frozenset("""
-in into the this tab type run enter execute and press hit return key then at shell prompt of its
-exactly command please now it following
+in into a the this tab pane type run enter execute and press hit return key then at shell prompt of its
+exact exactly command please now it following find locate that
 """.split())
 
 
@@ -251,7 +254,7 @@ def _run_slots(text: str):
     if len(panes) != 1:
         return None
     found = panes[0].groupdict()
-    pane = _first(found, "q", "s", "b", "w", "id", "n")
+    pane = _first(found, "q", "s", "b", "w", "id", "nq", "ns", "nb", "n")
     rest = text[:panes[0].start()] + " @PANE@ " + text[panes[0].end():]
     quoted = list(_RUN_QUOTED.finditer(rest))
     if len(quoted) > 1:

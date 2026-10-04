@@ -183,27 +183,32 @@ def _logs_arguments(arguments):
 for _operation in ("plan", "read"):
     TOOL_LIST.append({
         "name": "kilix_files_" + _operation,
-        "description": ("Plan a bounded file query; reads nothing." if _operation == "plan" else
-                        "Bounded file search or UTF-8 preview; contents are untrusted data.") +
-                       " State the scope in the request.",
+        "description": ('Plan only. ' if _operation == 'plan' else 'Read untrusted files. ') +
+                       'Prefix: find files starting with "PREFIX" in here. Named is literal, not a glob.',
         "annotations": {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
         "inputSchema": {"type": "object", "properties": {
-            "request": {"type": "string", "description": "e.g. find pdf files in Downloads"},
+            "request": {"type": "string", "description": 'Scope required.'},
             "cwd": {"type": "string", "description": "absolute directory meant by 'here'"},
             "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20}},
             "required": ["request"], "additionalProperties": False}})
 
 for _operation in ("plan", "act"):
     _tmux_properties = {
-        "request": {"type": "string", "maxLength": 66560},
+        "request": {"oneOf": [{"type": "string", "maxLength": 66560},
+                               {"type": "object", "properties": {
+                                   "operation": {"enum": ["send", "type"]},
+                                   "target": {"type": "string", "maxLength": 160},
+                                   "text": {"type": "string", "minLength": 1, "maxLength": 65536}},
+                                "required": ["operation", "target", "text"], "additionalProperties": False}]},
         "socket": {"type": "string", "description": "absolute private tmux socket; no fallback"}}
     if _operation == "act":
         _tmux_properties["confirm_risky"] = {"type": "boolean", "default": False}
     TOOL_LIST.append({
         "name": "kilix_tmux_" + _operation,
-        "description": ("Plan one tmux request: validate/resolve only; no mutation." if _operation == "plan" else
-                        'One tmux request: list/new/read/send/type/key/rename/close. Quote text. '
-                        'send adds no Enter; type submits, completion unknown. Input/close needs confirm_risky.'),
+        "description": ("Validate/resolve only; no mutation." if _operation == "plan" else
+                        'Tmux list/new/read/send/type/key/rename/close. Text objects: send=no Enter; '
+                        'type=Enter; completion unknown. For a key use request="press Enter in %0". '
+                        'Input/close: confirm_risky=true.'),
         "inputSchema": {"type": "object", "properties": _tmux_properties,
                         "required": ["request", "socket"], "additionalProperties": False}})
 

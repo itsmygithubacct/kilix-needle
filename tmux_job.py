@@ -13,7 +13,10 @@ OPERATIONS = ("list", "new", "read", "send", "type", "key", "rename", "close")
 USAGE = ('tmux requests: list sessions | new session NAME [in "/absolute/directory"] | '
          'read TARGET [last N lines] | send "TEXT" to TARGET | type "TEXT" in TARGET | '
          'press Enter in TARGET | rename session TARGET to NAME | close session TARGET; '
-         'provide --socket /absolute/private/socket; send adds no Enter, type submits')
+         'provide --socket /absolute/private/socket; send adds no Enter, type submits. '
+         'Quotes are literal delimiters, not shell escapes: use single quotes around TEXT '
+         'when it contains double quotes (and vice versa), or use --request-json '
+         'with operation, target and text for exact literal input.')
 
 _NAME = r"[A-Za-z0-9_][A-Za-z0-9_-]{0,127}"
 _SESSION = rf"(?:{_NAME}|\$[0-9]+)"
@@ -44,6 +47,19 @@ _FORMS = (
                           rf"(?P<new_name>{_NAME})", re.I)),
     ("close", re.compile(rf"(?:close|kill)\s+(?:the\s+)?{_UNIT}\s+(?P<target>{_SESSION})", re.I)),
 )
+
+
+def literal_request(request: dict) -> dict:
+    """Structured literal input bypasses natural-language quotation delimiters."""
+    if (not isinstance(request, dict) or set(request) != {"operation", "target", "text"}
+            or request.get("operation") not in ("send", "type")
+            or not isinstance(request.get("target"), str)
+            or len(request["target"]) > 160
+            or not re.fullmatch(_TARGET, request["target"])
+            or not isinstance(request.get("text"), str)
+            or not 1 <= len(request["text"]) <= MAX_TEXT or controls(request["text"])):
+        raise ValueError("literal request needs operation send|type, exact target, and nonempty text without controls except tab")
+    return dict(request)
 
 
 def controls(text: str) -> bool:

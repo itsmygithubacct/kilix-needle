@@ -1394,6 +1394,13 @@ def _admit(name: str, args: dict, prompt: str) -> Action | Refusal:
             return Refusal(name, "the command runs on into the reason for it")
 
     if name in ("open_pane", "open_tab"):
+        # A grounded title alone does not authorize creation.
+        unquoted = _unquoted(prompt)
+        inspection = re.match(
+            r"^(?:(?:please|can you|could you)\s+)*(?:find|list|show|read|inspect|locate|search)\s+"
+            r"(?:(?:the|all|my|existing|current)\s+)*(?:panes?|tabs?)\b", unquoted, re.I)
+        if inspection and not re.search(r"\b(?:open|create|split|spawn|add|make)\s+(?:a\s+|new\s+|another\s+|the\s+)*(?:pane|tab)\b", unquoted, re.I):
+            return Refusal(name, "an inspection request does not authorize opening a pane or tab; use kilix pane list")
         out = {}
         if name == "open_pane":
             side = _text(args, "side")

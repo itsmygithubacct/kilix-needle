@@ -1052,7 +1052,7 @@ _LAUNCH_REWRITES = (
     # "Open a new interactive Codex coding-agent tab in /x": the tab is the agent's.
     (re.compile(rf"^(?:open|start|create|launch)\s+(?:an?\s+)?(?:new\s+)?(?:interactive\s+)?({_AGENT_WORDS})"
                 rf"(?:\s+coding[- ]agent|\s+agent)?\s+tab\s+in\s+(?P<d>[~/]\S*)", re.I), r"start \1 in \g<d>"),
-    (re.compile(rf"^(?:open|start|create|launch)\s+(?:a\s+)?(?:new\s+)?tab\s+(?:running|with)\s+({_AGENT_WORDS})\s+"
+    (re.compile(rf"^(?:open|start|create|launch)\s+(?:a\s+)?(?:new\s+)?tab\s+(?:running|with|and\s+(?:run|start|launch))\s+({_AGENT_WORDS})\s+"
                 rf"in\s+(?:(?:the\s+)?(?:directory|folder|dir)\s+)?(?P<d>[~/]\S*)", re.I),
      r"start \1 in \g<d>"),
     # "start Codex as an interactive coding-agent session in a new tab in /x"

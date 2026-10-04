@@ -161,7 +161,8 @@ class TokenCost(unittest.TestCase):
         tmux = [t for t in tools if t["name"].startswith("kilix_tmux_")]
         actions = [t for t in tools if t["name"].startswith("kilix_action_")]
         self.assertLessEqual(len(json.dumps(existing)), 6800)
-        self.assertLessEqual(len(json.dumps(tmux)), 1100)
+        # Two tools also describe the bounded structured literal input form.
+        self.assertLessEqual(len(json.dumps(tmux)), 1500)
         self.assertLessEqual(len(json.dumps(actions)), 10000)
 
         def described(node):
