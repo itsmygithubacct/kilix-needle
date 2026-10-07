@@ -1,8 +1,10 @@
-● Example step 1 done.
+ Do you want to allow this
+ operation on the
+ example target?
 
-✻ Brewed for 2m 50s · done 4:40 AM
+   Yes / No
 
 ────────────────────────────────────────────────────────────
 ❯ 
 ────────────────────────────────────────────────────────────
-  ⏵⏵ bypass permissions on (shift+tab to cycle) · 1 monitor · ← for agents
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← for agents

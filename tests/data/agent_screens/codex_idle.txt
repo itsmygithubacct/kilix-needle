@@ -1,5 +1,6 @@
-• The suite passes: 1176 tests, no failures.
+• Example step 1 done.
 
 › Ask Codex to do anything
 
-  gpt-6.1-sol high · 58% context left · ~/gpu_terminal/kilix
+  model-x high · ~/project · Example task title
+  ← for agents · ? for shortcuts

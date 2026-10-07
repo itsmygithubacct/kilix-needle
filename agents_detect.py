@@ -1,76 +1,164 @@
 """Session-state evidence the agents job adds to what Kilix's pane listing says.
 
+Rule: a false hold is acceptable; a false `idle` or `working`, or bytes reaching
+anything but the identified agent's empty composer, is not. Positive evidence
+must be exact and structurally located; anything else holds.
+
 Kilix's reader names a coding session from the foreground process of a pane and
-a state from that agent's own records. Three real sessions fell outside it:
+a state from the agent's own records. Three real sessions fell outside it:
+a Codex pane whose rollout is not held open (state `agent`), a Claude pane idle
+at `❯` with a background monitor, and a Claude session inside tmux (the pane's
+foreground process is `tmux`, so no coding session is listed).
 
-- a Codex pane whose rollout is not held open: the state is `agent`, not
-  `idle`/`working`/`waiting`, though the screen says `• Working (...)`, shows an
-  empty composer `› Ask Codex to do anything`, or asks `Would you like to run the
-  following command?`;
-- a Claude pane idle at `❯` with a background monitor ("1 monitor") whose record
-  says something this reader does not map;
-- a Claude session that runs inside tmux, where the pane's foreground process is
-  `tmux`, so no coding session is listed at all.
+**Screens.** State is decided only from the bottom UI region, located by its
+layout, never from transcript lines:
 
-Screen text is read only as evidence about a pane Kilix already names as that
-agent (or tmux names for one exact tmux pane); it never names a session by
-itself. A tmux-hosted session is found by asking tmux which session the pane's
-own tmux *client process* is attached to, then reading the process tree of that
-session's panes: exact IDs only, the agent's own working directory, one match
-per directory. Nothing here sends input.
+- Claude: the composer lies between the last two full-width rules, the footer
+  below the last one, nothing below the footer. `idle` needs one composer line
+  that is exactly an empty prompt and a footer without `esc to interrupt`;
+  `working` needs the same empty composer and `esc to interrupt` in the footer.
+- Codex: the composer line `› Ask Codex to do anything` (an empty composer shows
+  exactly that), a blank line above it, footer lines only below it. The status
+  block directly above holds `• Working (… esc to interrupt)` while it works.
+- A screen holding nothing but that region (a pane cut down to its UI) reads the
+  same way.
+- A numbered choice anywhere on the visible screen, approval wording (`Would you
+  like to`, `Do you want to`, `esc to cancel`) in the last lines, matched across
+  wrapped lines, the working marker outside its place, an unknown layout, a draft
+  or a truncated region: no state, and the message is held. (Approval wording
+  higher up is transcript, which may quote it; a real idle pane did.)
+
+**tmux.** A tmux-hosted session is found by asking tmux which session the pane's
+own tmux client is attached to, then reading the process trees of that session's
+panes. The agent must own the foreground process group of the pane's terminal
+(`tpgid` from `/proc`), and its identity is kept as provider, pids, start times,
+full argv, working directory, socket, session `$N`, window `@N`, pane `%N` and
+client pid. A message is delivered by tmux itself to that exact pane `%N`, with
+the checks and the send in one tmux command so the server applies them
+atomically; nothing goes through the Kilix pane or the tmux client, which can be
+in a command prompt, a prefix table or showing another pane.
 """
 from __future__ import annotations
 
 import os
 import re
+import secrets
+from dataclasses import dataclass
 from pathlib import Path
 
 PROC_ROOT = "/proc"
-SCREEN_TAIL = 14
 MAX_PROCESSES = 20000
 MAX_DEPTH = 8
 AGENT_NAMES = {"codex": "codex", "claude": "claude", "grok": "grok", "omp": "omp",
                "kimi": "kimi", "kimi-code": "kimi"}
+SENT, HELD = "NEEDLE-SENT", "NEEDLE-HELD"
+# What Kilix may call a session whose state it cannot read: a named state is never supplemented.
+GENERIC_DIRECT = frozenset({"agent", "unknown"})
+GENERIC_HOSTED = frozenset({"agent", "unknown", "running"})
 
-_CODEX_WORKING = re.compile(r"^\s*(?:[•◦●○·]\s*)?Working\s*\(")
-_CODEX_IDLE = re.compile(r"^\s*›\s*Ask Codex to do anything\s*$")
-_CODEX_WAITING = re.compile(r"^\s*Would you like to .+\?\s*$")
-_CLAUDE_WORKING = re.compile(r"esc to interrupt", re.I)
-_CLAUDE_IDLE = re.compile(r"^\s*(?:[│|]\s*)?[❯>]\s*(?:[│|]\s*)?$")
-_CLAUDE_MENU_ITEM = re.compile(r"^\s*(?:[│|]\s*)?(?:[❯>]\s*)?(\d)\.\s+\S")
-_CLAUDE_QUESTION = re.compile(r"^\s*(?:[│|]\s*)?Do you want to .+\?")
+# --------------------------------------------------------------------------- screens
+
+_ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-Z\\-_]")
+_RULE = re.compile(r"^[─━═]{10,}$")
+_FOOTER = re.compile(r"shortcuts|for agents|permissions|shift\+tab|plan mode|accept edits|auto-accept|"
+                     r"monitor|context|esc to|ctrl\+|·|%|bypass", re.I)
+_APPROVAL = re.compile(r"would you like to|do you want to|press enter to confirm|esc to cancel|"
+                       r"enter to select|\(y/n\)|\[y/n\]", re.I)
+_CHOICE = re.compile(r"^\s*(?:[│|]\s*)?(?:[❯›>▶➤]\s*)?\d{1,2}[.)]\s+\S")
+_INTERRUPT = re.compile(r"esc to interrupt", re.I)
+_CODEX_WORKING = re.compile(r"•\s*working\b", re.I)
+_SPINNER = re.compile(r"^\s*\S\s+\S+…\s*\(\d")
+_EMPTY_CODEX = "› Ask Codex to do anything"
+RULE_DISTANCE = 10          # most lines a composer may span between its two rules
+FOOTER_LINES = 3
+STATUS_BLOCK = 12
+WAITING_TAIL = 15
 
 
-def _tail(text: str) -> list[str]:
-    return [line.rstrip() for line in str(text).splitlines() if line.strip()][-SCREEN_TAIL:]
+def _lines(text: str) -> list[str]:
+    cleaned = _ANSI.sub("", str(text)).replace(" ", " ")
+    lines = [line.rstrip() for line in cleaned.splitlines()]
+    while lines and not lines[-1].strip():
+        lines.pop()
+    return lines
+
+
+def _flat(lines: list[str]) -> str:
+    return " ".join(" ".join(line.split()) for line in lines)
+
+
+def _footer_ok(footer: list[str]) -> bool:
+    return len(footer) <= FOOTER_LINES and all(_FOOTER.search(line) for line in footer)
 
 
 def screen_state(provider: str, text: str) -> str | None:
-    """`idle`, `working` or `waiting` if the screen's last lines say so plainly, else None.
-
-    Anything unclear is None: a half-typed composer, an unknown modal, an empty
-    screen. The caller then keeps Kilix's own answer and holds the message.
-    """
-    lines = _tail(text)
-    if provider == "codex":
-        if any(_CODEX_WAITING.match(line) for line in lines):
-            return "waiting"
-        if any(_CODEX_WORKING.match(line) for line in lines):
-            return "working"
-        if any(_CODEX_IDLE.match(line) for line in lines):
-            return "idle"
+    """`idle`, `working` or `waiting` only when the bottom UI region says so exactly; else None."""
+    lines = _lines(text)
+    if not lines or provider not in ("claude", "codex"):
         return None
-    if provider == "claude":
-        numbers = {m.group(1) for line in lines if (m := _CLAUDE_MENU_ITEM.match(line))}
-        if any(_CLAUDE_QUESTION.match(line) for line in lines) or {"1", "2"} <= numbers:
-            return "waiting"
-        if any(_CLAUDE_WORKING.search(line) for line in lines):
-            return "working"
-        if any(_CLAUDE_IDLE.match(line) for line in lines):
-            return "idle"
-        return None
-    return None
+    flat = _flat(lines)
+    nonempty = [line for line in lines if line.strip()]
+    tail = _flat(nonempty[-WAITING_TAIL:])
+    # A numbered choice anywhere on the screen is a menu. Approval wording counts where a dialog
+    # sits (the last lines, joined across wrapping); higher up it is the transcript, which may quote
+    # it (a real idle pane did), and the layout checks below decide whether a composer is there.
+    if _APPROVAL.search(tail) or any(_CHOICE.match(line) for line in lines):
+        return "waiting" if _APPROVAL.search(tail) else None
+    return _claude(lines, flat) if provider == "claude" else _codex(lines, flat)
 
+
+def _claude(lines: list[str], flat: str) -> str | None:
+    rules = [index for index, line in enumerate(lines) if _RULE.match(line.strip())]
+    if len(rules) >= 2:
+        top, bottom = rules[-2], rules[-1]
+        if len(lines[top].strip()) != len(lines[bottom].strip()) or not 1 <= bottom - top - 1 <= RULE_DISTANCE:
+            return None
+        composer = [line for line in lines[top + 1:bottom] if line.strip()]
+        footer = [line for line in lines[bottom + 1:] if line.strip()]
+        above = [line for line in lines[:top] if line.strip()]
+    else:
+        # The whole screen is the region (a pane cut down to its UI): composer, then footer.
+        everything = [line for line in lines if line.strip()]
+        composer, footer, above = everything[:1], everything[1:], []
+    if len(composer) != 1 or not _footer_ok(footer):
+        return None
+    prompt = composer[0].strip()
+    if not prompt.startswith("❯") or prompt[1:].strip():
+        return None                                   # a draft, or not the prompt at all
+    if _INTERRUPT.search(_flat(footer)):
+        return "working"
+    if _INTERRUPT.search(flat) or any(_SPINNER.match(line) for line in above[-6:]):
+        return None                                   # a marker where it does not belong, or a spinner
+    return "idle"
+
+
+def _codex(lines: list[str], flat: str) -> str | None:
+    composer = max((index for index, line in enumerate(lines) if line.lstrip().startswith("›")), default=None)
+    if composer is None:
+        return None
+    footer = [line for line in lines[composer + 1:] if line.strip()]
+    if lines[composer].strip() != _EMPTY_CODEX or not _footer_ok(footer):
+        return None                                   # a draft, a continuation line, or an unknown footer
+    if composer > 0 and lines[composer - 1].strip():
+        return None                                   # something sits on the composer: a modal, not the UI
+    block = []
+    for line in reversed(lines[:composer]):
+        if not line.strip():
+            if block:
+                break
+            continue
+        block.append(line)
+        if len(block) > STATUS_BLOCK:
+            break
+    status = _flat(list(reversed(block)))
+    marked = bool(_INTERRUPT.search(flat) or _CODEX_WORKING.search(flat))
+    if marked:
+        return "working" if (_INTERRUPT.search(status) or _CODEX_WORKING.search(status)) \
+            and len(block) <= STATUS_BLOCK else None
+    return "idle"
+
+
+# --------------------------------------------------------------------------- processes
 
 def process_agent(argv) -> str:
     """The same rule Kilix uses: the first two arguments' base names."""
@@ -89,6 +177,26 @@ def _proc_text(proc_root: str, pid: int, name: str) -> str:
         return ""
 
 
+@dataclass(frozen=True)
+class Stat:
+    parent: int
+    pgrp: int
+    tpgid: int
+    start_ticks: int
+
+
+def proc_stat(pid: int, proc_root: str = PROC_ROOT) -> Stat | None:
+    """parent, process group, the terminal's foreground group and the start time of a process."""
+    fields = _proc_text(proc_root, pid, "stat").rsplit(")", 1)
+    if len(fields) != 2:
+        return None
+    rest = fields[1].split()
+    try:
+        return Stat(parent=int(rest[1]), pgrp=int(rest[2]), tpgid=int(rest[5]), start_ticks=int(rest[19]))
+    except (IndexError, ValueError):
+        return None
+
+
 def _children(proc_root: str) -> dict[int, list[int]]:
     found: dict[int, list[int]] = {}
     try:
@@ -100,12 +208,9 @@ def _children(proc_root: str) -> dict[int, list[int]]:
             break
         if not name.isdigit():
             continue
-        stat = _proc_text(proc_root, int(name), "stat")
-        try:
-            parent = int(stat.rsplit(")", 1)[1].split()[1])
-        except (IndexError, ValueError):
-            continue
-        found.setdefault(parent, []).append(int(name))
+        stat = proc_stat(int(name), proc_root)
+        if stat is not None:
+            found.setdefault(stat.parent, []).append(int(name))
     return found
 
 
@@ -130,6 +235,13 @@ def process_cwd(pid: int, proc_root: str = PROC_ROOT) -> str:
         return os.readlink(f"{proc_root}/{pid}/cwd")
     except OSError:
         return ""
+
+
+# --------------------------------------------------------------------------- tmux
+
+_SESSION = re.compile(r"\$[0-9]+")
+_WINDOW = re.compile(r"@[0-9]+")
+_PANE = re.compile(r"%[0-9]+")
 
 
 def tmux_socket_args(argv) -> list[str]:
@@ -163,13 +275,14 @@ def _rows(text: str, width: int) -> list[list[str]]:
 
 
 def tmux_hosted(pane: dict, tmux, *, proc_root: str | None = None) -> list[dict]:
-    """The coding agents running in the tmux session this pane's tmux client shows.
+    """The coding agents in the foreground of the tmux session this pane's tmux client shows.
 
-    `tmux(args) -> str` runs tmux with those arguments. The session is the one
-    tmux itself reports for the client process that is in the pane's foreground,
-    not one matched by a name; a client tmux does not list names no session.
-    One entry per (tmux pane, provider), and only when the agent processes of that
-    tmux pane agree on one working directory.
+    `tmux(args) -> str` runs tmux with those arguments. The session is the one tmux
+    itself reports for the client process in the pane's foreground (`$N`, never a
+    name). One entry per (tmux pane, provider), only for agent processes that own
+    the foreground process group of the pane's terminal and agree on one working
+    directory. Every identity field is validated; an incomplete record is dropped,
+    which holds the message.
     """
     proc_root = proc_root or PROC_ROOT
     hosted = []
@@ -182,34 +295,49 @@ def tmux_hosted(pane: dict, tmux, *, proc_root: str | None = None) -> list[dict]
         if len(sessions) != 1:
             continue
         session = sessions.pop()
+        if not _SESSION.fullmatch(session):
+            continue
         try:
             panes = _rows(tmux([*socket, "list-panes", "-s", "-t", session, "-F",
-                                "#{pane_id}\t#{pane_pid}\t#{pane_active}\t#{window_active}\t#{pane_in_mode}"]), 5)
+                                "#{pane_id}\t#{pane_pid}\t#{pane_active}\t#{window_active}\t#{pane_in_mode}"
+                                "\t#{window_id}\t#{pane_dead}"]), 7)
         except Exception:
             continue
-        for pane_id, pane_pid, active, window_active, in_mode in panes:
-            if not pane_pid.isdigit() or not re.fullmatch(r"%[0-9]+", pane_id):
+        for pane_id, pane_pid, active, window_active, in_mode, window_id, dead in panes:
+            if (not _PANE.fullmatch(pane_id) or not _WINDOW.fullmatch(window_id) or not pane_pid.isdigit()
+                    or dead != "0" or active not in ("0", "1") or window_active not in ("0", "1")):
                 continue
-            by_provider: dict[str, list[tuple[int, str]]] = {}
+            root = proc_stat(int(pane_pid), proc_root)
+            if root is None or root.tpgid <= 0:
+                continue
+            by_provider: dict[str, list[tuple]] = {}
             for pid in process_tree(int(pane_pid), proc_root):
-                provider = process_agent(process_argv(pid, proc_root))
-                if provider:
-                    by_provider.setdefault(provider, []).append((pid, process_cwd(pid, proc_root)))
+                stat = proc_stat(pid, proc_root)
+                argv = process_argv(pid, proc_root)
+                provider = process_agent(argv)
+                # Only the terminal's foreground group can read what is typed there.
+                if provider and stat is not None and stat.pgrp == root.tpgid and stat.tpgid == root.tpgid:
+                    by_provider.setdefault(provider, []).append(
+                        (pid, stat.start_ticks, tuple(argv), process_cwd(pid, proc_root)))
             for provider, members in by_provider.items():
-                cwds = {cwd for _pid, cwd in members}
+                cwds = {member[3] for member in members}
                 if len(cwds) != 1 or not next(iter(cwds)):
                     continue
                 hosted.append({
-                    "provider": provider, "pid": members[0][0], "cwd": next(iter(cwds)),
-                    "tmux_socket": socket, "session_id": session, "tmux_pane": pane_id,
-                    "client_pid": client_pid, "active": active == "1" and window_active == "1",
-                    "in_mode": in_mode != "0"})
+                    "provider": provider, "pid": members[0][0], "members": tuple(members),
+                    "cwd": next(iter(cwds)), "pgrp": root.tpgid,
+                    "tmux_socket": socket, "session_id": session, "window_id": window_id,
+                    "tmux_pane": pane_id, "pane_pid": int(pane_pid), "client_pid": client_pid,
+                    "active": active == "1" and window_active == "1", "in_mode": in_mode != "0"})
     return hosted
 
 
+_IDENTITY = ("provider", "members", "cwd", "pgrp", "tmux_socket", "session_id", "window_id", "tmux_pane",
+             "pane_pid", "client_pid")
+
+
 def same_hosted(first: dict, second: dict) -> bool:
-    keys = ("provider", "pid", "cwd", "tmux_socket", "session_id", "tmux_pane", "client_pid")
-    return all(first.get(key) == second.get(key) for key in keys)
+    return all(first.get(key) == second.get(key) for key in _IDENTITY)
 
 
 def hosted_screen(hosted: dict, tmux) -> str:
@@ -218,6 +346,47 @@ def hosted_screen(hosted: dict, tmux) -> str:
         return tmux([*hosted["tmux_socket"], "capture-pane", "-p", "-t", hosted["tmux_pane"]])
     except Exception:
         return ""
+
+
+def guard(hosted: dict) -> str:
+    """The tmux format that is true only while the pane is the identified one and takes input."""
+    return ("#{&&:#{&&:#{==:#{pane_id},%s},#{==:#{pane_pid},%d}},"
+            "#{&&:#{&&:#{==:#{pane_in_mode},0},#{==:#{pane_dead},0}},"
+            "#{&&:#{==:#{pane_input_off},0},#{&&:#{==:#{window_id},%s},#{==:#{session_id},%s}}}}}"
+            % (hosted["tmux_pane"], hosted["pane_pid"], hosted["window_id"], hosted["session_id"]))
+
+
+def _conditional(hosted: dict, tmux, then: str, otherwise: str | None = None) -> str:
+    """One tmux command: run `then` against the exact pane only while the guard holds."""
+    held = f"{otherwise} ; display-message -p {HELD}" if otherwise else f"display-message -p {HELD}"
+    return tmux([*hosted["tmux_socket"], "if-shell", "-F", "-t", hosted["tmux_pane"], guard(hosted),
+                 f"{then} ; display-message -p {SENT}", held])
+
+
+def tmux_type(hosted: dict, text: str, tmux) -> bool:
+    """Insert `text` into exactly that pane, atomically with the guard. True if it was sent.
+
+    The text travels as an argument of `set-buffer` (no quoting, no tmux parsing) and is
+    pasted by the same tmux command that checks the pane, then removed.
+    """
+    pane = hosted["tmux_pane"]
+    buffer = "needle-" + secrets.token_hex(8)
+    tmux([*hosted["tmux_socket"], "set-buffer", "-b", buffer, "--", text])
+    try:
+        answer = _conditional(hosted, tmux, f"paste-buffer -d -b {buffer} -t {pane}",
+                              f"delete-buffer -b {buffer}")
+    finally:
+        try:
+            tmux([*hosted["tmux_socket"], "delete-buffer", "-b", buffer])
+        except Exception:
+            pass                                      # already pasted or deleted
+    return answer.strip() == SENT
+
+
+def tmux_enter(hosted: dict, tmux) -> bool:
+    """Press Enter in exactly that pane under the same guard. True if it was sent."""
+    answer = _conditional(hosted, tmux, f"send-keys -t {hosted['tmux_pane']} Enter")
+    return answer.strip() == SENT
 
 
 def same_directory(cwd: str, directory: Path) -> bool:

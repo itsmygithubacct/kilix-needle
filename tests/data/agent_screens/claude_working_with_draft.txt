@@ -1,8 +1,6 @@
-● Example step 1 done.
-
-✻ Brewed for 2m 50s · done 4:40 AM
+· Cascading… (21m 50s · ↓ 134.0k tokens)
 
 ────────────────────────────────────────────────────────────
-❯ 
+❯ fix the fail
 ────────────────────────────────────────────────────────────
-  ⏵⏵ bypass permissions on (shift+tab to cycle) · 1 monitor · ← for agents
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · esc to interrupt · ← for agents

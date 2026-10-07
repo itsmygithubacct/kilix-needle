@@ -1,6 +1,0 @@
-• Explored
-  └ Read pane_center.py
-
-• Working (8s • esc to interrupt)
-
-  gpt-6.1-sol high · 61% context left · ~/gpu_terminal/kilix

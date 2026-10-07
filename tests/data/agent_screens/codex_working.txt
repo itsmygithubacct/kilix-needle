@@ -1,7 +1,12 @@
-  Reading pane_center.py and the Codex reader to see where the state is decided.
+• Ran echo example
+  └ example
+    + 34 lines (ctrl+t to expand)
 
-• Working (1m 12s • esc to interrupt)
+• Working (6m 23s • esc to interrupt) · 1 background terminal running · /ps to view · /stop to close
+  └ Tip: Use /rename to rename your threads for easier thread resuming.
+
 
 › Ask Codex to do anything
 
-  gpt-6.1-sol high · 61% context left · ~/gpu_terminal/kilix
+  model-x high · ~/project · Example task title
+  ← for agents · ? for shortcuts

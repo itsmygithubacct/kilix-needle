@@ -1,0 +1,22 @@
+• Added example.txt (+3 -0)
+     1 +example line one
+     2 +example line two
+     3 +example line three
+    + Show details                                                                                                                                                                                                  
+
+• Ran echo example
+  └ example
+    + 9 lines (ctrl+t to expand)                                                                                                                                                                                    
+
+• Ran echo second
+  └ ok
+    + 34 lines (ctrl+t to expand)                                                                                                                                                                                   
+
+• Working (6m 23s • esc to interrupt) · 1 background terminal running · /ps to view · /stop to close
+  └ Tip: Use /rename to rename your threads for easier thread resuming.
+
+
+› Ask Codex to do anything
+
+  model-x high · ~/project · Example task title
+  ← for agents · ? for shortcuts

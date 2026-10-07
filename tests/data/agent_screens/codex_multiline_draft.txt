@@ -1,6 +1,7 @@
 • Example step 1 done.
 
-› fix the failing te
+› fix the failing tests and
+  then run the suite
 
   model-x high · ~/project · Example task title
   ← for agents · ? for shortcuts

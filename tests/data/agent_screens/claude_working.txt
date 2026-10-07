@@ -1,8 +1,11 @@
-● Reading the reader.
+● Running echo example…
+  ⎿  $ echo example
+     example
 
-✻ Thinking… (12s · ↓ 1.2k tokens · esc to interrupt)
+· Cascading… (21m 50s · ↓ 134.0k tokens · thinking with high effort)
+  ⎿  Tip: Use /permissions to pre-approve and pre-deny bash, edit, and MCP tools
 
-────────────────────────────────────────────────────────────────
-❯ 
-────────────────────────────────────────────────────────────────
-  ⏵⏵ bypass permissions on (shift+tab to cycle) · 1 monitor
+────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · esc to interrupt · ← for agents

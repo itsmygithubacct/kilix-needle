@@ -239,12 +239,39 @@ def calling_cwd() -> str | None:
     return caller_info()[2]
 
 
+def _session_identity(pane: dict) -> dict | None:
+    """What Kilix says a coding session is: provider, directory, session and live pids."""
+    coding = pane.get("coding_session")
+    if not isinstance(coding, dict):
+        return None
+    cwd = coding.get("cwd") or pane.get("cwd") or ""
+    try:
+        cwd = str(Path(cwd).resolve()) if cwd else ""
+    except OSError:
+        cwd = ""
+    pids = coding.get("live_pids")
+    return {"provider": PROVIDER_AGENT.get(str(coding.get("provider") or ""), ""), "cwd": cwd,
+            "session_id": coding.get("session_id"),
+            "pids": tuple(pids) if isinstance(pids, list) else ()}
+
+
+def _same_identity(known: dict, now: dict) -> bool:
+    """The session found is the one sent to: provider and directory, and whatever Kilix named
+    (its session id, its live pids) must not have changed."""
+    if known["provider"] != now["provider"] or known["cwd"] != now["cwd"]:
+        return False
+    if known["session_id"] not in (None, "", "unknown") and known["session_id"] != now["session_id"]:
+        return False
+    return not known["pids"] or known["pids"] == now["pids"]
+
+
 def find_session(agent: str, directory: Path, *, caller_pane: int | None = None) -> dict:
     """Exactly one live pane of that agent in that directory.
 
-    A pane Kilix lists as that agent counts. So does a pane with no coding session
-    whose tmux client shows a tmux session holding that agent in that directory;
-    such a pane carries `_hosted`, the exact tmux pane and process found.
+    A pane Kilix lists as that agent counts. So does a pane with no coding session,
+    a generic state and a tmux client whose session holds that agent, in the
+    foreground of its terminal, in that directory; it carries `_hosted`, the exact
+    tmux pane and processes found. A listed pane carries `_identity`.
     """
     if caller_pane is None:
         caller_pane = caller_info()[0]
@@ -255,7 +282,7 @@ def find_session(agent: str, directory: Path, *, caller_pane: int | None = None)
             continue
         coding = pane.get("coding_session")
         if not isinstance(coding, dict):
-            if coding is None:
+            if coding is None and pane.get("activity") in detect.GENERIC_HOSTED:
                 for item in detect.tmux_hosted(pane, _tmux):
                     if (PROVIDER_AGENT.get(item["provider"]) == agent
                             and detect.same_directory(item["cwd"], directory)):
@@ -264,7 +291,7 @@ def find_session(agent: str, directory: Path, *, caller_pane: int | None = None)
         provider = PROVIDER_AGENT.get(str(coding.get("provider") or ""))
         cwd = coding.get("cwd") or pane.get("cwd") or ""
         if provider == agent and cwd and Path(cwd).resolve() == directory:
-            matches.append(pane)
+            matches.append({**pane, "_identity": _session_identity(pane)})
     if len(matches) != 1:
         raise AgentsError(f"{'no' if not matches else len(matches)} live {agent} sessions in "
                           f"{directory}")
@@ -274,20 +301,49 @@ def find_session(agent: str, directory: Path, *, caller_pane: int | None = None)
 def _state(pane: dict, agent: str, hosted: dict | None) -> tuple[str, dict | None]:
     """The session's state, and for a tmux-hosted one the tmux pane as it is now.
 
-    Kilix's `activity` is used when it names a state. Only when it says `agent`
-    (a session it recognises but cannot read) is the screen consulted, and a
-    tmux-hosted session is always read from its own tmux pane.
+    A state Kilix names (`idle`, `working`, `waiting`) is used as is; the screen
+    supplements only a generic one (`GENERIC_DIRECT`: `agent`, `unknown`; for a
+    tmux-hosted pane `GENERIC_HOSTED`, which adds `running`, what Kilix says of a
+    pane whose foreground program is tmux). For a tmux-hosted session the screen
+    is always read, from its own tmux pane, because the message goes into its
+    composer: a named `idle`/`working` that the screen does not confirm holds, and
+    a named `waiting` holds.
     """
+    activity = pane.get("activity")
     if hosted is not None:
         now = [item for item in detect.tmux_hosted(pane, _tmux) if detect.same_hosted(item, hosted)]
         if len(now) != 1:
             raise AgentsError("the tmux-hosted session changed; the message is held")
-        return detect.screen_state(hosted["provider"], detect.hosted_screen(now[0], _tmux)) \
-            or "agent", now[0]
-    activity = pane.get("activity")
-    if activity == "agent" and agent in ("claude", "codex"):
+        seen = detect.screen_state(hosted["provider"], detect.hosted_screen(now[0], _tmux))
+        if activity in ("idle", "working"):
+            return (activity if seen == activity else "agent"), now[0]
+        # (`waiting`, `shell`, ... are not generic: they are returned as named, and they hold)
+        return (seen or "agent" if activity in detect.GENERIC_HOSTED else activity), now[0]
+    if activity in detect.GENERIC_DIRECT and agent in ("claude", "codex"):
         return detect.screen_state(agent, _screen(pane.get("pane_id"))) or activity, None
     return activity, None
+
+
+def _deliver_hosted(pane: dict, hosted: dict, text: str) -> None:
+    """Type `text` and Enter into exactly the identified tmux pane, through tmux itself.
+
+    Nothing goes through the Kilix pane or the tmux client. The identity is read again
+    immediately before; the pane's mode, pid, window and session are then checked by
+    tmux in the same command that types, so a change in between types nothing.
+    """
+    if any(ord(char) < 32 or ord(char) == 127 for char in text):
+        raise AgentsError("a message with line breaks or control characters cannot be typed into "
+                          "a tmux-hosted session; the message is held")
+    again = [item for item in detect.tmux_hosted(pane, _tmux) if detect.same_hosted(item, hosted)]
+    if len(again) != 1:
+        raise AgentsError("the tmux-hosted session changed; the message is held")
+    if not detect.tmux_type(again[0], text, _tmux):
+        raise AgentsError("tmux held the message: that pane is not in a state to take input; "
+                          "nothing was typed")
+    time.sleep(0.15)       # the text first, then Enter as its own write, as agent-control does
+    if not detect.tmux_enter(again[0], _tmux):
+        raise AgentsError("the text was typed into the tmux pane but tmux held Enter; "
+                          "the line is pending there")
 
 
 def _broker_id(pane: dict) -> str:
@@ -409,14 +465,16 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
                 if dry_run:
                     entry.update(outcome="would", argv=argv)
                     last = {"pane_id": f"<new pane {len(launched) + 1}>",
-                            "agent": action.args["agent"], "broker": "<new pane broker>"}
+                            "agent": action.args["agent"], "broker": "<new pane broker>",
+                            "dir": str(directory)}
                     launched[f"{action.args['agent']}@{action.args['dir']}"] = last
                     continue
                 result = _listing_result(argv, timeout=60)
                 pane_result = result.get("pane")
                 if not isinstance(pane_result, dict) or pane_result.get("pane_id") is None:
                     raise AgentsError("kilix agent-control returned no launched pane")
-                last = {"pane_id": pane_result["pane_id"], "agent": action.args["agent"]}
+                last = {"pane_id": pane_result["pane_id"], "agent": action.args["agent"],
+                        "dir": str(directory)}
                 tracked[last["pane_id"]] = (action.args["agent"], None)
                 launched[f"{action.args['agent']}@{action.args['dir']}"] = last
                 if action.args.get("resume") or prompt:
@@ -431,11 +489,13 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
                 target_info = last
                 pane_id = last["pane_id"]
                 target_agent = last["agent"]
+                target_dir = last.get("dir")
             else:
                 agent, _, said = target.partition("@")
                 caller_pane = get_caller()[0]
-                target_info = find_session(agent, resolve_dir(said, cwd=cwd),
-                                           caller_pane=caller_pane)
+                found_dir = resolve_dir(said, cwd=cwd)
+                target_info = find_session(agent, found_dir, caller_pane=caller_pane)
+                target_dir = str(found_dir)
                 pane_id = target_info["pane_id"]
                 target_agent = agent
                 tracked[pane_id] = (agent, target_info.get("_hosted"))
@@ -472,14 +532,11 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
                 hosted_target = target_info.get("_hosted") if isinstance(target_info, dict) else None
                 if hosted_target is not None:
                     # Found through tmux, so Kilix lists no coding session. Re-read the same
-                    # tmux pane and process; the message goes where tmux is showing.
+                    # tmux pane, processes and screen; delivery goes to that pane only.
                     if coding is not None:
                         raise AgentsError("the target changed (Kilix now lists a coding session); "
                                           "the message is held")
-                    activity, now = _state(pane, target_agent, hosted_target)
-                    if activity in ("idle", "working") and (not now["active"] or now["in_mode"]):
-                        raise AgentsError("tmux would send the message to another pane or a "
-                                          "mode, not to that session; the message is held")
+                    activity, hosted_now = _state(pane, target_agent, hosted_target)
                 else:
                     if not isinstance(coding, dict):
                         raise AgentsError("the target is not a live coding-agent pane")
@@ -488,7 +545,14 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
                         raise AgentsError("the target is not a live coding-agent pane")
                     if observed_agent and observed_agent != target_agent:
                         raise AgentsError("the target coding agent changed; the message is held")
-                    activity, _now = _state(pane, target_agent, None)
+                    # The same session in the same directory as when it was found.
+                    fresh = _session_identity(pane)
+                    if target_dir and fresh["cwd"] != str(Path(target_dir).resolve()):
+                        raise AgentsError("the session's directory changed; the message is held")
+                    known = target_info.get("_identity") if isinstance(target_info, dict) else None
+                    if known and not _same_identity(known, fresh):
+                        raise AgentsError("the session changed since it was found; the message is held")
+                    activity, hosted_now = _state(pane, target_agent, None)
             if activity == "waiting":
                 raise AgentsError("the session is waiting for an approval or a menu; "
                                   "the message is held")
@@ -500,13 +564,22 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
                 # state, so they take messages only while idle.
                 raise AgentsError(f"a {target_agent} session takes a message only when idle; "
                                   "ask to wait until it is done first")
-            broker = _broker_id(pane)
-            argv = ["agent-control", "send", str(pane_id), "--expect-broker", broker,
-                    "--text", action.args["text"], "--submit"]
-            if dry_run:
-                entry.update(outcome="would", argv=argv)
-                continue
-            _run(argv)
+            hosted_target = target_info.get("_hosted") if isinstance(target_info, dict) else None
+            if hosted_target is not None:
+                argv = ["tmux", *hosted_target["tmux_socket"], "if-shell", "-F", "-t", hosted_target["tmux_pane"],
+                        "<guard>", "paste-buffer + Enter into exactly that pane"]
+                if dry_run:
+                    entry.update(outcome="would", argv=argv)
+                    continue
+                _deliver_hosted(pane, hosted_target, action.args["text"])
+            else:
+                broker = _broker_id(pane)
+                argv = ["agent-control", "send", str(pane_id), "--expect-broker", broker,
+                        "--text", action.args["text"], "--submit"]
+                if dry_run:
+                    entry.update(outcome="would", argv=argv)
+                    continue
+                _run(argv)
             if activity == "idle":
                 try:
                     wait_state(pane_id, "working", 30, 60)

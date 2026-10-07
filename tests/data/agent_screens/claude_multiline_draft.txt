@@ -1,8 +1,7 @@
 ● Example step 1 done.
 
-✻ Brewed for 2m 50s · done 4:40 AM
-
 ────────────────────────────────────────────────────────────
-❯ 
+❯ fix the failure and
+  then run the tests
 ────────────────────────────────────────────────────────────
-  ⏵⏵ bypass permissions on (shift+tab to cycle) · 1 monitor · ← for agents
+  ? for shortcuts
