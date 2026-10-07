@@ -278,6 +278,42 @@ def _process_environment(pid, *, proc_root: str = "/proc") -> dict[str, str | No
     return found
 
 
+def _client_changed(item: dict, argv: list, *, proc_root: str) -> str:
+    """Why the listed client cannot be trusted any more, or "" when it still is what the listing says.
+
+    The listing is a snapshot: the process is read again, and its live command line (and working
+    directory, when the listing gives one) must equal it, before any socket is read out of it. (Kilix
+    always lists a pid; an entry with none can only come from a degraded listing.)
+    """
+    pid = item.get("pid")
+    if pid is None:
+        return ""               # an entry that names no process has nothing to read again: its listed argv stands
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        return "the listed client process id is not valid"
+    try:
+        raw = (Path(proc_root) / str(pid) / "cmdline").read_bytes()
+    except OSError:
+        return "the client process cannot be read any more"
+    parts = raw.split(b"\0")
+    if parts and parts[-1] == b"":
+        parts.pop()
+    try:
+        live = [part.decode() for part in parts]
+    except UnicodeDecodeError:
+        return "the client's command line is not valid text"
+    if live != [str(value) for value in argv]:
+        return "the client's command line is not the one listed"
+    cwd = item.get("cwd")
+    if isinstance(cwd, str) and cwd:
+        try:
+            now = os.readlink(Path(proc_root) / str(pid) / "cwd")
+        except OSError:
+            return "the client's directory cannot be read"
+        if now != cwd:
+            return "the client's directory is not the one listed"
+    return ""
+
+
 _TMUX_VARIABLE = re.compile(r"(?P<path>[^,]+),(?P<pid>\d+),(?P<session>\d+)\Z")
 
 
@@ -292,9 +328,14 @@ def tmux_socket(item: dict, *, proc_root: str = "/proc") -> tuple[str | None, st
     `PATH,PID,SESSION` is refused rather than guessed (tmux cuts $TMUX at its first comma).
     """
     argv = item.get("argv") if isinstance(item.get("argv"), list) else []
+    changed = _client_changed(item, argv, proc_root=proc_root)
+    if changed:
+        return None, changed
     options = _tmux_options(argv)
     if options is None:
         return None, "its command line has an option that cannot be read exactly"
+    if "L" in options and not options["L"]:
+        return None, "its -L name is empty"
     if "S" in options:
         path = options["S"]
         if not path:
@@ -321,7 +362,7 @@ def tmux_socket(item: dict, *, proc_root: str = "/proc") -> tuple[str | None, st
     base = environment.get("TMUX_TMPDIR") or "/tmp"
     if not os.path.isabs(base):
         return None, "the client's TMUX_TMPDIR is relative"
-    name = options.get("L") or "default"
+    name = options["L"] if "L" in options else "default"
     if "/" in name:
         return None, "its -L name contains a slash"
     try:

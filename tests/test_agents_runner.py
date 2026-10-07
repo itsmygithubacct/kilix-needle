@@ -275,7 +275,7 @@ class InsideTmuxHint(unittest.TestCase):
     def tmux_pane(pane_id=6, argv=("tmux", "new-session", "-s", "x", "claude"), activity="running"):
         return {"pane_id": pane_id, "cwd": "/w/kilix", "activity": activity, "coding_session": None,
                 "broker": {"session_id": "b" * 16},
-                "process": {"foreground": [{"pid": 4000, "argv": list(argv), "cwd": "/w/kilix"}]}}
+                "process": {"foreground": [{"pid": 4000 + pane_id - 6, "argv": list(argv), "cwd": "/w/kilix"}]}}
 
     def run_tell(self, panes):
         def run(argv, timeout=30):
@@ -290,10 +290,7 @@ class InsideTmuxHint(unittest.TestCase):
             return agents_kilix.perform([tell], cwd="/w")[0]
 
     def test_a_pane_running_a_tmux_client_is_named_with_the_way_to_reach_it(self):
-        with mock.patch.object(agents_kilix, "PROC_ROOT", str(self.fake_proc(4000, {"HOME": "/h"}))):
-            result = self.run_tell([self.tmux_pane()])
-        self.assertEqual(result["outcome"], "failed")
-        reason = result["reason"]
+        reason = self.hint([self.tmux_pane()], self.fake_proc(4000, {"HOME": "/h"}))
         for word in ("tmux", "pane 6", "cannot read its state", "no message is sent into tmux",
                      "kilix-needle tmux --socket", "attach"):
             self.assertIn(word, reason)
@@ -307,8 +304,29 @@ class InsideTmuxHint(unittest.TestCase):
             b"\0".join(f"{k}={v}".encode() for k, v in environ.items()) + b"\0")
         return root
 
+    def live_clients(self, panes, proc):
+        """Make /proc agree with the listing: each listed client runs its listed command in its directory."""
+        root = Path(proc) if proc else Path(tempfile.mkdtemp(prefix="kn-proc-"))
+        if not proc:
+            self.addCleanup(shutil.rmtree, root, True)
+        for pane in panes:
+            for item in (pane.get("process") or {}).get("foreground") or []:
+                pid = item.get("pid")
+                if not isinstance(pid, int):
+                    continue
+                folder = root / str(pid)
+                folder.mkdir(exist_ok=True)
+                (folder / "cmdline").write_bytes(b"\0".join(str(a).encode() for a in item["argv"]) + b"\0")
+                link = folder / "cwd"
+                if link.is_symlink():
+                    link.unlink()
+                if item.get("cwd"):
+                    link.symlink_to(item["cwd"])
+        return root
+
     def hint(self, panes, proc=None):
-        with mock.patch.object(agents_kilix, "PROC_ROOT", str(proc or "/nonexistent-proc")):
+        root = self.live_clients(panes, proc)
+        with mock.patch.object(agents_kilix, "PROC_ROOT", str(root)):
             return self.run_tell(panes)["reason"]
 
     def test_the_sockets_of_the_clients_are_used_in_the_hint(self):
@@ -439,6 +457,50 @@ class InsideTmuxHint(unittest.TestCase):
     def test_a_well_formed_TMUX_gives_the_socket_up_to_its_first_comma(self):
         proc = self.fake_proc(4000, {"TMUX": "/inner/sock,4242,3"})
         self.assertIn("--socket /inner/sock ", self.hint([self.tmux_pane(argv=("tmux", "attach"))], proc))
+
+    def test_an_empty_label_is_refused_not_read_as_default(self):
+        proc = self.fake_proc(4000, {"TMUX_TMPDIR": "/clients/tmp"})
+        got = self.hint([self.tmux_pane(argv=("tmux", "-L", "", "attach"))], proc)
+        self.assertNotIn("--socket", got)
+        self.assertIn("-L name is empty", got)
+        got = self.hint([self.tmux_pane(argv=("tmux", "-L", "x", "attach"))], proc)
+        self.assertIn("/clients/tmp/tmux-", got)
+
+    def test_a_client_that_is_no_longer_what_the_listing_says_names_no_socket(self):
+        pane = self.tmux_pane(argv=("tmux", "-S", "/fixture/old", "attach"))
+        root = self.live_clients([pane], None)
+        self.assertIn("--socket /fixture/old ", self.hint([pane], root))
+        # the process now runs another command line, another directory, is gone, or the listing has no pid
+        (root / "4000" / "cmdline").write_bytes(b"tmux\0-S\0/fixture/current\0attach\0")
+        with mock.patch.object(agents_kilix, "PROC_ROOT", str(root)):
+            got = self.run_tell([pane])["reason"]
+        self.assertNotIn("--socket", got)
+        self.assertIn("command line is not the one listed", got)
+        (root / "4000" / "cmdline").write_bytes(b"tmux\0-S\0/fixture/old\0attach\0")
+        (root / "4000" / "cwd").unlink()
+        (root / "4000" / "cwd").symlink_to("/elsewhere")
+        with mock.patch.object(agents_kilix, "PROC_ROOT", str(root)):
+            got = self.run_tell([pane])["reason"]
+        self.assertNotIn("--socket", got)
+        self.assertIn("directory is not the one listed", got)
+        (root / "4000" / "cmdline").unlink()
+        with mock.patch.object(agents_kilix, "PROC_ROOT", str(root)):
+            self.assertNotIn("--socket", self.run_tell([pane])["reason"])
+        for bad in (0, -3, True, "4000", 1.5):
+            invalid = dict(pane, process={"foreground": [{"pid": bad, "argv": ["tmux", "-S", "/fixture/old"], "cwd": "/w/kilix"}]})
+            got = self.hint([invalid])
+            self.assertNotIn("--socket", got, bad)
+            self.assertIn("process id is not valid", got, bad)
+        # a degraded listing entry with no pid at all has nothing to read again: its listed argv stands
+        nopid = dict(pane, process={"foreground": [{"argv": ["tmux", "-S", "/fixture/old"], "cwd": "/w/kilix"}]})
+        self.assertIn("--socket /fixture/old ", self.hint([nopid]))
+
+    def test_a_command_line_that_is_not_valid_text_names_no_socket(self):
+        pane = self.tmux_pane(argv=("tmux", "-S", "/fixture/old", "attach"))
+        root = self.live_clients([pane], None)
+        (root / "4000" / "cmdline").write_bytes(b"tmux\0-S\0/fixture/\xff\0attach\0")
+        with mock.patch.object(agents_kilix, "PROC_ROOT", str(root)):
+            self.assertNotIn("--socket", self.run_tell([pane])["reason"])
 
     def test_each_distinct_server_gets_its_own_command(self):
         one = self.tmux_pane(pane_id=6, argv=("tmux", "-S", "/s/a", "attach"))

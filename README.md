@@ -682,11 +682,13 @@ ambiguous matches are refused. Research directories need an explicit path
 or configured alias. A session reference must identify one live coding
 session; `it` refers to the session launched earlier in the same request.
 
-**Waiting and messaging.** Waits can target idle (turn finished) or waiting
-(the client asks something). Messages are held when a session is waiting
-on an approval or menu. The current runner permits steering working Claude
-and Grok sessions; Codex and Qwen OMP must be idle before receiving a
-message. These are session controls, not arbitrary keystrokes into a pane.
+**Waiting and messaging.** Only **Claude Code** sessions have a state Kilix can certify, so only
+they can be waited on or messaged. Waits can target idle (turn finished) or waiting (the client asks
+something). Messages are held when a session is waiting on an approval or menu; a working Claude
+session may be steered. Codex, Grok, Qwen OMP and Kimi sessions (and any other pane whose state is
+`agent`) are refused for `tell` and `wait` with a message that says Kilix cannot read their state:
+none of them writes a record that names the session a process runs now. Launching them (`agent`)
+still works. These are session controls, not arbitrary keystrokes into a pane.
 
 An agent that runs inside tmux (for example a restored `tmux new-session … claude --resume …`)
 is not visible to Kilix: the pane's foreground program is tmux, so its state cannot be read
@@ -704,12 +706,13 @@ names no socket, and says how to find it (`tmux display-message -p '#{socket_pat
 `-S` path is left as written, so the filesystem resolves any `..` through symlinks; `$TMUX` is cut at its
 first comma as tmux does, and only when it is exactly `PATH,PID,SESSION`.
 
-**Codex is not available for `tell`/`wait`.** Kilix reads a Codex pane's state from nothing: no Codex
-record names the session a running process owns *now* (a rollout is opened per write, `/resume` switches
-sessions in place, a PID can be reused), so every Codex pane reads `agent` and needle refuses to send to or
-wait on it, saying so, until Codex exposes an exact current-session identity. Launching Codex (`agent`)
-still works. The same refusal applies to any session whose state is `agent`. See the kilix-tui-utils
-README ("Where an agent's state comes from").
+**Why only Claude.** Kilix reads a state only from a record that names the process instance and
+its session exactly (Claude's registry row: pid, `procStart`, the process's own config directory,
+checked again when used). Codex has none (a rollout is opened per write, `/resume` switches sessions
+in place, a PID can be reused), Grok's registry and OMP's files were matched by PID existence or by
+directory and time, and Kimi exposes nothing; their panes read `agent` and needle refuses to send to or
+wait on them, until such a record exists. See the kilix-tui-utils README ("Where an agent's state
+comes from").
 
 ## The system job
 
