@@ -124,22 +124,57 @@ def controls(text: str) -> bool:
     return any(unicodedata.category(c) in ("Cc", "Cf", "Cs", "Zl", "Zp") for c in text)
 
 
+_TARGET = re.compile(r"(?<![A-Za-z0-9._-])[0-9a-f]{16,64}(?:\.[0-9]{1,20})?(?![A-Za-z0-9._-])")
+
+
+def targets(request: str) -> list[str]:
+    """The IDs a request names, in order: quoted IDs, then bare lowercase-hex IDs."""
+    found = [m.group()[1:-1] for m in _QUOTED.finditer(request) if valid_id(m.group()[1:-1])]
+    found += _TARGET.findall(_QUOTED.sub(" ", request))
+    return list(dict.fromkeys(found))
+
+
 def hint_for(request: str) -> str:
-    """One accepted form, chosen by what the refused request seems to want."""
+    """One accepted form, chosen by what the refused request seems to want.
+
+    A hint never names a session the request did not name. With exactly one ID in
+    the request, the form carries that ID (and for an ending request, only a read
+    of it: the refused words may be a negation or hearsay). With several IDs, or an
+    ending request without one, it is `list sessions`. A placeholder ID appears
+    only in a read example for a request with no ID in it at all.
+    """
     text = request.casefold()
+    named = targets(request)
+    if len(named) > 1:
+        return HINTS["list"]
+    lit = id_literal(named[0]) if named else None
     if _KILL_WORDS.search(text):
-        return HINTS["kill"]
+        return f"show session {lit}" if lit else HINTS["list"]
     if re.search(r"\b(?:lines?|tail|output|last|read)\b", text):
-        return HINTS["observe"]
+        return f"show the last 50 lines of session {lit}" if lit else HINTS["observe"]
     if "journals" in text:
         return HINTS["journals"]
     if "journal" in text:
-        return HINTS["journal"]
+        return f"show archived journal {lit}" if lit else HINTS["journal"]
     if re.search(r"\bpane\b", text):
         return HINTS["pane"]
     if re.search(r"\b(?:status|state|details|show|describe|inspect|get)\b.*\bsession\b", text):
-        return HINTS["status"]
+        return f"show session {lit}" if lit else HINTS["status"]
     return HINTS["list"]
+
+
+def structured_hint(operation, ident=None) -> str:
+    """The structured twin of `hint_for`: the request's own ID, or none, or a read example."""
+    ident = ident if valid_id(ident) else None
+    if operation == "kill":
+        return (json.dumps({"operation": "status", "id": ident}, separators=(",", ":"))
+                if ident else STRUCTURED_HINTS["list"])
+    if operation in ("status", "observe", "journal") and ident:
+        example = json.loads(STRUCTURED_HINTS[operation])
+        example["id"] = ident
+        return json.dumps(example, separators=(",", ":"))
+    return STRUCTURED_HINTS.get(operation, STRUCTURED_HINTS["list"]) if isinstance(operation, str) \
+        else STRUCTURED_HINTS["list"]
 
 
 def _reason(request: str) -> str:
@@ -221,8 +256,7 @@ def _number(value, name, low, high, unit, whole=False):
 def structured(request) -> dict:
     """The same operations as an object: unknown fields and wrong types refuse."""
     operation = request.get("operation") if isinstance(request, dict) else None
-    hint = STRUCTURED_HINTS.get(operation, STRUCTURED_HINTS["list"]) if isinstance(operation, str) \
-        else STRUCTURED_HINTS["list"]
+    hint = structured_hint(operation, request.get("id") if isinstance(request, dict) else None)
     try:
         if not isinstance(request, dict):
             raise ValueError("a structured pty request is an object")

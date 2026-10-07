@@ -132,16 +132,19 @@ def checked(action: dict, document: dict, returncode: int, step: str = "run") ->
     operation = action["operation"]
     ident = action.get("id")
     if operation == "kill" and step == "kill":
-        result = document.get("result")
-        if (result not in RESULTS or RESULTS[result] != returncode or document.get("id") != ident
-                or type(document.get("request_sent")) is not bool):
+        result, reason = document.get("result"), document.get("reason")
+        # Types first: a receipt is untrusted input, and a list or object is not a dict key.
+        if (not isinstance(result, str) or result not in RESULTS or RESULTS[result] != returncode
+                or not isinstance(document.get("id"), str) or document["id"] != ident
+                or type(document.get("request_sent")) is not bool
+                or (reason is not None and not isinstance(reason, str))):
             raise ValueError("kill receipt does not match the request or its exit status")
         sent = document["request_sent"]
         if result == "verified_absent":
             # Success is only for the incarnation read just before the kill was sent.
-            if (sent is not True or not _integer(document.get("started_millis"))
+            if (sent is not True or reason is not None or not _integer(document.get("started_millis"))
                     or document["started_millis"] != action.get("expect")):
-                raise ValueError("verified_absent receipt must have request_sent true and the "
+                raise ValueError("verified_absent receipt must have request_sent true, no reason and the "
                                  "started_millis that --expect-started carried")
         elif result in ("refused", "not_found") and sent is not False:
             raise ValueError(f"{result} receipt must have request_sent false")

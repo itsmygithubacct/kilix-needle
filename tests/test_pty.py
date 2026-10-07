@@ -4,6 +4,7 @@ import contextlib
 import io
 import json
 import os
+import re
 from pathlib import Path
 import stat
 import sys
@@ -212,7 +213,7 @@ class Grammar(unittest.TestCase):
                 self.assertEqual(script.calls, [])
 
     def test_hint_follows_the_intent_of_the_refused_request(self):
-        for text, expected in (("close the stuck session now", "end session"),
+        for text, expected in (("close the stuck session now", "list sessions"),
                                ("show me what session 0123 printed, last 20 lines", "show the last 50 lines"),
                                ("show the journals", "list archived journals"),
                                ("which session has pane 5 and 6", "which session is pane"),
@@ -567,6 +568,99 @@ class ReceiptInvariants(unittest.TestCase):
         self.assertNotIn("hint", record)
 
 
+class ReceiptFields(unittest.TestCase):
+    """Fields of a receipt are untrusted input: types before use, reasons consistent with results."""
+
+    def kill(self, document, code=0):
+        script = kill_script(kill=reply(document, code))
+        return run(f"end session {ID}", script, assume_yes=True)
+
+    def assert_unknown(self, record):
+        self.assertEqual((record["status"], record["completion"]), (1, "unknown"), record)
+        self.assertNotIn("result", record)
+        self.assertEqual(pty_job.parse(record["hint"]), {"operation": "status", "id": ID})
+
+    def test_a_success_with_a_failure_reason_is_not_success(self):
+        for reason in ("still_listed", "list_failed", "status_failed", "status_timeout", "started_mismatch",
+                       "own_session", "declined", "anything", "", "cannot_bind"):
+            with self.subTest(reason=reason):
+                self.assert_unknown(self.kill(receipt("verified_absent", started_millis=STARTED, reason=reason)))
+
+    def test_a_success_with_no_reason_or_a_null_one_passes(self):
+        document = receipt("verified_absent", started_millis=STARTED)
+        self.assertIsNone(document["reason"])
+        self.assertEqual(self.kill(document)["result"], document)
+        del document["reason"]
+        self.assertEqual(self.kill(document)["status"], 0)
+
+    def test_failure_results_pass_through_with_any_reason_string(self):
+        # Kilix adds reasons over time; a closed list here would turn a new one into an error.
+        cases = (("uncertain", 1, True, "still_listed"), ("uncertain", 1, False, "status_timeout"),
+                 ("uncertain", 1, True, "terminate_timed_out"), ("uncertain", 1, True, None),
+                 ("refused", 3, False, "cannot_bind"), ("refused", 3, False, "a_reason_not_yet_invented"),
+                 ("refused", 3, False, "started_mismatch"), ("not_found", 4, False, "gone"))
+        for result, code, sent, reason in cases:
+            with self.subTest(result=result, reason=reason):
+                document = receipt(result) | {"request_sent": sent, "reason": reason, "extra_field": {"new": 1}}
+                record = self.kill(document, code)
+                self.assertEqual((record["result"], record["status"]), (document, code))
+                self.assertNotIn("completion", record)
+
+    def test_malformed_field_types_are_an_unknown_completion_not_a_crash(self):
+        good = receipt("verified_absent", started_millis=STARTED)
+        for field, value in (("result", []), ("result", {}), ("result", ["verified_absent"]), ("result", 5),
+                             ("result", None), ("id", []), ("id", {}), ("id", 5), ("id", None),
+                             ("request_sent", "true"), ("request_sent", 1), ("request_sent", [True]),
+                             ("started_millis", []), ("started_millis", {}), ("started_millis", "1"),
+                             ("reason", []), ("reason", {}), ("reason", 5), ("reason", True),
+                             ("schema", []), ("schema", {}), ("runtime", []), ("runtime", None)):
+            with self.subTest(field=field, value=value):
+                self.assert_unknown(self.kill(good | {field: value}))
+        # the same for the other results' own fields
+        self.assert_unknown(self.kill(receipt("refused") | {"reason": []}, 3))
+        self.assert_unknown(self.kill(receipt("uncertain") | {"result": [[]]}, 1))
+
+    def test_the_validator_itself_raises_value_error_for_any_malformed_receipt(self):
+        good = receipt("verified_absent", started_millis=STARTED)
+        action = {"operation": "kill", "id": ID, "expect": STARTED}
+        for field, value in (("result", []), ("result", {}), ("result", [[]]), ("reason", []), ("reason", {}),
+                             ("id", []), ("request_sent", []), ("started_millis", [])):
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                pty_backend.checked(action, good | {field: value}, 0, "kill")
+
+    def test_any_other_exception_from_the_validator_still_reaches_the_recovery_envelope(self):
+        real = pty_backend.checked
+
+        def failing(error):
+            def check(action, document, code, step="run"):
+                if step == "kill":
+                    raise error
+                return real(action, document, code, step)
+            return check
+
+        for error in (TypeError("x"), KeyError("x"), AttributeError("x")):
+            with self.subTest(error=error), mock.patch.object(pty_backend, "checked", failing(error)):
+                record = run(f"end session {ID}", kill_script(), assume_yes=True)
+            self.assertEqual((record["status"], record["completion"]), (1, "unknown"))
+            pty_job.parse(record["hint"])
+
+    def test_malformed_lookups_and_reads_are_a_failed_record_not_a_crash(self):
+        for document in (header(session=[]), header(session={"id": []}), header(session={"id": ID, "started_millis": []}),
+                         header(result=[], id=ID), header(result="not_found", id=[]), header(session=None)):
+            with self.subTest(document=document):
+                record = run(f"end session {ID}", Script((["status"], reply(document, 0))), assume_yes=True)
+                self.assertEqual(record["status"], 1)
+                self.assertNotIn("completion", record)             # nothing was sent
+                pty_job.parse(record["hint"])
+        for request, document in ((f"show session {ID}", header(session=[])), ("list sessions", header(sessions={}, unreachable=[])),
+                                  (f"show the last 5 lines of session {ID}", observe_doc() | {"id": []}),
+                                  ("list archived journals", header(journals="x"))):
+            with self.subTest(request=request):
+                record = run(request, Script((["pty"], reply(document))))
+                self.assertEqual(record["status"], 1)
+                pty_job.parse(record["hint"])
+
+
 class Hints(unittest.TestCase):
     """Every refusal and recovery record names one request the grammar accepts."""
 
@@ -627,7 +721,7 @@ class Hints(unittest.TestCase):
                     self.assertIn(self.accepted(record["hint"])["operation"], pty_job.OPERATIONS)
 
     def test_a_refused_request_gets_the_hint_for_what_it_asked(self):
-        for text, expected in ((f"close session {ID}", "end session"), (f"never end session {ID}", "end session"),
+        for text, expected in ((f"close session {ID}", "show session"), (f"never end session {ID}", "show session"),
                                ("list the journals please and", "list archived journals"),
                                ("which session has pane abc", "which session is pane"),
                                ("tail output of the build", "show the last 50 lines")):
@@ -649,6 +743,66 @@ class Hints(unittest.TestCase):
             hint = record.get("hint", "")
             self.assertNotIn("re-list", hint)
             self.assertNotIn("install", hint.lower())
+
+    def named(self, text):
+        if text.startswith("{"):
+            ident = json.loads(text).get("id")
+            return {ident} if isinstance(ident, str) else set()
+        found = [m.group()[1:-1] for m in re.finditer(r"\"[^\"]*\"", text)]
+        return set(found) | set(re.findall(r"(?<![A-Za-z0-9._-])[0-9a-f]{16,64}(?:\.[0-9]{1,20})?(?![A-Za-z0-9._-])",
+                                           re.sub(r"\"[^\"]*\"", " ", text)))
+
+    def test_a_hint_never_names_a_session_the_request_did_not_name(self):
+        other = "fedcba9876543210"
+        requests = [f"Sam says to end session {ID}", f"do not end session {ID}", f"end session {ID} if idle",
+                    f"end session {ID} and end session {other}", f"end session {ID} and list sessions",
+                    f'never end session "my.id"', f"close session {ID}", f"stop session {ID}",
+                    f"show the last 0 lines of session {ID}", f"show the last 5000 lines of session {ID}",
+                    f"tail output of {ID}", f"show archived journals {ID}", f"show archived journal {ID}.{STARTED} now and more",
+                    f"which session is pane {ID}", f"status {ID} please do", "end session 3fa9",
+                    "end session titled build", "end this session", "kill session", "end session ID",
+                    "close the stuck session", "show the last 5 lines", "journal please", "what is going on"]
+        records = [run(text, Script(), assume_yes=True) for text in requests]
+        for payload in ({"operation": "kill", "id": ID, "expect_started": 1}, {"operation": "kill", "id": ID, "max_lines": 5},
+                        {"operation": "status", "id": ID, "extra": 1}, {"operation": "observe", "id": ID, "max_lines": 0},
+                        {"operation": "journal", "id": ID, "max_bytes": 0}, {"operation": "kill"},
+                        {"operation": "kill", "id": "-x"}, {"operation": "kill", "id": ["x"]}, {"operation": "nope", "id": ID}):
+            records.append(run(payload, Script(), assume_yes=True))
+        # the read tool refusing an exact request
+        records += [run(f"end session {ID}", Script(), reads_only=True), run('end session "A.b"', Script(), reads_only=True),
+                    run({"operation": "kill", "id": ID}, Script(), reads_only=True)]
+        records += self.records()
+        for record in records:
+            request = record["request"]
+            asked = {request["id"]} if isinstance(request, dict) and isinstance(request.get("id"), str) \
+                else self.named(request) if isinstance(request, str) else set()
+            hint = record.get("hint")
+            if hint is None:
+                continue
+            with self.subTest(request=str(request)[:60], hint=hint):
+                mentioned = self.named(hint)
+                if asked:
+                    self.assertLessEqual(mentioned, asked)
+                elif "kill" in hint or hint.startswith("end session"):
+                    self.assertEqual(mentioned, set())          # an ending example never carries a placeholder
+                if len(asked) > 1:
+                    self.assertEqual(mentioned, set())
+
+    def test_a_structured_refusal_keeps_the_requests_own_id(self):
+        cases = (({"operation": "kill", "id": ID, "expect_started": 1}, {"operation": "status", "id": ID}),
+                 ({"operation": "observe", "id": ID, "max_lines": 0}, {"operation": "observe", "id": ID, "max_lines": 50}),
+                 ({"operation": "status", "id": ID, "extra": 1}, {"operation": "status", "id": ID}),
+                 ({"operation": "journal", "id": "A.b", "max_bytes": 0}, {"operation": "journal", "id": "A.b", "max_lines": 50}),
+                 ({"operation": "kill", "id": "-x"}, {"operation": "list"}), ({"operation": "kill"}, {"operation": "list"}))
+        for payload, expected in cases:
+            with self.subTest(payload=payload):
+                self.assertEqual(json.loads(run(payload, Script())["hint"]), expected)
+
+    def test_the_read_tool_points_at_act_with_the_same_id(self):
+        for ident, literal in ((ID, ID), ("A.b", '"A.b"')):
+            record = run(f"end session {literal}", Script(), reads_only=True)
+            self.assertEqual(record["hint"], f"end session {literal}")
+            self.assertIn("kilix_pty_act", record["note"])
 
     def test_every_static_hint_parses(self):
         for hint in pty_job.HINTS.values():
@@ -678,6 +832,8 @@ n = len(os.listdir(root + "/calls"))
 json.dump({{"argv": sys.argv[1:], "stdin_closed": sys.stdin.read() == "",
            "own": os.environ.get("KITTY_PTY_BROKER_SESSION")}}, open(root + f"/calls/{{n:04d}}.json", "w"))
 rule = json.load(open(root + "/rule.json"))
+if "by" in rule:
+    rule = rule["by"][sys.argv[2]]
 time.sleep(rule.get("sleep", 0))
 sys.stdout.write(rule.get("stdout", ""))
 sys.stderr.write(rule.get("stderr", ""))
@@ -700,6 +856,25 @@ sys.exit(rule.get("rc", 0))
         record = pty_cli.run("list sessions")
         self.assertEqual(record["status"], 0)
         self.assertEqual(self.calls(), [{"argv": ["pty", "list", "--json"], "stdin_closed": True, "own": OWN}])
+
+    def test_malformed_receipts_over_the_real_json_transport_are_unknown_completion(self):
+        status = json.dumps(status_doc())
+        for receipt_text in ('{"schema":"kilix.pty/v1","runtime":"/srv/r","result":[],"id":"%s","request_sent":true}' % ID,
+                             '{"schema":"kilix.pty/v1","runtime":"/srv/r","result":{},"id":"%s","request_sent":true}' % ID,
+                             '{"schema":"kilix.pty/v1","runtime":"/srv/r","result":"verified_absent","id":[],"request_sent":true}',
+                             json.dumps(receipt("verified_absent", started_millis=STARTED, reason="still_listed")),
+                             json.dumps(receipt("verified_absent", started_millis=STARTED + 1)),
+                             json.dumps(receipt("verified_absent", started_millis=STARTED) | {"request_sent": False})):
+            with self.subTest(receipt=receipt_text[:90]):
+                self.say(by={"status": {"stdout": status}, "kill": {"stdout": receipt_text, "rc": 0}})
+                record = pty_cli.run(f"end session {ID}", assume_yes=True)
+                self.assertEqual((record["status"], record["completion"]), (1, "unknown"), record)
+                self.assertNotIn("result", record)
+                self.assertEqual(pty_job.parse(record["hint"]), {"operation": "status", "id": ID})
+        good = receipt("verified_absent", started_millis=STARTED)
+        self.say(by={"status": {"stdout": status}, "kill": {"stdout": json.dumps(good), "rc": 0}})
+        record = pty_cli.run(f"end session {ID}", assume_yes=True)
+        self.assertEqual((record["status"], record["result"]), (0, good))
 
     def test_a_launcher_without_the_pty_subcommands_is_refused_with_a_hint(self):
         self.say(stderr="usage: kilix pty [--install-only]\n", rc=2)

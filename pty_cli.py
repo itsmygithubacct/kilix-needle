@@ -71,7 +71,7 @@ def _answer(record: dict, action: dict, reply, step: str = "run") -> dict | None
         return None
     try:
         return pty_backend.checked(action, reply.document, reply.returncode, step)
-    except ValueError as exc:
+    except (ValueError, TypeError, KeyError, AttributeError) as exc:
         record.update(status=1, note=f"kilix pty returned an unexpected document: {exc}")
         if action["operation"] == "kill" and step == "kill":
             record.update(completion="unknown", hint=pty_job.show_request(action["id"]))
@@ -170,7 +170,7 @@ def _run(request, held, *, dry_run=False, assume_yes=False, agent=False, confirm
     record["operation"] = operation
     if reads_only and operation == "kill":
         record.update(note="this tool only reads; ending a session is kilix_pty_act with "
-                           "confirm_risky=true", hint=pty_job.HINTS["kill"])
+                           "confirm_risky=true", hint=f"end session {pty_job.id_literal(action['id'])}")
         return record
     if dry_run:
         record["dry_run"] = True
