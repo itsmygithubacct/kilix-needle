@@ -81,10 +81,22 @@ refused request is never partly executed.
 | bounds | `show the last 5000 lines of session ID` | N lines is a count of lines, 1-1000 |
 | shape | empty, control characters, over 1024 characters | |
 
-The hint is chosen from the words of the refused request, for example
-`end session 0123456789abcdef` for anything about ending, closing or killing.
-Its ID is a placeholder that no session has; replace it with a full ID from
-`list sessions`.
+The hint is chosen from the words of the refused request, and **it never names a
+session the request did not name**:
+
+- a request with exactly one ID gets a form carrying that same ID literal; for
+  anything about ending, closing or killing it is a *read* of it
+  (`show session ID`), because the refused words may be a negation or hearsay;
+- a request with several IDs, or an ending request with none, gets
+  `list sessions`;
+- only a read example for a request with no ID in it at all
+  (`show the last 50 lines of session 0123456789abcdef`) uses the placeholder
+  `0123456789abcdef`. It is a well-formed ID, and a session could have it, so it
+  is never used in an ending example;
+- the MCP read tool's refusal of `end session ID` hints `end session ID` with
+  the same literal, and its note points at `kilix_pty_act`.
+
+A structured refusal follows the same rule with a structured request.
 
 `attach` and `reap` are not reachable through this job. `attach` takes a
 terminal; `reap` stays a `kilix pty reap` maintenance command.
@@ -156,14 +168,20 @@ the result's own fields agree with it:
 
 | `result` | exit | Needle also requires |
 | --- | --- | --- |
-| `verified_absent` | 0 | `request_sent: true` and an integer `started_millis` equal to the `--expect-started` value it sent |
+| `verified_absent` | 0 | `request_sent: true`, **no `reason`** (absent or null) and an integer `started_millis` equal to the `--expect-started` value it sent |
 | `uncertain` | 1 | `request_sent` boolean |
 | `refused` | 3 | `request_sent: false` (a `started_mismatch` receipt describes the replacement session and passes through unchanged) |
 | `not_found` | 4 | `request_sent: false` |
 
 Anything else is reported as `unexpected document`, status 1, without `result`,
 and for a kill with `completion: "unknown"` and a note to re-list before retrying.
-A valid receipt is passed through unchanged.
+Types are checked before any field is used as a key, so a malformed receipt
+(`result` a list, `id` an object, ...) takes the same path. The failure results
+(`uncertain`, `refused`, `not_found`) take **any string `reason`** (or none) and
+pass through unchanged: Kilix adds reasons over time (`refused/cannot_bind` for a
+broker too old to bind a kill, `uncertain` after a timed-out terminate), and a
+closed list here would turn a new legitimate one into an error. A valid receipt
+is passed through unchanged.
 
 Unreachable is not absent. `list` returns sessions that did not answer under
 `result.unreachable`; `show session ID` on one of them fails (status 1) rather
@@ -181,7 +199,7 @@ and `cwd` strings of a session in `list` and `status`: a program chose them.
 ```
 
 ```json
-{"request":"end session 3fa9","job":"pty","status":2,"note":"refused the whole request: an ID must be the full session ID, never a prefix; copy it from 'list sessions'. forms, one per request: ...","hint":"end session 0123456789abcdef"}
+{"request":"end session 3fa9","job":"pty","status":2,"note":"refused the whole request: an ID must be the full session ID, never a prefix; copy it from 'list sessions'. forms, one per request: ...","hint":"list sessions"}
 ```
 
 ```json
