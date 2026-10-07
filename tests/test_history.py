@@ -1,6 +1,7 @@
 """The local request history (history.py): what it records, where, and that
 recording never changes a request."""
 import io
+import datetime
 import json
 import os
 import shutil
@@ -348,16 +349,32 @@ class ReviewR17Round3(unittest.TestCase):
                 Engine([{"name": "go_to_pane", "arguments": {"pane": pane}}]), request,
                 needle_cli.Options(dry_run=True))
 
-    def test_unresolved_and_failed_reasons_stay_out(self):                 # KN-R17-301
+    def reasons_stay_out(self):
         record = self.panes("go to the bash pane", "bash")
         self.assertIn("build (bash)", record["items"][0]["reason"])   # the caller still sees it
         import kilix
         with mock.patch.object(kilix, "snapshot",
                                side_effect=kilix.KilixError("error for pane 999: private-title")):
             self.panes("go to the left pane", "left")
-        text = json.dumps(self.lines())
+        # Search what the history says about the request, not when it was written: a timestamp
+        # such as 2026-10-07T07:50:00.999+00:00 legitimately holds digits like "999" or "301".
+        text = json.dumps([{key: value for key, value in line.items() if key != "time"}
+                           for line in self.lines()])
         for secret in ("build (bash)", "301", "private-title", "999"):
             self.assertNotIn(secret, text)
+
+    def test_unresolved_and_failed_reasons_stay_out(self):                 # KN-R17-301
+        self.reasons_stay_out()
+
+    def test_a_timestamp_holding_the_forbidden_digits_does_not_fail_it(self):
+        import types
+        stamp = datetime.datetime(2026, 10, 7, 7, 50, 30, 999000, tzinfo=datetime.timezone.utc)
+        frozen = types.SimpleNamespace(
+            datetime=types.SimpleNamespace(now=lambda tz=None: stamp), timezone=datetime.timezone)
+        with mock.patch.object(history, "datetime", frozen):
+            self.reasons_stay_out()
+        times = [line["time"] for line in self.lines()]
+        self.assertTrue(times and all(t.endswith(".999+00:00") for t in times), times)
 
     def test_the_checks_reasons_are_kept(self):
         with self.quiet():
