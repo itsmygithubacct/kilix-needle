@@ -688,6 +688,11 @@ on an approval or menu. The current runner permits steering working Claude
 and Grok sessions; Codex and Qwen OMP must be idle before receiving a
 message. These are session controls, not arbitrary keystrokes into a pane.
 
+An agent that runs inside tmux (for example a restored `tmux new-session … claude --resume …`)
+is not visible to Kilix: the pane's foreground program is tmux, so its state cannot be read
+and no message is sent into it. A request for such a session says so, names the tmux pane and
+points at the `tmux` job (`kilix-needle tmux --socket SOCKET 'list sessions'`) or `tmux attach`.
+
 ## The system job
 
 `kilix-needle system "…"` selects read-only Linux diagnostic queries. It works

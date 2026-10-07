@@ -220,6 +220,76 @@ class RunnerTransitions(unittest.TestCase):
         self.assertIn("no live codex", results[0]["reason"])
 
 
+class InsideTmuxHint(unittest.TestCase):
+    """A coding agent inside tmux is not readable by Kilix: say so, and how to reach it."""
+
+    @staticmethod
+    def tmux_pane(pane_id=6, argv=("tmux", "new-session", "-s", "x", "claude"), activity="running"):
+        return {"pane_id": pane_id, "cwd": "/w/kilix", "activity": activity, "coding_session": None,
+                "broker": {"session_id": "b" * 16},
+                "process": {"foreground": [{"pid": 4000, "argv": list(argv), "cwd": "/w/kilix"}]}}
+
+    def run_tell(self, panes):
+        def run(argv, timeout=30):
+            if argv[:2] == ["agent-control", "list"]:
+                return json.dumps({"caller_pane": 1, "panes": [{"pane_id": 1, "broker": "a" * 16, "cwd": "/w"}]})
+            if argv[:2] == ["panes", "list"]:
+                return json.dumps({"panes": panes})
+            raise AssertionError(argv)          # nothing may be sent, waited on or typed
+        tell = agents.Action("tell", {"session": "claude@kilix", "text": "go"})
+        with mock.patch.object(agents_kilix, "_run", side_effect=run), \
+                mock.patch.object(agents_kilix, "resolve_dir", return_value=Path("/w/kilix")):
+            return agents_kilix.perform([tell], cwd="/w")[0]
+
+    def test_a_pane_running_a_tmux_client_is_named_with_the_way_to_reach_it(self):
+        result = self.run_tell([self.tmux_pane()])
+        self.assertEqual(result["outcome"], "failed")
+        reason = result["reason"]
+        for word in ("tmux", "Pane 6", "cannot read its state", "no message is sent into tmux",
+                     "kilix-needle tmux --socket", "tmux attach"):
+            self.assertIn(word, reason)
+        self.assertNotIn("no live claude sessions", reason)
+
+    def test_the_sockets_of_the_clients_are_used_in_the_hint(self):
+        got = self.run_tell([self.tmux_pane(argv=("tmux", "-S", "/srv/t/sock", "attach"))])["reason"]
+        self.assertIn("--socket /srv/t/sock", got)
+        got = self.run_tell([self.tmux_pane(argv=("tmux", "-S", "run/sock", "attach"))])["reason"]
+        self.assertIn("--socket run/sock ", got)
+        got = self.run_tell([self.tmux_pane(argv=("tmux", "-L", "work", "attach"))])["reason"]
+        self.assertRegex(got, r"--socket \S*/tmux-\d+/work ")
+        got = self.run_tell([self.tmux_pane(argv=("/usr/bin/tmux", "attach"))])["reason"]
+        self.assertRegex(got, r"--socket \S*/tmux-\d+/default ")
+
+    def test_without_a_tmux_pane_the_old_message_stays(self):
+        plain = dict(self.tmux_pane(), process={"foreground": [{"pid": 1, "argv": ["vim", "x"]}]})
+        self.assertIn("no live claude sessions", self.run_tell([plain])["reason"])
+        self.assertIn("no live claude sessions", self.run_tell([])["reason"])
+
+    def test_a_readable_session_is_used_whatever_else_runs_tmux(self):
+        listed = {"pane_id": 3, "cwd": "/w/kilix", "activity": "idle", "broker": {"session_id": "b" * 16},
+                  "coding_session": {"provider": "claude", "cwd": "/w/kilix"}}
+        sent = []
+
+        def run(argv, timeout=30):
+            if argv[:2] == ["agent-control", "list"]:
+                return json.dumps({"caller_pane": 1, "panes": [{"pane_id": 1, "broker": "a" * 16, "cwd": "/w"}]})
+            if argv[:2] == ["panes", "list"]:
+                return json.dumps({"panes": [self.tmux_pane(), listed]})
+            sent.append(argv)
+            return "{}"
+        tell = agents.Action("tell", {"session": "claude@kilix", "text": "go"})
+        with mock.patch.object(agents_kilix, "_run", side_effect=run), \
+                mock.patch.object(agents_kilix, "resolve_dir", return_value=Path("/w/kilix")):
+            self.assertEqual(agents_kilix.perform([tell], cwd="/w")[0]["outcome"], "done")
+        self.assertEqual(sent[0][:3], ["agent-control", "send", "3"])      # to the listed pane only
+
+    def test_the_callers_own_tmux_pane_and_listed_ones_are_not_named(self):
+        own = self.tmux_pane(pane_id=1)
+        self.assertIn("no live claude sessions", self.run_tell([own])["reason"])
+        coded = dict(self.tmux_pane(), coding_session={"provider": "codex", "cwd": "/w/kilix"})
+        self.assertIn("no live claude sessions", self.run_tell([coded])["reason"])
+
+
 class HelpText(unittest.TestCase):
     def test_agents_help_documents_the_directory_map(self):
         output = io.StringIO()

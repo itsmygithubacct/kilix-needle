@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import json
+import os
 from pathlib import Path
 import subprocess
 import time
@@ -209,6 +210,32 @@ def calling_cwd() -> str | None:
     return caller_info()[2]
 
 
+def _tmux_panes(panes, caller_pane) -> list[tuple[object, list[str]]]:
+    """Panes with no coding session whose foreground is a tmux client: (pane id, its -S/-L socket args).
+
+    A coding agent running inside tmux is invisible to Kilix (its foreground program is tmux), so the
+    state of such a session cannot be read, and nothing is sent into tmux from here.
+    """
+    found = []
+    for pane in panes:
+        if not isinstance(pane, dict) or pane.get("pane_id") == caller_pane or pane.get("coding_session") is not None:
+            continue
+        process = pane.get("process") if isinstance(pane.get("process"), dict) else {}
+        for item in process.get("foreground") or []:
+            argv = item.get("argv") if isinstance(item, dict) and isinstance(item.get("argv"), list) else []
+            if argv and os.path.basename(str(argv[0])) == "tmux":
+                socket = []
+                for index, value in enumerate(argv[1:], 1):
+                    if value in ("-S", "-L") and index + 1 < len(argv):
+                        socket = [value, str(argv[index + 1])]
+                        break
+                    if not str(value).startswith("-"):
+                        break
+                found.append((pane.get("pane_id"), socket))
+                break
+    return found
+
+
 def find_session(agent: str, directory: Path, *, caller_pane: int | None = None) -> dict:
     """Exactly one live pane of that agent in that directory."""
     if caller_pane is None:
@@ -225,6 +252,21 @@ def find_session(agent: str, directory: Path, *, caller_pane: int | None = None)
         cwd = coding.get("cwd") or pane.get("cwd") or ""
         if provider == agent and cwd and Path(cwd).resolve() == directory:
             matches.append(pane)
+    if not matches:
+        hosted = _tmux_panes(snapshot.get("panes", []), caller_pane)
+        if hosted:
+            ids = ", ".join(str(pane_id) for pane_id, _ in hosted[:5])
+            args = next((args for _, args in hosted if args), [])
+            if args[:1] == ["-S"]:
+                socket = args[1]
+            else:       # tmux's default location for the socket (-L NAME, or the default one)
+                socket = os.path.join(os.environ.get("TMUX_TMPDIR") or "/tmp", f"tmux-{os.getuid()}",
+                                      args[1] if args else "default")
+            raise AgentsError(
+                f"no {agent} session in {directory} that Kilix can read. Pane {ids} runs tmux: "
+                "an agent inside tmux can be running there, but Kilix cannot read its state and no "
+                "message is sent into tmux. Reach it with the tmux job "
+                f"(kilix-needle tmux --socket {socket} 'list sessions') or attach to it (tmux attach)")
     if len(matches) != 1:
         raise AgentsError(f"{'no' if not matches else len(matches)} live {agent} sessions in "
                           f"{directory}")
