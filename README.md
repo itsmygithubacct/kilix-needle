@@ -688,21 +688,33 @@ on an approval or menu. The current runner permits steering working Claude
 and Grok sessions; Codex and Qwen OMP must be idle before receiving a
 message. These are session controls, not arbitrary keystrokes into a pane.
 
-**When Kilix cannot read the state.** For a Claude or Codex pane that Kilix lists
-but reports as `agent` (a session it recognises and cannot read: Codex 0.160's
-`• Working (…)` and idle composer `› Ask Codex to do anything`, Codex's
-`Would you like to run the following command?`, Claude idle at `❯` with a
-background monitor), the last lines of the pane's screen decide: `idle` only for
-an empty composer, `working` or `waiting` for their markers, otherwise unknown
-and the message is held. A state Kilix does name is never overridden, and an
-approval or menu is reported as "waiting for an approval". When the agent runs
-inside tmux (a restored `tmux new-session … claude --resume …`), Kilix lists no
-coding session; the agent is then found through tmux itself: the session shown
-by the pane's own tmux client, its panes' process trees, the agent's own working
-directory. It must be exactly one agent in exactly that directory, and a message
-is sent only while tmux shows that pane (not another pane, not copy mode), with
-the usual `--expect-broker` on the Kilix pane. Waits on such sessions poll the
-screen. See `agents_detect.py`.
+**When Kilix cannot read the state.** Rule: a false hold is acceptable; a false
+`idle`/`working`, or bytes reaching anything but the identified agent's empty
+composer, is not. Kilix names a state for most sessions and that is used as is. For a Claude
+or Codex pane Kilix lists but reports with a generic state (`agent`, `unknown`),
+the screen's bottom UI region decides, located by layout and never from
+transcript lines: Claude's composer between its last two full-width rules and the
+footer under them; Codex's `› Ask Codex to do anything` composer, a blank line above
+it, footer lines only below. `idle` needs an *empty* composer in a layout it knows;
+`working` needs the same plus `esc to interrupt` where it belongs (Claude's
+footer, Codex's status block); a numbered choice anywhere, or approval wording
+(`Would you like to`, `Do you want to`) in the last lines, is "waiting for an approval";
+a draft, an unknown modal, a truncated or odd region is unknown, and the message is held.
+
+When the agent runs inside tmux (a restored `tmux new-session … claude --resume …`)
+Kilix lists no coding session. It is found through tmux itself: the session shown
+by the pane's own tmux client (`$N`), its panes' process trees, the agent in the
+foreground process group of that pane's terminal, in exactly the requested
+directory. Its identity (provider, pids, start times, full argv, directory, socket,
+session, window, pane, client) is read again just before sending. The message goes
+**through tmux, not the Kilix pane**: one tmux command checks that the pane is that
+pane, in no mode, alive and taking input, and pastes the text into exactly that
+`%N` (then Enter, under the same check), so a tmux command prompt, prefix table,
+choose-tree, copy mode or a change of the active pane cannot take it or redirect it.
+The text is passed as an argument, never inside a tmux command string, and must be
+one line without control characters. Waits on such sessions poll the same evidence.
+Before a direct send the session's directory and identity are checked again too.
+See `agents_detect.py`.
 
 ## The system job
 
