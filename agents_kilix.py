@@ -16,6 +16,13 @@
   until its approval events are seen with approvals on, qwen-omp, Kimi) take
   messages only idle.
 
+Where Kilix's own reader leaves a state unknown (`agent`) for a Claude or Codex
+pane, or lists no coding session because the agent runs inside tmux, the screen
+text and tmux's own process tree are read as extra evidence (`agents_detect`).
+They never widen identity: a tmux-hosted session is the one agent process in one
+exact tmux pane of the session the pane's own tmux client shows, in exactly the
+requested directory, and a message is sent only while tmux shows that pane.
+
 Directories resolve to exactly one existing directory: an explicit path, the
 caller's directory ("here"), a name or alias in ~/.config/kilix-needle/dirs.json,
 or a repository name found under ~/gpu_terminal (never ~/research, never a
@@ -32,6 +39,7 @@ import subprocess
 import time
 
 import agents
+import agents_detect as detect
 import kilix
 
 HERE = ("here", "this repo", "this directory", "the current folder", "this folder",
@@ -57,6 +65,9 @@ _DIR_SCAN_TTL = 60.0
 _WORKING_STEER_AGENTS = frozenset(("claude", "grok"))
 
 
+POLL_SECONDS = 1.0
+
+
 class AgentsError(RuntimeError):
     pass
 
@@ -70,6 +81,25 @@ def _run(argv: list[str], timeout: float = 30) -> str:
     if done.returncode != 0:
         raise AgentsError(done.stderr.strip() or f"kilix {argv[0]} exited {done.returncode}")
     return done.stdout
+
+
+def _tmux(args: list[str]) -> str:
+    """tmux with exactly these arguments; a failure is an error the caller treats as no answer."""
+    try:
+        done = subprocess.run(["tmux", *args], capture_output=True, text=True, timeout=5, check=False)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise AgentsError(f"tmux {args[0] if args else ''} failed: {error}") from error
+    if done.returncode != 0:
+        raise AgentsError(done.stderr.strip() or f"tmux exited {done.returncode}")
+    return done.stdout
+
+
+def _screen(pane_id) -> str:
+    """The visible text of a pane, as evidence only; unreadable is empty."""
+    try:
+        return kilix._run(["get-text", "--match", f"id:{pane_id}", "--extent", "screen"])
+    except kilix.KilixError:
+        return ""
 
 
 def _skip_scan_dir(name: str) -> bool:
@@ -210,7 +240,12 @@ def calling_cwd() -> str | None:
 
 
 def find_session(agent: str, directory: Path, *, caller_pane: int | None = None) -> dict:
-    """Exactly one live pane of that agent in that directory."""
+    """Exactly one live pane of that agent in that directory.
+
+    A pane Kilix lists as that agent counts. So does a pane with no coding session
+    whose tmux client shows a tmux session holding that agent in that directory;
+    such a pane carries `_hosted`, the exact tmux pane and process found.
+    """
     if caller_pane is None:
         caller_pane = caller_info()[0]
     snapshot = _listing(["panes", "list", "--json"])
@@ -220,6 +255,11 @@ def find_session(agent: str, directory: Path, *, caller_pane: int | None = None)
             continue
         coding = pane.get("coding_session")
         if not isinstance(coding, dict):
+            if coding is None:
+                for item in detect.tmux_hosted(pane, _tmux):
+                    if (PROVIDER_AGENT.get(item["provider"]) == agent
+                            and detect.same_directory(item["cwd"], directory)):
+                        matches.append({**pane, "_hosted": item})
             continue
         provider = PROVIDER_AGENT.get(str(coding.get("provider") or ""))
         cwd = coding.get("cwd") or pane.get("cwd") or ""
@@ -229,6 +269,25 @@ def find_session(agent: str, directory: Path, *, caller_pane: int | None = None)
         raise AgentsError(f"{'no' if not matches else len(matches)} live {agent} sessions in "
                           f"{directory}")
     return matches[0]
+
+
+def _state(pane: dict, agent: str, hosted: dict | None) -> tuple[str, dict | None]:
+    """The session's state, and for a tmux-hosted one the tmux pane as it is now.
+
+    Kilix's `activity` is used when it names a state. Only when it says `agent`
+    (a session it recognises but cannot read) is the screen consulted, and a
+    tmux-hosted session is always read from its own tmux pane.
+    """
+    if hosted is not None:
+        now = [item for item in detect.tmux_hosted(pane, _tmux) if detect.same_hosted(item, hosted)]
+        if len(now) != 1:
+            raise AgentsError("the tmux-hosted session changed; the message is held")
+        return detect.screen_state(hosted["provider"], detect.hosted_screen(now[0], _tmux)) \
+            or "agent", now[0]
+    activity = pane.get("activity")
+    if activity == "agent" and agent in ("claude", "codex"):
+        return detect.screen_state(agent, _screen(pane.get("pane_id"))) or activity, None
+    return activity, None
 
 
 def _broker_id(pane: dict) -> str:
@@ -292,6 +351,35 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
     # already working must cross idle and then working, since panes/v1 exposes
     # no monotonic turn counter.
     transitions: dict[object, str] = {}
+    # What each target pane is, for waits that Kilix cannot track (unknown state, tmux-hosted).
+    tracked: dict[object, tuple[str, dict | None]] = {}
+
+    def wait_state(pane_id, state: str, timeout, run_timeout) -> None:
+        """`kilix panes wait`, or polling where Kilix cannot see the state."""
+        agent, hosted = tracked.get(pane_id, ("", None))
+        argv = ["panes", "wait", str(pane_id), "--for", state, "--json", "--timeout", str(timeout)]
+        if hosted is None:
+            if agent not in ("claude", "codex"):
+                _run(argv, timeout=run_timeout)
+                return
+            snapshot = _listing(["panes", "list", "--json"])
+            pane = next((p for p in snapshot.get("panes", [])
+                         if isinstance(p, dict) and p.get("pane_id") == pane_id), None)
+            if pane is None or pane.get("activity") != "agent":
+                _run(argv, timeout=run_timeout)
+                return
+        deadline = time.monotonic() + float(timeout)
+        while True:
+            snapshot = _listing(["panes", "list", "--json"])
+            pane = next((p for p in snapshot.get("panes", [])
+                         if isinstance(p, dict) and p.get("pane_id") == pane_id), None)
+            if pane is None:
+                raise AgentsError(f"pane {pane_id} is gone")
+            if _state(pane, agent, hosted)[0] == state:
+                return
+            if time.monotonic() >= deadline:
+                raise AgentsError(f"timed out after {timeout}s waiting for pane {pane_id} to be {state}")
+            time.sleep(POLL_SECONDS)
 
     def get_caller():
         nonlocal caller_cache
@@ -302,11 +390,9 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
     def observe_transition(pane_id, timeout: float) -> None:
         transition = transitions.pop(pane_id, None)
         if transition == "idle-working":
-            _run(["panes", "wait", str(pane_id), "--for", "idle", "--json",
-                  "--timeout", str(timeout)], timeout=timeout + 30)
+            wait_state(pane_id, "idle", timeout, timeout + 30)
         if transition in ("working", "idle-working"):
-            _run(["panes", "wait", str(pane_id), "--for", "working", "--json",
-                  "--timeout", "30"], timeout=60)
+            wait_state(pane_id, "working", 30, 60)
 
     for action in actions:
         entry = {"kind": action.kind, "args": dict(action.args)}
@@ -331,6 +417,7 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
                 if not isinstance(pane_result, dict) or pane_result.get("pane_id") is None:
                     raise AgentsError("kilix agent-control returned no launched pane")
                 last = {"pane_id": pane_result["pane_id"], "agent": action.args["agent"]}
+                tracked[last["pane_id"]] = (action.args["agent"], None)
                 launched[f"{action.args['agent']}@{action.args['dir']}"] = last
                 if action.args.get("resume") or prompt:
                     transitions[last["pane_id"]] = "working"
@@ -351,6 +438,7 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
                                            caller_pane=caller_pane)
                 pane_id = target_info["pane_id"]
                 target_agent = agent
+                tracked[pane_id] = (agent, target_info.get("_hosted"))
             if action.kind == "wait":
                 wait_timeout = action.args.get("timeout") or 3600
                 argv = ["panes", "wait", str(pane_id), "--for", action.args["for"], "--json",
@@ -359,7 +447,7 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
                     entry.update(outcome="would", argv=argv)
                     continue
                 observe_transition(pane_id, wait_timeout)
-                _run(argv, timeout=wait_timeout + 30)
+                wait_state(pane_id, action.args["for"], wait_timeout, wait_timeout + 30)
                 entry.update(outcome="done", pane=pane_id)
                 continue
             # tell
@@ -367,8 +455,7 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
             wait_timeout = action.args.get("timeout") or 3600
             if waited and not dry_run:
                 observe_transition(pane_id, wait_timeout)
-                _run(["panes", "wait", str(pane_id), "--for", "idle", "--json", "--timeout",
-                      str(wait_timeout)], timeout=wait_timeout + 30)
+                wait_state(pane_id, "idle", wait_timeout, wait_timeout + 30)
             if dry_run and isinstance(pane_id, str) and pane_id.startswith("<new pane"):
                 pane = target_info
                 activity = "idle" if waited else "working"
@@ -381,15 +468,30 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
                              if isinstance(p, dict) and p.get("pane_id") == pane_id), None)
                 if pane is None:
                     raise AgentsError(f"pane {pane_id} is gone")
-                activity = pane.get("activity")
                 coding = pane.get("coding_session")
-                if not isinstance(coding, dict):
-                    raise AgentsError("the target is not a live coding-agent pane")
-                observed_agent = PROVIDER_AGENT.get(str(coding.get("provider") or ""), "")
-                if not observed_agent and target != "it":
-                    raise AgentsError("the target is not a live coding-agent pane")
-                if observed_agent and observed_agent != target_agent:
-                    raise AgentsError("the target coding agent changed; the message is held")
+                hosted_target = target_info.get("_hosted") if isinstance(target_info, dict) else None
+                if hosted_target is not None:
+                    # Found through tmux, so Kilix lists no coding session. Re-read the same
+                    # tmux pane and process; the message goes where tmux is showing.
+                    if coding is not None:
+                        raise AgentsError("the target changed (Kilix now lists a coding session); "
+                                          "the message is held")
+                    activity, now = _state(pane, target_agent, hosted_target)
+                    if activity in ("idle", "working") and (not now["active"] or now["in_mode"]):
+                        raise AgentsError("tmux would send the message to another pane or a "
+                                          "mode, not to that session; the message is held")
+                else:
+                    if not isinstance(coding, dict):
+                        raise AgentsError("the target is not a live coding-agent pane")
+                    observed_agent = PROVIDER_AGENT.get(str(coding.get("provider") or ""), "")
+                    if not observed_agent and target != "it":
+                        raise AgentsError("the target is not a live coding-agent pane")
+                    if observed_agent and observed_agent != target_agent:
+                        raise AgentsError("the target coding agent changed; the message is held")
+                    activity, _now = _state(pane, target_agent, None)
+            if activity == "waiting":
+                raise AgentsError("the session is waiting for an approval or a menu; "
+                                  "the message is held")
             if activity not in ("idle", "working"):
                 raise AgentsError("the session is not idle or working; the message is held")
             if target_agent not in _WORKING_STEER_AGENTS and activity != "idle":
@@ -407,8 +509,7 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
             _run(argv)
             if activity == "idle":
                 try:
-                    _run(["panes", "wait", str(pane_id), "--for", "working", "--json",
-                          "--timeout", "30"], timeout=60)
+                    wait_state(pane_id, "working", 30, 60)
                 except AgentsError as error:
                     raise AgentsError(f"delivery not confirmed: {error}") from error
                 delivery = "delivered"

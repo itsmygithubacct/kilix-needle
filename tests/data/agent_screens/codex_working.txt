@@ -1,0 +1,7 @@
+  Reading pane_center.py and the Codex reader to see where the state is decided.
+
+• Working (1m 12s • esc to interrupt)
+
+› Ask Codex to do anything
+
+  gpt-6.1-sol high · 61% context left · ~/gpu_terminal/kilix
