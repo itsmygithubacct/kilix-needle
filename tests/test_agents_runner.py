@@ -222,6 +222,52 @@ class RunnerTransitions(unittest.TestCase):
         self.assertIn("no live codex", results[0]["reason"])
 
 
+class UnreadableStates(unittest.TestCase):
+    """A session whose state Kilix cannot read (`agent`, as every Codex pane is) takes no message and no wait."""
+
+    pane = RunnerTransitions.__dict__["pane"]
+    run_actions = RunnerTransitions.run_actions
+
+    def test_tell_and_wait_refuse_an_unreadable_codex_session_without_sending_or_waiting(self):
+        for action in (agents.Action("tell", {"session": "codex@kilix", "text": "go"}),
+                       agents.Action("tell", {"session": "codex@kilix", "text": "go", "wait": True}),
+                       agents.Action("wait", {"session": "codex@kilix", "for": "idle"})):
+            results, calls = self.run_actions([action], panes=[self.pane(activity="agent")])
+            self.assertEqual(results[0]["outcome"], "failed", action.kind)
+            self.assertIn("cannot read the state of this codex session", results[0]["reason"])
+            self.assertIn("exposes no exact current-session identity", results[0]["reason"])
+            self.assertFalse([c for c in calls if c[:2] in (["agent-control", "send"], ["panes", "wait"])], calls)
+
+    def test_other_unreadable_agents_are_refused_the_same_way(self):
+        pane = self.pane(activity="agent", coding_session={"provider": "claude", "cwd": "/w/kilix"})
+        results, calls = self.run_actions([agents.Action("tell", {"session": "claude@kilix", "text": "go"})], panes=[pane])
+        self.assertEqual(results[0]["outcome"], "failed")
+        self.assertNotIn("exposes no exact", results[0]["reason"])
+
+    def test_a_session_that_becomes_unreadable_between_the_lookup_and_the_send_is_held(self):
+        listings = [[self.pane(activity="idle")], [self.pane(activity="agent")]]
+        sent = []
+
+        def run(argv, timeout=30):
+            if argv[:2] == ["agent-control", "list"]:
+                return json.dumps({"caller_pane": 1, "panes": [{"pane_id": 1, "broker": "a" * 16, "cwd": "/w"}]})
+            if argv[:2] == ["panes", "list"]:
+                return json.dumps({"panes": listings.pop(0) if len(listings) > 1 else listings[0]})
+            sent.append(argv)
+            return "{}"
+        tell = agents.Action("tell", {"session": "codex@kilix", "text": "go"})
+        with mock.patch.object(agents_kilix, "_run", side_effect=run), \
+                mock.patch.object(agents_kilix, "resolve_dir", return_value=Path("/w/kilix")):
+            result = agents_kilix.perform([tell], cwd="/w")[0]
+        self.assertEqual(result["outcome"], "failed")
+        self.assertIn("cannot read the state", result["reason"])
+        self.assertEqual(sent, [])
+
+    def test_a_readable_session_is_still_served(self):
+        results, _calls = self.run_actions([agents.Action("wait", {"session": "codex@kilix", "for": "idle"})])
+        self.assertEqual(results[0]["outcome"], "done")
+
+
 class InsideTmuxHint(unittest.TestCase):
     """A coding agent inside tmux is not readable by Kilix: say so, and how to reach it."""
 
@@ -276,7 +322,7 @@ class InsideTmuxHint(unittest.TestCase):
         self.assertIn("--socket /w/kilix/sub/run/sock ", self.hint([pane]))
         del pane["process"]["foreground"][0]["cwd"]
         got = self.hint([pane])
-        self.assertIn("cannot be established", got)
+        self.assertIn("is not established", got)
         self.assertNotIn("--socket", got)
 
     def test_options_before_the_socket_do_not_hide_it(self):
@@ -294,9 +340,9 @@ class InsideTmuxHint(unittest.TestCase):
 
     def test_an_option_that_cannot_be_read_gives_no_socket(self):
         got = self.hint([self.tmux_pane(argv=("tmux", "-Z", "-S", "/s/x", "attach"))])
-        self.assertIn("cannot be established", got)
+        self.assertIn("is not established", got)
         self.assertNotIn("--socket", got)
-        self.assertIn("cannot be established", self.hint([self.tmux_pane(argv=("tmux", "-S"))]))
+        self.assertIn("is not established", self.hint([self.tmux_pane(argv=("tmux", "-S"))]))
 
     def test_the_default_and_named_sockets_come_from_the_clients_environment(self):
         proc = self.fake_proc(4000, {"TMUX_TMPDIR": "/clients/tmp"})
@@ -324,7 +370,7 @@ class InsideTmuxHint(unittest.TestCase):
 
     def test_an_unreadable_environment_gives_no_default_socket(self):
         got = self.hint([self.tmux_pane(argv=("tmux", "attach"))])
-        self.assertIn("cannot be established", got)
+        self.assertIn("is not established", got)
         self.assertNotIn("--socket", got)
         self.assertNotIn("tmux-", got)
         proc = self.fake_proc(4000, {})                 # the process exists but its environment is unreadable
@@ -351,6 +397,48 @@ class InsideTmuxHint(unittest.TestCase):
         got = self.hint([far])                      # none here: elsewhere is named as a lead, and says so
         self.assertIn("No pane running tmux is in that directory", got)
         self.assertIn("/s/far", got)
+
+    def test_a_socket_is_left_as_written_so_the_filesystem_resolves_dotdot_through_symlinks(self):
+        root = Path(tempfile.mkdtemp(prefix="kn-sock-"))
+        self.addCleanup(shutil.rmtree, root, True)
+        (root / "other" / "nested").mkdir(parents=True)
+        (root / "work").mkdir()
+        (root / "work" / "alias").symlink_to(root / "other" / "nested")
+        pane = self.tmux_pane(argv=("tmux", "-S", "alias/../sock", "attach"))
+        pane["process"]["foreground"][0]["cwd"] = str(root / "work")
+        got = self.hint([pane])
+        self.assertIn(f"--socket {root}/work/alias/../sock ", got)
+        self.assertEqual(Path(f"{root}/work/alias/../sock").resolve(), root / "other" / "sock")
+
+    def test_evidence_that_does_not_prove_a_socket_names_none_and_says_how_to_find_it(self):
+        cases = (
+            ("an empty -S", ("tmux", "-S", "", "attach"), {"HOME": "/h"}),
+            ("a relative $TMUX", ("tmux", "attach"), {"TMUX": "run/sock,123,0"}),
+            ("a $TMUX that is not PATH,PID,SESSION", ("tmux", "attach"), {"TMUX": "/s/sock,part,123,0"}),
+            ("a $TMUX with no pid and session", ("tmux", "attach"), {"TMUX": "/s/sock"}),
+            ("a relative TMUX_TMPDIR", ("tmux", "attach"), {"TMUX_TMPDIR": "rel"}),
+            ("a -L name with a slash", ("tmux", "-L", "a/b", "attach"), {"HOME": "/h"}),
+        )
+        for name, argv, environ in cases:
+            proc = self.fake_proc(4000, environ)
+            got = self.hint([self.tmux_pane(argv=argv)], proc)
+            self.assertNotIn("--socket", got, name)
+            self.assertNotIn("tmux -S", got, name)
+            self.assertIn("is not established", got, name)
+            self.assertIn("display-message -p '#{socket_path}'", got, name)
+            self.assertIn("no message is sent into tmux", got, name)
+
+    def test_an_environment_that_is_not_valid_text_names_no_socket(self):
+        proc = self.fake_proc(4000, {})
+        (proc / "4000" / "environ").write_bytes(b"TMUX=/fixture/\xff,123,0\0")
+        got = self.hint([self.tmux_pane(argv=("tmux", "attach"))], proc)
+        self.assertNotIn("--socket", got)
+        (proc / "4000" / "environ").write_bytes(b"TMUX_TMPDIR=/t/\xff\0")
+        self.assertNotIn("--socket", self.hint([self.tmux_pane(argv=("tmux", "-L", "x", "attach"))], proc))
+
+    def test_a_well_formed_TMUX_gives_the_socket_up_to_its_first_comma(self):
+        proc = self.fake_proc(4000, {"TMUX": "/inner/sock,4242,3"})
+        self.assertIn("--socket /inner/sock ", self.hint([self.tmux_pane(argv=("tmux", "attach"))], proc))
 
     def test_each_distinct_server_gets_its_own_command(self):
         one = self.tmux_pane(pane_id=6, argv=("tmux", "-S", "/s/a", "attach"))

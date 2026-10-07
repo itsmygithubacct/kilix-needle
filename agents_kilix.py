@@ -29,6 +29,7 @@ from dataclasses import dataclass, field
 import json
 import os
 from pathlib import Path
+import re
 import shlex
 import subprocess
 import time
@@ -251,28 +252,44 @@ def _tmux_options(argv) -> dict[str, str] | None:
     return options
 
 
-def _process_environment(pid, *, proc_root: str = "/proc") -> dict[str, str] | None:
-    """The environment a process started with, from /proc/<pid>/environ; None when unreadable."""
+def _process_environment(pid, *, proc_root: str = "/proc") -> dict[str, str | None] | None:
+    """The environment a process started with, from /proc/<pid>/environ; None when unreadable.
+
+    A value that is not valid UTF-8 is `None`: a path is never rebuilt from a lossy decoding.
+    """
     if not isinstance(pid, int) or pid <= 0:
         return None
     try:
         raw = (Path(proc_root) / str(pid) / "environ").read_bytes()
     except OSError:
         return None
-    found = {}
+    found: dict[str, str | None] = {}
     for entry in raw.split(b"\0"):
         name, separator, value = entry.partition(b"=")
-        if separator and name:
-            found[name.decode(errors="replace")] = value.decode(errors="replace")
+        if not (separator and name):
+            continue
+        try:
+            found[name.decode()] = value.decode()
+        except UnicodeDecodeError:
+            try:
+                found[name.decode()] = None
+            except UnicodeDecodeError:
+                pass
     return found
 
 
-def tmux_socket(item: dict, *, proc_root: str = "/proc") -> tuple[str | None, str]:
-    """(socket path, "") of one tmux client in the listing, or (None, why it cannot be established).
+_TMUX_VARIABLE = re.compile(r"(?P<path>[^,]+),(?P<pid>\d+),(?P<session>\d+)\Z")
 
-    The path is the client's own: -S (relative to the client's working directory), else -L's name, else
-    the socket in the client's $TMUX, else "default", below the client's $TMUX_TMPDIR (or /tmp) in
-    tmux-<uid>. Needle's own environment and directory say nothing about the client.
+
+def tmux_socket(item: dict, *, proc_root: str = "/proc") -> tuple[str | None, str]:
+    """(socket path, "") of one tmux client in the listing, or (None, why it is not established).
+
+    Only what the client's own argv, working directory and environment prove is returned: -S (a
+    relative one joined to the client's directory, and left as written so the filesystem resolves any
+    `..` through symlinks), else -L's name, else the socket in the client's $TMUX, else "default", below
+    the client's $TMUX_TMPDIR (or /tmp) in tmux-<uid>. Needle's own environment says nothing about the
+    client. An empty or relative-by-environment path, a lossy decoding, or a $TMUX that is not exactly
+    `PATH,PID,SESSION` is refused rather than guessed (tmux cuts $TMUX at its first comma).
     """
     argv = item.get("argv") if isinstance(item.get("argv"), list) else []
     options = _tmux_options(argv)
@@ -280,25 +297,38 @@ def tmux_socket(item: dict, *, proc_root: str = "/proc") -> tuple[str | None, st
         return None, "its command line has an option that cannot be read exactly"
     if "S" in options:
         path = options["S"]
+        if not path:
+            return None, "its -S path is empty"
         if os.path.isabs(path):
-            return os.path.normpath(path), ""
+            return path, ""
         cwd = item.get("cwd")
         if not isinstance(cwd, str) or not os.path.isabs(cwd):
             return None, "its -S path is relative and the client's directory is unknown"
-        return os.path.normpath(os.path.join(cwd, path)), ""
+        return os.path.join(cwd, path), ""
     environment = _process_environment(item.get("pid"), proc_root=proc_root)
     if environment is None:
         return None, "the client's environment cannot be read, and its TMUX_TMPDIR decides the socket"
-    if "L" not in options and environment.get("TMUX", "")[:1] not in ("", ","):
-        return os.path.normpath(environment["TMUX"].split(",", 1)[0]), ""
+    for name in ("TMUX", "TMUX_TMPDIR"):
+        if name in environment and environment[name] is None:
+            return None, f"the client's {name} is not valid text"
+    if "L" not in options and environment.get("TMUX"):
+        match = _TMUX_VARIABLE.match(environment["TMUX"])
+        if match is None:
+            return None, "the client's TMUX is not of the form PATH,PID,SESSION"
+        if not os.path.isabs(match["path"]):
+            return None, "the socket in the client's TMUX is relative"
+        return match["path"], ""
     base = environment.get("TMUX_TMPDIR") or "/tmp"
     if not os.path.isabs(base):
         return None, "the client's TMUX_TMPDIR is relative"
+    name = options.get("L") or "default"
+    if "/" in name:
+        return None, "its -L name contains a slash"
     try:
         uid = os.stat(Path(proc_root) / str(item["pid"])).st_uid
     except OSError:
         return None, "the client's owner cannot be read"
-    return os.path.join(base, f"tmux-{uid}", options.get("L") or "default"), ""
+    return os.path.join(base, f"tmux-{uid}", name), ""
 
 
 def _tmux_panes(panes, caller_pane, directory: Path) -> list[dict]:
@@ -337,8 +367,8 @@ def _tmux_hint(agent: str, directory: Path, hosted: list[dict]) -> str:
     seen = set()
     for item in shown:
         if item["socket"] is None:
-            lines.append(f"pane {item['pane']}: the tmux socket cannot be established: {item['why']}; "
-                         "no command is given for it")
+            lines.append(f"pane {item['pane']}: its tmux socket is not established ({item['why']}), so none is "
+                         "named; to find it, run `tmux display-message -p '#{socket_path}'` inside that pane")
         elif item["socket"] not in seen:
             seen.add(item["socket"])
             quoted = shlex.quote(item["socket"])
@@ -348,8 +378,15 @@ def _tmux_hint(agent: str, directory: Path, hosted: list[dict]) -> str:
             lines.append(f"pane {item['pane']}: the same server as above")
     return (f"no {agent} session in {directory} that Kilix can read. {scope}: an agent inside tmux can be "
             "running there, but Kilix cannot read its state and no message is sent into tmux. "
-            "Reach it with the tmux job or attach to it; the directory an agent works in inside tmux "
-            "is not visible here. " + "; ".join(lines))
+            "A socket is named only when the client's own command line, directory and environment "
+            "establish it; the directory an agent works in inside tmux is not visible here. " + "; ".join(lines))
+
+
+def _unreadable(agent: str) -> str:
+    return (f"Kilix cannot read the state of this {agent} session (its activity is 'agent': no exact, "
+            "current evidence names idle, working or waiting), so nothing is sent to it and waiting "
+            "for it would never end" + (
+                "; Codex exposes no exact current-session identity" if agent == "codex" else ""))
 
 
 def find_session(agent: str, directory: Path, *, caller_pane: int | None = None) -> dict:
@@ -499,6 +536,8 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
                 pane_id = target_info["pane_id"]
                 target_agent = agent
             if action.kind == "wait":
+                if not dry_run and target_info.get("activity") == "agent":
+                    raise AgentsError(_unreadable(target_agent))
                 wait_timeout = action.args.get("timeout") or 3600
                 argv = ["panes", "wait", str(pane_id), "--for", action.args["for"], "--json",
                         "--timeout", str(wait_timeout)]
@@ -512,6 +551,8 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
             # tell
             waited = bool(action.args.get("wait"))
             wait_timeout = action.args.get("timeout") or 3600
+            if not dry_run and target_info.get("activity") == "agent":
+                raise AgentsError(_unreadable(target_agent))
             if waited and not dry_run:
                 observe_transition(pane_id, wait_timeout)
                 _run(["panes", "wait", str(pane_id), "--for", "idle", "--json", "--timeout",
@@ -537,6 +578,8 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
                     raise AgentsError("the target is not a live coding-agent pane")
                 if observed_agent and observed_agent != target_agent:
                     raise AgentsError("the target coding agent changed; the message is held")
+            if activity == "agent":
+                raise AgentsError(_unreadable(target_agent))
             if activity not in ("idle", "working"):
                 raise AgentsError("the session is not idle or working; the message is held")
             if target_agent not in _WORKING_STEER_AGENTS and activity != "idle":
