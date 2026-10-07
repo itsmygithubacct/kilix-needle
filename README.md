@@ -106,6 +106,30 @@ For literal input with mixed quotes, use `--request-json` on the CLI or a
 Enter; `type` submits. Existing confirmation and validation still apply.
 See [the tmux guide](docs/tmux.md) for forms, discovery and limits.
 
+## Persistent pane sessions
+
+`kilix-needle pty REQUEST` answers questions about the persistent PTY sessions
+behind Kilix panes with a deterministic grammar and no model, by running
+`kilix pty ... --json` (Kilix 0.2.2-rc6 or newer; an older Kilix is refused
+with a hint). One operation per request: `list sessions`, `show session ID`,
+`which session is pane N`, `show the last N lines of session ID`,
+`list archived journals`, `show archived journal ID`, `end session ID`. Anything
+else (negated, hearsay, conditional, compound, a prefix, a title) refuses whole
+with a `hint`. IDs are opaque literals: bare lowercase hex or quoted.
+`end session` takes the exact full ID and `--yes`, binds the kill to the
+session it just read, never ends the caller's own session and does nothing when
+the caller cannot be identified. The receipt is Kilix's, unchanged.
+
+```sh
+kilix-needle pty --json 'list sessions'
+kilix-needle pty --dry-run 'end session 3fa9c2d41b7e6a05'
+kilix-needle pty --yes --agent --json 'end session 3fa9c2d41b7e6a05'
+```
+
+The MCP tools `kilix_pty_read`, `kilix_pty_plan` and `kilix_pty_act` are an
+opt-in set (`kilix-needle mcp --tools pty`), in no other menu. See
+[the pty guide](docs/pty.md) for forms, refusals, receipts and identity.
+
 ## Structured actions
 
 Scripts and MCP callers can bypass language parsing with
@@ -246,7 +270,7 @@ Kilix's abstract socket.
 What an agent should know (measured in a Codex route benchmark, 2026-09-29):
 
 - **Each job has its own command:** `kilix-needle agents`, `apps`, `system`,
-  `files`, `logs` and `tmux`. The bare command is the panes job only. A refused record
+  `files`, `logs`, `tmux` and `pty`. The bare command is the panes job only. A refused record
   carries `hint`: the job whose grammar reads the request, or one accepted
   phrasing for what was refused. Restate the request once in that form rather
   than guessing.
@@ -391,6 +415,7 @@ kilix-needle has four action jobs and three read-only jobs:
 | `system` | `kilix-needle system REQUEST` | Read resources, processes, services, journal entries and installed package information |
 | logs | `kilix-needle logs …` | Read and search local pane logs, with citations |
 | `tmux` | `kilix-needle tmux --socket PATH REQUEST` | Exact tmux session and pane control on an explicit socket |
+| `pty` | `kilix-needle pty REQUEST` | Persistent pane sessions: list, show, read the tail, archived journals, end one by its exact ID |
 
 ### How each job understands a request
 
@@ -407,6 +432,7 @@ The checks decide; a proposer that invents a call gets it refused.
 | `system` | the grammar first, then a tuned normalizer that only *proposes* for unfamiliar wording | The grammar is exact but narrow; model proposals never collect on their own |
 | logs | a baseline reader, no model | It reads, it doesn't act |
 | `tmux` | a whole-request grammar, no model | One explicit operation with exact targets and literal input |
+| `pty` | a whole-request grammar, no model | One operation, IDs read as opaque literals, the only mutation is an exact-ID kill with consent |
 
 A default changes only by measurement on a **blind held-out set**. Such a set is
 written from a specification by a session that sees no code, no training data and
