@@ -17,31 +17,20 @@ MAX_LINES = 1000
 MAX_BYTES = 65536
 MIN_TIMEOUT, MAX_TIMEOUT = 0.1, 60.0
 ID_CHARS = re.compile(r"[A-Za-z0-9._-]{1,64}", re.ASCII)
-EXAMPLE_ID = "0123456789abcdef"
 OPERATIONS = ("list", "journals", "status", "pane", "observe", "journal", "kill")
 READS = frozenset(OPERATIONS) - {"kill"}
 USAGE = ("forms, one per request: list sessions [all] | show session ID | "
          "which session is pane N | show the last N lines of session ID | "
          "list archived journals | show archived journal ID | end session ID. "
          "ID: the full ID, 16-64 lowercase hex, or quoted. N: 1-1000.")
+# A hint is a request this grammar accepts. It carries an ID only when the grammar's own
+# reader took that ID from the request (see `hint_for`); examples with IDs live in the docs.
 HINTS = {
-    "kill": f"end session {EXAMPLE_ID}",
-    "observe": f"show the last 50 lines of session {EXAMPLE_ID}",
-    "journal": f"show archived journal {EXAMPLE_ID}",
     "journals": "list archived journals",
     "pane": "which session is pane 12",
-    "status": f"show session {EXAMPLE_ID}",
     "list": "list sessions",
 }
-STRUCTURED_HINTS = {
-    "list": '{"operation":"list"}',
-    "journals": '{"operation":"journals"}',
-    "status": f'{{"operation":"status","id":"{EXAMPLE_ID}"}}',
-    "pane": '{"operation":"pane","pane_id":12}',
-    "observe": f'{{"operation":"observe","id":"{EXAMPLE_ID}","max_lines":50}}',
-    "journal": f'{{"operation":"journal","id":"{EXAMPLE_ID}","max_lines":50}}',
-    "kill": f'{{"operation":"kill","id":"{EXAMPLE_ID}"}}',
-}
+STRUCTURED_HINTS = {"list": '{"operation":"list"}'}
 
 
 class Refused(ValueError):
@@ -110,8 +99,21 @@ def id_literal(ident: str) -> str:
     return ident if re.fullmatch(r"[0-9a-f]{16,64}", ident) else f'"{ident}"'
 
 
+def _read_back(text: str, ident: str, operation: str) -> str:
+    """`text` if the grammar reads it as `operation` on exactly `ident`, else `list sessions`."""
+    try:
+        action = _grammar(text)
+    except Refused:
+        return HINTS["list"]
+    return text if action["operation"] == operation and action.get("id") == ident else HINTS["list"]
+
+
 def show_request(ident: str) -> str:
-    return f"show session {id_literal(ident)}"
+    return _read_back(f"show session {id_literal(ident)}", ident, "status")
+
+
+def ending_request(ident: str) -> str:
+    return _read_back(f"end session {id_literal(ident)}", ident, "kill")
 
 
 def valid_id(ident) -> bool:
@@ -124,57 +126,71 @@ def controls(text: str) -> bool:
     return any(unicodedata.category(c) in ("Cc", "Cf", "Cs", "Zl", "Zp") for c in text)
 
 
-_TARGET = re.compile(r"(?<![A-Za-z0-9._-])[0-9a-f]{16,64}(?:\.[0-9]{1,20})?(?![A-Za-z0-9._-])")
+_ID_TOKEN = re.compile(_JOURNAL_ID, re.A)
 
 
-def targets(request: str) -> list[str]:
-    """The IDs a request names, in order: quoted IDs, then bare lowercase-hex IDs."""
-    found = [m.group()[1:-1] for m in _QUOTED.finditer(request) if valid_id(m.group()[1:-1])]
-    found += _TARGET.findall(_QUOTED.sub(" ", request))
-    return list(dict.fromkeys(found))
+def request_ids(request: str) -> list[str]:
+    """The IDs a request names, read as the grammar reads them: a whole whitespace-separated
+    token that is a quoted ID or bare lowercase hex (a journal may add `.STARTED_MILLIS`).
+    Anything else, such as a token with punctuation stuck to it or inside a quoted phrase,
+    names nothing."""
+    return [token[1:-1] if token[0] in "\"'`" else token
+            for token in request.split() if _ID_TOKEN.fullmatch(token)]
+
+
+def _sole_id(request: str) -> str | None:
+    """The one ID of a request, or None when it has none, several, or anything ambiguous:
+    a quote character outside the ID, or an ID-sized token the reader did not take."""
+    tokens = request.split()
+    ids = request_ids(request)
+    if len(ids) != 1:
+        return None
+    rest = [t for t in tokens if not _ID_TOKEN.fullmatch(t)]
+    if any(re.search(r"[\"'`]", t) or re.search(r"[A-Za-z0-9._-]{16,}", t) for t in rest):
+        return None
+    return ids[0] if valid_id(ids[0]) else None
 
 
 def hint_for(request: str) -> str:
-    """One accepted form, chosen by what the refused request seems to want.
+    """One accepted request for a refused one: `list sessions` unless it is surely better.
 
-    A hint never names a session the request did not name. With exactly one ID in
-    the request, the form carries that ID (and for an ending request, only a read
-    of it: the refused words may be a negation or hearsay). With several IDs, or an
-    ending request without one, it is `list sessions`. A placeholder ID appears
-    only in a read example for a request with no ID in it at all.
+    An ID is in the hint only if the grammar's reader took exactly one ID from the request
+    and the hint read back by `parse` names that same ID; an ending request gets a *read*
+    of it (the refused words may be a negation or hearsay). Several IDs, quoted phrases,
+    punctuation stuck to an ID, ID-sized composites and oversize IDs all give
+    `list sessions`. A hint never carries a placeholder ID.
     """
     text = request.casefold()
-    named = targets(request)
-    if len(named) > 1:
-        return HINTS["list"]
-    lit = id_literal(named[0]) if named else None
-    if _KILL_WORDS.search(text):
-        return f"show session {lit}" if lit else HINTS["list"]
-    if re.search(r"\b(?:lines?|tail|output|last|read)\b", text):
-        return f"show the last 50 lines of session {lit}" if lit else HINTS["observe"]
+    ident = _sole_id(request)
     if "journals" in text:
         return HINTS["journals"]
-    if "journal" in text:
-        return f"show archived journal {lit}" if lit else HINTS["journal"]
-    if re.search(r"\bpane\b", text):
+    if re.search(r"\bpane\b", text) and not _KILL_WORDS.search(text):
         return HINTS["pane"]
-    if re.search(r"\b(?:status|state|details|show|describe|inspect|get)\b.*\bsession\b", text):
-        return f"show session {lit}" if lit else HINTS["status"]
-    return HINTS["list"]
+    if ident is None:
+        return HINTS["list"]
+    lit = id_literal(ident) if not re.fullmatch(r"[0-9a-f]{16,64}\.[0-9]{1,20}", ident) else ident
+    if "journal" in text and not _KILL_WORDS.search(text):
+        form, operation = f"show archived journal {lit}", "journal"
+    elif not _KILL_WORDS.search(text) and re.search(r"\b(?:lines?|tail|output|last|read)\b", text):
+        form, operation = f"show the last 50 lines of session {lit}", "observe"
+    else:
+        form, operation = f"show session {lit}", "status"
+    return _read_back(form, ident, operation)
+
+
+def parse(request: str) -> dict:
+    """Return one operation and its literal arguments, or refuse the whole request."""
+    try:
+        return _grammar(request)
+    except Refused as exc:
+        raise Refused(str(exc), hint_for(request) if isinstance(request, str) else HINTS["list"]) from None
 
 
 def structured_hint(operation, ident=None) -> str:
-    """The structured twin of `hint_for`: the request's own ID, or none, or a read example."""
-    ident = ident if valid_id(ident) else None
-    if operation == "kill":
-        return (json.dumps({"operation": "status", "id": ident}, separators=(",", ":"))
-                if ident else STRUCTURED_HINTS["list"])
-    if operation in ("status", "observe", "journal") and ident:
-        example = json.loads(STRUCTURED_HINTS[operation])
-        example["id"] = ident
-        return json.dumps(example, separators=(",", ":"))
-    return STRUCTURED_HINTS.get(operation, STRUCTURED_HINTS["list"]) if isinstance(operation, str) \
-        else STRUCTURED_HINTS["list"]
+    """The structured twin: the request's own ID if `structured` would accept it, else a list."""
+    if operation in OPERATIONS and operation not in ("list", "journals", "pane") and valid_id(ident):
+        return json.dumps({"operation": "status", "id": ident}, separators=(",", ":"))
+    return STRUCTURED_HINTS["list"]
 
 
 def _reason(request: str) -> str:
@@ -199,13 +215,13 @@ def _reason(request: str) -> str:
     return "not one of the pty forms"
 
 
-def parse(request: str) -> dict:
+def _grammar(request: str) -> dict:
     """Return one operation and its literal arguments, or refuse the whole request."""
     if not isinstance(request, str) or not request.strip():
         raise Refused("provide one pty request", HINTS["list"])
     if len(request) > MAX_REQUEST:
         raise Refused(f"a pty request is at most {MAX_REQUEST} characters", HINTS["list"])
-    hint = hint_for(request)
+    hint = HINTS["list"]    # parse() replaces it with hint_for(request)
     if controls(request):
         raise Refused("control and format characters are not supported in a pty request", hint)
     stripped = request.strip()
@@ -247,7 +263,9 @@ def parse(request: str) -> dict:
 
 
 def _number(value, name, low, high, unit, whole=False):
-    ok = (type(value) is int) if whole else (type(value) in (int, float) and math.isfinite(value))
+    # Compare before any float conversion: a huge JSON integer is out of range, not an OverflowError.
+    ok = (type(value) is int) if whole else (
+        type(value) is int or (type(value) is float and math.isfinite(value)))
     if not ok or not low <= value <= high:
         raise ValueError(f"{name} is {unit}, {'an integer ' if whole else ''}from {low:g} to {high:g}")
     return value

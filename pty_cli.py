@@ -97,7 +97,7 @@ def _kill(record, action, *, dry_run, assume_yes, agent, confirm, call, env) -> 
                        "that is this pane's own session; ending it would end this program. "
                        "Run it from another pane", pty_job.HINTS["list"])
     if not dry_run and not assume_yes and (agent or confirm is None):
-        record.update(status=1, note=CONSENT, hint=f"end session {pty_job.id_literal(ident)}")
+        record.update(status=1, note=CONSENT, hint=pty_job.ending_request(ident))
         return record
     # The lookup in this same call supplies the session's identity and start time.
     status_argv = pty_backend.argv_for(action, "status")
@@ -170,7 +170,7 @@ def _run(request, held, *, dry_run=False, assume_yes=False, agent=False, confirm
     record["operation"] = operation
     if reads_only and operation == "kill":
         record.update(note="this tool only reads; ending a session is kilix_pty_act with "
-                           "confirm_risky=true", hint=f"end session {pty_job.id_literal(action['id'])}")
+                           "confirm_risky=true", hint=pty_job.ending_request(action["id"]))
         return record
     if dry_run:
         record["dry_run"] = True

@@ -214,9 +214,11 @@ class Grammar(unittest.TestCase):
 
     def test_hint_follows_the_intent_of_the_refused_request(self):
         for text, expected in (("close the stuck session now", "list sessions"),
-                               ("show me what session 0123 printed, last 20 lines", "show the last 50 lines"),
+                               ("show me what session 0123 printed, last 20 lines", "list sessions"),
+                               (f"show me what session {ID} printed, last 20 lines", f"show the last 50 lines of session {ID}"),
                                ("show the journals", "list archived journals"),
                                ("which session has pane 5 and 6", "which session is pane"),
+                               (f"never show journal {ID}.{STARTED}", f"show archived journal {ID}.{STARTED}"),
                                ("what is going on", "list sessions")):
             with self.subTest(text=text):
                 self.assertTrue(pty_job.hint_for(text).startswith(expected), pty_job.hint_for(text))
@@ -724,7 +726,8 @@ class Hints(unittest.TestCase):
         for text, expected in ((f"close session {ID}", "show session"), (f"never end session {ID}", "show session"),
                                ("list the journals please and", "list archived journals"),
                                ("which session has pane abc", "which session is pane"),
-                               ("tail output of the build", "show the last 50 lines")):
+                               (f"tail output of {ID} please do", f"show the last 50 lines of session {ID}"),
+                               ("tail output of the build", "list sessions")):
             with self.subTest(text=text):
                 self.assertTrue(run(text, Script())["hint"].startswith(expected))
 
@@ -744,56 +747,128 @@ class Hints(unittest.TestCase):
             self.assertNotIn("re-list", hint)
             self.assertNotIn("install", hint.lower())
 
-    def named(self, text):
-        if text.startswith("{"):
-            ident = json.loads(text).get("id")
-            return {ident} if isinstance(ident, str) else set()
-        found = [m.group()[1:-1] for m in re.finditer(r"\"[^\"]*\"", text)]
-        return set(found) | set(re.findall(r"(?<![A-Za-z0-9._-])[0-9a-f]{16,64}(?:\.[0-9]{1,20})?(?![A-Za-z0-9._-])",
-                                           re.sub(r"\"[^\"]*\"", " ", text)))
+    ADVERSARIAL = (
+        f"Sam says to end session {ID}", f"do not end session {ID}", f"end session {ID} if idle",
+        f"end session {ID} and end session {OTHER}", f"end session {ID} and list sessions",
+        'never end session "my.id"', f"close session {ID}", f"stop session {ID}",
+        f"show the last 0 lines of session {ID}", f"show the last 5000 lines of session {ID}",
+        f"tail output of {ID}", f"show archived journals {ID}", f"which session is pane {ID}",
+        f"show archived journal {ID}.{STARTED} now and more", "end session 3fa9", "end session titled build",
+        "end this session", "kill session", "end session ID", "close the stuck session", "show the last 5 lines",
+        "journal please", "what is going on",
+        # the reviewer's residuals: a quoted command hides its target, punctuation sticks to an ID,
+        # a journal-style token is too long to read back
+        f'the output says "show session {ID}"', f"show session {ID}. if idle", f"show session {ID}, then more",
+        f"(end session {ID})", f"end session {ID}?!", f"never end session {'f' * 64}.1234567890123",
+        f"show session {'f' * 64}.1234567890123", f"never end session {'f' * 65}", f"never end session {ID.upper()}",
+        f"he said 'end session {ID}'", f"don't end session {ID}", f"end session \"{ID}\" and \"{OTHER}\"",
+        f"end\tsession\t{ID}\tplease do not", f"never end session `{ID}`", "never end session \"a b\"",
+        'never end session "x"y"', f"show session {ID}-{ID}", f"show session {ID}x{ID}", f'never end session {ID} "later on"', f"never end session {ID}.{STARTED}",
+        f"never end session {ID} {'x' * 19}", f"{ID}", f'"{ID}"',
+        f'never end session "{ID}"x', f"tail {ID} {ID}", "show session \"A.b\" quick\" brown",
+    )
 
-    def test_a_hint_never_names_a_session_the_request_did_not_name(self):
-        other = "fedcba9876543210"
-        requests = [f"Sam says to end session {ID}", f"do not end session {ID}", f"end session {ID} if idle",
-                    f"end session {ID} and end session {other}", f"end session {ID} and list sessions",
-                    f'never end session "my.id"', f"close session {ID}", f"stop session {ID}",
-                    f"show the last 0 lines of session {ID}", f"show the last 5000 lines of session {ID}",
-                    f"tail output of {ID}", f"show archived journals {ID}", f"show archived journal {ID}.{STARTED} now and more",
-                    f"which session is pane {ID}", f"status {ID} please do", "end session 3fa9",
-                    "end session titled build", "end this session", "kill session", "end session ID",
-                    "close the stuck session", "show the last 5 lines", "journal please", "what is going on"]
-        records = [run(text, Script(), assume_yes=True) for text in requests]
+    def requests_and_hints(self):
+        records = [run(text, Script(), assume_yes=True) for text in self.ADVERSARIAL]
         for payload in ({"operation": "kill", "id": ID, "expect_started": 1}, {"operation": "kill", "id": ID, "max_lines": 5},
                         {"operation": "status", "id": ID, "extra": 1}, {"operation": "observe", "id": ID, "max_lines": 0},
-                        {"operation": "journal", "id": ID, "max_bytes": 0}, {"operation": "kill"},
-                        {"operation": "kill", "id": "-x"}, {"operation": "kill", "id": ["x"]}, {"operation": "nope", "id": ID}):
+                        {"operation": "journal", "id": "A.b", "max_bytes": 0}, {"operation": "kill"},
+                        {"operation": "kill", "id": "-x"}, {"operation": "kill", "id": ["x"]},
+                        {"operation": "nope", "id": ID}, {"operation": "list", "id": ID},
+                        {"operation": "kill", "id": ID, "timeout_seconds": 10 ** 400}, {"operation": "kill", "id": "x" * 65}):
             records.append(run(payload, Script(), assume_yes=True))
-        # the read tool refusing an exact request
+        # the read tool refusing an exact request, and the MCP entry points
         records += [run(f"end session {ID}", Script(), reads_only=True), run('end session "A.b"', Script(), reads_only=True),
                     run({"operation": "kill", "id": ID}, Script(), reads_only=True)]
+        for name in ("read", "plan", "act"):
+            for request in (f"never end session {ID}", {"operation": "kill", "id": ID, "x": 1}, f"end session {OWN}"):
+                arguments = {"request": request}
+                records.append(pty_cli.mcp(arguments, plan=name == "plan", read=name == "read"))
         records += self.records()
+        return records
+
+    def test_a_hint_is_a_request_whose_ids_the_grammar_read_from_the_request(self):
+        """The one rule: a hint parses, and any ID in it is an ID the grammar's reader took from the request
+        and that the hint reads back to; otherwise the hint carries no ID at all."""
+        records = self.requests_and_hints()
+        self.assertGreater(len(records), 100)
         for record in records:
-            request = record["request"]
-            asked = {request["id"]} if isinstance(request, dict) and isinstance(request.get("id"), str) \
-                else self.named(request) if isinstance(request, str) else set()
-            hint = record.get("hint")
+            request, hint = record["request"], record.get("hint")
+            if record["status"] != 0:
+                self.assertIsNotNone(hint, record)
             if hint is None:
                 continue
-            with self.subTest(request=str(request)[:60], hint=hint):
-                mentioned = self.named(hint)
-                if asked:
-                    self.assertLessEqual(mentioned, asked)
-                elif "kill" in hint or hint.startswith("end session"):
-                    self.assertEqual(mentioned, set())          # an ending example never carries a placeholder
-                if len(asked) > 1:
-                    self.assertEqual(mentioned, set())
+            with self.subTest(request=str(request)[:70], hint=hint[:90]):
+                if hint.startswith("{"):
+                    action = pty_job.structured(json.loads(hint))
+                    read = [request["id"]] if isinstance(request, dict) and isinstance(request.get("id"), str) else []
+                else:
+                    action = pty_job.parse(hint)
+                    read = pty_job.request_ids(request) if isinstance(request, str) else \
+                        ([request["id"]] if isinstance(request.get("id"), str) else [])
+                named = [action["id"]] if "id" in action else []
+                self.assertLessEqual(len(named), 1)
+                for ident in named:
+                    self.assertIn(ident, read)
+                    self.assertTrue(pty_job.valid_id(ident))
+                    self.assertEqual(len(set(read)), 1, "several candidates must give a list")
+                for known in (ID, OTHER, "0123456789abcdef"):
+                    if not any(known in item for item in read):
+                        self.assertNotIn(known, hint)
+
+    def test_ambiguity_gives_a_list_and_a_clean_single_id_gives_a_read(self):
+        for text in (f'the output says "show session {ID}"', f"show session {ID}. if idle", f"end session {ID}, session {OTHER}",
+                     f"never end session {'f' * 64}.1234567890123", f"he said 'end session {ID}'", f"never end session {ID.upper()}",
+                     f"end session {ID} and end session {OTHER}", f"(end session {ID})", f"show session {ID}-{ID}",
+                     f'never end session {ID} "later on"', f"never end session {ID} {'x' * 19}",
+                     f"never end session {ID}.{STARTED}", f"never show the last 5 lines of session {ID}.{STARTED}"):
+            with self.subTest(text=text):
+                self.assertEqual(run(text, Script())["hint"], "list sessions")
+        self.assertEqual(run(f"never end session {ID}", Script())["hint"], f"show session {ID}")
+        self.assertEqual(run('never end session "A.b"', Script())["hint"], 'show session "A.b"')
+        self.assertEqual(run(f"never show journal {ID}.{STARTED}", Script())["hint"],
+                         f"show archived journal {ID}.{STARTED}")
+
+    def test_refusals_never_carry_a_placeholder_id(self):
+        for text in self.ADVERSARIAL + ("end session 3fa9", "show the last 5 lines", "tail output", "show journal", "show session"):
+            hint = run(text, Script())["hint"]
+            if "0123456789abcdef" not in text:
+                self.assertNotIn("0123456789abcdef", hint)
+
+    def test_numbers_that_are_too_large_are_out_of_range_not_an_exception(self):
+        big, huge = 10 ** 400, 10 ** 5000
+        for field, value in (("timeout_seconds", big), ("timeout_seconds", -big), ("timeout_seconds", huge),
+                             ("timeout_seconds", float("inf")), ("timeout_seconds", float("nan")),
+                             ("timeout_seconds", 1e999), ("timeout_seconds", -float("inf"))):
+            for operation in ("kill", "status", "list"):
+                payload = {"operation": operation, "timeout_seconds": value}
+                if operation != "list":
+                    payload["id"] = ID
+                with self.subTest(operation=operation, value=type(value).__name__ + str(value.bit_length() if isinstance(value, int) else value)):
+                    record = run(payload, Script(), assume_yes=True)
+                    self.assertEqual(record["status"], 2)
+                    self.assertIn("seconds", record["note"])
+                    self.assertIn("0.1", record["note"])
+        for field, operation in (("max_lines", "observe"), ("max_bytes", "observe"), ("pane_id", "pane")):
+            for value in (big, -big, huge):
+                payload = {"operation": operation, field: value, **({"id": ID} if field != "pane_id" else {})}
+                with self.subTest(field=field, bits=value.bit_length()):
+                    self.assertEqual(run(payload, Script())["status"], 2)
+        # the command-line flag and the MCP entry
+        for value in (1e999, float("nan"), 10 ** 400):
+            self.assertEqual(run("list sessions", Script(), timeout_seconds=value)["status"], 2)
+        record = pty_cli.mcp({"request": {"operation": "kill", "id": ID, "timeout_seconds": 10 ** 400},
+                              "confirm_risky": True})
+        self.assertEqual(record["status"], 2)
 
     def test_a_structured_refusal_keeps_the_requests_own_id(self):
         cases = (({"operation": "kill", "id": ID, "expect_started": 1}, {"operation": "status", "id": ID}),
-                 ({"operation": "observe", "id": ID, "max_lines": 0}, {"operation": "observe", "id": ID, "max_lines": 50}),
+                 ({"operation": "observe", "id": ID, "max_lines": 0}, {"operation": "status", "id": ID}),
                  ({"operation": "status", "id": ID, "extra": 1}, {"operation": "status", "id": ID}),
-                 ({"operation": "journal", "id": "A.b", "max_bytes": 0}, {"operation": "journal", "id": "A.b", "max_lines": 50}),
-                 ({"operation": "kill", "id": "-x"}, {"operation": "list"}), ({"operation": "kill"}, {"operation": "list"}))
+                 ({"operation": "journal", "id": "A.b", "max_bytes": 0}, {"operation": "status", "id": "A.b"}),
+                 ({"operation": "list", "id": ID}, {"operation": "list"}),
+                 ({"operation": "kill", "id": "-x"}, {"operation": "list"}), ({"operation": "kill"}, {"operation": "list"}),
+                 ({"operation": "kill", "id": "x" * 65}, {"operation": "list"}))
         for payload, expected in cases:
             with self.subTest(payload=payload):
                 self.assertEqual(json.loads(run(payload, Script())["hint"]), expected)
