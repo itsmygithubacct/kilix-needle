@@ -122,8 +122,10 @@ checked in this order, stopping at the first refusal:
 (the session that would end) and `plan.argv` (the exact command that would run,
 with its `--expect-started`), and sends no kill. A dry run that would be refused
 for step 1 or 2 reports that refusal; a missing session reports `not_found`.
-It cannot know the receipt `kill` will return (`verified_absent` or
-`uncertain`); that comes from Kilix at act time.
+A dry run prints a **plan**, never a receipt: the receipt a kill returns
+(`verified_absent` or `uncertain`) exists only after the kill, and comes from
+Kilix at act time. The plan names the target, its `started_millis` and the exact
+argv.
 
 ## Receipts
 
@@ -140,17 +142,28 @@ It cannot know the receipt `kill` will return (`verified_absent` or
 | `resolved` | for `kill`: the session read in the same call: `id`, `started_millis`, `command`, `cwd`, `cwd_now`, `attached`, `child_pid` |
 | `plan` | for `--dry-run`: `would` (`run` or `end`), `argv` (the `kilix` arguments), and for `end` what it `needs` |
 | `refused` | a refusal made by Needle, before any call that could end a session: `own_session`, `caller_unidentified`, `declined` |
-| `note`, `hint` | why nothing ran or the answer failed; one accepted form |
+| `note` | why nothing ran or the answer failed: installation, identity, consent, "re-list before retrying" |
+| `hint` | on every refusal and every non-zero record: **one request this grammar accepts**, never prose (`list sessions`; `show session ID` with the real ID filled in; `end session ID` when only consent was missing). Passed-through Kilix receipts get it on the outer record; the receipt is untouched |
 | `completion` | `"unknown"` after a `kill` that was sent but not answered or verified |
 
 A kill receipt's `result.result` is one of `verified_absent` (status 0),
 `uncertain` (1; **re-list before retrying**), `refused` (3; `reason`
 `started_mismatch`, `own_session`, `declined`) and `not_found` (4). Needle checks
 that the document is the one the contract promises for the operation and the
-exit status agrees with it (a `verified_absent` with exit 1, a receipt for
-another ID, a status document for another session, an `observe` without
-`untrusted: true`): anything else is reported as `unexpected document`, status 1,
-without `result`, and for a kill with `completion: "unknown"`.
+exit status agrees with it (a receipt for another ID, a status document for
+another session, an `observe` without `untrusted: true`), and for a kill that
+the result's own fields agree with it:
+
+| `result` | exit | Needle also requires |
+| --- | --- | --- |
+| `verified_absent` | 0 | `request_sent: true` and an integer `started_millis` equal to the `--expect-started` value it sent |
+| `uncertain` | 1 | `request_sent` boolean |
+| `refused` | 3 | `request_sent: false` (a `started_mismatch` receipt describes the replacement session and passes through unchanged) |
+| `not_found` | 4 | `request_sent: false` |
+
+Anything else is reported as `unexpected document`, status 1, without `result`,
+and for a kill with `completion: "unknown"` and a note to re-list before retrying.
+A valid receipt is passed through unchanged.
 
 Unreachable is not absent. `list` returns sessions that did not answer under
 `result.unreachable`; `show session ID` on one of them fails (status 1) rather
@@ -196,8 +209,8 @@ caller's panes use (`KITTY_PTY_BROKER_RUNTIME`, `XDG_RUNTIME_DIR`).
 This job needs a Kilix with `kilix pty list|status|observe|kill|journals`
 (0.2.2-rc6 or newer). When it is missing, or too old (an older Kilix answers any
 `kilix pty` argument with `usage: kilix pty [--install-only]`), the request is
-refused with status 2, a `note` that says which and a `hint` to check
-`kilix pty help`. For `end session` this happens at the lookup, so nothing was
+refused with status 2, a `note` that says which (install Kilix 0.2.2-rc6 or newer;
+`kilix pty help` shows the verbs) and a `hint` that is an accepted request. For `end session` this happens at the lookup, so nothing was
 sent.
 
 ## Options
@@ -268,7 +281,8 @@ inherits it. Codex forwards only the variables named in `env_vars`; the entry
 `KITTY_PTY_BROKER_RUNTIME` and `KITTY_PTY_BROKER_EXECUTABLE` (re-run it after
 updating; a hand-written Codex entry for the pty server must list them too).
 Without the session, `kilix_pty_act` refuses `end session` (`caller_unidentified`)
-and runs nothing; reads still work.
+and runs nothing; reads still work through `kilix_pty_act` without it (decided:
+only `end session` fails closed).
 
 ## Limits
 
