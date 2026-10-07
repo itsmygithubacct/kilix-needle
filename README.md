@@ -700,8 +700,10 @@ client's directory) and from the client's `/proc/<pid>/environ` (`TMUX`, `TMUX_T
 from needle's environment; it is shell-quoted. Clients running in the requested directory are
 named first and alone; when none is, clients elsewhere are named as leads, and the message says
 the directory an agent works in inside tmux is not visible. When the socket cannot be
-established (an option that cannot be read, an unreadable client environment, a relative `-S`
-with an unknown directory, an empty `-S`, a relative or malformed `$TMUX`, non-UTF-8 text) the message says so,
+established (a listing entry with no valid pid, an option that cannot be read, an unreadable or
+over-long client command line or environment, a relative `-S` with an unknown directory, an empty `-S`
+or `-L`, a relative or malformed `$TMUX`, non-UTF-8 text, or a client whose command line or directory
+differs from the listing, or changes while it is read: they are read, then read again) the message says so,
 names no socket, and says how to find it (`tmux display-message -p '#{socket_path}'` inside that pane). A
 `-S` path is left as written, so the filesystem resolves any `..` through symlinks; `$TMUX` is cut at its
 first comma as tmux does, and only when it is exactly `PATH,PID,SESSION`.

@@ -486,14 +486,62 @@ class InsideTmuxHint(unittest.TestCase):
         (root / "4000" / "cmdline").unlink()
         with mock.patch.object(agents_kilix, "PROC_ROOT", str(root)):
             self.assertNotIn("--socket", self.run_tell([pane])["reason"])
-        for bad in (0, -3, True, "4000", 1.5):
+        for bad in (0, -3, True, "4000", 1.5, None):
             invalid = dict(pane, process={"foreground": [{"pid": bad, "argv": ["tmux", "-S", "/fixture/old"], "cwd": "/w/kilix"}]})
             got = self.hint([invalid])
             self.assertNotIn("--socket", got, bad)
-            self.assertIn("process id is not valid", got, bad)
-        # a degraded listing entry with no pid at all has nothing to read again: its listed argv stands
+            self.assertIn("names no valid client process", got, bad)
+        # an entry with no pid at all has no client to check either: nothing is named
         nopid = dict(pane, process={"foreground": [{"argv": ["tmux", "-S", "/fixture/old"], "cwd": "/w/kilix"}]})
-        self.assertIn("--socket /fixture/old ", self.hint([nopid]))
+        self.assertNotIn("--socket", self.hint([nopid]))
+        self.assertIn("names no valid client process", self.hint([nopid]))
+
+    def test_a_client_that_changes_while_its_context_is_read_names_no_socket(self):
+        pane = self.tmux_pane(argv=("tmux", "-L", "old", "attach"))
+        root = self.live_clients([pane], self.fake_proc(4000, {"TMUX_TMPDIR": "/clients/tmp"}))
+        original = agents_kilix._process_environment
+
+        def change_then_read(pid, **kwargs):
+            (root / str(pid) / "cmdline").write_bytes(b"tmux\0-L\0new\0attach\0")
+            return original(pid, **kwargs)
+        with mock.patch.object(agents_kilix, "_process_environment", side_effect=change_then_read), \
+                mock.patch.object(agents_kilix, "PROC_ROOT", str(root)):
+            got = self.run_tell([pane])["reason"]
+        self.assertNotIn("--socket", got)
+        self.assertIn("changed while it was being read", got)
+        # its directory changes after the check
+        pane = self.tmux_pane(argv=("tmux", "-S", "rel/sock", "attach"))
+        root = self.live_clients([pane], None)
+        real = os.readlink
+        calls = {"n": 0}
+
+        def move(path, *a, **kw):
+            value = real(path, *a, **kw)
+            if str(path).endswith("/cwd"):
+                calls["n"] += 1
+                if calls["n"] == 1:
+                    Path(path).unlink()
+                    Path(path).symlink_to("/elsewhere")
+            return value
+        with mock.patch.object(agents_kilix.os, "readlink", side_effect=move), \
+                mock.patch.object(agents_kilix, "PROC_ROOT", str(root)):
+            got = self.run_tell([pane])["reason"]
+        self.assertNotIn("--socket", got)
+        self.assertIn("changed while it was being read", got)
+
+    def test_a_command_line_or_environment_too_long_to_read_whole_names_no_socket(self):
+        pane = self.tmux_pane(argv=("tmux", "-S", "/fixture/old", "attach"))
+        root = self.live_clients([pane], None)
+        with mock.patch.object(agents_kilix, "_MAX_CMDLINE_BYTES", 10), mock.patch.object(agents_kilix, "PROC_ROOT", str(root)):
+            got = self.run_tell([pane])["reason"]
+        self.assertNotIn("--socket", got)
+        self.assertIn("too long to read whole", got)
+        pane = self.tmux_pane(argv=("tmux", "attach"))
+        root = self.live_clients([pane], self.fake_proc(4000, {"TMUX": "/inner/sock,1,0"}))
+        self.assertIn("--socket /inner/sock ", self.hint([pane], root))
+        with mock.patch.object(agents_kilix, "_MAX_ENVIRON_BYTES", 10), mock.patch.object(agents_kilix, "PROC_ROOT", str(root)):
+            got = self.run_tell([pane])["reason"]
+        self.assertNotIn("--socket", got)
 
     def test_a_command_line_that_is_not_valid_text_names_no_socket(self):
         pane = self.tmux_pane(argv=("tmux", "-S", "/fixture/old", "attach"))
@@ -501,6 +549,14 @@ class InsideTmuxHint(unittest.TestCase):
         (root / "4000" / "cmdline").write_bytes(b"tmux\0-S\0/fixture/\xff\0attach\0")
         with mock.patch.object(agents_kilix, "PROC_ROOT", str(root)):
             self.assertNotIn("--socket", self.run_tell([pane])["reason"])
+        # the listing carries the replacement character a lossy decoder would put there: still not the same bytes
+        lossy = self.tmux_pane(argv=("tmux", "-S", "/fixture/\ufffd", "attach"))
+        root = self.live_clients([lossy], None)
+        (root / "4000" / "cmdline").write_bytes(b"tmux\0-S\0/fixture/\xff\0attach\0")
+        with mock.patch.object(agents_kilix, "PROC_ROOT", str(root)):
+            got = self.run_tell([lossy])["reason"]
+        self.assertNotIn("--socket", got)
+        self.assertIn("not valid text", got)
 
     def test_each_distinct_server_gets_its_own_command(self):
         one = self.tmux_pane(pane_id=6, argv=("tmux", "-S", "/s/a", "attach"))

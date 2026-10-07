@@ -259,9 +259,8 @@ def _process_environment(pid, *, proc_root: str = "/proc") -> dict[str, str | No
     """
     if not isinstance(pid, int) or pid <= 0:
         return None
-    try:
-        raw = (Path(proc_root) / str(pid) / "environ").read_bytes()
-    except OSError:
+    raw = _read_bounded(Path(proc_root) / str(pid) / "environ", _MAX_ENVIRON_BYTES)
+    if raw is None:
         return None
     found: dict[str, str | None] = {}
     for entry in raw.split(b"\0"):
@@ -278,40 +277,37 @@ def _process_environment(pid, *, proc_root: str = "/proc") -> dict[str, str | No
     return found
 
 
-def _client_changed(item: dict, argv: list, *, proc_root: str) -> str:
-    """Why the listed client cannot be trusted any more, or "" when it still is what the listing says.
+_MAX_CMDLINE_BYTES = 1 << 20
+_MAX_ENVIRON_BYTES = 4 << 20
 
-    The listing is a snapshot: the process is read again, and its live command line (and working
-    directory, when the listing gives one) must equal it, before any socket is read out of it. (Kilix
-    always lists a pid; an entry with none can only come from a degraded listing.)
-    """
-    pid = item.get("pid")
-    if pid is None:
-        return ""               # an entry that names no process has nothing to read again: its listed argv stands
-    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
-        return "the listed client process id is not valid"
+
+def _read_bounded(path, limit: int) -> bytes | None:
+    """The whole file when it is at most `limit` bytes; None when unreadable or longer (never a prefix)."""
     try:
-        raw = (Path(proc_root) / str(pid) / "cmdline").read_bytes()
+        with open(path, "rb") as handle:
+            data = handle.read(limit + 1)
     except OSError:
-        return "the client process cannot be read any more"
+        return None
+    return None if len(data) > limit else data
+
+
+def _read_client(pid: int, *, proc_root: str) -> tuple[tuple[str, ...], str] | str:
+    """(live command line, working directory) of the process, or the reason it cannot be read."""
+    raw = _read_bounded(Path(proc_root) / str(pid) / "cmdline", _MAX_CMDLINE_BYTES)
+    if raw is None:
+        return "the client process cannot be read, or its command line is too long to read whole"
     parts = raw.split(b"\0")
     if parts and parts[-1] == b"":
         parts.pop()
     try:
-        live = [part.decode() for part in parts]
+        argv = tuple(part.decode() for part in parts)
     except UnicodeDecodeError:
         return "the client's command line is not valid text"
-    if live != [str(value) for value in argv]:
-        return "the client's command line is not the one listed"
-    cwd = item.get("cwd")
-    if isinstance(cwd, str) and cwd:
-        try:
-            now = os.readlink(Path(proc_root) / str(pid) / "cwd")
-        except OSError:
-            return "the client's directory cannot be read"
-        if now != cwd:
-            return "the client's directory is not the one listed"
-    return ""
+    try:
+        cwd = os.readlink(Path(proc_root) / str(pid) / "cwd")
+    except OSError:
+        return "the client's directory cannot be read"
+    return argv, cwd
 
 
 _TMUX_VARIABLE = re.compile(r"(?P<path>[^,]+),(?P<pid>\d+),(?P<session>\d+)\Z")
@@ -320,6 +316,33 @@ _TMUX_VARIABLE = re.compile(r"(?P<path>[^,]+),(?P<pid>\d+),(?P<session>\d+)\Z")
 def tmux_socket(item: dict, *, proc_root: str = "/proc") -> tuple[str | None, str]:
     """(socket path, "") of one tmux client in the listing, or (None, why it is not established).
 
+    The listing is a snapshot, so the client is read first (command line and working directory must
+    equal the listing, and the listing must name its pid), its environment is read to derive the socket,
+    and the command line and directory are read AGAIN: a client that changed meanwhile names no socket.
+    """
+    pid = item.get("pid")
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        return None, "the listing names no valid client process, so nothing can be checked"
+    argv = item.get("argv") if isinstance(item.get("argv"), list) else []
+    first = _read_client(pid, proc_root=proc_root)
+    if isinstance(first, str):
+        return None, first
+    if list(first[0]) != [str(value) for value in argv]:
+        return None, "the client's command line is not the one listed"
+    cwd = item.get("cwd")
+    if isinstance(cwd, str) and cwd and first[1] != cwd:
+        return None, "the client's directory is not the one listed"
+    result = _socket_of(dict(item, cwd=first[1]), argv, proc_root=proc_root)
+    if result[0] is None:
+        return result
+    if _read_client(pid, proc_root=proc_root) != first:
+        return None, "the client changed while it was being read"
+    return result
+
+
+def _socket_of(item: dict, argv: list, *, proc_root: str) -> tuple[str | None, str]:
+    """The socket the (already checked) client's argv, directory and environment establish.
+
     Only what the client's own argv, working directory and environment prove is returned: -S (a
     relative one joined to the client's directory, and left as written so the filesystem resolves any
     `..` through symlinks), else -L's name, else the socket in the client's $TMUX, else "default", below
@@ -327,10 +350,6 @@ def tmux_socket(item: dict, *, proc_root: str = "/proc") -> tuple[str | None, st
     client. An empty or relative-by-environment path, a lossy decoding, or a $TMUX that is not exactly
     `PATH,PID,SESSION` is refused rather than guessed (tmux cuts $TMUX at its first comma).
     """
-    argv = item.get("argv") if isinstance(item.get("argv"), list) else []
-    changed = _client_changed(item, argv, proc_root=proc_root)
-    if changed:
-        return None, changed
     options = _tmux_options(argv)
     if options is None:
         return None, "its command line has an option that cannot be read exactly"
