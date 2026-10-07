@@ -690,8 +690,20 @@ message. These are session controls, not arbitrary keystrokes into a pane.
 
 An agent that runs inside tmux (for example a restored `tmux new-session … claude --resume …`)
 is not visible to Kilix: the pane's foreground program is tmux, so its state cannot be read
-and no message is sent into it. A request for such a session says so, names the tmux pane and
-points at the `tmux` job (`kilix-needle tmux --socket SOCKET 'list sessions'`) or `tmux attach`.
+and no message is sent into it. A request for such a session says so and names the tmux panes
+with the command that reaches each one's server (`kilix-needle tmux --socket SOCKET 'list sessions'`,
+or `tmux -S SOCKET attach`). The socket is the tmux client's own, read structurally from its
+command line (`-S`, `-L`, `-f` and their arguments; a relative `-S` is resolved against the
+client's directory) and from the client's `/proc/<pid>/environ` (`TMUX`, `TMUX_TMPDIR`), never
+from needle's environment; it is shell-quoted. Clients running in the requested directory are
+named first and alone; when none is, clients elsewhere are named as leads, and the message says
+the directory an agent works in inside tmux is not visible. When the socket cannot be
+established (an option that cannot be read, an unreadable client environment, a relative `-S`
+with an unknown directory) the message says so and prints no command.
+
+Likewise, a Codex pane is `agent` (refused) unless Kilix can name its session exactly: Codex
+normally holds no rollout open, so `tell`/`wait` on a running Codex are not available; see the
+kilix-tui-utils README ("Where an agent's state comes from").
 
 ## The system job
 

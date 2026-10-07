@@ -29,6 +29,7 @@ from dataclasses import dataclass, field
 import json
 import os
 from pathlib import Path
+import shlex
 import subprocess
 import time
 
@@ -210,11 +211,102 @@ def calling_cwd() -> str | None:
     return caller_info()[2]
 
 
-def _tmux_panes(panes, caller_pane) -> list[tuple[object, list[str]]]:
-    """Panes with no coding session whose foreground is a tmux client: (pane id, its -S/-L socket args).
+PROC_ROOT = "/proc"      # where a tmux client's environment is read from (tests point it at a fake tree)
+
+# tmux's global options: those that take an argument, and those that do not.
+_TMUX_WITH_ARGUMENT = frozenset("cfLST")
+_TMUX_FLAGS = frozenset("2CDlNuvV")
+
+
+def _tmux_options(argv) -> dict[str, str] | None:
+    """The global options of a tmux client's argv, or None when the argv cannot be read exactly.
+
+    Options may be combined (`-uv`), their argument may be attached (`-S/run/sock`) or the next word,
+    and the first word that is not an option starts the command (`attach`). A later -S/-L wins.
+    """
+    options: dict[str, str] = {}
+    index = 1
+    while index < len(argv):
+        word = str(argv[index])
+        if word == "--":
+            break
+        if not word.startswith("-") or word == "-":
+            break
+        position = 1
+        while position < len(word):
+            letter = word[position]
+            if letter in _TMUX_WITH_ARGUMENT:
+                value = word[position + 1:]
+                if not value:
+                    index += 1
+                    if index >= len(argv):
+                        return None
+                    value = str(argv[index])
+                options[letter] = value
+                break
+            if letter not in _TMUX_FLAGS:
+                return None
+            position += 1
+        index += 1
+    return options
+
+
+def _process_environment(pid, *, proc_root: str = "/proc") -> dict[str, str] | None:
+    """The environment a process started with, from /proc/<pid>/environ; None when unreadable."""
+    if not isinstance(pid, int) or pid <= 0:
+        return None
+    try:
+        raw = (Path(proc_root) / str(pid) / "environ").read_bytes()
+    except OSError:
+        return None
+    found = {}
+    for entry in raw.split(b"\0"):
+        name, separator, value = entry.partition(b"=")
+        if separator and name:
+            found[name.decode(errors="replace")] = value.decode(errors="replace")
+    return found
+
+
+def tmux_socket(item: dict, *, proc_root: str = "/proc") -> tuple[str | None, str]:
+    """(socket path, "") of one tmux client in the listing, or (None, why it cannot be established).
+
+    The path is the client's own: -S (relative to the client's working directory), else -L's name, else
+    the socket in the client's $TMUX, else "default", below the client's $TMUX_TMPDIR (or /tmp) in
+    tmux-<uid>. Needle's own environment and directory say nothing about the client.
+    """
+    argv = item.get("argv") if isinstance(item.get("argv"), list) else []
+    options = _tmux_options(argv)
+    if options is None:
+        return None, "its command line has an option that cannot be read exactly"
+    if "S" in options:
+        path = options["S"]
+        if os.path.isabs(path):
+            return os.path.normpath(path), ""
+        cwd = item.get("cwd")
+        if not isinstance(cwd, str) or not os.path.isabs(cwd):
+            return None, "its -S path is relative and the client's directory is unknown"
+        return os.path.normpath(os.path.join(cwd, path)), ""
+    environment = _process_environment(item.get("pid"), proc_root=proc_root)
+    if environment is None:
+        return None, "the client's environment cannot be read, and its TMUX_TMPDIR decides the socket"
+    if "L" not in options and environment.get("TMUX", "")[:1] not in ("", ","):
+        return os.path.normpath(environment["TMUX"].split(",", 1)[0]), ""
+    base = environment.get("TMUX_TMPDIR") or "/tmp"
+    if not os.path.isabs(base):
+        return None, "the client's TMUX_TMPDIR is relative"
+    try:
+        uid = os.stat(Path(proc_root) / str(item["pid"])).st_uid
+    except OSError:
+        return None, "the client's owner cannot be read"
+    return os.path.join(base, f"tmux-{uid}", options.get("L") or "default"), ""
+
+
+def _tmux_panes(panes, caller_pane, directory: Path) -> list[dict]:
+    """Panes with no coding session whose foreground is a tmux client.
 
     A coding agent running inside tmux is invisible to Kilix (its foreground program is tmux), so the
-    state of such a session cannot be read, and nothing is sent into tmux from here.
+    state of such a session cannot be read, and nothing is sent into tmux from here. Each entry says
+    the pane, whether the client runs in the requested directory, and its socket (or why it has none).
     """
     found = []
     for pane in panes:
@@ -224,16 +316,40 @@ def _tmux_panes(panes, caller_pane) -> list[tuple[object, list[str]]]:
         for item in process.get("foreground") or []:
             argv = item.get("argv") if isinstance(item, dict) and isinstance(item.get("argv"), list) else []
             if argv and os.path.basename(str(argv[0])) == "tmux":
-                socket = []
-                for index, value in enumerate(argv[1:], 1):
-                    if value in ("-S", "-L") and index + 1 < len(argv):
-                        socket = [value, str(argv[index + 1])]
-                        break
-                    if not str(value).startswith("-"):
-                        break
-                found.append((pane.get("pane_id"), socket))
+                where = item.get("cwd") or pane.get("cwd") or ""
+                try:
+                    here = bool(where) and Path(where).resolve() == directory
+                except (OSError, RuntimeError):
+                    here = False
+                socket, why = tmux_socket(item, proc_root=PROC_ROOT)
+                found.append({"pane": pane.get("pane_id"), "here": here, "socket": socket, "why": why})
                 break
     return found
+
+
+def _tmux_hint(agent: str, directory: Path, hosted: list[dict]) -> str:
+    """Why nothing is sent, which panes run tmux, and an exact way to reach each one's server."""
+    near = [item for item in hosted if item["here"]]
+    shown = (near or hosted)[:5]
+    scope = ("A pane here runs tmux" if near else
+             "No pane running tmux is in that directory; tmux clients elsewhere may host it")
+    lines = []
+    seen = set()
+    for item in shown:
+        if item["socket"] is None:
+            lines.append(f"pane {item['pane']}: the tmux socket cannot be established: {item['why']}; "
+                         "no command is given for it")
+        elif item["socket"] not in seen:
+            seen.add(item["socket"])
+            quoted = shlex.quote(item["socket"])
+            lines.append(f"pane {item['pane']}: kilix-needle tmux --socket {quoted} 'list sessions' "
+                         f"(or tmux -S {quoted} attach)")
+        else:
+            lines.append(f"pane {item['pane']}: the same server as above")
+    return (f"no {agent} session in {directory} that Kilix can read. {scope}: an agent inside tmux can be "
+            "running there, but Kilix cannot read its state and no message is sent into tmux. "
+            "Reach it with the tmux job or attach to it; the directory an agent works in inside tmux "
+            "is not visible here. " + "; ".join(lines))
 
 
 def find_session(agent: str, directory: Path, *, caller_pane: int | None = None) -> dict:
@@ -253,20 +369,9 @@ def find_session(agent: str, directory: Path, *, caller_pane: int | None = None)
         if provider == agent and cwd and Path(cwd).resolve() == directory:
             matches.append(pane)
     if not matches:
-        hosted = _tmux_panes(snapshot.get("panes", []), caller_pane)
+        hosted = _tmux_panes(snapshot.get("panes", []), caller_pane, directory)
         if hosted:
-            ids = ", ".join(str(pane_id) for pane_id, _ in hosted[:5])
-            args = next((args for _, args in hosted if args), [])
-            if args[:1] == ["-S"]:
-                socket = args[1]
-            else:       # tmux's default location for the socket (-L NAME, or the default one)
-                socket = os.path.join(os.environ.get("TMUX_TMPDIR") or "/tmp", f"tmux-{os.getuid()}",
-                                      args[1] if args else "default")
-            raise AgentsError(
-                f"no {agent} session in {directory} that Kilix can read. Pane {ids} runs tmux: "
-                "an agent inside tmux can be running there, but Kilix cannot read its state and no "
-                "message is sent into tmux. Reach it with the tmux job "
-                f"(kilix-needle tmux --socket {socket} 'list sessions') or attach to it (tmux attach)")
+            raise AgentsError(_tmux_hint(agent, directory, hosted))
     if len(matches) != 1:
         raise AgentsError(f"{'no' if not matches else len(matches)} live {agent} sessions in "
                           f"{directory}")

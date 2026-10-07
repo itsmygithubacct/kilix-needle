@@ -2,7 +2,9 @@
 from contextlib import redirect_stdout
 import io
 import json
+import os
 from pathlib import Path
+import shutil
 import tempfile
 import unittest
 from unittest import mock
@@ -242,23 +244,122 @@ class InsideTmuxHint(unittest.TestCase):
             return agents_kilix.perform([tell], cwd="/w")[0]
 
     def test_a_pane_running_a_tmux_client_is_named_with_the_way_to_reach_it(self):
-        result = self.run_tell([self.tmux_pane()])
+        with mock.patch.object(agents_kilix, "PROC_ROOT", str(self.fake_proc(4000, {"HOME": "/h"}))):
+            result = self.run_tell([self.tmux_pane()])
         self.assertEqual(result["outcome"], "failed")
         reason = result["reason"]
-        for word in ("tmux", "Pane 6", "cannot read its state", "no message is sent into tmux",
-                     "kilix-needle tmux --socket", "tmux attach"):
+        for word in ("tmux", "pane 6", "cannot read its state", "no message is sent into tmux",
+                     "kilix-needle tmux --socket", "attach"):
             self.assertIn(word, reason)
         self.assertNotIn("no live claude sessions", reason)
 
+    def fake_proc(self, pid, environ, *, uid_of=None):
+        root = Path(tempfile.mkdtemp(prefix="kn-proc-"))
+        self.addCleanup(shutil.rmtree, root, True)
+        (root / str(pid)).mkdir()
+        (root / str(pid) / "environ").write_bytes(
+            b"\0".join(f"{k}={v}".encode() for k, v in environ.items()) + b"\0")
+        return root
+
+    def hint(self, panes, proc=None):
+        with mock.patch.object(agents_kilix, "PROC_ROOT", str(proc or "/nonexistent-proc")):
+            return self.run_tell(panes)["reason"]
+
     def test_the_sockets_of_the_clients_are_used_in_the_hint(self):
-        got = self.run_tell([self.tmux_pane(argv=("tmux", "-S", "/srv/t/sock", "attach"))])["reason"]
-        self.assertIn("--socket /srv/t/sock", got)
-        got = self.run_tell([self.tmux_pane(argv=("tmux", "-S", "run/sock", "attach"))])["reason"]
-        self.assertIn("--socket run/sock ", got)
-        got = self.run_tell([self.tmux_pane(argv=("tmux", "-L", "work", "attach"))])["reason"]
-        self.assertRegex(got, r"--socket \S*/tmux-\d+/work ")
-        got = self.run_tell([self.tmux_pane(argv=("/usr/bin/tmux", "attach"))])["reason"]
-        self.assertRegex(got, r"--socket \S*/tmux-\d+/default ")
+        got = self.hint([self.tmux_pane(argv=("tmux", "-S", "/srv/t/sock", "attach"))])
+        self.assertIn("--socket /srv/t/sock ", got)
+        self.assertIn("tmux -S /srv/t/sock attach", got)
+
+    def test_a_relative_socket_is_resolved_against_the_clients_directory(self):
+        pane = self.tmux_pane(argv=("tmux", "-S", "run/sock", "attach"))
+        pane["process"]["foreground"][0]["cwd"] = "/w/kilix/sub"
+        self.assertIn("--socket /w/kilix/sub/run/sock ", self.hint([pane]))
+        del pane["process"]["foreground"][0]["cwd"]
+        got = self.hint([pane])
+        self.assertIn("cannot be established", got)
+        self.assertNotIn("--socket", got)
+
+    def test_options_before_the_socket_do_not_hide_it(self):
+        for argv, expected in ((("tmux", "-f", "/c/conf", "-S", "/s/one", "attach"), "/s/one"),
+                               (("tmux", "-uv", "-S/s/two", "attach"), "/s/two"),
+                               (("tmux", "-2", "-c", "sh -c x", "-S", "/s/three", "new"), "/s/three"),
+                               (("tmux", "-L", "name", "-S", "/s/four", "attach"), "/s/four"),     # -S wins
+                               (("tmux", "-S", "/s/old", "-S", "/s/five", "attach"), "/s/five")):
+            self.assertIn(f"--socket {expected} ", self.hint([self.tmux_pane(argv=argv)]), argv)
+
+    def test_a_socket_after_the_command_belongs_to_the_command(self):
+        got = self.hint([self.tmux_pane(argv=("tmux", "new-session", "-S", "/not/a/socket", "claude"))])
+        self.assertNotIn("/not/a/socket ", got.split("cannot")[0])
+        self.assertNotIn("--socket /not/a/socket", got)
+
+    def test_an_option_that_cannot_be_read_gives_no_socket(self):
+        got = self.hint([self.tmux_pane(argv=("tmux", "-Z", "-S", "/s/x", "attach"))])
+        self.assertIn("cannot be established", got)
+        self.assertNotIn("--socket", got)
+        self.assertIn("cannot be established", self.hint([self.tmux_pane(argv=("tmux", "-S"))]))
+
+    def test_the_default_and_named_sockets_come_from_the_clients_environment(self):
+        proc = self.fake_proc(4000, {"TMUX_TMPDIR": "/clients/tmp"})
+        uid = os.stat(proc / "4000").st_uid
+        got = self.hint([self.tmux_pane(argv=("tmux", "-L", "work", "attach"))], proc)
+        self.assertIn(f"--socket /clients/tmp/tmux-{uid}/work ", got)
+        got = self.hint([self.tmux_pane(argv=("/usr/bin/tmux", "attach"))], proc)
+        self.assertIn(f"--socket /clients/tmp/tmux-{uid}/default ", got)
+        plain = self.fake_proc(4000, {"HOME": "/h"})
+        self.assertIn(f"--socket /tmp/tmux-{os.stat(plain / '4000').st_uid}/default ",
+                      self.hint([self.tmux_pane(argv=("tmux", "attach"))], plain))
+
+    def test_needles_own_tmux_environment_is_never_used(self):
+        proc = self.fake_proc(4000, {"TMUX_TMPDIR": "/clients/tmp"})
+        with mock.patch.dict(os.environ, {"TMUX_TMPDIR": "/needles/tmp", "TMUX": "/needles/sock,1,0"}):
+            got = self.hint([self.tmux_pane(argv=("tmux", "attach"))], proc)
+        self.assertIn("/clients/tmp/", got)
+        self.assertNotIn("/needles/", got)
+
+    def test_a_client_inside_tmux_uses_the_socket_of_its_TMUX(self):
+        proc = self.fake_proc(4000, {"TMUX": "/inner/sock,123,0", "TMUX_TMPDIR": "/ignored"})
+        self.assertIn("--socket /inner/sock ", self.hint([self.tmux_pane(argv=("tmux", "attach"))], proc))
+        got = self.hint([self.tmux_pane(argv=("tmux", "-L", "x", "attach"))], proc)
+        self.assertNotIn("/inner/sock", got)             # -L overrides $TMUX
+
+    def test_an_unreadable_environment_gives_no_default_socket(self):
+        got = self.hint([self.tmux_pane(argv=("tmux", "attach"))])
+        self.assertIn("cannot be established", got)
+        self.assertNotIn("--socket", got)
+        self.assertNotIn("tmux-", got)
+        proc = self.fake_proc(4000, {})                 # the process exists but its environment is unreadable
+        (proc / "4000" / "environ").unlink()
+        got = self.hint([self.tmux_pane(argv=("tmux", "attach"))], proc)
+        self.assertIn("environment cannot be read", got)
+        self.assertNotIn("--socket", got)
+
+    def test_the_socket_is_shell_quoted(self):
+        got = self.hint([self.tmux_pane(argv=("tmux", "-S", "/s/with space; rm x", "attach"))])
+        self.assertIn("--socket '/s/with space; rm x' ", got)
+        self.assertIn("tmux -S '/s/with space; rm x' attach", got)
+
+    def test_only_clients_in_the_requested_directory_are_named_when_there_are_any(self):
+        near = self.tmux_pane(pane_id=6, argv=("tmux", "-S", "/s/near", "attach"))
+        far = self.tmux_pane(pane_id=7, argv=("tmux", "-S", "/s/far", "attach"))
+        far["cwd"] = "/elsewhere"
+        far["process"]["foreground"][0]["cwd"] = "/elsewhere"
+        got = self.hint([far, near])
+        self.assertIn("pane 6", got)
+        self.assertIn("/s/near", got)
+        self.assertNotIn("/s/far", got)
+        self.assertNotIn("pane 7", got)
+        got = self.hint([far])                      # none here: elsewhere is named as a lead, and says so
+        self.assertIn("No pane running tmux is in that directory", got)
+        self.assertIn("/s/far", got)
+
+    def test_each_distinct_server_gets_its_own_command(self):
+        one = self.tmux_pane(pane_id=6, argv=("tmux", "-S", "/s/a", "attach"))
+        two = self.tmux_pane(pane_id=8, argv=("tmux", "-S", "/s/b", "attach"))
+        three = self.tmux_pane(pane_id=9, argv=("tmux", "-S", "/s/a", "attach"))
+        got = self.hint([one, two, three])
+        self.assertIn("--socket /s/a ", got)
+        self.assertIn("--socket /s/b ", got)
+        self.assertIn("pane 9: the same server", got)
 
     def test_without_a_tmux_pane_the_old_message_stays(self):
         plain = dict(self.tmux_pane(), process={"foreground": [{"pid": 1, "argv": ["vim", "x"]}]})
