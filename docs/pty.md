@@ -81,22 +81,36 @@ refused request is never partly executed.
 | bounds | `show the last 5000 lines of session ID` | N lines is a count of lines, 1-1000 |
 | shape | empty, control characters, over 1024 characters | |
 
-The hint is chosen from the words of the refused request, and **it never names a
-session the request did not name**:
+The hint is a request this grammar accepts, and one rule decides whether it
+carries an ID: **an ID is in a hint only if the grammar's own reader took exactly
+that ID from the request and the hint, read back by the grammar, names it.**
 
-- a request with exactly one ID gets a form carrying that same ID literal; for
-  anything about ending, closing or killing it is a *read* of it
-  (`show session ID`), because the refused words may be a negation or hearsay;
-- a request with several IDs, or an ending request with none, gets
-  `list sessions`;
-- only a read example for a request with no ID in it at all
-  (`show the last 50 lines of session 0123456789abcdef`) uses the placeholder
-  `0123456789abcdef`. It is a well-formed ID, and a session could have it, so it
-  is never used in an ending example;
-- the MCP read tool's refusal of `end session ID` hints `end session ID` with
-  the same literal, and its note points at `kilix_pty_act`.
+- The reader takes a *whole whitespace-separated token* that is a quoted ID or
+  bare lowercase hex (a journal may add `.STARTED_MILLIS`). A token with
+  punctuation stuck to it (`ID.`, `(ID`, `ID,`), an ID inside a quoted phrase, a
+  token the reader cannot read whole (`ID-ID`, 65 hex characters, a journal-style
+  token that is too long to quote), an ID-sized token that is not an ID, or any
+  other quote character in the request means the request is **ambiguous**.
+- Exactly one such ID and nothing ambiguous: the hint is a *read* of it, chosen by
+  the words of the request (`show session ID`, `show the last 50 lines of session
+  ID`, `show archived journal ID`), even for anything about ending, closing or
+  killing, because the refused words may be a negation or hearsay.
+- Anything else (no ID, several IDs, ambiguity, an ID the hint cannot read back) is
+  `list sessions`. Requests about journals or panes get the ID-free
+  `list archived journals` or `which session is pane 12`.
+- **A hint never carries a placeholder or example ID.** Examples with IDs are in
+  this document only.
+- The MCP read tool's refusal of `end session ID` hints `end session ID` with the
+  same literal (it was read and validated), and its note points at
+  `kilix_pty_act`.
 
-A structured refusal follows the same rule with a structured request.
+A structured refusal follows the same rule: `{"operation":"status","id":ID}` with
+the request's own valid ID, else `{"operation":"list"}`.
+
+Numbers are checked against their range before any conversion: a JSON integer too
+large for a float, an infinity or a NaN is refused with the unit and range
+(`timeout_seconds is in seconds (not milliseconds), from 0.1 to 60`), never an
+exception.
 
 `attach` and `reap` are not reachable through this job. `attach` takes a
 terminal; `reap` stays a `kilix pty reap` maintenance command.
