@@ -458,7 +458,9 @@ class Runner(unittest.TestCase):
                    agents.Action("wait", {"session": "it", "for": "idle"})]
         results, sent = self.run_actions(actions, {"panes": []})
         self.assertEqual([r["outcome"] for r in results], ["done", "done"])
-        self.assertEqual(sent[-1][:3], ["panes", "wait", "9"])
+        waits = [argv for argv in sent if argv[:2] == ["panes", "wait"]]
+        self.assertEqual(waits[-1][:3], ["panes", "wait", "9"])
+        self.assertEqual(sent[-1][:3], ["panes", "dump", "9"])  # the finished turn's screen
 
     def test_plan_resolves_it_to_the_session_it_would_launch(self):
         actions = [agents.Action("agent", {"agent": "codex", "dir": "kilix"}),

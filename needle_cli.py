@@ -700,6 +700,10 @@ def render(record: dict) -> str:
             lines.append(f"  failed: {item['reason']}")
         else:
             lines.append(f"  done: {item['summary']}")
+            if item.get("tail"):
+                lines.extend(f"    | {row}" for row in item["tail"].split("\n"))
+            elif item.get("tail_error"):
+                lines.append(f"    (screen not read: {item['tail_error']})")
             if "result" in item:
                 lines.append(json.dumps(item["result"], ensure_ascii=True, indent=2))
     return "\n".join(lines)

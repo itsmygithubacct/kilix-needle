@@ -251,6 +251,16 @@ class ReviewR17(unittest.TestCase):
         self.assertEqual(set(data["items"][0]), {"kind", "args", "outcome"})
         self.assertNotIn("abc", json.dumps(data))
 
+    def test_a_wait_screen_tail_is_never_recorded(self):
+        # The tail is the session's screen: private text, like a summary.
+        item = {"kind": "wait", "args": {"session": "codex@kilix", "for": "idle"}, "outcome": "done",
+                "summary": "wait until codex@kilix is idle", "pane": 7,
+                "tail": "secret reply text", "tail_error": "secret error text"}
+        data = history.entry("agents", "wait for codex", None, Engine(), [],
+                             needle_cli.Options(), {"status": 0, "items": [item]}, 0.1)
+        self.assertEqual(set(data["items"][0]), {"kind", "args", "outcome"})
+        self.assertNotIn("secret", json.dumps(data))
+
     def test_the_request_is_kept_as_given(self):                            # KN-R17-07
         self.run_one("  hide the clock  ")
         self.run_one("bad \ud800 request")

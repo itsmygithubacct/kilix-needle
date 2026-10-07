@@ -281,6 +281,34 @@ def summary(entry: dict) -> str:
             f"\"{args.get('text')}\"")
 
 
+TAIL_LINES = 40
+TAIL_BYTES = 4000
+
+
+def screen_tail(pane_id) -> str:
+    """The session's visible screen after a finished wait: what the agent
+    replied, or the question it is asking. Bounded so a caller can afford it:
+    the last TAIL_LINES non-padding rows, then the first and last halves of
+    TAIL_BYTES. It is never written to history (history.ITEM_FIELDS)."""
+    dump = _listing_result(["panes", "dump", str(pane_id), "--screen", "--lines", str(TAIL_LINES),
+                            "--json"], timeout=30)
+    text = dump.get("text")
+    if dump.get("schema") != "kilix.panes.dump/v1" or not isinstance(text, str):
+        raise AgentsError("kilix panes dump returned no screen text")
+    rows = [row.rstrip() for row in text.split("\n")]
+    while rows and not rows[0]:
+        rows.pop(0)
+    while rows and not rows[-1]:
+        rows.pop()
+    tail = "\n".join(rows[-TAIL_LINES:])
+    raw = tail.encode("utf-8")
+    if len(raw) > TAIL_BYTES:
+        half = TAIL_BYTES // 2
+        tail = (raw[:half].decode("utf-8", "ignore") + f"\n[... {len(raw) - 2 * half} bytes omitted ...]\n"
+                + raw[-half:].decode("utf-8", "ignore"))
+    return tail
+
+
 def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> list[dict]:
     """Run admitted actions in order; stop at the first that fails."""
     results = []
@@ -361,6 +389,13 @@ def perform(actions: list, *, cwd: str | None = None, dry_run: bool = False) -> 
                 observe_transition(pane_id, wait_timeout)
                 _run(argv, timeout=wait_timeout + 30)
                 entry.update(outcome="done", pane=pane_id)
+                # Report what the finished turn left on screen. The wait is
+                # done either way: a screen that cannot be read is noted, not
+                # a failure, so nobody repeats a step that already happened.
+                try:
+                    entry["tail"] = screen_tail(pane_id)
+                except (AgentsError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+                    entry["tail_error"] = str(error)
                 continue
             # tell
             waited = bool(action.args.get("wait"))

@@ -110,12 +110,17 @@ class RunnerTransitions(unittest.TestCase):
                 "coding_session": coding_session,
                 "broker": {"session_id": "b" * 16}}
 
-    def run_actions(self, actions, panes=None, *, wait_failure=False):
+    def run_actions(self, actions, panes=None, *, wait_failure=False, screen=None):
         calls = []
         panes = panes if panes is not None else [self.pane()]
 
         def run(argv, timeout=30):
             calls.append(list(argv))
+            if argv[:2] == ["panes", "dump"]:
+                if isinstance(screen, Exception):
+                    raise screen
+                return json.dumps({"schema": "kilix.panes.dump/v1", "pane": {}, "text_line_limit": 40,
+                                   "text": "done\n" if screen is None else screen})
             if argv[:2] == ["agent-control", "list"]:
                 return json.dumps({"caller_pane": 1, "panes": [
                     {"pane_id": 1, "broker": "a" * 16, "cwd": "/w"}]})
@@ -150,6 +155,40 @@ class RunnerTransitions(unittest.TestCase):
         self.assertEqual(self.wait_states(calls), ["working", "idle"])
         working = next(argv for argv in calls if argv[:2] == ["panes", "wait"])
         self.assertEqual(working[working.index("--timeout") + 1], "30")
+
+    def test_a_finished_wait_reports_its_screen_tail(self):
+        actions = [agents.Action("tell", {"session": "codex@kilix", "text": "run it"}),
+                   agents.Action("wait", {"session": "codex@kilix", "for": "idle"})]
+        screen = "\n\n  Ran 21 tests: OK      \n\n> \n   \n"
+        results, calls = self.run_actions(actions, screen=screen)
+        self.assertEqual(results[1]["outcome"], "done")
+        self.assertEqual(results[1]["tail"], "  Ran 21 tests: OK\n\n>")
+        self.assertNotIn("tail", results[0])  # a message reports delivery, not a reply
+        dump = next(argv for argv in calls if argv[:2] == ["panes", "dump"])
+        self.assertEqual(dump, ["panes", "dump", "3", "--screen", "--lines", "40", "--json"])
+        self.assertEqual(calls[-1], dump)  # read only after the wait finished
+
+    def test_the_screen_tail_is_bounded(self):
+        wait = agents.Action("wait", {"session": "codex@kilix", "for": "idle"})
+        results, _calls = self.run_actions([wait], screen="".join(f"row {n}\n" for n in range(500)))
+        self.assertEqual(results[0]["tail"].split("\n")[0], "row 460")
+        results, _calls = self.run_actions([wait], screen="x" * 9000)
+        self.assertLessEqual(len(results[0]["tail"].encode()), agents_kilix.TAIL_BYTES + 40)
+        self.assertIn("bytes omitted", results[0]["tail"])
+
+    def test_an_unreadable_screen_does_not_fail_a_finished_wait(self):
+        wait = agents.Action("wait", {"session": "codex@kilix", "for": "idle"})
+        for screen, expected in [(agents_kilix.AgentsError("pane 3 is gone"), "pane 3 is gone"),
+                                 (ValueError("{not json"), "{not json")]:
+            with self.subTest(expected=expected):
+                results, _calls = self.run_actions([wait], screen=screen)
+                self.assertEqual(results[0]["outcome"], "done")
+                self.assertNotIn("tail", results[0])
+                self.assertIn(expected, results[0]["tail_error"])
+        with mock.patch.object(agents_kilix, "_listing_result",
+                               return_value={"schema": "kilix.panes.dump/v2", "text": "x"}):
+            results, _calls = self.run_actions([wait])
+        self.assertIn("no screen text", results[0]["tail_error"])
 
     def test_an_unobserved_idle_delivery_is_a_failed_step(self):
         tell = agents.Action("tell", {"session": "codex@kilix", "text": "run it"})
