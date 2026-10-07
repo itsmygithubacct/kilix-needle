@@ -7,6 +7,7 @@
     kilix-needle files 'find files named "x" in here'
     kilix-needle logs search --session NAME --query TEXT
     kilix-needle tmux --socket /abs/socket 'list sessions'
+    kilix-needle pty 'list sessions'                # persistent pane sessions
     kilix-needle action --yes --request-json -     # structured, no model
 
 Agents: act directly with `--agent --json --yes`. A refused request runs
@@ -819,6 +820,9 @@ def main(argv: list[str] | None = None) -> int:
     if argv[:1] == ["tmux"]:
         from tmux_cli import main as tmux_main
         return tmux_main(argv[1:])
+    if argv[:1] == ["pty"]:
+        from pty_cli import main as pty_main
+        return pty_main(argv[1:])
     if argv[:1] == ["files"]:
         from files_cli import main as files_main
         return files_main(argv[1:])
@@ -889,8 +893,9 @@ def main(argv: list[str] | None = None) -> int:
         parser = argparse.ArgumentParser(prog="kilix-needle mcp",
                                          description=mcp_server.__doc__,
                                          formatter_class=argparse.RawDescriptionHelpFormatter)
-        parser.add_argument("--tools", choices=("all", "actions"), default="all",
-                            help="tool menu and dispatch selection (default: all)")
+        parser.add_argument("--tools", choices=("all", "actions", "pty"), default="all",
+                            help="tool menu and dispatch selection (default: all, which "
+                                 "does not include the opt-in pty set)")
         parser.add_argument("--engine", metavar="FILE")
         parser.add_argument("--root")
         args = parser.parse_args(argv[1:])
