@@ -1,5 +1,0 @@
-• Done.
-
-› fix the failing te
-
-  gpt-6.1-sol high · 58% context left · ~/gpu_terminal/kilix

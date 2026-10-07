@@ -1,5 +1,0 @@
-• The suite passes: 1176 tests, no failures.
-
-› Ask Codex to do anything
-
-  gpt-6.1-sol high · 58% context left · ~/gpu_terminal/kilix
