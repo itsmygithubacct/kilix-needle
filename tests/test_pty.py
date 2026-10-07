@@ -768,6 +768,28 @@ class Hints(unittest.TestCase):
         f'never end session "{ID}"x', f"tail {ID} {ID}", "show session \"A.b\" quick\" brown",
     )
 
+    PUNCTUATED = (f"end session {ID}.", 'end session "A.b"!', f"could you end session {ID}?", f"end session {ID}!!!",
+                  f"please end session {ID} thanks.", f"end session {ID}, please", 'end session `x.y`.', f"can you end session {ID}...?")
+
+    def test_the_id_reader_and_the_grammar_agree_on_what_a_request_names(self):
+        """So the helper behind every hint cannot drift from `parse`."""
+        accepted = list(self.PUNCTUATED) + [
+            "list sessions", f"show session {ID}.", f"Show session {ID}!", "list sessions.",
+            f"show the last 5 lines of session {ID}.", f"show archived journal {ID}.{STARTED}!", f"kill session {ID} thanks",
+            f"would you show session {ID}?", f"show session {ID}"]
+        for text in accepted:
+            with self.subTest(text=text):
+                action = pty_job.parse(text)
+                self.assertEqual(pty_job.request_ids(text), [action["id"]] if "id" in action else [])
+        # and where the grammar refuses a closing mark, the helper reads no ID either (never guess wider)
+        for text in (f"end session {ID}?", f"show session {ID}. if idle", f"show session {ID}.x", f'end session "A.b"!x',
+                     f"please end session {ID}?!", f"end session {ID}? thanks"):
+            with self.subTest(text=text):
+                with self.assertRaises(pty_job.Refused):
+                    pty_job.parse(text)
+                self.assertEqual(pty_job.request_ids(text), [])
+                self.assertEqual(run(text, Script())["hint"], "list sessions")
+
     def requests_and_hints(self):
         records = [run(text, Script(), assume_yes=True) for text in self.ADVERSARIAL]
         for payload in ({"operation": "kill", "id": ID, "expect_started": 1}, {"operation": "kill", "id": ID, "max_lines": 5},
@@ -780,6 +802,8 @@ class Hints(unittest.TestCase):
         # the read tool refusing an exact request, and the MCP entry points
         records += [run(f"end session {ID}", Script(), reads_only=True), run('end session "A.b"', Script(), reads_only=True),
                     run({"operation": "kill", "id": ID}, Script(), reads_only=True)]
+        # accepted trailing punctuation and politeness: the grammar reads the ID, so the helper must too
+        records += [run(text, Script(), reads_only=True) for text in self.PUNCTUATED]
         for name in ("read", "plan", "act"):
             for request in (f"never end session {ID}", {"operation": "kill", "id": ID, "x": 1}, f"end session {OWN}"):
                 arguments = {"request": request}
@@ -826,6 +850,12 @@ class Hints(unittest.TestCase):
                 self.assertEqual(run(text, Script())["hint"], "list sessions")
         self.assertEqual(run(f"never end session {ID}", Script())["hint"], f"show session {ID}")
         self.assertEqual(run('never end session "A.b"', Script())["hint"], 'show session "A.b"')
+        # closing punctuation the grammar ignores does not make a request ambiguous
+        for text, hint in ((f"never end session {ID}.", f"show session {ID}"),
+                           ('never end session "A.b"!', 'show session "A.b"'),
+                           (f"could you not end session {ID}?", f"show session {ID}"),
+                           (f"do not end session {ID}, thanks.", f"show session {ID}")):
+            self.assertEqual(run(text, Script())["hint"], hint)
         self.assertEqual(run(f"never show journal {ID}.{STARTED}", Script())["hint"],
                          f"show archived journal {ID}.{STARTED}")
 

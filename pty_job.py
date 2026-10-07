@@ -129,19 +129,36 @@ def controls(text: str) -> bool:
 _ID_TOKEN = re.compile(_JOURNAL_ID, re.A)
 
 
+def _reading(request: str) -> str:
+    """The text the grammar reads: without the closing punctuation and politeness it ignores.
+
+    `parse` tries the request as written and then without its tail (`.`, `!`, `?`, `please`,
+    `thanks`), and a `?` only counts as a tail after `can/could/would/will you`. This is the
+    same rule, so an ID that `parse` takes from `end session ID.` is the one read here.
+    """
+    stripped = request.strip()
+    head = _HEAD.match(stripped)
+    asked = bool(head and re.search(r"\b(?:can|could|would|will)\b", head[1], re.I))
+    body = stripped[head.end():] if head else stripped
+    trimmed = _TAIL.sub("", body)
+    if "?" in body[len(trimmed):] and not asked:
+        return body
+    return trimmed
+
+
 def request_ids(request: str) -> list[str]:
     """The IDs a request names, read as the grammar reads them: a whole whitespace-separated
     token that is a quoted ID or bare lowercase hex (a journal may add `.STARTED_MILLIS`).
     Anything else, such as a token with punctuation stuck to it or inside a quoted phrase,
-    names nothing."""
+    names nothing. Closing punctuation the grammar ignores is ignored here too."""
     return [token[1:-1] if token[0] in "\"'`" else token
-            for token in request.split() if _ID_TOKEN.fullmatch(token)]
+            for token in _reading(request).split() if _ID_TOKEN.fullmatch(token)]
 
 
 def _sole_id(request: str) -> str | None:
     """The one ID of a request, or None when it has none, several, or anything ambiguous:
     a quote character outside the ID, or an ID-sized token the reader did not take."""
-    tokens = request.split()
+    tokens = _reading(request).split()
     ids = request_ids(request)
     if len(ids) != 1:
         return None

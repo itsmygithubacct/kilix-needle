@@ -91,6 +91,10 @@ that ID from the request and the hint, read back by the grammar, names it.**
   token the reader cannot read whole (`ID-ID`, 65 hex characters, a journal-style
   token that is too long to quote), an ID-sized token that is not an ID, or any
   other quote character in the request means the request is **ambiguous**.
+- The reader ignores exactly what the grammar ignores at the end of a request
+  (`.`, `!`, `?` after `can/could/would/will you`, `please`, `thanks`), so
+  `end session ID.` and `could you end session "A.b"?` name their ID; it never
+  guesses wider (`show session ID. if idle` names nothing).
 - Exactly one such ID and nothing ambiguous: the hint is a *read* of it, chosen by
   the words of the request (`show session ID`, `show the last 50 lines of session
   ID`, `show archived journal ID`), even for anything about ending, closing or
