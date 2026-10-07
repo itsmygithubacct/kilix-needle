@@ -34,6 +34,8 @@ PARAM_PROPERTIES = {
     "direction": {"type": "string", "enum": ["right", "left", "up", "down"]},
     "bias": {"type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 100},
     "model": _STR, "prompt": _STR, "resume": _STR,
+    "reasoning_effort": {"type": "string", "enum": ["low", "medium", "high", "xhigh"],
+        "description": "Codex agent.launch only; preserve the requested effort. Model support is checked by the client."},
     "coding_yolo": {"type": "boolean"}, "trust_folder": {"const": False,
         "description": "set trust explicitly through agent-control before this launch"},
     "agent_arg": {"type": "array", "items": _STR},
