@@ -103,3 +103,20 @@ or executable), then `kilix` on PATH and resolves its symlink to `config`.
 Only `agent_actions.py` is imported in an isolated Python worker; the Kilix
 launcher and installation setup are never executed. Receipts and worker output
 are bounded to 16 KiB, with stdout reserved for the receipt.
+
+## Explicit Codex reasoning effort
+
+Structured `agent.launch` accepts `params.reasoning_effort` with `low`, `medium`,
+`high`, or `xhigh` for `agent: "codex"`. Supply the exact `model` alongside it;
+the launch preserves both through normal startup and resume. Other clients and
+invalid values are refused before dispatch. Omitting the field preserves the
+client's existing effort setting. This requires a Kilix backend advertising the
+field in `kilix action capabilities`; an older backend refuses it.
+
+CLI and MCP use the same field and validation. Created/planned receipts carry
+`evidence.requested` (`agent`, `model`, `reasoning_effort`); null means omitted.
+These describe the request, not the provider's served configuration or successful
+agent startup. Needle rejects missing or mismatched effort evidence for a launch
+that explicitly requested effort. Historical receipts remain readable through
+`operation.status`. Never retry an uncertain launch with a new ID just to change
+its effort: inspect/recover the original operation first.

@@ -46,7 +46,7 @@ def validate(request: dict) -> dict:
     fields = {
         "pane.open": ({"argv", "cwd", "title", "placement"}, {"direction", "bias"}),
         "agent.launch": ({"agent", "cwd", "title", "placement"},
-                         {"direction", "bias", "model", "prompt", "resume", "coding_yolo", "trust_folder", "agent_arg"}),
+                         {"direction", "bias", "model", "prompt", "resume", "coding_yolo", "trust_folder", "agent_arg", "reasoning_effort"}),
         "agent.deliver": ({"text"}, {"mode"}),
         "operation.status": (set(), set()),
     }
@@ -57,6 +57,10 @@ def validate(request: dict) -> dict:
         raise ValueError("operation.status is already read-only; omit dry_run")
     if request["operation"] == "agent.launch" and params.get("trust_folder", False) is not False:
         raise ValueError("trust_folder must be false; set folder trust explicitly through agent-control before launch")
+    if request["operation"] == "agent.launch" and "reasoning_effort" in params:
+        effort = params["reasoning_effort"]
+        if params["agent"] != "codex" or not isinstance(effort, str) or effort not in ("low", "medium", "high", "xhigh"):
+            raise ValueError("reasoning_effort supports codex only: low, medium, high or xhigh")
     if len(json.dumps(request, ensure_ascii=True).encode()) > MAX_REQUEST:
         raise ValueError("action request exceeds 16384 bytes")
     return dict(request, dry_run=request.get("dry_run", False))
@@ -127,6 +131,25 @@ def checked(receipt, request: dict) -> dict:
         raise ValueError("invalid bounded action error")
     if "evidence" in receipt and not isinstance(receipt["evidence"], dict):
         raise ValueError("invalid action evidence")
+    requested = receipt.get("evidence", {}).get("requested")
+    if "requested" in receipt.get("evidence", {}):
+        if (receipt["operation"] != "agent.launch" or receipt["status"] not in ("created", "planned")
+                or not isinstance(requested, dict) or set(requested) != {"agent", "model", "reasoning_effort"}
+                or not isinstance(requested["agent"], str)
+                or requested["agent"] not in ("codex", "claude", "kimi", "grok", "qwen-omp")
+                or requested["model"] is not None and (not isinstance(requested["model"], str)
+                    or not 0 < len(requested["model"].encode()) <= 200)
+                or requested["reasoning_effort"] is not None and (requested["agent"] != "codex"
+                    or not isinstance(requested["reasoning_effort"], str)
+                    or requested["reasoning_effort"] not in ("low", "medium", "high", "xhigh"))):
+            raise ValueError("invalid requested launch settings in receipt")
+        if expected_operation == "agent.launch" and requested != {
+                "agent": request["params"]["agent"], "model": request["params"].get("model"),
+                "reasoning_effort": request["params"].get("reasoning_effort")}:
+            raise ValueError("receipt launch settings differ from request")
+    if (expected_operation == "agent.launch" and "reasoning_effort" in request["params"]
+            and receipt["status"] in ("created", "planned") and requested is None):
+        raise ValueError("receipt omits requested reasoning effort")
     if len(json.dumps(receipt, ensure_ascii=True).encode()) > MAX_RECEIPT:
         raise ValueError("action receipt exceeds 16384 bytes")
     return receipt
