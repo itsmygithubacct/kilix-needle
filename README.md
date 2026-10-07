@@ -688,22 +688,6 @@ on an approval or menu. The current runner permits steering working Claude
 and Grok sessions; Codex and Qwen OMP must be idle before receiving a
 message. These are session controls, not arbitrary keystrokes into a pane.
 
-**When Kilix cannot read the state.** For a Claude or Codex pane that Kilix lists
-but reports as `agent` (a session it recognises and cannot read: Codex 0.160's
-`• Working (…)` and idle composer `› Ask Codex to do anything`, Codex's
-`Would you like to run the following command?`, Claude idle at `❯` with a
-background monitor), the last lines of the pane's screen decide: `idle` only for
-an empty composer, `working` or `waiting` for their markers, otherwise unknown
-and the message is held. A state Kilix does name is never overridden, and an
-approval or menu is reported as "waiting for an approval". When the agent runs
-inside tmux (a restored `tmux new-session … claude --resume …`), Kilix lists no
-coding session; the agent is then found through tmux itself: the session shown
-by the pane's own tmux client, its panes' process trees, the agent's own working
-directory. It must be exactly one agent in exactly that directory, and a message
-is sent only while tmux shows that pane (not another pane, not copy mode), with
-the usual `--expect-broker` on the Kilix pane. Waits on such sessions poll the
-screen. See `agents_detect.py`.
-
 ## The system job
 
 `kilix-needle system "…"` selects read-only Linux diagnostic queries. It works
