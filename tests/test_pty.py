@@ -370,7 +370,7 @@ class Kill(unittest.TestCase):
     def test_the_receipt_is_the_launchers_unchanged_for_every_result(self):
         for result, code in (("verified_absent", 0), ("uncertain", 1), ("refused", 3), ("not_found", 4)):
             with self.subTest(result=result):
-                document = receipt(result, **({"reason": "started_mismatch"} if result == "refused" else {}))
+                document = receipt(result, **({"started_millis": STARTED} if result == "verified_absent" else {}))
                 document["reason"] = {"uncertain": "still_listed", "refused": "started_mismatch"}.get(result)
                 record = run(f"end session {ID}", kill_script(kill=reply(document, code)), assume_yes=True)
                 self.assertEqual(record["result"], document)
@@ -470,7 +470,8 @@ class Kill(unittest.TestCase):
         self.assertEqual(run(f"end session {ID} expect started 5", kill_script(), assume_yes=True)["status"], 2)
 
     def test_a_receipt_that_contradicts_itself_is_not_success(self):
-        for answer in (reply(receipt("verified_absent", ident=OTHER), 0), reply(receipt("verified_absent"), 1),
+        for answer in (reply(receipt("verified_absent", ident=OTHER, started_millis=STARTED), 0),
+                       reply(receipt("verified_absent", started_millis=STARTED), 1),
                        reply(receipt("uncertain"), 0), reply(dict(receipt("refused"), result="bogus"), 3),
                        reply(dict(receipt("verified_absent"), schema="x"), 0)):
             with self.subTest(answer=answer):
@@ -485,7 +486,8 @@ class Kill(unittest.TestCase):
             record = run(f"end session {ID}", kill_script(kill=answer), assume_yes=True)
             self.assertEqual(record["status"], 1)
             self.assertEqual(record["completion"], "unknown")
-            self.assertIn("re-list", record["hint"])
+            self.assertIn("re-list", record["note"])
+            self.assertEqual(pty_job.parse(record["hint"]), {"operation": "status", "id": ID})
 
     def test_dry_run_resolves_and_sends_no_kill(self):
         script = kill_script(started=77)
@@ -507,6 +509,157 @@ class Kill(unittest.TestCase):
         run(f"end session {ID}", script, confirm=lambda q: asked.append(q) or False)
         self.assertLess(len(asked[0]), 400)
         self.assertNotIn("\x1b", asked[0])
+
+
+class ReceiptInvariants(unittest.TestCase):
+    """CONTRACT.md: what each kill result must say, checked before anything is reported as success."""
+
+    def kill(self, document, code):
+        script = kill_script(kill=reply(document, code))
+        return run(f"end session {ID}", script, assume_yes=True), script
+
+    def test_a_success_that_sent_nothing_is_not_success(self):
+        for sent in (False, None, "yes", 1):
+            with self.subTest(sent=sent):
+                record, _ = self.kill(receipt("verified_absent", started_millis=STARTED, **{}) | {"request_sent": sent}, 0)
+                self.assertEqual(record["status"], 1)
+                self.assertEqual(record["completion"], "unknown")
+                self.assertNotIn("result", record)
+
+    def test_a_success_is_bound_to_the_incarnation_that_was_resolved(self):
+        for started in (STARTED + 1, STARTED - 1, None, str(STARTED), float(STARTED), True):
+            with self.subTest(started=started):
+                document = receipt("verified_absent", started_millis=STARTED) | {"started_millis": started}
+                record, _ = self.kill(document, 0)
+                self.assertEqual(record["status"], 1)
+                self.assertEqual(record["completion"], "unknown")
+        document = receipt("verified_absent", started_millis=STARTED)
+        del document["started_millis"]
+        self.assertEqual(self.kill(document, 0)[0]["status"], 1)
+
+    def test_refused_and_not_found_never_sent_a_request(self):
+        for result, code in (("refused", 3), ("not_found", 4)):
+            with self.subTest(result=result):
+                record, _ = self.kill(receipt(result) | {"request_sent": True}, code)
+                self.assertEqual((record["status"], record["completion"]), (1, "unknown"))
+
+    def test_an_uncertain_receipt_needs_exit_1_and_may_or_may_not_have_sent(self):
+        for sent in (True, False):
+            record, _ = self.kill(receipt("uncertain", started_millis=STARTED) | {"request_sent": sent,
+                                                                                   "reason": "still_listed"}, 1)
+            self.assertEqual(record["status"], 1)
+            self.assertNotIn("completion", record)
+        self.assertEqual(self.kill(receipt("uncertain"), 0)[0]["completion"], "unknown")
+
+    def test_a_mismatch_receipt_describing_the_replacement_passes_through_unchanged(self):
+        document = receipt("refused", started_millis=STARTED + 99, expected_started_millis=STARTED) | {
+            "reason": "started_mismatch"}
+        record, _ = self.kill(document, 3)
+        self.assertEqual(record["result"], document)
+        self.assertEqual(record["status"], 3)
+        self.assertNotIn("completion", record)
+        self.assertEqual(pty_job.parse(record["hint"]), {"operation": "status", "id": ID})
+
+    def test_valid_receipts_are_unchanged_and_a_success_carries_no_hint(self):
+        document = receipt("verified_absent", started_millis=STARTED, waited_ms=150)
+        record, _ = self.kill(document, 0)
+        self.assertEqual((record["result"], record["status"]), (document, 0))
+        self.assertNotIn("hint", record)
+
+
+class Hints(unittest.TestCase):
+    """Every refusal and recovery record names one request the grammar accepts."""
+
+    def accepted(self, hint):
+        if hint.startswith("{"):
+            return pty_job.structured(json.loads(hint))
+        return pty_job.parse(hint)
+
+    def records(self):
+        out = []
+        env = {"KITTY_PTY_BROKER_SESSION": OWN}
+        for text in Grammar.REFUSED[:40]:
+            out.append(run(text, Script(), assume_yes=True))
+        out.append(run({"operation": "kill", "id": ID, "expect_started": 1}, Script()))
+        out.append(run("list sessions", Script(), timeout_seconds=30000))
+        out.append(run("list sessions", Script(), dry_run="yes"))
+        # identity, consent and declined
+        out.append(run(f"end session {ID}", Script(), env={}, assume_yes=True))
+        out.append(run(f"end session {OWN}", Script(), assume_yes=True))
+        out.append(run(f"end session {ID}", Script()))
+        out.append(run(f"end session {ID}", Script(), agent=True))
+        out.append(run(f"end session {ID}", kill_script(), confirm=lambda q: False))
+        out.append(run('end session "My.Id"', Script(), agent=True))
+        # reads that fail, answer not_found, or answer nonsense
+        gone = reply(header(result="not_found", id=ID), 4)
+        out.append(run(f"show session {ID}", Script((["status"], gone))))
+        out.append(run("list sessions", Script((["list"], pty_backend.Reply("timeout", error="slow")))))
+        out.append(run("list sessions", Script((["list"], pty_backend.Reply("failed", 1, error="broken")))))
+        out.append(run("list sessions", Script((["list"], pty_backend.Reply("unavailable", error="no kilix")))))
+        out.append(run("list sessions", Script((["list"], pty_backend.Reply("too_old", 2, error="old")))))
+        out.append(run("list sessions", Script((["list"], reply(header(sessions=[]))))))
+        # kills that fail in every way
+        out.append(run(f"end session {ID}", Script((["status"], gone)), assume_yes=True))
+        out.append(run(f"end session {ID}", Script((["status"], pty_backend.Reply("timeout", error="slow"))),
+                       assume_yes=True))
+        out.append(run('end session "My.Id"', Script((["status"], reply(status_doc("My.Id"))),
+                                                     (["kill"], pty_backend.Reply("timeout", error="slow"))),
+                       assume_yes=True))
+        for document, code in ((receipt("uncertain", reason="still_listed"), 1),
+                               (receipt("refused", reason="started_mismatch"), 3),
+                               (receipt("verified_absent"), 0), (receipt("not_found"), 4),
+                               (receipt("refused") | {"request_sent": True}, 3)):
+            out.append(run(f"end session {ID}", kill_script(kill=reply(document, code)), assume_yes=True))
+        out.append(run(f"end session {ID}", kill_script(kill=pty_backend.Reply("failed", 2, error="x")),
+                       assume_yes=True))
+        out.append(run(f"end session {ID}", Script(), reads_only=True))
+        return out
+
+    def test_every_failed_record_has_a_hint_the_grammar_accepts(self):
+        records = self.records()
+        self.assertGreater(len(records), 40)
+        for record in records:
+            with self.subTest(request=str(record["request"])[:50], status=record["status"],
+                              note=record.get("note", "")[:50]):
+                if record["status"] != 0:
+                    self.assertIn("hint", record)
+                if "hint" in record:
+                    self.assertIn(self.accepted(record["hint"])["operation"], pty_job.OPERATIONS)
+
+    def test_a_refused_request_gets_the_hint_for_what_it_asked(self):
+        for text, expected in ((f"close session {ID}", "end session"), (f"never end session {ID}", "end session"),
+                               ("list the journals please and", "list archived journals"),
+                               ("which session has pane abc", "which session is pane"),
+                               ("tail output of the build", "show the last 50 lines")):
+            with self.subTest(text=text):
+                self.assertTrue(run(text, Script())["hint"].startswith(expected))
+
+    def test_the_real_id_is_filled_in(self):
+        record = run(f"end session {ID}", Script())
+        self.assertEqual(record["hint"], f"end session {ID}")
+        self.assertEqual(run('end session "My.Id"', Script(), agent=True)["hint"], 'end session "My.Id"')
+        self.assertEqual(run(f"end session {ID}", kill_script(), confirm=lambda q: False)["hint"],
+                         f"show session {ID}")
+        record = run(f"end session {ID}", kill_script(
+            kill=reply(receipt("refused", reason="started_mismatch", started_millis=5), 3)), assume_yes=True)
+        self.assertEqual(record["hint"], f"show session {ID}")
+
+    def test_explanations_are_in_the_note_not_the_hint(self):
+        for record in self.records():
+            hint = record.get("hint", "")
+            self.assertNotIn("re-list", hint)
+            self.assertNotIn("install", hint.lower())
+
+    def test_every_static_hint_parses(self):
+        for hint in pty_job.HINTS.values():
+            self.assertTrue(self.accepted(hint))
+        for hint in pty_job.STRUCTURED_HINTS.values():
+            self.assertTrue(self.accepted(hint))
+
+    def test_the_plain_rendering_shows_the_hint_of_a_passed_through_refusal(self):
+        record = run(f"end session {ID}", kill_script(
+            kill=reply(receipt("refused", reason="started_mismatch", started_millis=5), 3)), assume_yes=True)
+        self.assertIn(f"hint: show session {ID}", pty_cli.render(record))
 
 
 class Transport(unittest.TestCase):
@@ -554,7 +707,8 @@ sys.exit(rule.get("rc", 0))
             record = pty_cli.run(request, assume_yes=True)
             self.assertEqual(record["status"], 2)
             self.assertIn("update Kilix", record["note"])
-            self.assertIn("kilix pty", record["hint"])
+            self.assertIn("Kilix 0.2.2-rc6", record["note"])
+            self.assertIn(pty_job.parse(record["hint"])["operation"], ("list", "status"))
         self.assertEqual([c["argv"][1] for c in self.calls()], ["list", "status"])     # no kill was ever sent
 
     def test_a_missing_launcher_is_refused_with_a_hint(self):

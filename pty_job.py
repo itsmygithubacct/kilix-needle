@@ -105,6 +105,15 @@ _BARE_ID = re.compile(r"(?<![A-Za-z0-9._-])[0-9a-f]{16,64}(?![A-Za-z0-9._-])")
 _ODD_ID = re.compile(r"(?<![A-Za-z0-9._-])(?=[A-Za-z0-9._-]*[0-9._-])[A-Za-z0-9._-]{16,64}(?![A-Za-z0-9._-])")
 
 
+def id_literal(ident: str) -> str:
+    """The spelling of an ID the grammar reads back: bare lowercase hex, else quoted."""
+    return ident if re.fullmatch(r"[0-9a-f]{16,64}", ident) else f'"{ident}"'
+
+
+def show_request(ident: str) -> str:
+    return f"show session {id_literal(ident)}"
+
+
 def valid_id(ident) -> bool:
     """An ID Needle will pass to `kilix pty` as one argument. A leading '-' would read as a flag."""
     return (isinstance(ident, str) and ID_CHARS.fullmatch(ident) is not None

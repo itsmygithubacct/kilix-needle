@@ -136,6 +136,15 @@ def checked(action: dict, document: dict, returncode: int, step: str = "run") ->
         if (result not in RESULTS or RESULTS[result] != returncode or document.get("id") != ident
                 or type(document.get("request_sent")) is not bool):
             raise ValueError("kill receipt does not match the request or its exit status")
+        sent = document["request_sent"]
+        if result == "verified_absent":
+            # Success is only for the incarnation read just before the kill was sent.
+            if (sent is not True or not _integer(document.get("started_millis"))
+                    or document["started_millis"] != action.get("expect")):
+                raise ValueError("verified_absent receipt must have request_sent true and the "
+                                 "started_millis that --expect-started carried")
+        elif result in ("refused", "not_found") and sent is not False:
+            raise ValueError(f"{result} receipt must have request_sent false")
         return document
     if operation in ("status", "pane", "kill"):      # kill's step is the status lookup
         if document.get("result") == "not_found":

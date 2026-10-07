@@ -33,18 +33,31 @@ def _caller(env) -> str | None:
     return value if pty_job.valid_id(value) else None
 
 
-def _refuse(record: dict, status: int, reason: str, note: str, hint: str | None = None) -> dict:
-    record.update(status=status, refused=reason, note=note)
-    if hint:
-        record["hint"] = hint
+def _refuse(record: dict, status: int, reason: str, note: str, hint: str) -> dict:
+    record.update(status=status, refused=reason, note=note, hint=hint)
     return record
 
 
 def _failed(record: dict, reply) -> dict:
-    record.update(status=1 if reply.kind in ("timeout", "failed") else 2, note=reply.error)
+    note = reply.error
     if reply.kind in ("unavailable", "too_old"):
-        record["hint"] = "kilix pty needs Kilix 0.2.2-rc6 or newer: run `kilix pty help` to check"
+        note += ". kilix pty needs Kilix 0.2.2-rc6 or newer: run `kilix pty help` to check"
+    record.update(status=1 if reply.kind in ("timeout", "failed") else 2, note=note)
     return record
+
+
+def _hint(record: dict, action: dict | None) -> None:
+    """Every refusal and recovery record names one request the grammar accepts.
+
+    Explanations (install Kilix, identity, consent, re-list before retrying) are the
+    note's; the hint is only ever a request that `pty_job.parse` reads.
+    """
+    if record.get("status") == 0 or "hint" in record:
+        return
+    ident = (action or {}).get("id")
+    gone = isinstance(record.get("result"), dict) and record["result"].get("result") == "not_found"
+    record["hint"] = (pty_job.show_request(ident) if ident and not gone and action["operation"] == "kill"
+                      else pty_job.HINTS["list"])
 
 
 def _answer(record: dict, action: dict, reply, step: str = "run") -> dict | None:
@@ -53,14 +66,16 @@ def _answer(record: dict, action: dict, reply, step: str = "run") -> dict | None
         _failed(record, reply)
         if step == "kill" and reply.kind in ("timeout", "failed"):
             # The request may have reached the broker: an unanswered kill is not "nothing happened".
-            record.update(completion="unknown", hint="re-list before retrying: list sessions")
+            record.update(completion="unknown", hint=pty_job.show_request(action["id"]))
+            record["note"] += ". The request may have reached the broker: re-list before retrying"
         return None
     try:
         return pty_backend.checked(action, reply.document, reply.returncode, step)
     except ValueError as exc:
         record.update(status=1, note=f"kilix pty returned an unexpected document: {exc}")
         if action["operation"] == "kill" and step == "kill":
-            record.update(completion="unknown", hint="re-list before retrying: list sessions")
+            record.update(completion="unknown", hint=pty_job.show_request(action["id"]))
+            record["note"] += ". The request may have reached the broker: re-list before retrying"
         return None
 
 
@@ -75,13 +90,14 @@ def _kill(record, action, *, dry_run, assume_yes, agent, confirm, call, env) -> 
     if caller is None:
         return _refuse(record, 3, "caller_unidentified",
                        f"the caller's own session is unknown ({OWN} is not set): "
-                       "nothing is ended when the caller cannot be identified")
+                       "nothing is ended when the caller cannot be identified. A person outside a "
+                       "Kilix pane ends a session with `kilix pty kill ID --yes`", pty_job.HINTS["list"])
     if caller == ident:
         return _refuse(record, 3, "own_session",
                        "that is this pane's own session; ending it would end this program. "
-                       "Run it from another pane")
+                       "Run it from another pane", pty_job.HINTS["list"])
     if not dry_run and not assume_yes and (agent or confirm is None):
-        record.update(status=1, note=CONSENT)
+        record.update(status=1, note=CONSENT, hint=f"end session {pty_job.id_literal(ident)}")
         return record
     # The lookup in this same call supplies the session's identity and start time.
     status_argv = pty_backend.argv_for(action, "status")
@@ -110,7 +126,7 @@ def _kill(record, action, *, dry_run, assume_yes, agent, confirm, call, env) -> 
                     f"{'attached' if session.get('attached') else 'detached'}, "
                     f"{json.dumps(str(session.get('command', ''))[:120], ensure_ascii=True)})? [y/N] ")
         if not confirm(question):
-            return _refuse(record, 3, "declined", "not ended: declined")
+            return _refuse(record, 3, "declined", "not ended: declined", pty_job.show_request(ident))
     reply = call(kill_argv, wall=None)
     document = _answer(record, action, reply, "kill")
     if document is not None:
@@ -118,8 +134,15 @@ def _kill(record, action, *, dry_run, assume_yes, agent, confirm, call, env) -> 
     return record
 
 
-def run(request, *, dry_run=False, assume_yes=False, agent=False, confirm=None,
-        timeout_seconds=None, reads_only=False, backend=None, environ=None) -> dict:
+def run(request, **kwargs) -> dict:
+    held = {}
+    record = _run(request, held, **kwargs)
+    _hint(record, held.get("action"))
+    return record
+
+
+def _run(request, held, *, dry_run=False, assume_yes=False, agent=False, confirm=None,
+         timeout_seconds=None, reads_only=False, backend=None, environ=None) -> dict:
     record = {"request": request, "job": "pty", "status": 2}
     env = os.environ if environ is None else environ
     try:
@@ -142,6 +165,7 @@ def run(request, *, dry_run=False, assume_yes=False, agent=False, confirm=None,
     except ValueError as exc:
         record.update(note=str(exc), hint=pty_job.HINTS["list"])
         return record
+    held["action"] = action
     operation = action["operation"]
     record["operation"] = operation
     if reads_only and operation == "kill":
@@ -169,14 +193,14 @@ def render(record: dict) -> str:
     if "plan" in record:
         text = json.dumps({key: record[key] for key in ("operation", "resolved", "plan") if key in record},
                           ensure_ascii=True, indent=2)
-        return text
-    if "result" in record:
+    elif "result" in record:
         # JSON keeps observed text as data and escapes terminal control sequences.
-        return json.dumps(record["result"], ensure_ascii=True, indent=2)
-    line = record.get("note", "")
-    if record.get("hint"):
-        line += f"\nhint: {record['hint']}"
-    return line
+        text = json.dumps(record["result"], ensure_ascii=True, indent=2)
+    else:
+        text = record.get("note", "")
+    if record.get("hint") and record.get("status"):
+        text += f"\nhint: {record['hint']}"
+    return text
 
 
 def mcp(arguments, *, plan=False, read=False) -> dict:
