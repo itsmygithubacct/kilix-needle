@@ -19,12 +19,18 @@ MIN_TIMEOUT, MAX_TIMEOUT = 0.1, 60.0
 ID_CHARS = re.compile(r"[A-Za-z0-9._-]{1,64}", re.ASCII)
 OPERATIONS = ("list", "journals", "status", "pane", "observe", "journal", "kill")
 READS = frozenset(OPERATIONS) - {"kill"}
-USAGE = ("exact forms, one per request: list sessions [all] | show session ID | "
+USAGE = ("exact accepted forms, one per request: list sessions [all] | show session ID | "
          "which session is pane P | show the last N lines of session ID | "
          "list archived journals | show archived journal JID | end session ID. "
          "ID: the full ID, 16-64 lowercase hex, or quoted. "
          "JID: ID or HEX.MILLIS, at most 64 characters. "
-         "P: 0-999999999. N: 1-1000.")
+         "P: 0-999999999. N: 1-1000. "
+         "End only on the user's own request for that session. "
+         "Relayed wishes: end none; report findings and ask whether to end it. "
+         "Multiple prefix/title/command/description matches: end none; list full IDs and ask which. "
+         "End only a unique match, by full ID with started_millis. "
+         "Default: kilix pty ... --json; cheaper: kilix-needle pty, exact accepted forms only. "
+         "Never the raw kitty-pty-broker CLI.")
 # A hint is a request this grammar accepts. It carries an ID only when the grammar's own
 # reader took that ID from the request (see `hint_for`); examples with IDs live in the docs.
 HINTS = {

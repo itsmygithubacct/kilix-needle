@@ -1,9 +1,9 @@
-"""Exact forms for persistent pane sessions, through `kilix pty --json`.
+"""Exact accepted forms for persistent pane sessions, through `kilix pty --json`.
 
-Agents use `kilix pty ... --json` by default. `kilix-needle pty --json FORM`
-is the cheaper alternative for these exact forms; no model is loaded.
+Default: kilix pty ... --json; cheaper: kilix-needle pty, exact accepted forms only.
+Never the raw kitty-pty-broker CLI. No model is loaded.
 
-Exact forms (one per request; brackets mark optional words):
+Exact accepted forms (one per request; brackets mark optional words):
     list sessions [all]
     show session ID
     which session is pane P

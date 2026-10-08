@@ -1,9 +1,11 @@
 # Persistent pane sessions
 
-Agents use `kilix pty ... --json` by default. `kilix-needle pty --json FORM`
-is the cheaper alternative for the exact forms below. The `pty` job reads one
-complete request through a deterministic grammar and
-runs one `kilix pty ... --json` command. It loads no model and has no
+Default: `kilix pty ... --json`; cheaper: `kilix-needle pty`, exact accepted
+forms only. Never the raw `kitty-pty-broker` CLI.
+
+The `pty` job reads one complete request through a deterministic grammar.
+Each request is one operation: one launcher call per read, two per successful
+kill (status, then kill). It loads no model and has no
 connection to a broker of its own: Kilix's launcher does the broker access and
 Needle checks the document that comes back. Use the documented forms; arbitrary
 natural wording refuses whole.
@@ -339,9 +341,17 @@ them, for example:
 claude mcp add --scope user kilix-needle-pty -- kilix-needle mcp --tools pty
 ```
 
-A direct `act` with an exact ID is one call: `plan` first only adds a call.
-Schema sizes (tool name, description and input schema, compact JSON):
-`kilix_pty_read` 941 bytes, `kilix_pty_plan` 814, `kilix_pty_act` 943.
+A direct `act` with an exact ID is one MCP call: `plan` first only adds an MCP
+call. A successful kill still needs the launcher's status and kill calls.
+The following sizes are UTF-8 bytes of the served description and whole tool
+spec. Compact tool size uses `json.dumps(tool, separators=(",", ":"))` and
+includes the name, description, input schema and annotations.
+
+| Tool | Description bytes | Compact tool bytes |
+| --- | ---: | ---: |
+| `kilix_pty_read` | 769 | 1474 |
+| `kilix_pty_plan` | 627 | 1339 |
+| `kilix_pty_act` | 728 | 1468 |
 
 **Caller identity.** The server's environment must carry the caller's
 `KITTY_PTY_BROKER_SESSION`. A server started by Claude Code inside a Kilix pane

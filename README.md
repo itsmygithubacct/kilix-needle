@@ -108,9 +108,11 @@ See [the tmux guide](docs/tmux.md) for forms, discovery and limits.
 
 ## Persistent pane sessions
 
-Agents use `kilix pty ... --json` by default. `kilix-needle pty --json FORM`
-is the cheaper alternative for these exact forms, with a deterministic grammar
-and no model. It reads persistent PTY sessions behind Kilix panes by running
+Default: `kilix pty ... --json`; cheaper: `kilix-needle pty`, exact accepted
+forms only. Never the raw `kitty-pty-broker` CLI.
+
+Needle uses a deterministic grammar and no model. It reads persistent PTY
+sessions behind Kilix panes by running
 `kilix pty ... --json` (Kilix 0.2.2-rc6 or newer; an older Kilix is refused
 with a hint). One exact form per request (`[]` marks optional words):
 
