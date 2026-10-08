@@ -1366,6 +1366,12 @@ class Guidance(unittest.TestCase):
         self.assert_end_rules(text)
         self.assert_route(text)
         text = " ".join(text.replace("`", "").split())
+        self.assertRegex(text, r"(?:For an unreachable session, recorded shows the command it was started with"
+                               r"|Unreachable recorded is the start command)")
+        self.assertRegex(text, r"(?:recorded command does not match the user's description it is not a match"
+                               r"|mismatch with the user's description rules it out)")
+        self.assertRegex(text, r"(?:if it is null or matches, the session is ambiguous: ask"
+                               r"|null or a match is ambiguous: ask)")
         self.assertRegex(text, r"Never (?:use )?--no-caller-check")
         self.assertIn("unreachable is not absent", text)
         self.assertRegex(text, r"uncertain(?::| means) re-read before retry")
