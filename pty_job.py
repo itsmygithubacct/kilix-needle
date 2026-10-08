@@ -19,10 +19,12 @@ MIN_TIMEOUT, MAX_TIMEOUT = 0.1, 60.0
 ID_CHARS = re.compile(r"[A-Za-z0-9._-]{1,64}", re.ASCII)
 OPERATIONS = ("list", "journals", "status", "pane", "observe", "journal", "kill")
 READS = frozenset(OPERATIONS) - {"kill"}
-USAGE = ("forms, one per request: list sessions [all] | show session ID | "
-         "which session is pane N | show the last N lines of session ID | "
-         "list archived journals | show archived journal ID | end session ID. "
-         "ID: the full ID, 16-64 lowercase hex, or quoted. N: 1-1000.")
+USAGE = ("exact forms, one per request: list sessions [all] | show session ID | "
+         "which session is pane P | show the last N lines of session ID | "
+         "list archived journals | show archived journal JID | end session ID. "
+         "ID: the full ID, 16-64 lowercase hex, or quoted. "
+         "JID: ID or HEX.MILLIS, at most 64 characters. "
+         "P: 0-999999999. N: 1-1000.")
 # A hint is a request this grammar accepts. It carries an ID only when the grammar's own
 # reader took that ID from the request (see `hint_for`); examples with IDs live in the docs.
 HINTS = {
