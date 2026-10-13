@@ -522,7 +522,9 @@ def run_calls(request: str, calls: list, options: Options,
                 broken = True
                 continue
         try:
-            kilix.perform(step)
+            receipt = kilix.perform(step)
+            if receipt is not None:
+                entry["receipt"] = receipt
         except kilix.KilixError as error:
             entry.update(outcome="failed", reason=str(error))
             record["status"] = 1

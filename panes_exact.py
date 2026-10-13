@@ -138,6 +138,18 @@ def read(request: str) -> tuple[list, str] | None:
     found = _FIND_THEN.fullmatch(text)
     if found:
         text = f"{found['verb']} {found['pane']}"
+    mutation = re.fullmatch(
+        r"(?:make|resize)\s+(?:the\s+)?pane\s+(?:id\s+)?([0-9]{1,6})\s+"
+        r"(wider|narrower|taller|shorter)\s+by\s+([0-9]{1,2})(?:\s+cells)?", text, re.I)
+    if mutation:
+        ident, direction, amount = mutation.groups()
+        return [{"name": "resize_pane", "arguments": {
+            "pane": ident, "direction": direction.lower(), "amount": int(amount)}}], text
+    mutation = re.fullmatch(
+        r"rename\s+(?:the\s+)?tab\s+(?:id\s+([0-9]{1,6})|containing\s+pane\s+([0-9]{1,6}))"
+        r"\s+to\s+([\w.+@:-]+)", text, re.I)
+    if mutation:
+        return [{"name": "rename_tab", "arguments": {"name": mutation[3]}}], text
     for kind, form in _FORMS:
         m = form.fullmatch(text)
         if not m:

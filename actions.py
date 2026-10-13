@@ -77,13 +77,15 @@ TOOLS = [
                                    "side by side; horizontal is one above another"}},
          "required": ["layout"]}},
     {"name": "rename_tab",
-     "description": "Rename or call the current tab something",
+     "description": "Rename the requested tab; use 'tab id N' for a stable identity",
      "parameters": {"type": "object", "properties": {
-         "name": {"type": "string", "description": "the new name"}},
+         "name": {"type": "string", "description": "the new name"},
+         "tab": {"type": "string", "description": "the requested tab, if explicit"}},
          "required": ["name"]}},
     {"name": "resize_pane",
-     "description": "Make the current pane wider, narrower, taller or shorter",
+     "description": "Make the requested pane wider, narrower, taller or shorter",
      "parameters": {"type": "object", "properties": {
+         "pane": {"type": "string", "description": "the requested pane, if explicit"},
          "direction": {"type": "string", "enum": list(DIRECTIONS)},
          "amount": {"type": "integer", "minimum": 1, "maximum": 50,
                     "description": "number of cells, only if the user gives one"}},
@@ -871,6 +873,33 @@ def _pane_id(raw: str, prompt: str) -> str | None:
     return f"id:{int(n)}" if said else None
 
 
+def _mutation_target(name: str, key: str, args: dict, prompt: str) -> str | Refusal | None:
+    """Bind explicit identities even when the small model omits its target slot.
+
+    Bare tab numbers retain their historical positional meaning; ``tab id N``
+    and ``tab containing pane N`` are stable identities. Never guess between
+    conflicting identities, including a negated second target.
+    """
+    pane_ids = set(re.findall(r"\b(?:pane|window)\s*(?:id\s*)?[:#]?\s*([0-9]{1,6})\b", prompt, re.I))
+    tab_ids = set(re.findall(r"\btab\s+id\s*[:#]?\s*([0-9]{1,6})\b", prompt, re.I))
+    positions = set(re.findall(r"\btab\s+([0-9]{1,2})\b", prompt, re.I))
+    refs = {f"id:{int(n)}" for n in (pane_ids if key == "pane" else tab_ids)}
+    if key == "tab":
+        refs.update(str(int(n)) for n in positions)
+        refs.update(f"pane:{int(n)}" for n in re.findall(
+            r"\btab\s+containing\s+(?:the\s+)?pane\s*(?:id\s*)?[:#]?\s*([0-9]{1,6})\b", prompt, re.I))
+    if len(refs) > 1:
+        return Refusal(name, f"conflicting {key} identities; name one target")
+    if refs:
+        return refs.pop()
+    if args.get(key):
+        return _named_target(name, key, args, prompt)
+    # Do not turn an explicit name the model dropped into the caller's pane.
+    if re.search(rf"\b{key}\s+(?:named|titled|called|id)\b", prompt, re.I):
+        return Refusal(name, f"the explicit {key} target was not resolved")
+    return None
+
+
 def _named_target(name: str, key: str, args: dict, prompt: str) -> str | Refusal:
     raw = _text(args, key)
     if key == "pane":
@@ -1500,6 +1529,10 @@ def _admit(name: str, args: dict, prompt: str) -> Action | Refusal:
         if title.casefold() in _UNIT_NAMES or title.casefold() in ("panes", "tabs"):
             # measured (five-tool schema): "make this pane wider by 10" -> tab_name "pane"
             return Refusal(name, f"{title!r} is not a name for a tab")
+        target = _mutation_target(name, "tab", args, prompt)
+        if isinstance(target, Refusal):
+            return target
+        rename_args = {"name": title, **({"tab": target} if target else {})}
         # The request must ask for a rename in the clause that holds the new name:
         # measured (route benchmark, qat-6): "in the pane titled bench-target, type
         # `touch /x` and press Enter" renamed the tab to the command, "type into
@@ -1524,11 +1557,11 @@ def _admit(name: str, args: dict, prompt: str) -> Action | Refusal:
                 continue
             if _PANE_WORD.search(rest) and not _TAB_WORD.search(rest):
                 return Refusal(name, "the request renames a pane, not a tab")
-            return Action(name, {"name": title})
+            return Action(name, rename_args)
         # Terse or split forms from the training corpus: "tab: logs", and "tab's
         # for api, rename it accordingly" (the verb in the next clause).
         if re.fullmatch(r"\s*tab\s*:\s*" + re.escape(title) + r"[.!?]*\s*", prompt, re.I):
-            return Action(name, {"name": title})
+            return Action(name, rename_args)
         verb_anywhere = re.search(r"\b(?:rename|retitle|relabel)\b", prompt, re.I)
         for clause in _clauses(prompt):
             at = re.search(r"(?<![\w-])" + re.escape(title) + r"(?![\w-])", clause, re.I)
@@ -1536,7 +1569,7 @@ def _admit(name: str, args: dict, prompt: str) -> Action | Refusal:
                     and not re.search(r"\b(?:type|typing|run|running|execute|enter|send|press|hit|"
                                       r"paste)\b", clause[:at.start()], re.I)
                     and not _negated(prompt) and not _REPORTED.search(clause[:at.start()])):
-                return Action(name, {"name": title})
+                return Action(name, rename_args)
         return Refusal(name, f"no part of the request renames the tab to {title!r}")
 
     # resize_pane
@@ -1552,4 +1585,8 @@ def _admit(name: str, args: dict, prompt: str) -> Action | Refusal:
         return Refusal(name, "the size change must be 1 to 50 cells")
     if "amount" in args and not _says_number(amount, prompt):
         return Refusal(name, f"the amount {amount} is not in the request")
-    return Action(name, {"direction": direction, "amount": amount})
+    target = _mutation_target(name, "pane", args, prompt)
+    if isinstance(target, Refusal):
+        return target
+    return Action(name, {"direction": direction, "amount": amount,
+                         **({"pane": target} if target else {})})

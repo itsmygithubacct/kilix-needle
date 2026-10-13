@@ -40,7 +40,9 @@ import needle_cli
 SERVER = {"name": "kilix-needle", "version": "0.1.0"}
 PROTOCOLS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 _REQUEST = {"type": "string",
-            "description": "e.g. 'split right', 'close the htop pane'"}
+            "description": "e.g. 'split right', 'close the htop pane'. For explicit mutations "
+                           "use 'rename tab id N to NAME' or 'make pane N wider by 5 cells'; "
+                           "success includes a receipt verifying the target and exact effect."}
 TOOL_LIST = [
     {"name": "kilix_plan",
      "description": "Preview a panes or tabs request; runs nothing. kilix_act runs the same "

@@ -20,6 +20,7 @@ import os
 import re
 import shlex
 import subprocess
+import time
 
 from actions import Action
 
@@ -52,6 +53,7 @@ class Step:
     # A person must see which one (review KN-R9-01).
     elsewhere: bool = False
     types_into: int | None = None     # the pane a command is typed into
+    verification: dict | None = None  # explicit mutation identity and observed baseline
 
 
 def _ancestors() -> list[int]:
@@ -102,6 +104,27 @@ def _run(argv: list[str], data: bytes | None = None) -> str:
         detail = done.stderr.decode("utf-8", "replace").strip() or f"status {done.returncode}"
         raise KilixError(f"kilix @ {argv[0]}: {detail}")
     return done.stdout.decode("utf-8", "replace")
+
+
+def _identities(tree: "Tree") -> dict:
+    return {w["id"]: (tab["id"], w.get("pid"), w.get("child_pid"),
+                      (w.get("env") or {}).get("KITTY_PTY_BROKER_SESSION"))
+            for tab, w in tree._all_panes()}
+
+
+def _mutation_baseline(tree: "Tree", kind: str, target: dict, args: dict) -> dict:
+    value = {"kind": kind, "target_id": target["id"], "identities": _identities(tree),
+             "tab_titles": {t["id"]: t.get("title") for t in tree.tabs}}
+    if kind == "rename_tab":
+        value["expected"] = args["name"]
+    else:
+        axis, sign = _RESIZE[args["direction"]]
+        field = "columns" if axis == "horizontal" else "lines"
+        before = target.get(field)
+        if not isinstance(before, int) or before <= 0:
+            raise KilixError("target geometry is unavailable; no resize attempted")
+        value.update(field=field, before=before, expected=before + sign * args["amount"])
+    return value
 
 
 def snapshot(*, under_overlay: bool = False) -> "Tree":
@@ -297,6 +320,14 @@ class Tree:
         index = self.tabs.index(self.active_tab)
         if ref == "current":
             return self.active_tab
+        if re.fullmatch(r"id:[0-9]+", ref):
+            found = [tab for tab in self.tabs if tab.get("id") == int(ref[3:])]
+            if len(found) == 1:
+                return found[0]
+            raise KilixError(f"tab identity {ref} is absent or ambiguous")
+        if re.fullmatch(r"pane:[0-9]+", ref):
+            window = self.pane("id:" + ref[5:])
+            return next(tab for tab, pane in self._all_panes() if pane is window)
         if ref in ("next", "previous", "last") and any(
                 str(t.get("title") or "").strip().casefold() == ref for t in self.tabs):
             # A tab titled "next" makes "the next tab" ambiguous (review R5, row D).
@@ -414,9 +445,10 @@ def _resolve(action: Action, tree: Tree) -> Step:
         return Step(action, f"arrange {tree.describe_tab(tab)} as {args['layout']}",
                     ((("goto-layout", f"--match=id:{tab['id']}", args["layout"]), None),))
     if kind == "rename_tab":
-        tab = tree.active_tab
+        tab = tree.tab(args.get("tab", "current"))
         return Step(action, f"rename {tree.describe_tab(tab)} to {args['name']!r}",
-                    ((("set-tab-title", f"--match=id:{tab['id']}", args["name"]), None),))
+                    ((("set-tab-title", f"--match=id:{tab['id']}", args["name"]), None),),
+                    verification=_mutation_baseline(tree, kind, tab, args) if "tab" in args else None)
     if kind == "rename_pane":
         window = tree.pane(args["pane"])
         return Step(action, f"rename {_describe_pane(window)} to {args['name']!r}",
@@ -460,12 +492,13 @@ def _resolve(action: Action, tree: Tree) -> Step:
             commands += ((("action", f"--match=id:{anchor['id']}", verb), None),) * abs(distance)
         return Step(action, f"move {tree.describe_tab(tab)} to position {destination + 1}", commands)
     if kind == "resize_pane":
-        window = tree.active_pane
+        window = tree.pane(args.get("pane", "current"))
         axis, sign = _RESIZE[args["direction"]]
         return Step(action, f"make {_describe_pane(window)} {args['direction']} "
                             f"by {args['amount']}",
                     ((("resize-window", f"--match=id:{window['id']}", f"--axis={axis}",
-                       f"--increment={sign * args['amount']}"), None),))
+                       f"--increment={sign * args['amount']}"), None),),
+                    verification=_mutation_baseline(tree, kind, window, args) if "pane" in args else None)
     if kind == "run_in_pane":
         window = tree.pane(args["pane"], wrap=False)
         if not _ready_to_type(window):
@@ -499,6 +532,39 @@ def still_at_prompt(window_id: int, *, under_overlay: bool = False) -> bool:
     return window is not None and _ready_to_type(window)
 
 
-def perform(step: Step) -> None:
+def perform(step: Step) -> dict | None:
+    expected = step.verification
+    if expected:
+        fresh = snapshot()
+        if _identities(fresh) != expected["identities"]:
+            raise KilixError("pane identity changed; no mutation attempted")
+        target = fresh.tab(f"id:{expected['target_id']}") if expected["kind"] == "rename_tab" else fresh.pane(f"id:{expected['target_id']}")
+        if (expected["kind"] == "resize_pane" and
+                target.get(expected["field"]) != expected["before"]):
+            raise KilixError("target geometry changed; no resize attempted")
+        if {t["id"]: t.get("title") for t in fresh.tabs} != expected["tab_titles"]:
+            raise KilixError("tab titles changed; no mutation attempted")
     for argv, data in step.commands:
         _run(list(argv), data)
+    if not expected:
+        return None
+    # Observe a bounded settling period, never repeat a mutation on failed verification.
+    for attempt in range(20):
+        fresh = snapshot()
+        if _identities(fresh) != expected["identities"]:
+            raise KilixError("mutation sent, but pane identities changed; completion unverified")
+        titles = {t["id"]: t.get("title") for t in fresh.tabs}
+        wanted_titles = dict(expected["tab_titles"])
+        if expected["kind"] == "rename_tab":
+            wanted_titles[expected["target_id"]] = expected["expected"]
+            observed = titles.get(expected["target_id"])
+        else:
+            observed = fresh.pane(f"id:{expected['target_id']}").get(expected["field"])
+        if titles == wanted_titles and observed == expected["expected"]:
+            return {"schema": "kilix.needle.mutation.v1", "target_id": expected["target_id"],
+                    "action": expected["kind"], "observed": observed,
+                    "expected": expected["expected"], "completion_verified": True,
+                    "identities_preserved": True, "other_tab_titles_preserved": True}
+        if attempt < 19:
+            time.sleep(0.1)
+    raise KilixError("mutation sent, but exact effect or neighboring titles were not verified; do not repeat blindly")

@@ -187,6 +187,8 @@ and consent rules](docs/actions.md).
 | make it a grid, stack the panes | change the tab's layout (only layouts enabled in that tab) | straight away |
 | rename this tab to build | set the tab title | straight away |
 | make this pane wider by 10 | resize the pane | straight away |
+| rename tab id 10 to build | rename that stable tab ID | verified receipt |
+| make pane 200 wider by 5 cells | resize that stable pane ID | verified receipt |
 | close this pane, close tab 2 | close a pane or tab | **asks** |
 | run make test in the left pane | type a command and press Enter | **asks** |
 
