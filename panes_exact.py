@@ -139,7 +139,8 @@ def read(request: str) -> tuple[list, str] | None:
     if found:
         text = f"{found['verb']} {found['pane']}"
     mutation = re.fullmatch(
-        r"(?:make|resize)\s+(?:the\s+)?pane\s+(?:id\s+)?([0-9]{1,6})\s+"
+        r"(?:make|resize)\s+(?:the\s+)?pane\s+(?:id\s+)?([0-9]{1,6})"
+        r"(?:,\s*(?:titled|named)\s+(?:[\w.+@:-]+|\"[^\"\n]+\"|'[^'\n]+'),)?\s+"
         r"(wider|narrower|taller|shorter)\s+by\s+([0-9]{1,2})(?:\s+cells)?", text, re.I)
     if mutation:
         ident, direction, amount = mutation.groups()

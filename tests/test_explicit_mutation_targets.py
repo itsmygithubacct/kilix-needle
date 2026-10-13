@@ -22,6 +22,36 @@ class TargetAdmission(unittest.TestCase):
                              {'direction': 'wider', 'amount': 5})
         self.assertEqual(action.args['pane'], 'id:200')
 
+    def test_size_amount_is_not_the_pane_id_or_title_number(self):
+        for prompt in ('make pane 50, titled target-50, wider by 5 cells',
+                       'make pane 5 wider by 12 cells',
+                       'make pane 5 wider',
+                       'make the pane titled "by 5" wider by 12 cells'):
+            with self.subTest(prompt=prompt):
+                values = interpret(prompt, [{'name': 'resize_pane', 'arguments':
+                                   {'direction': 'wider', 'amount': 5 if '50' not in prompt else 50}}])
+                self.assertIsInstance(values[0], Refusal)
+
+    def test_omitted_amount_is_recovered_from_the_resize_clause(self):
+        action = self.action('make pane 50, titled target-50, wider by 5 cells',
+                             'resize_pane', {'direction': 'wider'})
+        self.assertEqual(action.args, {'pane': 'id:50', 'direction': 'wider', 'amount': 5})
+
+    def test_invalid_or_multiple_amounts_do_not_become_the_default(self):
+        for suffix in ('by 99', 'by -5', 'by 1.5', 'by five pixels', 'by 5%',
+                       'by 5 rows', 'by ninety', 'by 5 and by 12'):
+            with self.subTest(suffix=suffix):
+                values = interpret('make pane 50 wider ' + suffix,
+                                   [{'name': 'resize_pane', 'arguments': {'direction': 'wider'}}])
+                self.assertIsInstance(values[0], Refusal)
+
+    def test_optional_title_resize_has_a_model_free_exact_form(self):
+        for prompt in ('make pane 50, titled target-50, wider by 5 cells',
+                       'make pane 7, titled "build 12", taller by 3 cells'):
+            with self.subTest(prompt=prompt):
+                admitted = panes_exact.admitted(prompt)
+                self.assertIsNotNone(admitted)
+
     def test_model_cannot_drop_stable_tab_id(self):
         action = self.action('rename tab id 10 to build-output', 'rename_tab',
                              {'name': 'build-output'})

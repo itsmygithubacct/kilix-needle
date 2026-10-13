@@ -251,6 +251,44 @@ def _says_number(n: int, prompt: str) -> bool:
     return any(re.search(rf"(?<![\w-]){form}(?![\w-])", prompt, re.I) for form in forms)
 
 
+def _resize_amount(direction: str, prompt: str) -> int | None:
+    """Read the size-change clause, never a pane ID or a number in its title."""
+    text = re.sub(r'''\b(?:titled|named|called)\s+(?:"[^"\n]*"|'[^'\n]*'|`[^`\n]*`|[\w.+@:-]+)''',
+                  ' ', prompt, flags=re.I)
+    words = '|'.join(re.escape(w) for w in sorted(_CARDINALS, key=len, reverse=True))
+    number = rf'(?:[+-]?\d+(?:\.\d+)?|{words})'
+    values = []
+    bound_by = 0
+    for clause in _clauses(text):
+        if not _says_direction(direction, clause):
+            continue
+        by = list(re.finditer(rf'\bby\s+({number})(?![\w-])', clause, re.I))
+        bound_by += len(by)
+        if re.search(r'\bby\b', clause, re.I) and not by:
+            raise ValueError('the resize amount after by is not a supported cell count')
+        adjectival = list(re.finditer(
+            rf'(?<![\w-])({number})\s+(?:cells?|columns?|rows?)\s+{direction}\b', clause, re.I))
+        for match in by + adjectival:
+            if re.match(r'\s*(?:%|(?:pixels?|percent|times)\b)', clause[match.end():], re.I):
+                raise ValueError('resize amounts must be cell counts')
+            unit = re.match(r'\s*(columns?|rows?|lines?)\b', clause[match.end():], re.I)
+            if unit and (unit[1].lower().startswith('column') != (direction in ('wider', 'narrower'))):
+                raise ValueError('the cell unit conflicts with the resize direction')
+            raw = match[1].lower()
+            try:
+                value = int(_CARDINALS.get(raw, raw))
+            except ValueError:
+                raise ValueError('resize amounts must be whole cell counts') from None
+            if not 1 <= value <= 50:
+                raise ValueError('the size change must be 1 to 50 cells')
+            values.append(value)
+    if bound_by != len(re.findall(r'\bby\b', text, re.I)):
+        raise ValueError('a size amount is not bound to the resize direction')
+    if len(values) > 1:
+        raise ValueError('the request contains multiple resize amounts')
+    return values[0] if values else None
+
+
 def _grounded(value: str, prompt: str) -> bool:
     """The value occurs in the request as whole words, not inside a word.
 
@@ -1587,11 +1625,15 @@ def _admit(name: str, args: dict, prompt: str) -> Action | Refusal:
         # Measured (tuned model): "increase the font size" -> narrower, and
         # "widen this pane by 20" -> narrower. The direction was never checked.
         return Refusal(name, f"the request does not ask for {direction}")
-    amount = args.get("amount", 2)
+    try:
+        requested_amount = _resize_amount(direction, prompt)
+    except ValueError as error:
+        return Refusal(name, str(error))
+    amount = args.get("amount", requested_amount if requested_amount is not None else 2)
     if isinstance(amount, bool) or not isinstance(amount, int) or not 1 <= amount <= 50:
         return Refusal(name, "the size change must be 1 to 50 cells")
-    if "amount" in args and not _says_number(amount, prompt):
-        return Refusal(name, f"the amount {amount} is not in the request")
+    if "amount" in args and amount != requested_amount:
+        return Refusal(name, f"the amount {amount} is not the requested size change")
     target = _mutation_target(name, "pane", args, prompt)
     if isinstance(target, Refusal):
         return target
