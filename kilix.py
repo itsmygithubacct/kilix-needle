@@ -123,7 +123,8 @@ def _mutation_baseline(tree: "Tree", kind: str, target: dict, args: dict) -> dic
         before = target.get(field)
         if not isinstance(before, int) or before <= 0:
             raise KilixError("target geometry is unavailable; no resize attempted")
-        value.update(field=field, before=before, expected=before + sign * args["amount"])
+        value.update(field=field, before=before, expected=before + sign * args["amount"],
+                     increment=sign * args["amount"], axis=axis)
     return value
 
 
@@ -548,7 +549,14 @@ def perform(step: Step) -> dict | None:
         _run(list(argv), data)
     if not expected:
         return None
-    # Observe a bounded settling period, never repeat a mutation on failed verification.
+    # A nested split scales the native increment by its parent's share of the
+    # viewport. Correct only an observed nonzero effect, with fresh identities,
+    # a fixed final size, and a strict command bound; never retry a clamped/no-op.
+    previous = expected.get("before")
+    increment = expected.get("increment")
+    adjustments = 0
+    stable = 0
+    last_observed = None
     for attempt in range(20):
         fresh = snapshot()
         if _identities(fresh) != expected["identities"]:
@@ -564,7 +572,23 @@ def perform(step: Step) -> dict | None:
             return {"schema": "kilix.needle.mutation.v1", "target_id": expected["target_id"],
                     "action": expected["kind"], "observed": observed,
                     "expected": expected["expected"], "completion_verified": True,
-                    "identities_preserved": True, "other_tab_titles_preserved": True}
+                    "identities_preserved": True, "other_tab_titles_preserved": True,
+                    "resize_corrections": adjustments}
+        stable = stable + 1 if observed == last_observed else 0
+        last_observed = observed
+        if (expected["kind"] == "resize_pane" and titles == wanted_titles
+                and isinstance(observed, int) and observed != previous
+                and stable >= 2 and adjustments < 4):
+            gain = (observed - previous) / increment
+            if gain <= 0:
+                raise KilixError("resize changed in the wrong direction; completion unverified")
+            remaining = expected["expected"] - observed
+            correction = round(remaining / gain)
+            correction = max(1, min(50, abs(correction))) * (1 if remaining > 0 else -1)
+            _run(["resize-window", f"--match=id:{expected['target_id']}",
+                  f"--axis={expected['axis']}", f"--increment={correction}"])
+            previous, increment, stable = observed, correction, 0
+            adjustments += 1
         if attempt < 19:
             time.sleep(0.1)
     raise KilixError("mutation sent, but exact effect or neighboring titles were not verified; do not repeat blindly")

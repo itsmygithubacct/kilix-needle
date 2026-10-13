@@ -106,6 +106,17 @@ class TargetResolution(unittest.TestCase):
             kilix.perform(step)
         self.assertEqual(run.call_count, 1)
 
+    def test_nested_split_scaled_increment_converges_to_exact_size(self):
+        step = kilix.resolve(Action('resize_pane', {'pane': 'id:200', 'direction': 'wider', 'amount': 5}), self.tree())
+        def mutate(argv, data=None):
+            amount = int(next(a.split('=')[1] for a in argv if a.startswith('--increment=')))
+            self.data[0]['tabs'][1]['windows'][0]['columns'] += round(amount / 2)
+        with mock.patch.object(kilix, 'snapshot', side_effect=self.tree), \
+                mock.patch.object(kilix, '_run', side_effect=mutate), mock.patch.object(kilix.time, 'sleep'):
+            receipt = kilix.perform(step)
+        self.assertEqual(receipt['observed'], 85)
+        self.assertLessEqual(receipt['resize_corrections'], 4)
+
     def test_recycled_target_refuses_before_mutation(self):
         step = kilix.resolve(Action('rename_tab', {'tab': 'id:10', 'name': 'output'}), self.tree())
         self.data[0]['tabs'][0]['windows'][0]['pid'] += 1
