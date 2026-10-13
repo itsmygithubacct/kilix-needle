@@ -32,6 +32,12 @@ class TargetAdmission(unittest.TestCase):
                              'rename_tab', {'name': 'build-output'})
         self.assertEqual(action.args['tab'], 'pane:200')
 
+    def test_new_title_is_not_mistaken_for_target_syntax(self):
+        action = self.action('rename this tab to tab 2', 'rename_tab', {'name': 'tab 2'})
+        self.assertNotIn('tab', action.args)
+        action = self.action('rename tab id 10 to tab id 20', 'rename_tab', {'name': 'tab id 20'})
+        self.assertEqual(action.args['tab'], 'id:10')
+
     def test_conflicting_target_ids_are_refused(self):
         values = interpret('make pane 200 wider by 5 cells, not pane 300',
                            [{'name': 'resize_pane', 'arguments':

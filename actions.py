@@ -1529,7 +1529,14 @@ def _admit(name: str, args: dict, prompt: str) -> Action | Refusal:
         if title.casefold() in _UNIT_NAMES or title.casefold() in ("panes", "tabs"):
             # measured (five-tool schema): "make this pane wider by 10" -> tab_name "pane"
             return Refusal(name, f"{title!r} is not a name for a tab")
-        target = _mutation_target(name, "tab", args, prompt)
+        # The new title is a value, not another target. In particular, renaming
+        # the caller to "tab 2" must never choose the second tab.
+        value = re.search(r"\b(?:to|as)\s+(['\"`]?)" + re.escape(title)
+                          + r"\1(?![\w-])", prompt, re.I)
+        target_prompt = prompt[:value.start()] + prompt[value.end():] if value else prompt
+        if not value and re.search(r"\b(?:tab|pane|window)\s+(?:id\s+)?[0-9]", title, re.I):
+            return Refusal(name, "the new title contains target syntax; use 'rename tab id N to TITLE'")
+        target = _mutation_target(name, "tab", args, target_prompt)
         if isinstance(target, Refusal):
             return target
         rename_args = {"name": title, **({"tab": target} if target else {})}
