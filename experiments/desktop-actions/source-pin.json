@@ -1,0 +1,23 @@
+{
+  "source_commit": "571fcd68f48b6649c91f353eb91d0a0c9b9135ce",
+  "provenance": "Existing local four-epoch QAT run; source and tokenizer hashes measured before this experiment.",
+  "files": {
+    "needle/__init__.py": "992393aa5905869faab560ee80bdd6566b62ea57cbdc0337991874de1cb5c56d",
+    "needle/agent/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "needle/agent/fetch.py": "0aa8664b6cc4df757983515f8844fe19d9946f2bd27747312bf567d518153f35",
+    "needle/agent/tools.py": "8337f001256dce23e0a4ad0d2597d9d5ff5d799f7a9afe57fe1f76af7107eaad",
+    "needle/cli.py": "6eef05282cc6c3d01d921eef7196e2f656f72a4658539a1d0b5915af48458da4",
+    "needle/model/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "needle/model/architecture.py": "07638e532131fa6071d1be37d20f6f17b95f7b78b2971225df87965c6c8daf43",
+    "needle/model/decode.py": "742fe405bef9fa8cca2fdc3475f2be8bcb9b0bf1fe738ff1181e1e19ece6ab79",
+    "needle/model/export.py": "337e6c321be6d0ea2692f89d6689dd33bdebbb52d2a5ff5058967cb53be047b7",
+    "needle/model/finetune.py": "2b1aef8c1361c5b9ac6ee163a465ed4f0bc80cf51520caec284b3c8ff81b9dd3",
+    "needle/model/quantize.py": "606ed5a9c3073f0caab3d61c5b286f2f2dd2f80f49dc68661ad31f4054d2f547",
+    "needle/model/run.py": "3a48a03caf5d1e475144ca577579d6a7afbd78da6ac7f4e7e9818a4e4dca1af6",
+    "needle/model/tokenizer.py": "4f243b1818ead3531a95e54bf0ed17390fbd6b2ab7a81f2e85e8cf8f802dd643",
+    "needle/playground/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "needle/playground/server.py": "dcaf3294b7b69708a8cb9388d14562e0c0063a33bc37c395a277720049731af2",
+    "needle/model/tokenizer.model": "0871b8e3df78e0dd7ccc236e187fc055f75cd57ebe3bec76ca8103030b8fe659",
+    "needle/model/tokenizer.vocab": "ed835aff5b2a3ca67b5896906dd471ab0ce12626d699d90e736e3c7e4ba9b1e3"
+  }
+}

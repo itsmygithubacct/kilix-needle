@@ -1,12 +1,15 @@
 """kilix-needle as an MCP tool server over stdio, for agent harnesses.
 
-    kilix-needle mcp [--tools all|actions|pty] [--engine FILE] [--root DIR]
+    kilix-needle mcp [--tools all|actions|pty|desktop] [--engine FILE] [--root DIR]
 
 --tools actions lists and accepts only kilix_action_plan, kilix_action_act and
 kilix_action_status, without loading a model. The default all keeps every tool
-except the pty set. --tools pty lists and accepts only kilix_pty_read,
+except the pty and desktop sets. --tools pty lists and accepts only kilix_pty_read,
 kilix_pty_plan and kilix_pty_act (persistent pane sessions, no model); it is
 opt-in and in no other menu.
+
+--tools desktop exposes only desktop read/plan/act. --desktop-model DIR uses an
+explicit experimental bundle. No desktop mutation occurs without confirm_risky.
 
 Two tools per job, so a harness's own approval setting can tell them apart:
 
@@ -296,6 +299,20 @@ PTY_TOOL_LIST = [
 ]
 _PTY_NAMES = frozenset(tool["name"] for tool in PTY_TOOL_LIST)
 
+# Desktop control is opt-in; existing MCP menus do not acquire desktop access.
+DESKTOP_TOOL_LIST = [
+    {"name": "kilix_desktop_read", "description": "List X11 window IDs, exact titles, active window and geometry; no model or input events.",
+     "annotations": {"readOnlyHint": True},
+     "inputSchema": {"type": "object", "properties": {"display": {"type": "string"}}, "additionalProperties": False}},
+    {"name": "kilix_desktop_plan", "description": "Preview a natural-language X11 desktop action sequence, resolving exact windows; does not send input.",
+     "annotations": {"readOnlyHint": True},
+     "inputSchema": {"type": "object", "properties": {"request": {"type": "string"}, "display": {"type": "string"}}, "required": ["request"], "additionalProperties": False}},
+    {"name": "kilix_desktop_act", "description": "Execute explicit X11 window, pointer, keyboard, scroll and wait actions. Requires confirm_risky. Input submission does not prove application completion.",
+     "annotations": {"readOnlyHint": False, "destructiveHint": True},
+     "inputSchema": {"type": "object", "properties": {"request": {"type": "string"}, "display": {"type": "string"}, "confirm_risky": {"type": "boolean"}}, "required": ["request", "confirm_risky"], "additionalProperties": False}},
+]
+_DESKTOP_NAMES = frozenset(tool["name"] for tool in DESKTOP_TOOL_LIST)
+
 
 def _result(record, is_error: bool, request=None) -> dict:
     """One record, sent once as compact text and once structured.
@@ -330,12 +347,12 @@ class _LazyEngine:
 
 class Server:
     def __init__(self, runtime_factory, *, tools="all"):
-        if tools not in ("all", "actions", "pty"):
-            raise ValueError("tools must be all, actions or pty")
+        if tools not in ("all", "actions", "pty", "desktop"):
+            raise ValueError("tools must be all, actions, pty or desktop")
         self._runtime_factory = runtime_factory
         self._runtimes = {}
         action_names = ("kilix_action_plan", "kilix_action_act", "kilix_action_status")
-        self._tools = (list(PTY_TOOL_LIST) if tools == "pty" else
+        self._tools = (list(DESKTOP_TOOL_LIST) if tools == "desktop" else list(PTY_TOOL_LIST) if tools == "pty" else
                        [tool for tool in TOOL_LIST if tools == "all" or tool["name"] in action_names])
         self._tool_names = frozenset(tool["name"] for tool in self._tools)
 
@@ -355,6 +372,11 @@ class Server:
     def call_tool(self, name: str, arguments: dict) -> dict:
         if not isinstance(name, str) or name not in self._tool_names:
             raise ValueError("unknown tool in selected tool set")
+        if name in _DESKTOP_NAMES:
+            import desktop_cli
+            record = desktop_cli.mcp(arguments, engine=_LazyEngine(lambda: self._ensure_engine("desktop")),
+                                     plan=name.endswith("_plan"), read=name.endswith("_read"))
+            return _result(record, record["status"] != 0)
         if name in _PTY_NAMES:
             import pty_cli
             record = pty_cli.mcp(arguments, plan=name.endswith("_plan"), read=name.endswith("_read"))

@@ -437,7 +437,7 @@ backslash is refused.
 
 ## Jobs
 
-kilix-needle has four action jobs and three read-only jobs:
+Requests are grouped into these jobs:
 
 | Job | CLI | Scope |
 | --- | --- | --- |
@@ -449,6 +449,7 @@ kilix-needle has four action jobs and three read-only jobs:
 | logs | `kilix-needle logs …` | Read and search local pane logs, with citations |
 | `tmux` | `kilix-needle tmux --socket PATH REQUEST` | Exact tmux session and pane control on an explicit socket |
 | `pty` | `kilix-needle pty REQUEST` | Persistent pane sessions: list, show, read the tail, archived journals, end one by its exact ID |
+| `desktop` (experimental) | `kilix-needle desktop REQUEST` | X11 windows, pointer, keyboard, scrolling and short sequences; preview by default, explicit model bundle and execution consent. See [desktop actions](docs/desktop.md). |
 
 ### How each job understands a request
 
