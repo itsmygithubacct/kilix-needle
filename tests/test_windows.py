@@ -127,6 +127,7 @@ class Grammar(unittest.TestCase):
         "inspect calculator": [("control", {"action": "inspect", "app": "ApplicationFrameHost.exe", "title": "Calculator"})],
         "find notepad": [("window", {"action": "find", "app": "notepad.exe"})],
         "find notepad windows": [("window", {"action": "find", "app": "notepad.exe"})],
+        'type "7" in calc': [("keyboard", {"action": "type", "text": "7", "app": "ApplicationFrameHost.exe", "title": "Calculator"})],
         'set the "File name:" field to "a.txt" in notepad': [
             ("control", {"action": "set_value", "name": "File name:", "control_type": "Edit", "text": "a.txt", "app": "notepad.exe"})],
         "minimize notepad and close it": [("window", {"action": "minimize", "app": "notepad.exe"}), ("window", {"action": "close"})],
@@ -175,7 +176,8 @@ class Grammar(unittest.TestCase):
 
     def test_interpreters_and_options_are_never_launched(self):
         for program in ("cmd.exe", "POWERSHELL.EXE", "C:\\Windows\\System32\\wscript.exe", "rundll32.exe", "pwsh.exe",
-                        "hh.exe", "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\POWERS~1.EXE"):
+                        "hh.exe", "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\POWERS~1.EXE",
+                        "python3.exe", "python3.12.exe", "pythonw3.exe", "pwsh7.exe", "Rscript.exe"):
             with self.subTest(program=program), self.assertRaises(job.WindowsActionError):
                 job.normalize([{"name": "launch", "arguments": {"program": program}}])
         with self.assertRaises(job.WindowsActionError):
@@ -196,6 +198,25 @@ class Grammar(unittest.TestCase):
         for bad in ("ctrl", "f13", "ctrl+ctrl+a", "a+b", "menu"):
             with self.subTest(bad=bad), self.assertRaises(job.WindowsActionError):
                 job.key_chord(bad)
+        # Start, Run and search launch whatever is typed next.
+        for launcher in ("win+r", "windows x", "super s", "ctrl+esc", "ctrl+shift+esc"):
+            with self.subTest(launcher=launcher), self.assertRaises(job.LauncherChordError):
+                job.key_chord(launcher)
+        reasons = []
+        self.assertIsNone(grammar.parse('press win+r then type "cmd" then press enter', reasons))
+        self.assertIn("Windows-key", reasons[0])
+
+    def test_an_app_alias_keeps_its_window_title(self):
+        # A packaged app's window belongs to ApplicationFrameHost; the alias title keeps it Calculator.
+        actions = job.normalize([{"name": "keyboard", "arguments": {"action": "type", "text": "x", "app": "calculator"}}])
+        self.assertEqual(actions[0]["arguments"]["title"], "Calculator")
+        self.assertEqual(job.validate('type "x" in calculator', [{"name": "keyboard", "arguments": {
+            "action": "type", "text": "x", "app": "calculator"}}])[0]["arguments"]["app"], "ApplicationFrameHost.exe")
+        settings = row(196696, "Settings", "ApplicationFrameHost.exe")
+        win, _fake = desktop(settings)
+        with self.assertRaises(backend.WindowsDesktopError) as caught:
+            win.plan(actions, win.snapshot())
+        self.assertEqual(caught.exception.code, "window_not_found")
 
     def test_eight_steps_at_most(self):
         with self.assertRaises(job.WindowsActionError):
@@ -286,6 +307,22 @@ class Planning(unittest.TestCase):
         self.assertEqual(plan[2]["window"]["deferred"], "resolved after launch")
         self.assertEqual(fake.ops(), ["status", "windows"])
 
+    def test_shell_and_launcher_windows_get_no_input(self):
+        kilix = row(1246354, "Kilix", "kitty.exe")
+        run = row(5005, "Run", "explorer.exe")
+        for request, rows in (('type "x" in "Kilix"', [kilix]), ('click "OK" in "Run"', [run]),
+                              ('type "x" into the search box in "Documents"', [DOCS]),
+                              ('open explorer then type "cmd" then press enter', []),
+                              ('scroll down in "Kilix"', [kilix])):
+            with self.subTest(request=request):
+                win, fake = desktop(*rows)
+                with self.assertRaises(backend.WindowsDesktopError) as caught:
+                    win.plan(grammar.parse(request), win.snapshot())
+                self.assertEqual(caught.exception.code, "shell_window")
+        # Managing those windows is still allowed.
+        win, fake = desktop(kilix)
+        win.plan(grammar.parse('minimize "Kilix"'), win.snapshot())
+
 
 class Execution(unittest.TestCase):
     def run_request(self, request, fake_rows=(), elements=None, execute=True):
@@ -349,6 +386,11 @@ class Execution(unittest.TestCase):
         fake.fail["type"] = "timeout"
         record = windows_cli.run('type "x" in notepad', execute=True, backend=backend.Windows(fake))
         self.assertEqual(record["results"][-1]["status"], "uncertain")
+        self.assertEqual(record["outcome"], "uncertain")  # never "blocked" when input may have landed
+        fake = FakeDesktop([NOTEPAD])
+        fake.fail["close"] = "timeout"
+        record = windows_cli.run('close notepad', execute=True, backend=backend.Windows(fake))
+        self.assertEqual((record["outcome"], record["results"][0]["status"]), ("uncertain", "uncertain"))
         for code in ("elevated_target", "stale_target", "window_moved", "password_element"):  # refused before input
             fake = FakeDesktop([NOTEPAD])
             fake.fail["type"] = code
@@ -364,6 +406,29 @@ class Execution(unittest.TestCase):
     def test_scroll_defaults_to_the_window_center(self):
         record, fake = self.run_request("scroll down 2 steps in notepad", [NOTEPAD])
         self.assertEqual(fake.calls[-1][:2], ("scroll", {"x": 400, "y": 300, "delta": -240}))
+
+    def test_a_named_app_after_launch_is_the_launched_window(self):
+        record, fake = self.run_request('open notepad then type "secret" in notepad', [NOTEPAD])
+        self.assertEqual(record["status"], 0, record)
+        typed = [c for c in fake.calls if c[0] == "type"][0]
+        self.assertEqual(typed[2]["hwnd"], "900000")  # not the older notes.txt window 1001
+        # A title still names the older window explicitly.
+        record, fake = self.run_request('open notepad then type "x" in "notes.txt - Notepad"', [NOTEPAD])
+        self.assertEqual([c for c in fake.calls if c[0] == "type"][0][2]["hwnd"], "1001")
+
+    def test_a_wait_deferred_shell_window_is_refused_when_it_appears(self):
+        fake = FakeDesktop([NOTEPAD])
+        original = fake.__call__
+
+        def calls(operation, params=None, **kw):
+            if operation == "wait" and params.get("title") == "Open":
+                fake.rows.append(row(6006, "Open", "explorer.exe"))  # a shell-hosted window
+            return original(operation, params, **kw)
+        record = windows_cli.run('wait for the "Open" window to appear then type "x" in it', execute=True,
+                                 backend=backend.Windows(calls))
+        self.assertEqual(record["results"][-1]["status"], "blocked", record)
+        self.assertEqual(record["results"][-1]["error"]["code"], "shell_window")
+        self.assertNotIn("type", fake.ops())
 
     def test_calculator_window_is_found_after_launch(self):
         record, fake = self.run_request("open calculator then press 7")

@@ -47,8 +47,19 @@ wt certutil bitsadmin forfiles wmic msbuild installutil cmstp curl ftp tftp task
 format diskpart bcdedit vssadmin icacls takeown cipher sdelete psexec mmc control
 hh pcalua msdt syncappvpublishingserver presentationhost ieexec infdefaultinstall odbcconf regasm
 regsvcs msxsl appvlp atbroker mavinject scriptrunner dotnet java javaw perl ruby php deno bun
-ssh scp sftp winrs
+ssh scp sftp winrs pypy rscript r julia lua luajit tclsh wish irb jshell groovy kotlin scala zsh fish
+busybox nu xonsh csi fsi csc vbc jsc ipython ipy jupyter pip uv uvx npm npx pnpm yarn conda winget
+choco scoop git git-bash
 """.split())
+# Windows whose input runs whatever is typed: consoles, terminals (Kilix
+# included), Explorer's address bar, Start/search and Task Manager's Run.
+SHELL_APPS = frozenset("""
+cmd.exe powershell.exe pwsh.exe powershell_ise.exe conhost.exe openconsole.exe windowsterminal.exe
+wt.exe wsl.exe wslhost.exe bash.exe mintty.exe kitty.exe kilix.exe explorer.exe searchapp.exe
+searchhost.exe searchui.exe startmenuexperiencehost.exe shellexperiencehost.exe taskmgr.exe
+regedit.exe mmc.exe
+""".split())
+SHELL_TITLES = frozenset(["run"])
 # Explorer opens a path with its associated program, so it runs a document as
 # readily as cmd would; it may only open its own window.
 NO_DOCUMENT = frozenset(["explorer"])
@@ -152,7 +163,8 @@ def program_name(value):
     base = re.split(r"[\\/]", value)[-1][:-4].lower()
     if "~" in base:
         raise WindowsActionError("short (8.3) program names are not launched; use the full executable name")
-    if base in INTERPRETERS:
+    # python3.12.exe and pwsh7.exe are still python and pwsh.
+    if base in INTERPRETERS or re.sub(r"[\d.]+$", "", base) in INTERPRETERS:
         raise WindowsActionError("command interpreters and system tools are not launched; open them yourself")
     return value
 
@@ -177,6 +189,10 @@ _KEY_ALIASES = {"control": "CTRL", "ctl": "CTRL", "ctrl": "CTRL", "alt": "ALT", 
                 "left": "LEFT", "right": "RIGHT", "up": "UP", "down": "DOWN"}
 
 
+class LauncherChordError(WindowsActionError):
+    pass
+
+
 def key_chord(value):
     """Canonical SDK chord such as CTRL+SHIFT+S, from ctrl+shift+s or 'control s'."""
     if not isinstance(value, str) or not value.strip() or len(value) > 80:
@@ -197,7 +213,11 @@ def key_chord(value):
     if (not out or len(out) > 5 or len(out) != len(set(out))
             or any(k not in MODIFIERS for k in out[:-1]) or out[-1] in MODIFIERS):
         raise WindowsActionError("press one key, optionally with distinct modifiers")
-    return "+".join(sorted(out[:-1], key=MODIFIERS.index) + out[-1:])
+    chord = "+".join(sorted(out[:-1], key=MODIFIERS.index) + out[-1:])
+    # Windows-key chords and Ctrl+Esc reach Start, Run and search, where typing launches programs.
+    if "WIN" in out or chord in ("CTRL+ESC", "CTRL+SHIFT+ESC"):
+        raise LauncherChordError("Windows-key and Start menu chords are not sent; they open system launchers")
+    return chord
 
 
 def _check_window(args, name):
@@ -205,7 +225,17 @@ def _check_window(args, name):
         if field in args:
             _single_line(args[field], field, 1024 if field == "app" else 200)
     if "app" in args:
+        alias = APPS.get(re.sub(r"\s+", " ", args["app"].strip().lower()))
         args["app"] = window_app(args["app"])
+        if alias and alias[2] and "title" not in args:
+            # Calculator's window belongs to ApplicationFrameHost, like every packaged app's.
+            args["title"] = alias[2]
+
+
+def _alias_title(args, clause, literals):
+    """The title an app alias implies, when that alias is written in the clause."""
+    return any(owner.lower() == args.get("app", "").lower() and title == args.get("title")
+               and _mentions(alias, clause, literals) for alias, (_program, owner, title) in APPS.items() if title)
 
 
 def normalize(calls):
@@ -427,6 +457,8 @@ def validate(request, calls):
         used = []
         for field in ("title", "name", "automation_id", "text", "document"):
             if field in args:
+                if field == "title" and _alias_title(args, clause, quoted):
+                    continue
                 if not _mentions(args[field], clause, quoted):
                     raise WindowsActionError(f"{name}.{field} was not requested")
                 used.append(args[field])

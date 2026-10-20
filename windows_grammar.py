@@ -185,6 +185,8 @@ def _clause(clause, literals):
             keys = lit(keys)
         try:
             chord = job.key_chord(keys)
+        except job.LauncherChordError:
+            raise
         except job.WindowsActionError:
             chord = None
         if chord:

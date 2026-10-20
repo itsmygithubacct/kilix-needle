@@ -30,7 +30,8 @@ element_not_found ambiguous_element element_disabled element_offscreen accessibi
 invalid_window_state input_busy stale_element desktop_unavailable access_denied unavailable locked
 point_outside_window target_mismatch wait_timeout stale_target elevated_target window_moved window_occluded
 invalid_coordinates cursor_clipped unsupported_pattern read_only_element password_element desktop_busy
-session_mismatch previous_operation_incomplete dpi_unavailable invalid_path""".split())
+session_mismatch previous_operation_incomplete dpi_unavailable invalid_path shell_window""".split())
+_INPUT = frozenset(["keyboard", "pointer", "scroll", "control.invoke", "control.set_value"])
 
 
 class WindowsDesktopError(job.WindowsActionError):
@@ -129,6 +130,26 @@ def describe(row):
             "pid": row["target"]["pid"], "minimized": row.get("minimized")}
 
 
+def _is_input(item):
+    return item["name"] in _INPUT or f'{item["name"]}.{item["arguments"].get("action")}' in _INPUT
+
+
+def _refuse_shell(window):
+    """Typing into a console, terminal, Explorer, Start or Run executes it."""
+    app = ntpath.basename(window.get("app") or "").lower()
+    title = (window.get("title") or "").strip().lower()
+    if app in job.SHELL_APPS or title in job.SHELL_TITLES:
+        raise WindowsDesktopError(f'"{window.get("title") or app}" runs what is typed into it; '
+                                  "Needle does not type, click or scroll there", "shell_window")
+
+
+def _covers(selector, deferred):
+    """A named window that is the one this request launched or waited for."""
+    named = {k: v.lower() for k, v in selector.items()}
+    earlier = {k: v.lower() for k, v in deferred.items()}
+    return named == earlier or ("app" in named and "title" not in named and named["app"] == earlier.get("app"))
+
+
 def _selector(args):
     return {key: args[key] for key in ("app", "title") if key in args}
 
@@ -186,12 +207,16 @@ class Windows:
     def plan(self, actions, snapshot):
         actions = job.normalize(actions)
         rows = snapshot["windows"]
-        result, current, focused, closed = [], None, None, set()
+        result, current, focused, closed, deferred = [], None, None, set(), []
 
         def bind(args, required=True):
             nonlocal current
             selector = _selector(args)
-            if selector:
+            # "open notepad then type ... in notepad" means the new window, not an older one.
+            earlier = next((w for w in reversed(deferred) if _covers(selector, w["selector"])), None) if selector else None
+            if earlier is not None:
+                window = earlier
+            elif selector:
                 row = self.resolve(selector, rows)
                 window = {"selector": selector, "identity": row["target"], "window": describe(row)}
             elif current is not None:
@@ -213,6 +238,7 @@ class Windows:
             if name == "launch":
                 # A new window usually, but not always, gets the foreground: focus it explicitly.
                 current = {"selector": _launch_selector(args), "launch": index, "deferred": "resolved after launch"}
+                deferred.append(current)
             elif name == "window" and action == "list":
                 pass
             elif name == "window" and action == "find":
@@ -227,8 +253,11 @@ class Windows:
                     # "wait for the Save As window to appear then ... in it"
                     current = {"selector": item["selector"], "wait": index, "deferred": "resolved after the wait"}
                     item["_binds"] = current
+                    deferred.append(current)
             else:
                 window, key = bind(args)
+                if _is_input(item):
+                    _refuse_shell(window.get("window") or window["selector"])
                 item["window"] = {k: v for k, v in window.items() if k not in ("launch", "wait")}
                 item["_window"] = window
                 if name in ("keyboard", "pointer", "scroll") and focused != key:
@@ -256,11 +285,11 @@ class Windows:
                 window["identity"] = launched["target"]
                 return window["identity"]
             # Applications such as Calculator hand their window to another process.
-            window["identity"] = self._wait_window(window["selector"], "visible", 9000)["target"]
-            return window["identity"]
-        listing = self._request("find", dict(window["selector"]))
-        rows = listing.get("windows") if isinstance(listing, dict) else []
-        window["identity"] = self.resolve(window["selector"], rows)["target"]
+            row = self._wait_window(window["selector"], "visible", 9000)
+        else:
+            listing = self._request("find", dict(window["selector"]))
+            row = self.resolve(window["selector"], listing.get("windows") if isinstance(listing, dict) else [])
+        window.update(identity=row["target"], window=describe(row))
         return window["identity"]
 
     def _wait_window(self, selector, state, ms):
@@ -352,9 +381,11 @@ class Windows:
         if name == "wait" and "selector" in item:
             found = self._wait_window(item["selector"], args["state"], args["ms"])
             if found is not None and "_binds" in item:
-                item["_binds"]["identity"] = found["target"]
+                item["_binds"].update(identity=found["target"], window=describe(found))
             return "confirmed", {"state": args["state"], **({"window": describe(found)} if found else {})}, None
         identity = self._identity(item, launches)
+        if _is_input(item) and "window" in item["_window"]:
+            _refuse_shell(item["_window"]["window"])  # a deferred window, known only now
         if name == "window":
             if action in ("move", "resize"):
                 rect = self._row(identity)["rect"]
@@ -430,11 +461,12 @@ class Windows:
                     receipt["window"] = item["_window"]["identity"]
             except WindowsDesktopError as error:
                 uncertain = mutating and error.code not in _REFUSALS
-                receipt.update(status="uncertain" if uncertain else "failed" if error.code == "wait_timeout" else "blocked",
-                               error={"code": error.code, "message": str(error)})
+                status = "uncertain" if uncertain else "failed" if error.code == "wait_timeout" else "blocked"
+                receipt.update(status=status, error={"code": error.code, "message": str(error)})
                 receipt["elapsed_ms"] = round((time.monotonic() - started) * 1000)
-                return dict(status=1, outcome="partial" if index else "blocked", results=results,
-                            note="stopped at the first failure; observe the desktop before retrying")
+                # An unknown effect outranks everything: the caller must look before acting again.
+                return dict(status=1, outcome="uncertain" if uncertain else "partial" if index else status,
+                            results=results, note="stopped at the first failure; observe the desktop before retrying")
             receipt["elapsed_ms"] = round((time.monotonic() - started) * 1000)
         return dict(status=0, outcome="submitted" if any(r["status"] == "submitted" or r["status"] == "started" for r in results)
                     else "observed" if all(r["status"] == "observed" for r in results) else "completed", results=results)
