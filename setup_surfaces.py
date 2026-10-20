@@ -32,7 +32,7 @@ HOME = Path.home()
 BIN = HOME / ".local" / "bin" / NAME
 SCRIPT = Path(__file__).resolve().parent / NAME
 BEGIN, END = f"# >>> {NAME} >>>", f"# <<< {NAME} <<<"
-SURFACES = ("command", "alias", "hotkey", "claude", "codex", "grok", "omp")
+SURFACES = ("command", "desktop-command", "alias", "hotkey", "claude", "codex", "grok", "omp")
 
 
 class SetupError(RuntimeError):
@@ -99,6 +99,14 @@ def _write(path: Path, text: str) -> None:
 
 
 def _command(undo, dry_run):
+    return _link_command(BIN, SCRIPT, undo, dry_run)
+
+
+def _desktop_command(undo, dry_run):
+    return _link_command(BIN.with_name("kilix-desktop"), SCRIPT.with_name("kilix-desktop"), undo, dry_run)
+
+
+def _link_command(BIN, SCRIPT, undo, dry_run):
     if undo:
         if BIN.is_symlink() and Path(os.readlink(BIN)) == SCRIPT:
             if not dry_run:
@@ -236,7 +244,7 @@ def _omp(undo, dry_run):
     return f"{path}: {'removed' if undo else 'set'} mcpServers.{NAME}"
 
 
-ACTIONS = {"command": _command, "alias": _alias, "hotkey": _hotkey, "claude": _claude,
+ACTIONS = {"command": _command, "desktop-command": _desktop_command, "alias": _alias, "hotkey": _hotkey, "claude": _claude,
            "codex": _codex, "grok": _grok, "omp": _omp}
 
 

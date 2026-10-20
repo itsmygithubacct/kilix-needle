@@ -907,9 +907,11 @@ def main(argv: list[str] | None = None) -> int:
                                  "excludes the opt-in pty and desktop sets)")
         parser.add_argument("--engine", metavar="FILE")
         parser.add_argument("--desktop-model", metavar="DIR", help="explicit experimental desktop model bundle")
+        parser.add_argument("--desktop-parser", choices=("grammar", "needle", "hybrid"), default="hybrid",
+                            help="desktop natural-language parser; structured actions never load a model")
         parser.add_argument("--root")
         args = parser.parse_args(argv[1:])
-        return mcp_server.serve(lambda job=jobs.DEFAULT: open_runtime(args, job=job), tools=args.tools)
+        return mcp_server.serve(lambda job=jobs.DEFAULT: open_runtime(args, job=job), tools=args.tools, desktop_parser=args.desktop_parser)
 
     job = jobs.DEFAULT
     if argv[:1] == ["apps"]:

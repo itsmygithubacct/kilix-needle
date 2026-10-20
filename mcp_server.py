@@ -312,6 +312,20 @@ DESKTOP_TOOL_LIST = [
      "inputSchema": {"type": "object", "properties": {"request": {"type": "string"}, "display": {"type": "string"}, "confirm_risky": {"type": "boolean"}}, "required": ["request", "confirm_risky"], "additionalProperties": False}},
 ]
 _DESKTOP_NAMES = frozenset(tool["name"] for tool in DESKTOP_TOOL_LIST)
+# Both representations feed the same normalizer/executor. Keep read independent
+# of the model and require callers to select exactly one planning representation.
+for _tool in DESKTOP_TOOL_LIST[1:]:
+    _schema = _tool["inputSchema"]
+    _schema["properties"].update({
+        "actions": {"type": "array", "minItems": 1, "maxItems": 6,
+                    "items": {"type": "object", "properties": {"name": {"type": "string", "enum": ["window", "pointer", "keyboard", "scroll", "wait"]},
+                              "arguments": {"type": "object"}}, "required": ["name", "arguments"], "additionalProperties": False}},
+        "parser": {"type": "string", "enum": ["grammar", "needle", "hybrid"], "description": "Natural-language parser override; omitted uses server selection."},
+    })
+    _schema["required"] = [field for field in _schema["required"] if field != "request"]
+    _schema["oneOf"] = [{"required": ["request"], "not": {"required": ["actions"]}},
+                        {"required": ["actions"], "not": {"anyOf": [{"required": ["request"]}, {"required": ["parser"]}]}}]
+    _tool["description"] += " Supply request (natural language) or actions (structured list), exclusively."
 
 
 def _result(record, is_error: bool, request=None) -> dict:
@@ -346,10 +360,13 @@ class _LazyEngine:
 
 
 class Server:
-    def __init__(self, runtime_factory, *, tools="all"):
+    def __init__(self, runtime_factory, *, tools="all", desktop_parser="hybrid"):
         if tools not in ("all", "actions", "pty", "desktop"):
             raise ValueError("tools must be all, actions, pty or desktop")
         self._runtime_factory = runtime_factory
+        if desktop_parser not in ("grammar", "needle", "hybrid"):
+            raise ValueError("invalid desktop parser")
+        self._desktop_parser = desktop_parser
         self._runtimes = {}
         action_names = ("kilix_action_plan", "kilix_action_act", "kilix_action_status")
         self._tools = (list(DESKTOP_TOOL_LIST) if tools == "desktop" else list(PTY_TOOL_LIST) if tools == "pty" else
@@ -375,7 +392,7 @@ class Server:
         if name in _DESKTOP_NAMES:
             import desktop_cli
             record = desktop_cli.mcp(arguments, engine=_LazyEngine(lambda: self._ensure_engine("desktop")),
-                                     plan=name.endswith("_plan"), read=name.endswith("_read"))
+                                     plan=name.endswith("_plan"), read=name.endswith("_read"), parser_mode=self._desktop_parser)
             return _result(record, record["status"] != 0)
         if name in _PTY_NAMES:
             import pty_cli
@@ -494,8 +511,8 @@ class Server:
         return {"jsonrpc": "2.0", "id": ident, "result": result}
 
 
-def serve(runtime_factory, stdin=sys.stdin, stdout=sys.stdout, *, tools="all") -> int:
-    server = Server(runtime_factory, tools=tools)
+def serve(runtime_factory, stdin=sys.stdin, stdout=sys.stdout, *, tools="all", desktop_parser="hybrid") -> int:
+    server = Server(runtime_factory, tools=tools, desktop_parser=desktop_parser)
     try:
         for line in stdin:
             if not line.strip():

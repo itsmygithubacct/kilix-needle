@@ -194,7 +194,7 @@ def run_inside(args):
                 if name == "kilix_desktop_act": arguments["confirm_risky"] = consent
                 messages.append(dict(jsonrpc="2.0", id=ident, method="tools/call", params=dict(name=name,
                                 arguments=arguments)))
-            client = subprocess.run([sys.executable, "-B", str(ROOT/"needle_cli.py"), "mcp", "--tools", "desktop", "--desktop-model", str(args.model)],
+            client = subprocess.run([sys.executable, "-B", str(ROOT/"needle_cli.py"), "mcp", "--tools", "desktop", "--desktop-parser", "needle", "--desktop-model", str(args.model)],
                                     input="".join(json.dumps(m)+"\n" for m in messages), capture_output=True, text=True, timeout=60)
             assert client.returncode == 0, client.stderr
             replies = {r["id"]:r for line in client.stdout.splitlines() if (r := json.loads(line))}
@@ -204,6 +204,47 @@ def run_inside(args):
                 assert record["outcome"] == outcome, record
                 if ident != 4: assert record["model"] == model_label
             checks.append("MCP stdio selects tuned model, previews, blocks missing consent and executes explicit wait")
+        # Exercise public interface dispatch against application input, including
+        # the distinction between exact literal typing and explicit submission.
+        box = state()["entry_box"]
+        apply([c("window", action="focus", target=f"id:{main_id}"),
+               c("pointer", action="click", x=box[0]+20, y=box[1]+10)])
+        routes = ["typed", "json", "grammar", "hybrid", "mcp-json", "mcp-grammar", "mcp-hybrid"]
+        if args.model: routes += ["needle", "mcp-needle"]
+        if args.kilix: routes += ["kilix"]
+        for route in routes:
+            apply([c("keyboard", action="press", keys="ctrl+a")])
+            literal = "desktop needle works"
+            enters = state()["keys"].count("Return")
+            payload = None
+            if route.startswith("mcp-"):
+                mode = route[4:]
+                arguments = {"actions": [c("keyboard", action="type", text=literal)]} if mode == "json" else {"request": 'type ' + json.dumps(literal), "parser": mode}
+                arguments["confirm_risky"] = True
+                payload = json.dumps(dict(jsonrpc="2.0", id=1, method="tools/call", params=dict(name="kilix_desktop_act", arguments=arguments))) + "\n"
+                argv = [sys.executable, "-B", str(ROOT/"needle_cli.py"), "mcp", "--tools", "desktop"]
+                if args.model: argv += ["--desktop-model", str(args.model)]
+            elif route in ("typed", "kilix"):
+                argv = ([str(args.kilix), "desktop-action"] if route == "kilix" else [sys.executable, "-B", str(ROOT/"desktop_control.py")])
+                argv += ["--yes", "--json", "keyboard", "type", "--text", literal]
+            elif route == "json":
+                payload = json.dumps([c("keyboard", action="type", text=literal)])
+                argv = [sys.executable, "-B", str(ROOT/"needle_cli.py"), "desktop", "--yes", "--json", "--actions-json", "-"]
+            else:
+                argv = [sys.executable, "-B", str(ROOT/"needle_cli.py"), "desktop", "--yes", "--json", "--parser", route]
+                if args.model: argv += ["--model", str(args.model)]
+                argv += ['type ' + json.dumps(literal)]
+            env = dict(os.environ, KILIX_DESKTOP_MODULE_ROOT=str(ROOT))
+            client = subprocess.run(argv, input=payload, env=env, capture_output=True, text=True, timeout=60)
+            assert client.returncode == 0, (route, client.stdout, client.stderr)
+            record = json.loads(client.stdout)
+            if route.startswith("mcp-"): record = record["result"]["structuredContent"]
+            records.append(dict(interface=route, receipt=record))
+            assert record["status"] == 0, (route, record)
+            assert record["parser"] == ("structured" if route in ("typed", "json", "mcp-json", "kilix") else "needle" if route in ("needle", "mcp-needle") else "grammar")
+            wait_for(lambda: state()["text"] == literal)
+            assert state()["keys"].count("Return") == enters
+            checks.append(route + " interface delivers literal text without Enter")
         report = dict(status="passed", checks=checks, display=os.environ["DISPLAY"], xdotool=str(args.xdotool), fixture=state())
     except BaseException as error:
         report = dict(status="failed", error=repr(error), checks=checks)
@@ -226,6 +267,7 @@ def main():
     p.add_argument("--xdotool", type=Path)
     p.add_argument("--out", type=Path)
     p.add_argument("--model", type=Path)
+    p.add_argument("--kilix", type=Path, help="optional Kilix launcher to verify desktop-action delegation")
     p.add_argument("--inside", action="store_true")
     p.add_argument("--fixture", type=Path)
     args = p.parse_args()

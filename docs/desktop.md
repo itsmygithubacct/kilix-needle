@@ -9,6 +9,64 @@ arrays. There is no shell-command generation.
 
 ## Use
 
+All interfaces use the same versioned action contract, target resolution and X11
+executor. The typed interface and grammar need no model assets or licence setup.
+Install the typed command with `kilix-needle setup --only desktop-command`.
+
+```sh
+kilix-desktop window list
+kilix-desktop --yes window focus --target 'title:Notes'
+kilix-desktop --yes window move --target active --x 80 --y 120
+kilix-desktop --yes window resize --width 800 --height 600
+kilix-desktop --yes pointer click --x 300 --y 240 --button left
+kilix-desktop --yes keyboard type --text 'literal text'
+kilix-desktop --yes keyboard press Return
+kilix-desktop --yes scroll down --steps 3
+kilix-desktop --yes wait 100
+kilix-desktop --yes batch actions.json
+kilix-desktop schema
+kilix desktop-action --help
+```
+
+`kilix desktop-action` delegates to `kilix-desktop` on PATH. An explicit
+`KILIX_DESKTOP_CLI` executable or `KILIX_DESKTOP_MODULE_ROOT` source directory
+selects an alternative installation without automatic fallback. Help and schema
+are read-only. Every typed subcommand has `--help`. Keyboard type also accepts
+`--text-file FILE` (`-` for stdin); it preserves whitespace and rejects control
+characters, including trailing newlines.
+
+Natural-language parsing has three explicit modes:
+
+| Mode | Behavior |
+| --- | --- |
+| `--parser grammar` | Deterministic bounded language; no model is loaded. |
+| `--parser needle` | Every eligible request uses the selected Needle model. |
+| `--parser hybrid` (default) | Grammar first, then lazy Needle fallback on a grammar miss. |
+
+Receipts contain `parser_mode` and the actual `parser` (`grammar`, `needle`, or
+`structured`). Fallback happens during planning only. Failed validation, target
+resolution, or execution never triggers another executor or a retry.
+
+The grammar supports every action family, explicit quoted titles, active/current
+windows, decimal window IDs, numeric coordinates/sizes, exact quoted text, key
+chords, scroll steps and short pauses. Examples:
+
+```sh
+kilix-needle desktop --parser grammar --parse-only 'resize the active window to 800x600'
+kilix-needle desktop --parser grammar --yes 'focus window "Notes" then type "hello" then press Return'
+kilix-needle desktop --parser grammar --yes 'move the pointer to 120, 250 then double click'
+kilix-needle desktop --parser hybrid --model /abs/desktop-bundle --yes 'scroll down five steps'
+kilix-needle desktop --parser needle --model /abs/desktop-bundle --parse-only 'wait 0.5 seconds'
+```
+
+MCP remains opt-in: `kilix-needle mcp --tools desktop --desktop-parser hybrid
+--desktop-model /abs/desktop-bundle`. The read tool needs no model. Plan/act
+accept exactly one of `request` (natural language) or `actions` (the JSON action
+list). A request may select `parser`; structured actions never load a model.
+Act requires `confirm_risky: true`. For example, structured arguments are
+`{"actions":[{"name":"keyboard","arguments":{"action":"type","text":"hello"}}],"confirm_risky":true}`.
+Use `kilix-desktop schema` for all action fields and bounds.
+
 This first backend requires an X11 display, an EWMH window manager, `xprop`, and
 `xdotool`. Graceful close and maximize/restore require a recent xdotool providing
 `windowquit` and `windowstate`. The backend checks for those commands and never

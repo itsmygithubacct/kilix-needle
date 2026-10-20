@@ -5,6 +5,11 @@ Linux system state. kilix-needle combines request grammars with
 [Needle 2](https://huggingface.co/Cactus-Compute/needle2), a 45M-parameter
 tool-calling model that runs on the CPU in about 45 MB of RAM.
 
+Experimental [desktop actions](docs/desktop.md) add `kilix-desktop` typed commands,
+JSON batches, `kilix desktop-action`, grammar/Needle/hybrid parsing and an opt-in
+desktop MCP menu. Every route shares one bounded X11 executor; previews are the
+default and typing never implicitly presses Enter.
+
 ```sh
 kilix-needle split right
 kilix-needle close tab 2 and go to tab 1
