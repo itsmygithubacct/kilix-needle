@@ -120,7 +120,10 @@ class Artifact(unittest.TestCase):
         # A minimum the gradient tolerance cannot reach in double precision:
         # an ill-conditioned quadratic far from zero. Without the stop, the
         # line search accepts steps on rounding alone until max_iter.
-        import numpy as np
+        try:
+            import numpy as np
+        except ImportError:
+            self.skipTest("training needs NumPy")
         a = np.logspace(0, 3, 40)
         c = np.random.default_rng(0).normal(size=40)
         evaluations = []
