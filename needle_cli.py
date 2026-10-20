@@ -9,6 +9,7 @@
     kilix-needle tmux --socket /abs/socket 'list sessions'
     kilix-needle pty 'list sessions'                # persistent pane sessions
     kilix-needle desktop --list                    # X11 desktop action experiment
+    kilix-needle windows --list                    # Windows applications (WSL or --host)
     kilix-needle action --yes --request-json -     # structured, no model
 
 Agents: act directly with `--agent --json --yes`. A refused request runs
@@ -101,6 +102,9 @@ def open_runtime(args, *, may_install: bool = False, job: str = jobs.DEFAULT) ->
     if job == "desktop":
         import desktop_cli
         return desktop_cli.open_runtime(getattr(args, "desktop_model", None), getattr(args, "root", None))
+    if job == "windows":
+        import windows_cli
+        return windows_cli.open_runtime(getattr(args, "root", None))
     if job == "system":
         import system_model
         return system_model.open_runtime(args)
@@ -835,6 +839,9 @@ def main(argv: list[str] | None = None) -> int:
     if argv[:1] == ["desktop"]:
         from desktop_cli import main as desktop_main
         return desktop_main(argv[1:])
+    if argv[:1] == ["windows"]:
+        from windows_cli import main as windows_main
+        return windows_main(argv[1:])
     if argv[:1] == ["logs"]:
         from needle_logs.cli import main as logs_main
         return logs_main(argv[1:])
@@ -902,16 +909,22 @@ def main(argv: list[str] | None = None) -> int:
         parser = argparse.ArgumentParser(prog="kilix-needle mcp",
                                          description=mcp_server.__doc__,
                                          formatter_class=argparse.RawDescriptionHelpFormatter)
-        parser.add_argument("--tools", choices=("all", "actions", "pty", "desktop"), default="all",
+        parser.add_argument("--tools", choices=("all", "actions", "pty", "desktop", "windows"), default="all",
                             help="tool menu and dispatch selection (default: all, which "
-                                 "excludes the opt-in pty and desktop sets)")
+                                 "excludes the opt-in pty, desktop and windows sets)")
         parser.add_argument("--engine", metavar="FILE")
         parser.add_argument("--desktop-model", metavar="DIR", help="explicit experimental desktop model bundle")
         parser.add_argument("--desktop-parser", choices=("grammar", "needle", "hybrid"), default="hybrid",
                             help="desktop natural-language parser; structured actions never load a model")
+        parser.add_argument("--windows-host", metavar="SSH_ALIAS",
+                            help="Windows machine for the windows menu (required outside WSL)")
+        parser.add_argument("--windows-parser", choices=("grammar", "needle", "hybrid"), default="grammar",
+                            help="windows natural-language parser (default grammar; the model is unqualified)")
         parser.add_argument("--root")
         args = parser.parse_args(argv[1:])
-        return mcp_server.serve(lambda job=jobs.DEFAULT: open_runtime(args, job=job), tools=args.tools, desktop_parser=args.desktop_parser)
+        return mcp_server.serve(lambda job=jobs.DEFAULT: open_runtime(args, job=job), tools=args.tools,
+                                desktop_parser=args.desktop_parser, windows_host=args.windows_host,
+                                windows_parser=args.windows_parser)
 
     job = jobs.DEFAULT
     if argv[:1] == ["apps"]:
