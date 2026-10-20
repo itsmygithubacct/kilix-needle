@@ -323,8 +323,9 @@ for _tool in DESKTOP_TOOL_LIST[1:]:
         "parser": {"type": "string", "enum": ["grammar", "needle", "hybrid"], "description": "Natural-language parser override; omitted uses server selection."},
     })
     _schema["required"] = [field for field in _schema["required"] if field != "request"]
-    _schema["oneOf"] = [{"required": ["request"], "not": {"required": ["actions"]}},
-                        {"required": ["actions"], "not": {"anyOf": [{"required": ["request"]}, {"required": ["parser"]}]}}]
+    # Keep the root an ordinary object for MCP clients that cannot expose
+    # top-level schema unions. desktop_cli.mcp enforces exclusive alternatives
+    # before model access or any desktop connection.
     _tool["description"] += " Supply request (natural language) or actions (structured list), exclusively."
 
 
