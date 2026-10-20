@@ -202,11 +202,12 @@ def _apps_admitted(text):
     the others are skipped here. tests/test_router.py checks this against
     propose and interpret on the spent apps requests."""
     global _apps_last
-    last_text, last = _apps_last
+    last_text, last = _apps_last         # one tuple: its text and reading agree
     if last_text == text:
         return last
-    _apps_last = (text, _apps_reading(text))
-    return _apps_last[1]
+    result = _apps_reading(text)
+    _apps_last = (text, result)
+    return result                        # not _apps_last[1], which another caller may replace
 
 
 def _apps_reading(text):
@@ -273,17 +274,22 @@ def _claims_apps(text):
 _PAYLOAD = re.compile(r":\s.*", re.S)
 _AGENT_NAMED: re.Pattern | None = None
 # A backslash escapes a double quote or a backtick inside one, as a shell does:
-# run "echo \"a; b\"" below is one payload.
-_QUOTED = re.compile(r"(?<!\w)'[^'\n]*'(?!\w)|\"(?:\\.|[^\"\\\n])*\"|`(?:\\.|[^`\\\n])*`|“[^”\n]*”"
-                     r"|(?<!\w)‘[^’\n]*’(?!\w)")
+# run "echo \"a; b\"" below is one payload. So it does in a $'...' string; in
+# a plain single-quoted one it is a backslash.
+_QUOTED = re.compile(r"\$'(?:\\.|[^'\\\n])*'|(?<!\w)'[^'\n]*'(?!\w)|\"(?:\\.|[^\"\\\n])*\""
+                     r"|`(?:\\.|[^`\\\n])*`|“[^”\n]*”|(?<!\w)‘[^’\n]*’(?!\w)")
 # A full stop needs a space after it ("v1.2", "notes.txt" are one word); a
 # semicolon, full-width punctuation, a line break of any kind, a dash (not a
 # hyphen) and a shell "&&" break where they stand.
 _BREAK = re.compile(r"\s*(?:[.!?]+(?=\s|$)|[;;；。！？]+|[\n\r\v\f\x85\u2028\u2029]"
                     r"|[‒-―]|\s--?(?=\s)|&&)\s*|\s*[,，]\s*(?:(?:and\s+)?then\s+|and\s+)?"
                     r"|\s+(?:and\s+then|then|and)\s+", re.I)
-# A list item's bullet or number, at the start of a line, is not its words.
-_BULLET = re.compile(r"(?:^|(?<=[\n\r\v\f\x85\u2028\u2029]))[ \t]*(?:[-*•‣◦▪]|\(?\d{1,3}[.)])[ \t]+")
+# A list item's bullet or number, and its checkbox, at the start of a line
+# after any indentation, are not its words.
+_INDENT = r"[^\S\n\r\v\f\x85\u2028\u2029]"
+_BOX = rf"\[[ xX✓✔]?\]{_INDENT}+"
+_BULLET = re.compile(rf"(?:^|(?<=[\n\r\v\f\x85\u2028\u2029])){_INDENT}*"
+                     rf"(?:(?:[-*+•‣◦▪▫●○■□►▸▹▶·∙⁃]|\(?\d{{1,3}}[.)]){_INDENT}+(?:{_BOX})?|{_BOX})")
 _EDGES = " .,;!?;；。！？，"
 
 

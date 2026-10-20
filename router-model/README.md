@@ -57,7 +57,11 @@ All training text is ours. None of it comes from a third-party dataset.
   output (`logs`); moving a pane into a new tab, asking which pane has focus,
   closing every other pane, and opening a pane or tab in a named directory
   (`none`: no panes tool does these, and new panes always open in the current
-  directory).
+  directory). Round 4 ran every `panes` row through the panes job's engine and
+  interpreter and found three more: swapping two numbered panes (twice, once
+  as a voice transcript) and moving a named tab after another (`none`:
+  `swap_panes` swaps the current pane with a neighbour, and `move_tab` moves
+  the current tab).
 - **Spent router held-out sets** (rule `spent`): round 1's fresh held-out text
   set (337 single-job rows; its ambiguous rows are left out) and its 63 voice
   transcripts (Piper speech recognised by the dictation engine). They were
@@ -99,7 +103,8 @@ target to 98.5%, on cross-validation only, before any round-2 held-out row was
 read. On the spent round-1 rows, held out whole, a threshold of 0.55 left 8.1%
 unsure for 2.7% wrong, where 0.70 left 20.0% unsure for 1.4% wrong. After
 review round 2 relabelled 8 rows and the trainer's stop rule changed, the same
-rule selected 0.57; after review round 3 relabelled 6 more, 0.56.
+rule selected 0.57; after review round 3 relabelled 6 more, 0.56; after
+round 4 relabelled 3 more, 0.57 again.
 
 **The folds** are grouped 5-fold:
 - each job eval file and each spent held-out set stays whole, so it measures
@@ -111,6 +116,6 @@ rule selected 0.57; after review round 3 relabelled 6 more, 0.56.
 | Measure | Value |
 |---|---:|
 | Cross-validation accuracy | 96.5% (macro recall 96.4%) |
-| Selected threshold | 0.56 |
-| Rows above the threshold | 94.0% |
-| Accuracy above the threshold | 98.5% |
+| Selected threshold | 0.57 |
+| Rows above the threshold | 93.7% |
+| Accuracy above the threshold | 98.6% |

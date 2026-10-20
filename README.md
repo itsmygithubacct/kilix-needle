@@ -102,7 +102,7 @@ history entry. That entry gains a `route` block.
    character n-grams, TF-IDF, and multinomial logistic regression. It is about
    2 MB of JSON and takes about 0.2 ms per request; with the grammar claims, a
    route takes about 1.5 ms (p95 under 5 ms). It reads only the request text.
-   At probability 0.56 or above, the top job takes the request.
+   At probability 0.57 or above, the top job takes the request.
 3. **Two jobs.** When no grammar reads the whole request and different clauses
    are each read by a different job, nothing runs, however sure the classifier
    is: the job it chose would act on its own clause and drop the other. The

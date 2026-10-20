@@ -5,7 +5,7 @@
 {"request": "rename this tab to deploy", "job": "panes"}
 {"request": "make the current pane wider", "job": "panes"}
 {"request": "maximize pane 2", "job": "panes"}
-{"request": "swap pane 3 with pane 5", "job": "panes"}
+{"request": "swap pane 3 with pane 5", "job": "none"}
 {"request": "arrange the panes in a grid", "job": "panes"}
 {"request": "move this tab to the far left", "job": "panes"}
 {"request": "run make test in the logs pane", "job": "panes"}
@@ -32,7 +32,7 @@
 {"request": "split right and run python3 -m http.server 8000", "job": "panes"}
 {"request": "new tab", "job": "panes"}
 {"request": "close all the other panes except this one", "job": "none"}
-{"request": "move the build tab after the docs tab", "job": "panes"}
+{"request": "move the build tab after the docs tab", "job": "none"}
 {"request": "launch lazygit in a new split on the right", "job": "panes"}
 {"request": "focus the pane on the left", "job": "panes"}
 {"request": "make the editor pane shorter", "job": "panes"}

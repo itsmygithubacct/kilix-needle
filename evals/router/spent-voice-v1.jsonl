@@ -3,7 +3,7 @@
 {"request": "Close the current tab", "job": "panes"}
 {"request": "Rename this tab to Build Server.", "job": "panes"}
 {"request": "Make this pain a little wider", "job": "panes"}
-{"request": "Swap pain two and pain four.", "job": "panes"}
+{"request": "Swap pain two and pain four.", "job": "none"}
 {"request": "Open a new tab and run VIM.", "job": "panes"}
 {"request": "had make test into the logs pane.", "job": "panes"}
 {"request": "Open solitaire in a new tab.", "job": "apps"}

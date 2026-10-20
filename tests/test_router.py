@@ -215,6 +215,44 @@ class Stages(unittest.TestCase):
                                      __import__("app_controls").parse(text) is None, text)
         self.assertNotIn("apps", router.claims("show the clock and hide the clock"))
 
+    def test_the_apps_reading_is_the_requests_own_when_another_caller_replaces_the_cache(self):
+        # Another caller's reading lands in the one-entry cache just after each
+        # one is stored (review round 4): every answer is still its own text's,
+        # and a request with two jobs' work still acts on nothing.
+        import sys
+        other = "hide the clock"
+        replacement = (other, router._apps_reading(other))
+
+        def trace(frame, event, _arg):
+            if frame.f_code is router._apps_admitted.__code__ and event == "line" \
+                    and router._apps_last[0] == frame.f_locals.get("text") != other:
+                router._apps_last = replacement
+            return trace
+
+        def interleaved(call, *args):
+            router._apps_last = (None, None)
+            sys.settrace(trace)
+            try:
+                return call(*args)
+            finally:
+                sys.settrace(None)
+        text = "hide the clock followed by split right"
+        reading, admitted = interleaved(router._apps_admitted, text)
+        self.assertEqual((reading, admitted), router._apps_reading(text))
+        self.assertEqual(len(reading.parts), 2)
+        for text in ("hide the clock followed by split right",
+                     "hide the clock followed by split right and hide the battery",
+                     "hide the clock and battery followed by split right"):
+            route = interleaved(router.route, text)
+            self.assertEqual((route.stage, route.candidates), ("multi", ["panes", "apps"]), text)
+
+    def test_the_apps_reading_is_cached_by_the_exact_text(self):
+        # A text that reads the same after normalising is still its own: over
+        # the length limit, it reads nothing.
+        import apps
+        router._apps_admitted("hide the clock")
+        self.assertEqual(router._apps_admitted("hide" + " " * apps.MAX_REQUEST + "the clock"), (None, []))
+
     def test_the_apps_name_index_finds_every_named_call(self):
         # Against searching every call's every name, over every spent request.
         import re
@@ -267,7 +305,14 @@ class Stages(unittest.TestCase):
                            ("split right\u2028open solitaire", ["panes", "apps"]),
                            ("- close tab 2\n- show memory", ["panes", "system"]),
                            ("\t* split right\n\t* open solitaire", ["panes", "apps"]),
-                           ("  \u2022 close tab 2\n  \u2022 show memory", ["panes", "system"])):
+                           ("  \u2022 close tab 2\n  \u2022 show memory", ["panes", "system"]),
+                           # Any indentation, a checkbox, other bullets.
+                           ("\u1680* close tab 2\n\u1680* show memory", ["panes", "system"]),
+                           ("  - [ ] close tab 2\n  - [x] show memory", ["panes", "system"]),
+                           ("[ ] close tab 2\n[ ] show memory", ["panes", "system"]),
+                           ("  \u25cf close tab 2\n  \u25cf show memory", ["panes", "system"]),
+                           ("+ close tab 2\n+ show memory", ["panes", "system"]),
+                           ("split right&&show memory", ["panes", "system"])):
             route = router.route(text)
             self.assertEqual((route.stage, route.job, route.candidates), ("multi", None, both), text)
         # One job's grammar reading all of it is not two jobs.
@@ -276,8 +321,12 @@ class Stages(unittest.TestCase):
         for quote, end in (("\u201c", "\u201d"), ("`", "`"), ('"', '"'), ("'", "'")):
             text = f"execute {quote}echo hello; show memory; close tab 2; echo done{end} below"
             self.assertEqual(router.route(text).job, "panes", text)
-        text = 'run "echo \\"hello; show memory; close tab 2; done\\"" in the pane on the left'
-        self.assertEqual(router.route(text).job, "panes", text)
+        for text in ('run "echo \\"hello; show memory; close tab 2; done\\"" in the pane on the left',
+                     # a backslash pair is one backslash, not an escaped quote
+                     'execute "echo \\\\hello; show memory; close tab 2; echo done" below',
+                     # $'...' escapes its quote; '...' does not
+                     "run $'echo \\' ; show memory; close tab 2; echo done' in the pane on the left"):
+            self.assertEqual(router.route(text).job, "panes", text)
 
     def test_an_apps_reading_of_another_jobs_clause_is_no_claim(self):
         # The apps grammar reads "split right" as the split-right button; alone,
@@ -291,7 +340,7 @@ class Stages(unittest.TestCase):
                      "hide the clock \U0001d69d\U0001d691\U0001d68e\U0001d697 split right",
                      # As the apps grammar divides it, and a shell's "&&".
                      "hide the clock followed by split right", "hide the clock: split right",
-                     "close tab 2 && hide the clock"):
+                     "close tab 2 && hide the clock", "close tab 2&&hide the clock"):
             route = router.route(text)
             self.assertEqual((route.stage, route.job, route.candidates), ("multi", None, ["panes", "apps"]), text)
         # Naming the button is the apps job's.
@@ -376,8 +425,15 @@ class Stages(unittest.TestCase):
                  # NFKC, as the grammars read it; a shell's "&&".
                  "hide the clock \uff54\uff48\uff45\uff4e split right": ["hide the clock", "split right"],
                  "close tab 2 && hide the clock": ["close tab 2", "hide the clock"],
+                 "close tab 2&&hide the clock": ["close tab 2", "hide the clock"],
                  # A backslash escapes a quote inside one.
                  'run "echo \\"a; show memory\\"" below': ['run "echo \\"a; show memory\\"" below'],
+                 'run "echo \\\\a; show memory" below': ['run "echo \\\\a; show memory" below'],
+                 "run $'a\\'; show memory' below": ["run $'a\\'; show memory' below"],
+                 # Any indentation before a bullet, and a checkbox after it.
+                 "\u1680* close tab 2\n\u1680* show memory": ["close tab 2", "show memory"],
+                 "  - [ ] close tab 2\n  - [x] show memory": ["close tab 2", "show memory"],
+                 "  \u25cf close tab 2\n  \u25cb show memory": ["close tab 2", "show memory"],
                  # Every kind of quote is one payload.
                  "execute \u201cecho hello; show memory; close tab 2\u201d below":
                      ["execute \u201cecho hello; show memory; close tab 2\u201d below"],
