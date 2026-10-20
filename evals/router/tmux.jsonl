@@ -1,0 +1,180 @@
+{"request": "list the tmux sessions", "job": "tmux"}
+{"request": "what tmux sessions are running", "job": "tmux"}
+{"request": "show all sessions on the tmux server", "job": "tmux"}
+{"request": "which tmux sessions exist on the socket /tmp/ci.sock", "job": "tmux"}
+{"request": "tmux ls", "job": "tmux"}
+{"request": "Enumerate the sessions on the private tmux socket so I can find the one running the nightly job.", "job": "tmux"}
+{"request": "any tmux sessions up right now?", "job": "tmux"}
+{"request": "show me the tmux session names and pane ids", "job": "tmux"}
+{"request": "I need the exact session IDs from tmux before I send anything to them", "job": "tmux"}
+{"request": "start a new tmux session called build", "job": "tmux"}
+{"request": "new session deploy in /srv/app", "job": "tmux"}
+{"request": "create a tmux session named scratch", "job": "tmux"}
+{"request": "open a new tmux session review in /home/pleb/work/kilix", "job": "tmux"}
+{"request": "spin up a detached tmux session for the tests, call it unit-tests", "job": "tmux"}
+{"request": "Create a tmux session named agent_run1 with its shell in /tmp/sandbox, then I'll attach to it later.", "job": "tmux"}
+{"request": "please make a new session called logs-watch in tmux", "job": "tmux"}
+{"request": "tmux new session demo", "job": "tmux"}
+{"request": "start session worker-2 in /opt/jobs", "job": "tmux"}
+{"request": "new tmux session called monitoring", "job": "tmux"}
+{"request": "read the build session", "job": "tmux"}
+{"request": "show me the last 50 lines of the tmux session build", "job": "tmux"}
+{"request": "capture the pane %3 from tmux", "job": "tmux"}
+{"request": "read session 0 in tmux", "job": "tmux"}
+{"request": "what's on the screen in the tmux session deploy?", "job": "tmux"}
+{"request": "read the last 200 lines from build:0.1", "job": "tmux"}
+{"request": "dump the output of tmux pane %12, 120 lines", "job": "tmux"}
+{"request": "Capture the last 80 lines of the tmux session ci-run to check whether the tests have finished.", "job": "tmux"}
+{"request": "see what the compile session printed, tmux, last 30 lines", "job": "tmux"}
+{"request": "has the build finished? read it from tmux", "job": "tmux"}
+{"request": "show 15 lines from pane %7", "job": "tmux"}
+{"request": "read tmux session $2", "job": "tmux"}
+{"request": "peek at the tmux session called web and tell me the last 40 lines", "job": "tmux"}
+{"request": "check what the server session in tmux is showing", "job": "tmux"}
+{"request": "get the latest output from tmux target dev:1.0", "job": "tmux"}
+{"request": "capture 500 lines of the tmux pane %0", "job": "tmux"}
+{"request": "send 'git status' to the tmux session build", "job": "tmux"}
+{"request": "send \"make test;\" to pane %3 without pressing enter", "job": "tmux"}
+{"request": "put the text 'echo hello' into tmux session scratch but don't submit it", "job": "tmux"}
+{"request": "send `ls -la` to build:0.0", "job": "tmux"}
+{"request": "insert \"cargo build --release\" into the tmux pane %5, no enter", "job": "tmux"}
+{"request": "type the string 'tail -f app.log' into tmux session logs without enter", "job": "tmux"}
+{"request": "Send the literal text 'export FOO=bar' to the tmux session deploy, leaving it pending at the prompt.", "job": "tmux"}
+{"request": "send \"y\" to session 0 in tmux", "job": "tmux"}
+{"request": "stage 'python train.py --epochs 3' in the tmux session train", "job": "tmux"}
+{"request": "send 'cd /srv/app' to the tmux session $1", "job": "tmux"}
+{"request": "paste \"npm run lint\" into the tmux pane review:0.0 and leave it unsubmitted", "job": "tmux"}
+{"request": "send 'pytest -x' to the session called unit-tests", "job": "tmux"}
+{"request": "tmux send \"htop\" to monitoring", "job": "tmux"}
+{"request": "type 'make clean' in the tmux session build", "job": "tmux"}
+{"request": "type \"/status\" in tmux session codex-run", "job": "tmux"}
+{"request": "run 'ls' in the tmux session scratch and press enter", "job": "tmux"}
+{"request": "in tmux pane %4, type 'git pull' and submit it", "job": "tmux"}
+{"request": "type and press enter 'docker compose up -d' in the deploy session", "job": "tmux"}
+{"request": "Type 'go test ./...' into the tmux session ci-run and hit enter.", "job": "tmux"}
+{"request": "execute 'uptime' in tmux session 0", "job": "tmux"}
+{"request": "enter the command 'npm test' in tmux pane build:0.1", "job": "tmux"}
+{"request": "type `exit` in the tmux target worker and submit", "job": "tmux"}
+{"request": "tmux: type 'sudo apt update' in session maint and press Enter", "job": "tmux"}
+{"request": "I want the tmux session web to run 'systemctl status nginx', so type it there and submit.", "job": "tmux"}
+{"request": "in the tmux session logs type 'journalctl -f' then enter", "job": "tmux"}
+{"request": "type \"y\" into the pane %9 of tmux", "job": "tmux"}
+{"request": "press Enter in the tmux session build", "job": "tmux"}
+{"request": "press Ctrl-C in the tmux session server", "job": "tmux"}
+{"request": "send C-c to pane %3", "job": "tmux"}
+{"request": "hit Escape in tmux pane editor:0.0", "job": "tmux"}
+{"request": "press Up and Enter in the tmux session build", "job": "tmux"}
+{"request": "send the keys C-c Enter to tmux session worker", "job": "tmux"}
+{"request": "tap Tab twice in the tmux pane %2", "job": "tmux"}
+{"request": "Interrupt the process in tmux session ci-run by sending C-c.", "job": "tmux"}
+{"request": "send PageUp to session 0 in tmux", "job": "tmux"}
+{"request": "press C-d in tmux session scratch to log out of the shell", "job": "tmux"}
+{"request": "clear the screen in the tmux session build with C-l", "job": "tmux"}
+{"request": "hit Enter on the pending line in tmux %4", "job": "tmux"}
+{"request": "press Down Down Enter in the tmux session installer", "job": "tmux"}
+{"request": "send Space to the tmux session player", "job": "tmux"}
+{"request": "key C-u in tmux pane dev:0.0 to wipe the line", "job": "tmux"}
+{"request": "rename the tmux session build to review", "job": "tmux"}
+{"request": "rename session scratch to experiments", "job": "tmux"}
+{"request": "call tmux session $0 main instead", "job": "tmux"}
+{"request": "rename the session deploy to deploy-prod", "job": "tmux"}
+{"request": "change the name of tmux session worker to worker-old", "job": "tmux"}
+{"request": "Rename the tmux session ci-run to ci-run-done now that it has finished.", "job": "tmux"}
+{"request": "tmux rename session 0 to notes", "job": "tmux"}
+{"request": "give the tmux session unit-tests the new name tests_final", "job": "tmux"}
+{"request": "rename session logs to logs-archive", "job": "tmux"}
+{"request": "close the tmux session scratch", "job": "tmux"}
+{"request": "kill the session build", "job": "tmux"}
+{"request": "close session review", "job": "tmux"}
+{"request": "tear down the tmux session deploy", "job": "tmux"}
+{"request": "get rid of tmux session $3", "job": "tmux"}
+{"request": "the tmux session experiments is finished, close it", "job": "tmux"}
+{"request": "Close the tmux session ci-run-done on the socket /tmp/ci.sock; I have its output already.", "job": "tmux"}
+{"request": "kill tmux session worker-old", "job": "tmux"}
+{"request": "please close session monitoring", "job": "tmux"}
+{"request": "tmux close session demo", "job": "tmux"}
+{"request": "end the tmux session called tests_final", "job": "tmux"}
+{"request": "which sessions does the tmux server on /run/user/1000/agents.sock have?", "job": "tmux"}
+{"request": "tmux server at /tmp/kn-test.sock: list what's there", "job": "tmux"}
+{"request": "using socket /tmp/team.sock, create session pairing", "job": "tmux"}
+{"request": "on /tmp/ci.sock read the session nightly, last 60 lines", "job": "tmux"}
+{"request": "on the private socket /var/tmp/agent.sock send 'ls' to session a1", "job": "tmux"}
+{"request": "Use the tmux socket /tmp/review.sock to press Enter in session reviewer.", "job": "tmux"}
+{"request": "tmux socket /tmp/x.sock: close session old-run", "job": "tmux"}
+{"request": "the tmux session build, what does it say", "job": "tmux"}
+{"request": "what is session 0 in tmux doing", "job": "tmux"}
+{"request": "look at session 0 in tmux", "job": "tmux"}
+{"request": "is the tmux session train still running anything? show its last lines", "job": "tmux"}
+{"request": "give me the tail of the tmux session pipeline, 25 lines", "job": "tmux"}
+{"request": "I started a long job in the tmux session batch, read its output", "job": "tmux"}
+{"request": "read the output from the tmux target compile:0.2", "job": "tmux"}
+{"request": "grab the last 10 lines of the dev session in tmux", "job": "tmux"}
+{"request": "snapshot of the tmux pane %1 please", "job": "tmux"}
+{"request": "have a look at what the tmux session migration printed", "job": "tmux"}
+{"request": "new tmux session called ops, start it in /etc/nginx", "job": "tmux"}
+{"request": "make session api-tests in tmux working in /home/pleb/src/api", "job": "tmux"}
+{"request": "begin a tmux session named gpu_burn", "job": "tmux"}
+{"request": "start another tmux session, name it spare", "job": "tmux"}
+{"request": "Spawn a tmux session sandbox2 so the agent has an isolated shell to run the migration in.", "job": "tmux"}
+{"request": "I need a fresh tmux session called triage in /tmp/triage", "job": "tmux"}
+{"request": "send 'tail -n 100 /var/log/syslog' to session logs", "job": "tmux"}
+{"request": "send \"echo done\" to %8", "job": "tmux"}
+{"request": "write 'ssh build-host' into tmux pane jump:0.0, don't run it", "job": "tmux"}
+{"request": "send 'make -j8' to the tmux session compile and wait for me to confirm", "job": "tmux"}
+{"request": "send the text 'select * from jobs limit 5;' to tmux session db without enter", "job": "tmux"}
+{"request": "put \"git rebase -i HEAD~3\" at the prompt of tmux session vcs", "job": "tmux"}
+{"request": "type 'cat results.txt' in the tmux session analysis", "job": "tmux"}
+{"request": "type `./run_eval.sh` into tmux session eval and press enter", "job": "tmux"}
+{"request": "Run 'df -h' in tmux session ops. Type it and submit.", "job": "tmux"}
+{"request": "type \"clear\" in tmux %0", "job": "tmux"}
+{"request": "type 'ls /tmp' in the tmux session $1 and submit it", "job": "tmux"}
+{"request": "have the tmux session builder run 'ninja -C out' by typing it and pressing enter", "job": "tmux"}
+{"request": "enter 'whoami' in the tmux pane ops:0.0", "job": "tmux"}
+{"request": "press Enter in pane %11 of the tmux server", "job": "tmux"}
+{"request": "send Ctrl-C to the job in the tmux session render", "job": "tmux"}
+{"request": "stop the foreground program in tmux session sweeper with C-c", "job": "tmux"}
+{"request": "press End in the tmux session pager", "job": "tmux"}
+{"request": "send BSpace three times to tmux session typo", "job": "tmux"}
+{"request": "hit Delete in tmux pane %5", "job": "tmux"}
+{"request": "tmux: press Left Left Left in session editor", "job": "tmux"}
+{"request": "send Right to session menu in tmux", "job": "tmux"}
+{"request": "press C-a in the tmux session shell1", "job": "tmux"}
+{"request": "press C-e in tmux pane shell1:0.0", "job": "tmux"}
+{"request": "Send Tab then Enter to the tmux session completer.", "job": "tmux"}
+{"request": "rename tmux session $2 to benchmark", "job": "tmux"}
+{"request": "relabel the tmux session unit-tests as unit-tests-v2", "job": "tmux"}
+{"request": "rename the session tmp1 to cleanup", "job": "tmux"}
+{"request": "name tmux session $4 as archive_2026", "job": "tmux"}
+{"request": "change tmux session web into web-staging", "job": "tmux"}
+{"request": "the session called dev should be renamed to dev-old, in tmux", "job": "tmux"}
+{"request": "Rename the tmux session agent_run1 to agent_run1_final after the run completes.", "job": "tmux"}
+{"request": "close the tmux session with id $5", "job": "tmux"}
+{"request": "shut down session test-old in tmux", "job": "tmux"}
+{"request": "kill the session called tmp1", "job": "tmux"}
+{"request": "I'm done with the tmux session pairing, close it", "job": "tmux"}
+{"request": "delete tmux session archive_2026", "job": "tmux"}
+{"request": "close out the tmux session gpu_burn please", "job": "tmux"}
+{"request": "Kill the tmux session sandbox2; the migration succeeded and nothing needs it.", "job": "tmux"}
+{"request": "lst the tmux sessions", "job": "tmux"}
+{"request": "raed the tmux session build", "job": "tmux"}
+{"request": "clsoe tmux session demo", "job": "tmux"}
+{"request": "pls press enter in tmux session build", "job": "tmux"}
+{"request": "list tmux sessions pls", "job": "tmux"}
+{"request": "could you read the last 20 lines of the tmux session dev?", "job": "tmux"}
+{"request": "can you close the tmux session review", "job": "tmux"}
+{"request": "would you type 'pwd' in the tmux session shell1?", "job": "tmux"}
+{"request": "show tmux sessions and their panes", "job": "tmux"}
+{"request": "give me the pane ids for every tmux session", "job": "tmux"}
+{"request": "check the tmux session pipeline for the final test summary and show the last 100 lines", "job": "tmux"}
+{"request": "Read what the second pane of tmux session dev printed: target dev:0.1, 40 lines.", "job": "tmux"}
+{"request": "tmux session logs: show 60 lines", "job": "tmux"}
+{"request": "send 'q' to the tmux session pager", "job": "tmux"}
+{"request": "send 'n' to session installer in tmux, no enter", "job": "tmux"}
+{"request": "type 'y' in tmux session installer and press Enter", "job": "tmux"}
+{"request": "type 'yes' in the tmux session confirm", "job": "tmux"}
+{"request": "send \"password-prompt-test\" to tmux session auth without submitting", "job": "tmux"}
+{"request": "In the tmux session codex-run, type 'continue' and press Enter so the agent proceeds.", "job": "tmux"}
+{"request": "The agent in tmux session claude-run is waiting. Press Enter there.", "job": "tmux"}
+{"request": "Check the tmux session claude-run; read its last 30 lines to see if it is waiting for input.", "job": "tmux"}
+{"request": "Open a new tmux session named grok-run in /home/pleb/gpu_terminal/kilix, I'll start the agent in it myself.", "job": "tmux"}
+{"request": "show me the sessions the tmux server on /tmp/agents.sock is holding", "job": "tmux"}

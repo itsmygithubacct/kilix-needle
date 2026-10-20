@@ -1,0 +1,260 @@
+{"request": "who painted the Mona Lisa", "job": "none"}
+{"request": "what's the boiling point of water at altitude?", "job": "none"}
+{"request": "explain the difference between TCP and a unix socket", "job": "none"}
+{"request": "why is the sky blue", "job": "none"}
+{"request": "good evening, how are you?", "job": "none"}
+{"request": "that was a long meeting", "job": "none"}
+{"request": "lol I just realized what the bug was", "job": "none"}
+{"request": "how many days are in a leap year", "job": "none"}
+{"request": "what's the capital of Canada?", "job": "none"}
+{"request": "can you recommend a podcast about space", "job": "none"}
+{"request": "what does idempotent mean", "job": "none"}
+{"request": "explain big O notation in plain words", "job": "none"}
+{"request": "what is the difference between a process and a thread?", "job": "none"}
+{"request": "Explain what a pty is, conceptually.", "job": "none"}
+{"request": "what is tmux used for", "job": "none"}
+{"request": "what does the -r flag do in rsync", "job": "none"}
+{"request": "which is faster, quicksort or mergesort, on average?", "job": "none"}
+{"request": "give me a limerick about a lazy compiler", "job": "none"}
+{"request": "what rhymes with orange", "job": "none"}
+{"request": "I'm feeling a bit tired today", "job": "none"}
+{"request": "nice weather we're having", "job": "none"}
+{"request": "ok thanks, that's all I needed", "job": "none"}
+{"request": "you rock", "job": "none"}
+{"request": "brb, phone call", "job": "none"}
+{"request": "sorry, wrong window", "job": "none"}
+{"request": "never mind", "job": "none"}
+{"request": "hmm interesting", "job": "none"}
+{"request": "what year did the Berlin Wall fall?", "job": "none"}
+{"request": "how many minutes in a week", "job": "none"}
+{"request": "what is 144 divided by 12", "job": "none"}
+{"request": "what's 15 percent of 80?", "job": "none"}
+{"request": "translate 'thank you' into Japanese", "job": "none"}
+{"request": "how do you say good night in Italian", "job": "none"}
+{"request": "what's a synonym for ephemeral", "job": "none"}
+{"request": "is a tomato a fruit?", "job": "none"}
+{"request": "how far away is the moon", "job": "none"}
+{"request": "who discovered penicillin?", "job": "none"}
+{"request": "how does a transistor work", "job": "none"}
+{"request": "suggest a name for my sourdough starter", "job": "none"}
+{"request": "what should I cook tonight, I have chicken and rice", "job": "none"}
+{"request": "give me three tips for staying focused", "job": "none"}
+{"request": "what's a good stretch for lower back pain", "job": "none"}
+{"request": "how long does it take to learn piano", "job": "none"}
+{"request": "what's the plot of Hamlet in two sentences?", "job": "none"}
+{"request": "recommend a movie for a rainy day", "job": "none"}
+{"request": "is it better to rebase or merge, philosophically speaking?", "job": "none"}
+{"request": "what does the acronym YAML stand for", "job": "none"}
+{"request": "what is the CAP theorem", "job": "none"}
+{"request": "explain dependency injection like I'm five", "job": "none"}
+{"request": "what's the difference between git fetch and git pull", "job": "none"}
+{"request": "what does chmod 755 mean?", "job": "none"}
+{"request": "why do programmers prefer dark mode", "job": "none"}
+{"request": "What are the pros and cons of Rust versus Go for CLIs?", "job": "none"}
+{"request": "Which sorting algorithm does Python's list.sort use?", "job": "none"}
+{"request": "How should I structure a README for a small library?", "job": "none"}
+{"request": "Summarize the plot of The Hobbit in one paragraph.", "job": "none"}
+{"request": "What is the time zone of Mumbai?", "job": "none"}
+{"request": "What's the etymology of the word 'kernel'?", "job": "none"}
+{"request": "Is it okay to use tabs instead of spaces?", "job": "none"}
+{"request": "wow that took forever", "job": "none"}
+{"request": "this song is stuck in my head", "job": "none"}
+{"request": "i need a vacation", "job": "none"}
+{"request": "it's raining again", "job": "none"}
+{"request": "where did I put my glasses", "job": "none"}
+{"request": "are you there", "job": "none"}
+{"request": "what can you do?", "job": "none"}
+{"request": "do you ever get tired of questions", "job": "none"}
+{"request": "what's your favorite color", "job": "none"}
+{"request": "tell me something interesting about octopuses", "job": "none"}
+{"request": "how many legs does a spider have", "job": "none"}
+{"request": "what is the speed of light in km/s", "job": "none"}
+{"request": "why do cats purr", "job": "none"}
+{"request": "which planet has the most moons?", "job": "none"}
+{"request": "what did Ada Lovelace work on", "job": "none"}
+{"request": "what's the tallest mountain in Africa", "job": "none"}
+{"request": "how do vaccines work", "job": "none"}
+{"request": "what's the difference between weather and climate?", "job": "none"}
+{"request": "name five countries in South America", "job": "none"}
+{"request": "what's the square root of 2025", "job": "none"}
+{"request": "how many ounces in a pound", "job": "none"}
+{"request": "convert 100 km/h to mph", "job": "none"}
+{"request": "give me a mnemonic for the planets", "job": "none"}
+{"request": "what's a good icebreaker question for a team meeting", "job": "none"}
+{"request": "draft a polite way to say no to a meeting invite", "job": "none"}
+{"request": "what's the opposite of 'verbose'", "job": "none"}
+{"request": "pun about databases?", "job": "none"}
+{"request": "do penguins have knees", "job": "none"}
+{"request": "good night!", "job": "none"}
+{"request": "thanks a million", "job": "none"}
+{"request": "excellent, we're done here", "job": "none"}
+{"request": "alright, that makes sense", "job": "none"}
+{"request": "the demo went well today", "job": "none"}
+{"request": "whoa, the deploy is finally finished", "job": "none"}
+{"request": "this refactor is making my head spin", "job": "none"}
+{"request": "what's the story behind the name Linux?", "job": "none"}
+{"request": "is Python compiled or interpreted", "job": "none"}
+{"request": "explain monads using a cooking analogy", "job": "none"}
+{"request": "what is the meaning of life", "job": "none"}
+{"request": "Why does DNS use UDP port 53?", "job": "none"}
+{"request": "What is a segfault, in general?", "job": "none"}
+{"request": "How does garbage collection work in Java?", "job": "none"}
+{"request": "What are good names for a variable that holds a retry count?", "job": "none"}
+{"request": "What does 'idempotent' mean for an HTTP PUT?", "job": "none"}
+{"request": "Explain what an LLM context window is.", "job": "none"}
+{"request": "What is the difference between a mutex and a semaphore?", "job": "none"}
+{"request": "what does the number 42 mean in hitchhiker's guide", "job": "none"}
+{"request": "when was the first iPhone released", "job": "none"}
+{"request": "which came first, the chicken or the egg", "job": "none"}
+{"request": "how do I politely decline a job offer?", "job": "none"}
+{"request": "how do bees make honey", "job": "none"}
+{"request": "what's the best way to learn a new language", "job": "none"}
+{"request": "what's the longest river in Europe?", "job": "none"}
+{"request": "what happens when you divide by zero", "job": "none"}
+{"request": "how many continents are there", "job": "none"}
+{"request": "how late is it in Sydney if it's noon in London", "job": "none"}
+{"request": "what are the primary colors?", "job": "none"}
+{"request": "what's the plural of octopus", "job": "none"}
+{"request": "Is it safe to leave rice out overnight?", "job": "none"}
+{"request": "whats a good bedtime story for a 5 year old", "job": "none"}
+{"request": "how do tides work", "job": "none"}
+{"request": "what does a product manager do", "job": "none"}
+{"request": "what's the difference between affect and effect", "job": "none"}
+{"request": "what's your take on tabs vs spaces", "job": "none"}
+{"request": "how are you feeling today, honestly", "job": "none"}
+{"request": "have a nice weekend", "job": "none"}
+{"request": "install nginx", "job": "none"}
+{"request": "apt install ripgrep", "job": "none"}
+{"request": "uninstall firefox from this machine", "job": "none"}
+{"request": "remove the htop package", "job": "none"}
+{"request": "update all my packages", "job": "none"}
+{"request": "upgrade the system to the newest release", "job": "none"}
+{"request": "pip install requests", "job": "none"}
+{"request": "npm install express in the project", "job": "none"}
+{"request": "please install docker and set it up for me", "job": "none"}
+{"request": "download and install the latest Node.js", "job": "none"}
+{"request": "kill pid 31337 right now", "job": "none"}
+{"request": "kill whatever is using port 8080", "job": "none"}
+{"request": "terminate the chrome process eating my memory", "job": "none"}
+{"request": "pkill -f python", "job": "none"}
+{"request": "restart nginx", "job": "none"}
+{"request": "restart the docker service", "job": "none"}
+{"request": "stop the cron service", "job": "none"}
+{"request": "enable ssh at boot", "job": "none"}
+{"request": "systemctl disable bluetooth", "job": "none"}
+{"request": "reboot the machine", "job": "none"}
+{"request": "turn the whole machine off now", "job": "none"}
+{"request": "power off in 10 minutes", "job": "none"}
+{"request": "put the laptop to sleep", "job": "none"}
+{"request": "sign me out of my user session", "job": "none"}
+{"request": "lock the screen", "job": "none"}
+{"request": "delete the file scratch.log from my home folder", "job": "none"}
+{"request": "rm -rf the build directory", "job": "none"}
+{"request": "empty the trash", "job": "none"}
+{"request": "clean out my Downloads folder", "job": "none"}
+{"request": "move report.pdf from Downloads to Documents", "job": "none"}
+{"request": "rename draft.md to final.md", "job": "none"}
+{"request": "copy ~/notes to ~/backup", "job": "none"}
+{"request": "zip up the research folder", "job": "none"}
+{"request": "make a new directory called experiments", "job": "none"}
+{"request": "create a file todo.txt with three items in it", "job": "none"}
+{"request": "edit config.yaml and set debug to true", "job": "none"}
+{"request": "fix the typo in the README", "job": "none"}
+{"request": "append a line to ~/.bashrc that sets EDITOR to vim", "job": "none"}
+{"request": "chmod +x deploy.sh", "job": "none"}
+{"request": "write the output to results.txt", "job": "none"}
+{"request": "overwrite hosts with the new entries", "job": "none"}
+{"request": "git commit all changes with the message 'wip'", "job": "none"}
+{"request": "push the branch to origin", "job": "none"}
+{"request": "git checkout main and pull", "job": "none"}
+{"request": "rebase my branch onto main", "job": "none"}
+{"request": "create a new git branch called feature-x", "job": "none"}
+{"request": "undo my last commit", "job": "none"}
+{"request": "open a pull request for this branch", "job": "none"}
+{"request": "merge the hotfix branch", "job": "none"}
+{"request": "git stash my changes", "job": "none"}
+{"request": "tag the release v1.2.0", "job": "none"}
+{"request": "send an email to Sam saying I'll be late", "job": "none"}
+{"request": "email the quarterly report to the whole team", "job": "none"}
+{"request": "text my wife that I'm on my way", "job": "none"}
+{"request": "post a message in the dev channel on Slack", "job": "none"}
+{"request": "reply to the last email from my manager", "job": "none"}
+{"request": "schedule a meeting with Priya for Thursday at 2", "job": "none"}
+{"request": "call my dentist", "job": "none"}
+{"request": "set an alarm for 7am", "job": "none"}
+{"request": "remind me to take out the trash tonight", "job": "none"}
+{"request": "add milk to my shopping list", "job": "none"}
+{"request": "buy a USB-C cable on Amazon", "job": "none"}
+{"request": "order a pizza from the place down the street", "job": "none"}
+{"request": "book a table for two at 8pm", "job": "none"}
+{"request": "buy me a ticket to Berlin for next Friday", "job": "none"}
+{"request": "go to news.ycombinator.com and read me the top story", "job": "none"}
+{"request": "search the web for cheap flights to Lisbon", "job": "none"}
+{"request": "open YouTube and play lo-fi beats", "job": "none"}
+{"request": "look up the weather forecast for the weekend", "job": "none"}
+{"request": "browse to github.com and star the repo", "job": "none"}
+{"request": "find me the best price for a mechanical keyboard", "job": "none"}
+{"request": "download the latest Ubuntu ISO", "job": "none"}
+{"request": "write a Python function that reverses a linked list", "job": "none"}
+{"request": "write a bash script that backs up my home directory", "job": "none"}
+{"request": "implement a binary search in Rust", "job": "none"}
+{"request": "write unit tests for my parser module", "job": "none"}
+{"request": "generate a regex that matches IPv4 addresses", "job": "none"}
+{"request": "refactor this function to use async await", "job": "none"}
+{"request": "write a SQL query that finds duplicate emails", "job": "none"}
+{"request": "create a REST API in Flask with two endpoints", "job": "none"}
+{"request": "write a Dockerfile for a Node app", "job": "none"}
+{"request": "debug this stack trace for me", "job": "none"}
+{"request": "write a haiku about merge conflicts", "job": "none"}
+{"request": "write a cover letter for a backend developer role", "job": "none"}
+{"request": "proofread this paragraph for me", "job": "none"}
+{"request": "set my wallpaper to something calming", "job": "none"}
+{"request": "turn the screen brightness down", "job": "none"}
+{"request": "change the system language to German", "job": "none"}
+{"request": "connect to the office wifi", "job": "none"}
+{"request": "turn on bluetooth", "job": "none"}
+{"request": "enable dark mode in GNOME", "job": "none"}
+{"request": "set the system timezone to UTC", "job": "none"}
+{"request": "change my password", "job": "none"}
+{"request": "add a new user account for my brother", "job": "none"}
+{"request": "set the default browser to Firefox", "job": "none"}
+{"request": "mount the USB drive", "job": "none"}
+{"request": "format the SD card as ext4", "job": "none"}
+{"request": "enable the firewall and open port 443", "job": "none"}
+{"request": "change the keyboard layout to Dvorak", "job": "none"}
+{"request": "mute the speakers", "job": "none"}
+{"request": "set the mouse speed to fast in system settings", "job": "none"}
+{"request": "clear my browser cache", "job": "none"}
+{"request": "ssh into the staging server and restart the app", "job": "none"}
+{"request": "deploy the latest build to production", "job": "none"}
+{"request": "run the database migration on prod", "job": "none"}
+{"request": "scale the kubernetes deployment to 5 replicas", "job": "none"}
+{"request": "add a cron job that runs backup.sh every night", "job": "none"}
+{"request": "Please install the missing package and re-run the failing build.", "job": "none"}
+{"request": "Edit src/plan.rs so the fallback path returns an error, then commit it.", "job": "none"}
+{"request": "Write a CHANGELOG entry for this release and save it to CHANGELOG.md.", "job": "none"}
+{"request": "Kill the runaway python process and free the port.", "job": "none"}
+{"request": "Run the full test suite and fix whatever fails.", "job": "none"}
+{"request": "Restart the web service once the deploy is done.", "job": "none"}
+{"request": "Send the build summary to the #releases channel when you finish.", "job": "none"}
+{"request": "Open an issue on GitHub titled 'router misses second clause'.", "job": "none"}
+{"request": "Create a pull request with the diff and request review from the team.", "job": "none"}
+{"request": "Install the dependencies listed in requirements.txt into a fresh venv.", "job": "none"}
+{"request": "Delete the stale branches from the remote.", "job": "none"}
+{"request": "Format all Python files with black.", "job": "none"}
+{"request": "Bump the version in Cargo.toml to 0.4.0.", "job": "none"}
+{"request": "Translate the README into French and write it to README.fr.md.", "job": "none"}
+{"request": "Remove the unused imports across the project.", "job": "none"}
+{"request": "Create a systemd unit for the worker and enable it.", "job": "none"}
+{"request": "Uninstall the old kernel versions to free some space.", "job": "none"}
+{"request": "Rotate the log files and truncate the big one.", "job": "none"}
+{"request": "Reset my git history to the first commit.", "job": "none"}
+{"request": "Back up the database to S3.", "job": "none"}
+{"request": "Update the DNS record to point to the new server.", "job": "none"}
+{"request": "Pair my headphones with the laptop.", "job": "none"}
+{"request": "purchase the annual subscription", "job": "none"}
+{"request": "add a calendar event for lunch with Dana tomorrow", "job": "none"}
+{"request": "Order two more monitors for the team on the company card.", "job": "none"}
+{"request": "write me a bash one-liner to rename all jpgs to lowercase", "job": "none"}
+{"request": "format my disk", "job": "none"}
+{"request": "drop the users table in the dev database", "job": "none"}

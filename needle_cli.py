@@ -1,6 +1,8 @@
 """kilix-needle: plain requests to Kilix, one job per kind of request.
 
-    kilix-needle close the pane titled build        # panes (this command)
+    kilix-needle is docker running                  # no job named: routed (ask)
+    kilix-needle ask --plan "open the pdf viewer"   # routed, with the route shown
+    kilix-needle panes close the pane titled build  # panes and tabs
     kilix-needle agents "start codex in /abs/dir"   # coding-agent sessions
     kilix-needle apps "open the pdf viewer"         # apps, games, settings
     kilix-needle system "is jq installed"           # read-only machine state
@@ -10,6 +12,10 @@
     kilix-needle pty 'list sessions'                # persistent pane sessions
     kilix-needle desktop --list                    # X11 desktop action experiment
     kilix-needle action --yes --request-json -     # structured, no model
+
+With no job named, a request is routed (ask.py): the job whose own grammar
+reads it exactly, or the one the local router is sure of, runs it unchanged;
+when unsure, nothing runs and the record names the candidate jobs.
 
 Agents: act directly with `--agent --json --yes`. A refused request runs
 nothing, so a `--dry-run` first only adds a call; a refused record carries
@@ -748,6 +754,36 @@ def _handle_system(args, request: str, modes: dict) -> int:
     return handle(classify, request, **modes, model_label=lambda: source["label"])
 
 
+def _handle_routed(args, panes_engine, request: str, modes: dict) -> int:
+    """The no-verb default: route the request (ask.py) and run the chosen job.
+
+    This entry point always meant the panes job, so when the router is unsure
+    the panes job answers, as it did before routing; only a sure route (stage 0
+    or 1) sends the request elsewhere. A panes route prints exactly what the
+    panes job prints; JSON gains `route`."""
+    import ask
+    import router
+    routed_jobs, stack = ask.cli_jobs(args, interactive=False, engines={"panes": panes_engine})
+    with stack:
+        try:
+            route = router.route(request)
+        except Exception as error:      # noqa: BLE001 - unsure: the panes job answers
+            route = router.Route("error", None, note=f"router failed: {type(error).__name__}")
+        if route.stage not in (0, 1):
+            route.note = "unsure; the no-verb default answers with the panes job"
+            route.job, route.stage = "panes", "default"
+        record = ask.ask(request, routed_jobs, act=not modes["dry_run"],
+                         assume_yes=modes["assume_yes"], route=route)
+    route = record.get("route") or {}
+    if modes["as_json"]:
+        print(json.dumps(record, ensure_ascii=False))
+    elif route.get("job") == "panes" and route.get("stage") in (0, 1, "default"):
+        print(render(record))
+    else:
+        print(ask.render(record))
+    return record["status"]
+
+
 def _offer_tuning(args) -> None:
     """After the first install, at a terminal only: offer to fine-tune in the background."""
     missing = asset.missing_for_tuning(getattr(args, "root", None))
@@ -820,6 +856,9 @@ def main(argv: list[str] | None = None) -> int:
     if argv[:1] == ["workflows"]:
         from workflows import main as workflows_main
         return workflows_main(argv[1:])
+    if argv[:1] == ["ask"]:
+        import ask
+        return ask.main(argv[1:])
     if argv[:1] == ["action"]:
         from action_cli import main as action_main
         return action_main(argv[1:])
@@ -914,7 +953,11 @@ def main(argv: list[str] | None = None) -> int:
         return mcp_server.serve(lambda job=jobs.DEFAULT: open_runtime(args, job=job), tools=args.tools, desktop_parser=args.desktop_parser)
 
     job = jobs.DEFAULT
-    if argv[:1] == ["apps"]:
+    # No job named: the request is routed (ask.py). `panes` names the panes job.
+    routed = True
+    if argv[:1] == ["panes"]:
+        job, argv, routed = "panes", argv[1:], False
+    elif argv[:1] == ["apps"]:
         # Launch Kilix apps and games and change Kilix settings (the apps job).
         job, argv = "apps", argv[1:]
     elif argv[:1] == ["agents"]:
@@ -922,13 +965,14 @@ def main(argv: list[str] | None = None) -> int:
         job, argv = "agents", argv[1:]
     elif argv[:1] == ["system"]:
         job, argv = "system", argv[1:]
+    routed = routed and job == jobs.DEFAULT
     agents_help = ("Directory resolution order: an explicit ~/ or absolute path; 'here' "
                    "(the calling pane's directory); exact entries in "
                    "~/.config/kilix-needle/dirs.json; then a unique exact checkout name "
                    "across all scanned depths under ~/gpu_terminal or ~/research (to depth "
                    "3). Names shorter than 3 characters are not scanned. dirs.json is a "
                    "JSON object mapping request names and aliases to absolute paths.")
-    parser = argparse.ArgumentParser(prog=f"kilix-needle {job}" if job != "panes" else "kilix-needle",
+    parser = argparse.ArgumentParser(prog="kilix-needle" if routed else f"kilix-needle {job}",
                                      description=__doc__,
                                      epilog=agents_help if job == "agents" else None,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -1003,6 +1047,8 @@ def main(argv: list[str] | None = None) -> int:
             if args.request:
                 if job == "system":
                     return _handle_system(args, " ".join(args.request), modes)
+                if routed:
+                    return _handle_routed(args, engine, " ".join(args.request), modes)
                 return handle(engine, " ".join(args.request), **modes)
             if args.agent or not sys.stdin.isatty():
                 print("kilix-needle: give a request, or run it in a terminal", file=sys.stderr)
@@ -1018,6 +1064,7 @@ def main(argv: list[str] | None = None) -> int:
                     return status
                 if line.strip():
                     status = (_handle_system(args, line, modes) if job == "system" else
+                              _handle_routed(args, engine, line, modes) if routed else
                               handle(engine, line, **modes))
     except (asset.AssetError, EngineError, LibEngineError) as error:
         hint = ("Exact commands still work without the model: split right; "

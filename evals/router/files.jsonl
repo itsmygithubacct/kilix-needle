@@ -1,0 +1,120 @@
+{"request": "find files named \"ledger\" in Documents", "job": "files"}
+{"request": "any file with 'invoice' in its name under Downloads?", "job": "files"}
+{"request": "where is the file called notes-final? check research", "job": "files"}
+{"request": "files starting with \"IMG_\" in my downloads", "job": "files"}
+{"request": "look in projects for filenames beginning with 'test_'", "job": "files"}
+{"request": "find pdf files in Downloads", "job": "files"}
+{"request": "list all the python files in this project", "job": "files"}
+{"request": "show me markdown files in research", "job": "files"}
+{"request": "find .csv files in ~/data", "job": "files"}
+{"request": "any zip files in Downloads from the last 3 days?", "job": "files"}
+{"request": "docx files in my documents modified yesterday", "job": "files"}
+{"request": "what changed today in the current directory", "job": "files"}
+{"request": "files i edited in the last 7 days in research", "job": "files"}
+{"request": "find rust files in projects modified last 2 days", "job": "files"}
+{"request": "search my documents for the text 'tax return 2025'", "job": "files"}
+{"request": "which files in this project mention \"FIXME\"?", "job": "files"}
+{"request": "grep research for 'learning_rate'", "job": "files"}
+{"request": "find text \"connection refused\" in ./logs", "job": "files"}
+{"request": "is 'secret_token' written anywhere in projects", "job": "files"}
+{"request": "look through Downloads for the phrase \"order confirmation\"", "job": "files"}
+{"request": "show the largest files in Downloads", "job": "files"}
+{"request": "what's the biggest stuff in my documents?", "job": "files"}
+{"request": "fattest files in this directory", "job": "files"}
+{"request": "list the top 10 biggest files under /var/log", "job": "files"}
+{"request": "which files in research take up the most room", "job": "files"}
+{"request": "show recent files in projects", "job": "files"}
+{"request": "newest files in Downloads?", "job": "files"}
+{"request": "what did I touch most recently in this project", "job": "files"}
+{"request": "latest modified files in ~/Desktop", "job": "files"}
+{"request": "list the most recently changed files in research", "job": "files"}
+{"request": "preview \"INSTALL.md\" in here", "job": "files"}
+{"request": "show the start of 'notes/todo.txt' in Documents", "job": "files"}
+{"request": "peek at \"src/main.rs\" in projects", "job": "files"}
+{"request": "what's at the top of results/summary.csv in research", "job": "files"}
+{"request": "preview 'config.toml' in ./deploy", "job": "files"}
+{"request": "let me see the first lines of \"install.log\" in my downloads", "job": "files"}
+{"request": "Search the repository directory for files whose names contain \"parser\" and report paths only.", "job": "files"}
+{"request": "Find the 20 largest files under the current directory so I can see what bloats the checkout.", "job": "files"}
+{"request": "Look for the string \"TODO(nora)\" in all text files in projects.", "job": "files"}
+{"request": "Preview the first 16 KB of \"docs/design.md\" in this project; do not modify it.", "job": "files"}
+{"request": "List files in Downloads modified today so I can find the installer I just fetched.", "job": "files"}
+{"request": "find the file named \"Makefile\" here", "job": "files"}
+{"request": "where's my \"resume\" file? documents", "job": "files"}
+{"request": "find pdfs in ~/Documents/taxes", "job": "files"}
+{"request": "txt files in ./notes", "job": "files"}
+{"request": "ls .py files in /home/pleb/src", "job": "files"}
+{"request": "hunt for js files in the current directory", "job": "files"}
+{"request": "list yml files in projects", "job": "files"}
+{"request": "find sh files modified today", "job": "files"}
+{"request": "find json files in research changed in the past 5 days", "job": "files"}
+{"request": "anything in downloads called setup?", "job": "files"}
+{"request": "do I have a file named backup-2026 anywhere in documents", "job": "files"}
+{"request": "files in this folder whose name starts with draft", "job": "files"}
+{"request": "files with report in the name, in research, from last week", "job": "files"}
+{"request": "which text files in /etc/nginx contain \"server_name\"", "job": "files"}
+{"request": "search ./src for 'unwrap()'", "job": "files"}
+{"request": "look for 'import numpy' in the files of this project", "job": "files"}
+{"request": "find the text \"wifi password\" in my documents", "job": "files"}
+{"request": "does any file in Downloads contain \"Tracking Number\"?", "job": "files"}
+{"request": "search for 'localhost:3000' in projects", "job": "files"}
+{"request": "which of my notes mention \"standup\"? search documents", "job": "files"}
+{"request": "which files in research mention beta-VAE", "job": "files"}
+{"request": "files containing 'panic!' in the rust project", "job": "files"}
+{"request": "biggest files in ~/Videos", "job": "files"}
+{"request": "what's hogging space in /tmp? biggest files first", "job": "files"}
+{"request": "list files by size in this project, largest first", "job": "files"}
+{"request": "largest file in my downloads folder", "job": "files"}
+{"request": "show 5 biggest files in research", "job": "files"}
+{"request": "what are the heaviest files in Documents?", "job": "files"}
+{"request": "newest files in /var/log", "job": "files"}
+{"request": "most recent 10 files in my downloads", "job": "files"}
+{"request": "what's been modified lately in the current directory", "job": "files"}
+{"request": "list recent files in ./build", "job": "files"}
+{"request": "show what's new in ~/Music", "job": "files"}
+{"request": "read the first part of 'meeting notes.txt' in my documents", "job": "files"}
+{"request": "show me the head of \"scripts/build.sh\" in projects", "job": "files"}
+{"request": "glance at \"data/labels.txt\" in research", "job": "files"}
+{"request": "preview \"index.html\" in ./site", "job": "files"}
+{"request": "what does Dockerfile look like at the top? here", "job": "files"}
+{"request": "open a preview of \"src/lib.rs\" in the current directory", "job": "files"}
+{"request": "Check Downloads for a pdf modified yesterday called receipt.", "job": "files"}
+{"request": "Is there a CSV named 'metrics' in research? Look only at filenames.", "job": "files"}
+{"request": "I need to find where I saved 'boarding-pass.pdf', search Downloads and Documents by name", "job": "files"}
+{"request": "plz find the file named \"budget\" in documnets", "job": "files"}
+{"request": "serach for \"error\" in logs dir ./logs", "job": "files"}
+{"request": "fnd pdf files in dowloads", "job": "files"}
+{"request": "biggst files in here", "job": "files"}
+{"request": "prevew \"README.md\" here", "job": "files"}
+{"request": "list newest files in downlods", "job": "files"}
+{"request": "could you find pdf files in Downloads modified today?", "job": "files"}
+{"request": "can you show the largest files in this project", "job": "files"}
+{"request": "would you search research for 'ablation'?", "job": "files"}
+{"request": "hey, preview \"notes/day one.txt\" in documents please", "job": "files"}
+{"request": "files that start with 'ledger-' in Downloads", "job": "files"}
+{"request": "photos named IMG_2026 in ~/Pictures", "job": "files"}
+{"request": "txt files named \"todo\" in this project modified last 14 days", "job": "files"}
+{"request": "find files in Documents modified last 30 days", "job": "files"}
+{"request": "what files showed up in downloads yesterday", "job": "files"}
+{"request": "files in research from today", "job": "files"}
+{"request": "search \"def main\" in the current directory", "job": "files"}
+{"request": "find \"DROP TABLE\" in projects", "job": "files"}
+{"request": "search research for the exact phrase 'confidence interval'", "job": "files"}
+{"request": "text search: 'ECONNRESET' in ./server", "job": "files"}
+{"request": "Find every file under ~/gpu_terminal that mentions the literal string 'KITTY_WINDOW_ID'.", "job": "files"}
+{"request": "Locate the config file named 'settings' in the project, searching filenames only.", "job": "files"}
+{"request": "Show me the largest files in /home/pleb/Downloads; the disk is almost full.", "job": "files"}
+{"request": "As a first step, list the most recently modified files in the project so I know what the last run touched.", "job": "files"}
+{"request": "To verify the export, preview \"out/summary.txt\" in the research folder.", "job": "files"}
+{"request": "Check that a file named \"manifest.json\" exists somewhere in the project directory.", "job": "files"}
+{"request": "which markdown files in this directory mention \"deprecated\"?", "job": "files"}
+{"request": "find the python files that contain 'asyncio' in projects", "job": "files"}
+{"request": "list recent files here, newest on top", "job": "files"}
+{"request": "list largest files in documents, top 15", "job": "files"}
+{"request": "find a file called \"thesis-draft\" in my documents or tell me it's missing", "job": "files"}
+{"request": "files in the current directory whose names contain \"2026\"", "job": "files"}
+{"request": "whats the newest file in ~/.config", "job": "files"}
+{"request": "let me read the first lines of \"notes.md\" from research", "job": "files"}
+{"request": "head of \"CHANGELOG.md\" in this project", "job": "files"}
+{"request": "search my downloads for the word 'warranty'", "job": "files"}
+{"request": "look inside research for text \"p < 0.05\"", "job": "files"}

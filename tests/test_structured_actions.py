@@ -45,7 +45,7 @@ class Adapters(unittest.TestCase):
         listed = server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
         names = [tool["name"] for tool in listed["result"]["tools"]]
         self.assertEqual(names, ["kilix_action_plan", "kilix_action_act", "kilix_action_status"])
-        self.assertEqual(len(full.handle({"id": 2, "method": "tools/list"})["result"]["tools"]), 17)
+        self.assertEqual(len(full.handle({"id": 2, "method": "tools/list"})["result"]["tools"]), 19)
         for tool in mcp_server.TOOL_LIST:
             if tool["name"] in names:
                 continue

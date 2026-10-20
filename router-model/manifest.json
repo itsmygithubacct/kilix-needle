@@ -1,0 +1,334 @@
+{
+ "schema": "kilix-needle.router-manifest/v1",
+ "labels": [
+  "panes",
+  "apps",
+  "agents",
+  "files",
+  "system",
+  "logs",
+  "tmux",
+  "pty",
+  "desktop",
+  "none"
+ ],
+ "trainer": {
+  "c": 10.0,
+  "min_df": 2,
+  "round": 4,
+  "max_iter": 3000,
+  "gtol": 1e-06,
+  "threshold": 0.7
+ },
+ "excluded_gate_sets": [
+  "evals/agents/heldout-v2.jsonl",
+  "evals/apps/heldout-v5.jsonl",
+  "evals/files/heldout-v2.jsonl",
+  "evals/heldout-v15.jsonl",
+  "evals/system/heldout-v2.jsonl"
+ ],
+ "sources": [
+  {
+   "path": "evals/dev.jsonl",
+   "rule": "eval",
+   "job": "panes",
+   "sha256": "faf5dca9d3143ee294a46f62eaecff6018915ba47539f1bd4a8926d78e7394c3",
+   "rows": 40
+  },
+  {
+   "path": "evals/test.jsonl",
+   "rule": "eval",
+   "job": "panes",
+   "sha256": "e0d8e8389802bbdefb49307cf9b6271c3273fe6bcd5046015050c04709740bfa",
+   "rows": 86
+  },
+  {
+   "path": "evals/heldout-v2.jsonl",
+   "rule": "eval",
+   "job": "panes",
+   "sha256": "53d811c648ce865040990cd80088b31bc94d182010e22f75f557d3758d50a474",
+   "rows": 100
+  },
+  {
+   "path": "evals/heldout-v3.jsonl",
+   "rule": "eval",
+   "job": "panes",
+   "sha256": "23fa13d4cf6b14b2fe96e60ec2f1aa50569173ecd258e69fed62ae8628033978",
+   "rows": 120
+  },
+  {
+   "path": "evals/heldout-v4.jsonl",
+   "rule": "eval",
+   "job": "panes",
+   "sha256": "2f5fd488767bd3d902e9cae69d7c15db1fb61f45562125e61843aaefa73468aa",
+   "rows": 120
+  },
+  {
+   "path": "evals/heldout-v5.jsonl",
+   "rule": "eval",
+   "job": "panes",
+   "sha256": "5186c61a2d1f99f6e41c1fefb9123e7840d9d81bcc7b5ecaf74d083d98d5a7e3",
+   "rows": 150
+  },
+  {
+   "path": "evals/heldout-v6.jsonl",
+   "rule": "eval",
+   "job": "panes",
+   "sha256": "39c9c55a8636e7c3d1993c432e909126bf92ff652bba12b3f23b8b1b4ef35b69",
+   "rows": 150
+  },
+  {
+   "path": "evals/heldout-v7.jsonl",
+   "rule": "eval",
+   "job": "panes",
+   "sha256": "7df8337398ebf9bd94dc071b1a575743c2f2a280b126369c49b125d16f8546f9",
+   "rows": 150
+  },
+  {
+   "path": "evals/heldout-v8.jsonl",
+   "rule": "eval",
+   "job": "panes",
+   "sha256": "e948839ea16263843978c6e2dac8797f0b5b2cc42ec19f7ba318f26a46ef056d",
+   "rows": 150
+  },
+  {
+   "path": "evals/heldout-v9.jsonl",
+   "rule": "eval",
+   "job": "panes",
+   "sha256": "b5325d30a2302b0a4e261a6037fa031c77dacf3a78cf6f70853593fe82b50321",
+   "rows": 150
+  },
+  {
+   "path": "evals/heldout-v10.jsonl",
+   "rule": "eval",
+   "job": "panes",
+   "sha256": "f9a387a2559abccf90defe4fb8609e8404175a0f2cae0178c58616e4d508c867",
+   "rows": 182
+  },
+  {
+   "path": "evals/heldout-v11.jsonl",
+   "rule": "eval",
+   "job": "panes",
+   "sha256": "e3b93e560cb025698e30286042e3c5d256fa33fcf685bc8ee911db3d0a75a154",
+   "rows": 182
+  },
+  {
+   "path": "evals/heldout-v12.jsonl",
+   "rule": "eval",
+   "job": "panes",
+   "sha256": "907855c55b27067003ebb387f663e0ca0caeb88643f20897c37475ed04b792e9",
+   "rows": 182
+  },
+  {
+   "path": "evals/heldout-v13.jsonl",
+   "rule": "eval",
+   "job": "panes",
+   "sha256": "8b5dc424fe8fe9a2ec75472ef79f25e4c786d061512a33857992c1c3a1f84c27",
+   "rows": 182
+  },
+  {
+   "path": "evals/heldout-v14.jsonl",
+   "rule": "eval",
+   "job": "panes",
+   "sha256": "44cba7e9f9717a89d8fea844664dd4fafc69bf16c193dfaaeaeec87538796ce2",
+   "rows": 182
+  },
+  {
+   "path": "evals/apps/dev.jsonl",
+   "rule": "eval",
+   "job": "apps",
+   "sha256": "c7e89183b371d70267d8e9e799872854d2e933d0c25af6d9f9d8a73c7213a4b7",
+   "rows": 40
+  },
+  {
+   "path": "evals/apps/test.jsonl",
+   "rule": "eval",
+   "job": "apps",
+   "sha256": "985f25487fc9276730b5a795ffe47cf45452445a9c7f113285333865954cbafa",
+   "rows": 90
+  },
+  {
+   "path": "evals/apps/heldout-v1.jsonl",
+   "rule": "eval",
+   "job": "apps",
+   "sha256": "af54a7f33b9b66f92707745f2e827e27f3ed6cb48739ce154f1f242e9b9429bf",
+   "rows": 150
+  },
+  {
+   "path": "evals/apps/heldout-v2.jsonl",
+   "rule": "eval",
+   "job": "apps",
+   "sha256": "a7ca73892b950a7093bcf21499a7bd532782549d5c4aa10da9ff6cf829beecb7",
+   "rows": 150
+  },
+  {
+   "path": "evals/apps/heldout-v3.jsonl",
+   "rule": "eval",
+   "job": "apps",
+   "sha256": "9b40c031c1bac3e69446f75d2763f54d9c97443b28b81cb70c6d8ed0e015add2",
+   "rows": 150
+  },
+  {
+   "path": "evals/apps/heldout-v4.jsonl",
+   "rule": "eval",
+   "job": "apps",
+   "sha256": "9de85bf5a327ef9cf41eeddc2c00f00564c4e517578ffedf572d26e6aa379f82",
+   "rows": 146
+  },
+  {
+   "path": "evals/agents/dev.jsonl",
+   "rule": "eval",
+   "job": "agents",
+   "sha256": "8836d0eb8614186b54149f11041869cb452be55177ab86ebbab5e4cc0f6e595d",
+   "rows": 40
+  },
+  {
+   "path": "evals/agents/test.jsonl",
+   "rule": "eval",
+   "job": "agents",
+   "sha256": "71ebbfb0a04a05c6990619167d85c407bad480204d78ea6e6af72744741edef9",
+   "rows": 90
+  },
+  {
+   "path": "evals/agents/heldout-v1.jsonl",
+   "rule": "eval",
+   "job": "agents",
+   "sha256": "307d970a8253151a1db3a62b06d6508ce52aae75ceeec9dc45170b631ce9784c",
+   "rows": 150
+  },
+  {
+   "path": "evals/files/dev.jsonl",
+   "rule": "eval",
+   "job": "files",
+   "sha256": "ad4733863efad16ffe49aa2e40e69f6aa20a14381f2806f6da417fffd7088060",
+   "rows": 24
+  },
+  {
+   "path": "evals/files/test.jsonl",
+   "rule": "eval",
+   "job": "files",
+   "sha256": "0b49db8c218e0d73b563f33925cd27423d7c37a1b9972ff50b51a34b6b0bf302",
+   "rows": 60
+  },
+  {
+   "path": "evals/files/heldout-v1.jsonl",
+   "rule": "eval",
+   "job": "files",
+   "sha256": "c5463dff5bc1e2199f2d2284af5a0b7ed2920c25188fe6584826eaca9119c659",
+   "rows": 150
+  },
+  {
+   "path": "evals/system/dev.jsonl",
+   "rule": "eval",
+   "job": "system",
+   "sha256": "f6986642bd3d8e303d834c5af987042664e152f38eb673359a9ac8cbce9cc8b8",
+   "rows": 25
+  },
+  {
+   "path": "evals/system/test.jsonl",
+   "rule": "eval",
+   "job": "system",
+   "sha256": "2a53f467f772ca6df6423eb5926a426bf52b3b44fa42f39c8ebd9e504e7491bd",
+   "rows": 24
+  },
+  {
+   "path": "evals/system/heldout-v1.jsonl",
+   "rule": "eval",
+   "job": "system",
+   "sha256": "4ee943f10dc4aef187d8d1050c47cc8b05908669672c9748391c58ceb73dccb9",
+   "rows": 150
+  },
+  {
+   "path": "evals/router/system.jsonl",
+   "rule": "labelled",
+   "sha256": "62a6794b8083fcb8abcecad7dcc7542e5495e72287645c74eb633afca915f50c",
+   "rows": 220
+  },
+  {
+   "path": "evals/router/tmux.jsonl",
+   "rule": "labelled",
+   "sha256": "97747dfa44cc49864ae98ef62c261af5712111934cf51580d6a1a3f61feb5cf6",
+   "rows": 180
+  },
+  {
+   "path": "evals/router/logs.jsonl",
+   "rule": "labelled",
+   "sha256": "faff87a08e09c7f77a0e6c2e32d29e4343a1b46a0ce2b241bc29dcf6500d9ede",
+   "rows": 180
+  },
+  {
+   "path": "evals/router/pty.jsonl",
+   "rule": "labelled",
+   "sha256": "6090b15478d8d6160f1eb42805ae986f08780243fc40e80994b91835b948adc4",
+   "rows": 180
+  },
+  {
+   "path": "evals/router/desktop.jsonl",
+   "rule": "labelled",
+   "sha256": "08d17f4e8ed93c54d70faa6edb15357948829a8964ffeb6ac061fe930beee19a",
+   "rows": 160
+  },
+  {
+   "path": "evals/router/desktop-v3.jsonl",
+   "rule": "labelled",
+   "sha256": "357a7f9787e1c74f0023107f677355a649f1cdbbefb78047441242a3e17ffc1c",
+   "rows": 300
+  },
+  {
+   "path": "evals/router/agents.jsonl",
+   "rule": "labelled",
+   "sha256": "ad5c3983724aef2f0b3a02a11106e91f53bae78659d9ea7745e2b264f71e4ab5",
+   "rows": 120
+  },
+  {
+   "path": "evals/router/files.jsonl",
+   "rule": "labelled",
+   "sha256": "3889a8cbeb7d73d84146bb24392835035610befd0f488834556a7a8ca43c20ac",
+   "rows": 120
+  },
+  {
+   "path": "evals/router/none.jsonl",
+   "rule": "labelled",
+   "sha256": "e83ff3a51df2c5cb957642b4c116862d454e508394c4df6a77b26df475c89564",
+   "rows": 260
+  },
+  {
+   "path": "evals/router/confusables.jsonl",
+   "rule": "labelled",
+   "sha256": "90b1b429aa508949c1f2218c3670e4830045f90c9e8ba0971b2e9d2d1f87c621",
+   "rows": 160
+  }
+ ],
+ "rows": {
+  "panes": 1508,
+  "apps": 517,
+  "agents": 317,
+  "files": 300,
+  "system": 379,
+  "logs": 190,
+  "tmux": 191,
+  "pty": 189,
+  "desktop": 473,
+  "none": 464
+ },
+ "artifact": {
+  "path": "router-model/router.json",
+  "sha256": "7222d12bb11aaa6071d6680baf7d924808e448688b23ad6c7c5d3902bd80d0e7",
+  "bytes": 2107811
+ },
+ "relabels": {
+  "path": "evals/router/relabels.jsonl",
+  "sha256": "9903ea3c1912227074483380e7a25be3622b6192d77defa31a05947e03c7dd67"
+ },
+ "threshold_rule": {
+  "rule": "lowest p in 0.50..0.95 (step 0.01) whose accepted cross-validation rows are at least 99.5% correct",
+  "folds": "grouped 5-fold: job eval files whole, router files in 5 text-hash chunks",
+  "selected": 0.7,
+  "coverage": 0.8947,
+  "accepted_accuracy": 0.9951,
+  "cv_accuracy": 0.9753,
+  "cv_macro_recall": 0.9722,
+  "frozen": "2026-10-19, before any router held-out row was read",
+  "report": "router-model/selection.json"
+ }
+}

@@ -1,0 +1,180 @@
+{"request": "list sessions", "job": "pty"}
+{"request": "list sessions all", "job": "pty"}
+{"request": "show sessions", "job": "pty"}
+{"request": "display all pty sessions", "job": "pty"}
+{"request": "list the persistent sessions", "job": "pty"}
+{"request": "show my broker sessions all", "job": "pty"}
+{"request": "please list sessions", "job": "pty"}
+{"request": "could you list the pty sessions?", "job": "pty"}
+{"request": "show the sessions, thanks", "job": "pty"}
+{"request": "show session 3fa9c2d41b7e6a05", "job": "pty"}
+{"request": "show session 91d0e47ab3c258f6e10a", "job": "pty"}
+{"request": "describe session c7e5019ba24d8f63", "job": "pty"}
+{"request": "inspect the session 0b6a7f3e19d2c458a1e7", "job": "pty"}
+{"request": "get the status of session e48b02c9d17f5a36", "job": "pty"}
+{"request": "show the details of session 5d2c9a81f0e7b364", "job": "pty"}
+{"request": "show session \"build-shell\"", "job": "pty"}
+{"request": "get session 'dev.2'", "job": "pty"}
+{"request": "state of session `ci_runner-1`", "job": "pty"}
+{"request": "can you show session a41f8c07d3e5962b?", "job": "pty"}
+{"request": "which session is pane 12", "job": "pty"}
+{"request": "which session is pane 0", "job": "pty"}
+{"request": "what session belongs to pane 47", "job": "pty"}
+{"request": "which session is behind pane 203", "job": "pty"}
+{"request": "what session is running in the pane 9", "job": "pty"}
+{"request": "which session is in pane id 31", "job": "pty"}
+{"request": "show the session behind the pane 88", "job": "pty"}
+{"request": "get the session for pane 15", "job": "pty"}
+{"request": "could you tell me which session is pane 64?", "job": "pty"}
+{"request": "which persistent session is behind pane 12", "job": "pty"}
+{"request": "what's the broker session id for pane 77", "job": "pty"}
+{"request": "I need the pty session that pane 140 is attached to", "job": "pty"}
+{"request": "Find which persistent session backs pane 56 so I can look at its journal.", "job": "pty"}
+{"request": "show the last 50 lines of session 3fa9c2d41b7e6a05", "job": "pty"}
+{"request": "show the last 20 lines of session 91d0e47ab3c258f6e10a", "job": "pty"}
+{"request": "read the last 100 lines from session c7e5019ba24d8f63", "job": "pty"}
+{"request": "get last 10 lines of session e48b02c9d17f5a36", "job": "pty"}
+{"request": "tail the last 30 lines of session 5d2c9a81f0e7b364", "job": "pty"}
+{"request": "show the last 200 lines of the output of session 0b6a7f3e19d2c458a1e7", "job": "pty"}
+{"request": "show last 5 lines from session a41f8c07d3e5962b", "job": "pty"}
+{"request": "show the last 40 lines of session \"build-shell\"", "job": "pty"}
+{"request": "please show the last 15 lines of session 7e03bd5a92c1f846", "job": "pty"}
+{"request": "list archived journals", "job": "pty"}
+{"request": "show archived journals", "job": "pty"}
+{"request": "list saved journals", "job": "pty"}
+{"request": "show the archived journals", "job": "pty"}
+{"request": "could you list archived journals please", "job": "pty"}
+{"request": "show archived journal 3fa9c2d41b7e6a05", "job": "pty"}
+{"request": "show archived journal 3fa9c2d41b7e6a05.1760814553201", "job": "pty"}
+{"request": "show the journal of session 91d0e47ab3c258f6e10a", "job": "pty"}
+{"request": "read the archived journal e48b02c9d17f5a36.1760901122047", "job": "pty"}
+{"request": "get journal 5d2c9a81f0e7b364", "job": "pty"}
+{"request": "show journal 0b6a7f3e19d2c458a1e7.1759999000123", "job": "pty"}
+{"request": "get the archived journal of session c7e5019ba24d8f63", "job": "pty"}
+{"request": "end session 3fa9c2d41b7e6a05", "job": "pty"}
+{"request": "end session 91d0e47ab3c258f6e10a", "job": "pty"}
+{"request": "kill session c7e5019ba24d8f63", "job": "pty"}
+{"request": "terminate session e48b02c9d17f5a36", "job": "pty"}
+{"request": "end the session 5d2c9a81f0e7b364", "job": "pty"}
+{"request": "please end session a41f8c07d3e5962b", "job": "pty"}
+{"request": "kill the session 0b6a7f3e19d2c458a1e7", "job": "pty"}
+{"request": "terminate the session \"stuck-vim\"", "job": "pty"}
+{"request": "end session 7e03bd5a92c1f846 please", "job": "pty"}
+{"request": "could you end session b2d4f6a8c0e1937d?", "job": "pty"}
+{"request": "which persistent session is behind pane 12 and what is it running", "job": "pty"}
+{"request": "kill the broker session 3fa9c2d41b7e6a05", "job": "pty"}
+{"request": "shut down the persistent session 91d0e47ab3c258f6e10a, I'm done with it", "job": "pty"}
+{"request": "I want session c7e5019ba24d8f63 ended", "job": "pty"}
+{"request": "get rid of the pty session e48b02c9d17f5a36", "job": "pty"}
+{"request": "stop broker session 5d2c9a81f0e7b364 for me", "job": "pty"}
+{"request": "terminate the persistent session a41f8c07d3e5962b now", "job": "pty"}
+{"request": "Please end pty session 0b6a7f3e19d2c458a1e7; its program is hung and I own it.", "job": "pty"}
+{"request": "kill off the detached shell session 7e03bd5a92c1f846", "job": "pty"}
+{"request": "what pty sessions do I have running", "job": "pty"}
+{"request": "which persistent sessions are alive", "job": "pty"}
+{"request": "give me every broker session, including the unreachable ones", "job": "pty"}
+{"request": "are there any unreachable pty sessions", "job": "pty"}
+{"request": "list all the pane sessions the broker knows about", "job": "pty"}
+{"request": "show me what persistent sessions exist and whether they're attached", "job": "pty"}
+{"request": "Enumerate the live pty sessions with their ids, commands and cwd.", "job": "pty"}
+{"request": "which sessions are detached right now", "job": "pty"}
+{"request": "what does the broker say about session 3fa9c2d41b7e6a05", "job": "pty"}
+{"request": "tell me about the pty session 91d0e47ab3c258f6e10a", "job": "pty"}
+{"request": "is session c7e5019ba24d8f63 still alive?", "job": "pty"}
+{"request": "has the broker lost session e48b02c9d17f5a36", "job": "pty"}
+{"request": "check the status of the persistent session 5d2c9a81f0e7b364", "job": "pty"}
+{"request": "what command was session a41f8c07d3e5962b started with", "job": "pty"}
+{"request": "what's the cwd of persistent session 0b6a7f3e19d2c458a1e7", "job": "pty"}
+{"request": "is the session behind pane 33 attached or detached", "job": "pty"}
+{"request": "map pane 18 to its pty session", "job": "pty"}
+{"request": "pane 72 – which pty session id is that", "job": "pty"}
+{"request": "give me the session id for pane 9", "job": "pty"}
+{"request": "look up the broker session of pane 101", "job": "pty"}
+{"request": "what persistent session did pane 5 get", "job": "pty"}
+{"request": "the screen text of session 3fa9c2d41b7e6a05, last 25 lines", "job": "pty"}
+{"request": "peek at the last 60 lines of persistent session 91d0e47ab3c258f6e10a", "job": "pty"}
+{"request": "what did session c7e5019ba24d8f63 print in its last 12 lines", "job": "pty"}
+{"request": "give me the final 8 lines of pty session e48b02c9d17f5a36", "job": "pty"}
+{"request": "read the tail, 50 lines, of broker session 5d2c9a81f0e7b364", "job": "pty"}
+{"request": "get the last 300 lines of the persistent session a41f8c07d3e5962b", "job": "pty"}
+{"request": "Show the most recent 75 lines of persistent session 0b6a7f3e19d2c458a1e7 without attaching.", "job": "pty"}
+{"request": "what's on the screen of pty session 7e03bd5a92c1f846, 10 lines", "job": "pty"}
+{"request": "do we have any journals archived from dead sessions", "job": "pty"}
+{"request": "list the journals kilix kept from sessions that died", "job": "pty"}
+{"request": "what archived pane journals exist", "job": "pty"}
+{"request": "show me the journal for the dead session 3fa9c2d41b7e6a05", "job": "pty"}
+{"request": "read the saved journal e48b02c9d17f5a36.1760901122047", "job": "pty"}
+{"request": "open the archived journal 5d2c9a81f0e7b364.1760555000999", "job": "pty"}
+{"request": "get the archived journal 91d0e47ab3c258f6e10a.1760300111222", "job": "pty"}
+{"request": "Show the journal text of the archived session c7e5019ba24d8f63.1760400099001.", "job": "pty"}
+{"request": "list sessions all please", "job": "pty"}
+{"request": "list sesions", "job": "pty"}
+{"request": "shwo session 3fa9c2d41b7e6a05", "job": "pty"}
+{"request": "which sesion is pane 21", "job": "pty"}
+{"request": "end sesion e48b02c9d17f5a36", "job": "pty"}
+{"request": "show the lst 10 lines of session c7e5019ba24d8f63", "job": "pty"}
+{"request": "kilix pty list", "job": "pty"}
+{"request": "kilix pty status 3fa9c2d41b7e6a05", "job": "pty"}
+{"request": "kilix pty status --pane 12", "job": "pty"}
+{"request": "kilix pty kill 91d0e47ab3c258f6e10a", "job": "pty"}
+{"request": "kilix pty journals list", "job": "pty"}
+{"request": "Run the pty list to see which broker sessions are still around, then I'll pick the one to close.", "job": "pty"}
+{"request": "Look up the session ID for pane 44 using the pty broker, then report its command and whether it is attached.", "job": "pty"}
+{"request": "I need to find the persistent session running my build in pane 58", "job": "pty"}
+{"request": "Before ending anything, show session 3fa9c2d41b7e6a05 so we can confirm its command.", "job": "pty"}
+{"request": "Session 3fa9c2d41b7e6a05 is unreachable. Show its recorded command.", "job": "pty"}
+{"request": "which unreachable sessions are recorded", "job": "pty"}
+{"request": "persistent session ids please", "job": "pty"}
+{"request": "ids of all pane sessions", "job": "pty"}
+{"request": "what's the id of the session in pane 12?", "job": "pty"}
+{"request": "which session is attached to pane 2", "job": "pty"}
+{"request": "what session is pane 3 connected to", "job": "pty"}
+{"request": "pane 14 belongs to which broker session", "job": "pty"}
+{"request": "give me the session record behind pane 26", "job": "pty"}
+{"request": "which session backs pane id 90", "job": "pty"}
+{"request": "ending session 3fa9c2d41b7e6a05 would be great", "job": "pty"}
+{"request": "terminate that persistent session, id 7e03bd5a92c1f846", "job": "pty"}
+{"request": "kill pty session a41f8c07d3e5962b", "job": "pty"}
+{"request": "I own session b2d4f6a8c0e1937d and want it gone: end it", "job": "pty"}
+{"request": "end the broker session 4c8a1e6f09b3d725 that I started yesterday", "job": "pty"}
+{"request": "dispose of broker session 2f7d93b0a6c18e45", "job": "pty"}
+{"request": "get rid of session 9a31c5e7f2d0846b", "job": "pty"}
+{"request": "end the persistent session id 6e0b4d82a17c93f5", "job": "pty"}
+{"request": "terminate persistent shell session d5a2863f0b9e1c74", "job": "pty"}
+{"request": "Kill the stuck session 1b9e5c37d4a08f62; the process inside has been frozen for an hour and is mine.", "job": "pty"}
+{"request": "end session \"scratch-1\"", "job": "pty"}
+{"request": "kill session 'debug_shell'", "job": "pty"}
+{"request": "show the session `old-build`", "job": "pty"}
+{"request": "show session f3a96d02c8e41b75", "job": "pty"}
+{"request": "show session 08c7e1b5a39d6f42", "job": "pty"}
+{"request": "get the status of session 6d1f0a93e7c25b84", "job": "pty"}
+{"request": "inspect session 2e84b6d0f1a39c57", "job": "pty"}
+{"request": "show the last 25 lines of session f3a96d02c8e41b75", "job": "pty"}
+{"request": "show the last 12 lines of session 08c7e1b5a39d6f42", "job": "pty"}
+{"request": "show the last 90 lines of session 2e84b6d0f1a39c57", "job": "pty"}
+{"request": "tail 40 lines of pty session 6d1f0a93e7c25b84", "job": "pty"}
+{"request": "get the last 3 lines from session 4c8a1e6f09b3d725", "job": "pty"}
+{"request": "read the last 500 lines of session 2f7d93b0a6c18e45", "job": "pty"}
+{"request": "show archived journal f3a96d02c8e41b75", "job": "pty"}
+{"request": "show archived journal 08c7e1b5a39d6f42.1760712345678", "job": "pty"}
+{"request": "show the journal of session 6d1f0a93e7c25b84", "job": "pty"}
+{"request": "get archived journal 2e84b6d0f1a39c57.1760001234567", "job": "pty"}
+{"request": "which session is pane 61", "job": "pty"}
+{"request": "which session is pane 7", "job": "pty"}
+{"request": "what session is behind pane 150", "job": "pty"}
+{"request": "which session belongs to pane 999", "job": "pty"}
+{"request": "get the session behind the pane 4", "job": "pty"}
+{"request": "list the archived pane journals, please", "job": "pty"}
+{"request": "list saved journals thanks", "job": "pty"}
+{"request": "end session f3a96d02c8e41b75", "job": "pty"}
+{"request": "terminate session 08c7e1b5a39d6f42", "job": "pty"}
+{"request": "kill the session 2e84b6d0f1a39c57", "job": "pty"}
+{"request": "end session 6d1f0a93e7c25b84", "job": "pty"}
+{"request": "end my old detached session 9a31c5e7f2d0846b if you can", "job": "pty"}
+{"request": "has the pty broker kept the session 1b9e5c37d4a08f62?", "job": "pty"}
+{"request": "persistent sessions: which pane runs 6e0b4d82a17c93f5", "job": "pty"}
+{"request": "show details for the pane session of pane 36", "job": "pty"}
+{"request": "show session b7c3d19e5a0f2864", "job": "pty"}
+{"request": "list archived journals, thanks", "job": "pty"}
+{"request": "which broker session is pane 83 attached to?", "job": "pty"}
+{"request": "show the last 35 lines of session 4c8a1e6f09b3d725", "job": "pty"}

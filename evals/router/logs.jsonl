@@ -1,0 +1,180 @@
+{"request": "what did the claude session in pane 14 do", "job": "logs"}
+{"request": "give me a brief of the session claude-needle", "job": "logs"}
+{"request": "summarize what happened in pane 7's recording", "job": "logs"}
+{"request": "search the codex session for 'parser'", "job": "logs"}
+{"request": "show the events from pane 22", "job": "logs"}
+{"request": "what was asked in the session titled flaky tests", "job": "logs"}
+{"request": "brief the recorded session for pane 3", "job": "logs"}
+{"request": "find where the pane 9 transcript mentions 'timeout'", "job": "logs"}
+{"request": "summary of the claude session log at ~/.claude/projects/kilix/7a1c3e90.jsonl", "job": "logs"}
+{"request": "read the codex rollout file /home/pleb/.codex/sessions/2026/10/rollout-0192.jsonl and list its events", "job": "logs"}
+{"request": "search ~/.claude/projects/needle/session-4f2.jsonl for 'segfault'", "job": "logs"}
+{"request": "what did I tell the agent in pane 18?", "job": "logs"}
+{"request": "which tests failed according to the recording of pane 5", "job": "logs"}
+{"request": "show errors that appeared in the session log for pane 12", "job": "logs"}
+{"request": "Summarize the codex session recorded in /tmp/rollout-8c1.jsonl so I can decide whether to resume it.", "job": "logs"}
+{"request": "What did the agent in pane 31 conclude? Read its recorded session, not the live screen.", "job": "logs"}
+{"request": "list the user requests in the claude session called refactor-planner", "job": "logs"}
+{"request": "events for the session grok-audit", "job": "logs"}
+{"request": "what happened in the pane 40 session yesterday", "job": "logs"}
+{"request": "search the transcript of pane 2 for 'permission denied'", "job": "logs"}
+{"request": "look up 'migration' in the session claude-ml", "job": "logs"}
+{"request": "brief session codex-review", "job": "logs"}
+{"request": "give me a short summary of what the claude session did", "job": "logs"}
+{"request": "what did codex change in that session? check its log", "job": "logs"}
+{"request": "show me the last events recorded for pane 16", "job": "logs"}
+{"request": "retrieve the transcript lines mentioning 'cargo test' from pane 8", "job": "logs"}
+{"request": "claude session log summary for pane 27", "job": "logs"}
+{"request": "did the agent in pane 6 ever run the integration suite? check the recording", "job": "logs"}
+{"request": "Search the session log of pane 19 for the text 'ModuleNotFoundError' and cite the lines.", "job": "logs"}
+{"request": "what were the assistant's last answers in pane 11's session?", "job": "logs"}
+{"request": "brief me on pane 33", "job": "logs"}
+{"request": "read the history of the session titled benchmark sweep", "job": "logs"}
+{"request": "pull the user questions from the claude jsonl at ~/.claude/projects/os/b83d.jsonl", "job": "logs"}
+{"request": "which commands did the codex agent run, from its session file", "job": "logs"}
+{"request": "search recorded session of pane 15 for 'OOM'", "job": "logs"}
+{"request": "summarise pane 21's recording", "job": "logs"}
+{"request": "events from codex rollout /home/pleb/.codex/sessions/2026/09/rollout-77ab.jsonl, provider codex", "job": "logs"}
+{"request": "look through the raw recording of pane 4 for 'build failed'", "job": "logs"}
+{"request": "what did the agent say about the loss spike in its session log?", "job": "logs"}
+{"request": "show the brief for the session called catalog-migration", "job": "logs"}
+{"request": "Find every place the recorded claude session mentions the file planner.py.", "job": "logs"}
+{"request": "give me the events of the claude code session with id 3e9f21c4", "job": "logs"}
+{"request": "report on what the grok session in pane 25 did over the last run, from the log", "job": "logs"}
+{"request": "Before I resume the agent in pane 10, summarize its recorded session: what was it doing and where did it stop?", "job": "logs"}
+{"request": "history of what the claude pane 13 did today", "job": "logs"}
+{"request": "search the session log for errors", "job": "logs"}
+{"request": "what test errors showed up in the codex log?", "job": "logs"}
+{"request": "show assistant claims in pane 29's session", "job": "logs"}
+{"request": "brief the claude-needle session log", "job": "logs"}
+{"request": "does the session log for pane 17 say it fixed the bug?", "job": "logs"}
+{"request": "search logs of the pane 1 session for 'TODO'", "job": "logs"}
+{"request": "what happened in the session before it crashed? read its recorded log", "job": "logs"}
+{"request": "Show me the evidence in the session recording for pane 23 that the tests passed.", "job": "logs"}
+{"request": "query the session log: 'wgpu' in the claude session titled renderer", "job": "logs"}
+{"request": "events in the qwen omp session in pane 35", "job": "logs"}
+{"request": "what did the last claude session in this repo accomplish? summarize its log file", "job": "logs"}
+{"request": "list the key events of session codex-os-audit", "job": "logs"}
+{"request": "Read the recorded transcript for pane 38 and tell me the last error it hit.", "job": "logs"}
+{"request": "look in the codex session file for mentions of 'rebase'", "job": "logs"}
+{"request": "get a brief of the claude conversation saved in ~/.claude/projects/catalog/ce02.jsonl", "job": "logs"}
+{"request": "what does the recording of pane 20 show about the deploy", "job": "logs"}
+{"request": "pane 26 session events please", "job": "logs"}
+{"request": "search the pane 30 transcript for stack traces", "job": "logs"}
+{"request": "give me a recap of the agent's work in pane 24", "job": "logs"}
+{"request": "recap the claude session titled font audit", "job": "logs"}
+{"request": "find 'API key' in the grok session called research-notes, from its log", "job": "logs"}
+{"request": "Page through the events of the codex session at /tmp/rollout-c4e.jsonl, 20 at a time.", "job": "logs"}
+{"request": "what commands were run in pane 36 according to its recording", "job": "logs"}
+{"request": "claude-needle brief", "job": "logs"}
+{"request": "events pane 5", "job": "logs"}
+{"request": "search pane 8 session 'error'", "job": "logs"}
+{"request": "log search: 'deadlock' in session codex-sched", "job": "logs"}
+{"request": "plz summarize the session in pane 2", "job": "logs"}
+{"request": "whats in the log for pane 44", "job": "logs"}
+{"request": "waht did the claude session do in pane 9", "job": "logs"}
+{"request": "serach the session log of pane 12 for 'lint'", "job": "logs"}
+{"request": "breif of the codex session titled lint-fixes", "job": "logs"}
+{"request": "what did the agent do while I was away? check pane 43's session record", "job": "logs"}
+{"request": "Check the recorded session for pane 28 and tell me whether the agent asked for approval at any point.", "job": "logs"}
+{"request": "were there any failing tests in the log of the claude session for the router?", "job": "logs"}
+{"request": "show the latest few user messages from the codex session titled eval-harness", "job": "logs"}
+{"request": "what did I last ask the agent in pane 39", "job": "logs"}
+{"request": "list tool failures recorded in pane 14's claude session", "job": "logs"}
+{"request": "give me a timeline of the session in pane 32", "job": "logs"}
+{"request": "Retrieve the final assistant answer from the claude session file ~/.claude/projects/ml/9d01.jsonl.", "job": "logs"}
+{"request": "search my codex sessions for 'segmentation fault'", "job": "logs"}
+{"request": "has the session for pane 41 recorded any 'warning' lines", "job": "logs"}
+{"request": "brief the plain-text recording at /home/pleb/recordings/pane-12.log", "job": "logs"}
+{"request": "search the raw recording /tmp/pane9.log for 'exception'", "job": "logs"}
+{"request": "events from the recording file /var/tmp/session-2201.txt, provider raw", "job": "logs"}
+{"request": "what does the saved terminal recording of pane 6 contain about 'cargo'", "job": "logs"}
+{"request": "Index the claude jsonl /home/pleb/.claude/projects/kilix/aa12.jsonl and show a brief with citations.", "job": "logs"}
+{"request": "show the source behind event evt-2f91", "job": "logs"}
+{"request": "give me the evidence cited for that event in the session log", "job": "logs"}
+{"request": "what happened in the grok session title 'sampler rewrite', per its log?", "job": "logs"}
+{"request": "look at the recorded conversation with claude in pane 18 and extract the decisions made", "job": "logs"}
+{"request": "pane 14, summarize the whole session", "job": "logs"}
+{"request": "give me the five newest events for the codex rollout", "job": "logs"}
+{"request": "limit it to 10 events in the session claude-os", "job": "logs"}
+{"request": "which errors did the test runs in pane 3 show, per the recording?", "job": "logs"}
+{"request": "From the claude session log, what was the root cause the agent found?", "job": "logs"}
+{"request": "Pull a brief of the codex session in pane 34 and flag anything it claimed but did not verify.", "job": "logs"}
+{"request": "look through the pane 42 recording for the string 'refused'", "job": "logs"}
+{"request": "replay the transcript of the omp session in pane 37 and give me the gist", "job": "logs"}
+{"request": "what did grok write in pane 45 earlier?", "job": "logs"}
+{"request": "list claims the assistant made in the codex session named db-migration", "job": "logs"}
+{"request": "summarise claude's session for the needle repo", "job": "logs"}
+{"request": "can you search the session claude-ml for the word 'checkpoint'", "job": "logs"}
+{"request": "could you give me a brief of pane 46's recorded session", "job": "logs"}
+{"request": "would you show the events of session grok-audit, newest first", "job": "logs"}
+{"request": "I forgot what the agent in pane 47 was working on, read its log", "job": "logs"}
+{"request": "Check the transcript of pane 48 for whether the build ever turned green.", "job": "logs"}
+{"request": "show me test failures and errors extracted from the pane 49 session", "job": "logs"}
+{"request": "where in the session log did the agent edit src/plan.rs", "job": "logs"}
+{"request": "session log of pane 50: search 'schema'", "job": "logs"}
+{"request": "Summarize the claude session transcript saved under ~/.claude/projects/research/f01e.jsonl; I don't need the live pane.", "job": "logs"}
+{"request": "events for session 8a7c33de", "job": "logs"}
+{"request": "brief session 12ab9f", "job": "logs"}
+{"request": "the codex pane 51, what was its task according to the log", "job": "logs"}
+{"request": "retrieve what the agent in the third tab reported at the end of its run, from the session log", "job": "logs"}
+{"request": "dig through the session recording for pane 52 and quote the failure", "job": "logs"}
+{"request": "look for 'rate limit' in the claude log", "job": "logs"}
+{"request": "list events of kind error in the session codex-ci", "job": "logs"}
+{"request": "search pane 53's session for \"connection refused\"", "job": "logs"}
+{"request": "find 'rebase conflict' in the log of the session titled git-cleanup", "job": "logs"}
+{"request": "Give me a cited brief of the last session in pane 54 before I write the handoff.", "job": "logs"}
+{"request": "what did pane 55 do between 3pm and 4pm, per its recording", "job": "logs"}
+{"request": "has my claude session ever mentioned 'flaky'", "job": "logs"}
+{"request": "get the first user request in the session recorded for pane 56", "job": "logs"}
+{"request": "short summary of the codex log, please", "job": "logs"}
+{"request": "show what the agent concluded, from the session log in pane 57", "job": "logs"}
+{"request": "Read the Claude Code JSONL for this task and report which files the agent touched.", "job": "logs"}
+{"request": "Search the session recording for the stack trace the user pasted earlier.", "job": "logs"}
+{"request": "using the session log, tell me what instructions the agent was given", "job": "logs"}
+{"request": "which pane recording mentions 'kernel panic'?", "job": "logs"}
+{"request": "search all my pane recordings for 'password'", "job": "logs"}
+{"request": "events: session claude-kilix-95, limit 15", "job": "logs"}
+{"request": "brief: pane 58", "job": "logs"}
+{"request": "do a lookup in the recorded session of pane 60 for 'warning: unused'", "job": "logs"}
+{"request": "get the assistant answers excerpt from session codex-api", "job": "logs"}
+{"request": "what were the tool errors in that rollout file?", "job": "logs"}
+{"request": "In the codex rollout at /home/pleb/.codex/sessions/2026/10/rollout-5d22.jsonl, which test did the agent say it fixed?", "job": "logs"}
+{"request": "What did the qwen session in pane 61 say when it stopped?", "job": "logs"}
+{"request": "I need a transcript-based recap of pane 62 for the standup", "job": "logs"}
+{"request": "What's in the recording of pane 63? Just the highlights, from the log.", "job": "logs"}
+{"request": "search session logs of pane 64 for 'sigterm'", "job": "logs"}
+{"request": "show the brief for the claude code session that fixed the clippy warnings", "job": "logs"}
+{"request": "recorded session pane 65 events, only the user requests", "job": "logs"}
+{"request": "pane 66 log: what did the agent do about the lockfile?", "job": "logs"}
+{"request": "audit trail: list what the claude session in pane 67 ran and when, from the recording", "job": "logs"}
+{"request": "Verify from the session log that the codex agent really executed the migration, not just claimed it.", "job": "logs"}
+{"request": "Verify the claim 'all tests pass' against the recorded session of pane 68.", "job": "logs"}
+{"request": "give me every error the claude session hit", "job": "logs"}
+{"request": "pane 69 recording search for 'ssl'", "job": "logs"}
+{"request": "read the session transcript titled onboarding-docs and summarize it", "job": "logs"}
+{"request": "ok what did the claude agent actually do in pane 70", "job": "logs"}
+{"request": "summary of the omp session transcript at /home/pleb/.omp/sessions/2026-10-18.jsonl", "job": "logs"}
+{"request": "brief of the earlier session; session id c19e07ab", "job": "logs"}
+{"request": "find the part of the log where the codex agent decided to switch approaches", "job": "logs"}
+{"request": "find 'assertion failed' in the recorded session for pane 71", "job": "logs"}
+{"request": "Page 2 of events for the claude-needle session, using the cursor from before.", "job": "logs"}
+{"request": "give me the evidence snapshot for the event we looked at", "job": "logs"}
+{"request": "claude log search query: 'hotfix', limit 5", "job": "logs"}
+{"request": "what did the agent in the pane to my left do, per the session log of pane 72", "job": "logs"}
+{"request": "grep the codex session for 'unwrap'", "job": "logs"}
+{"request": "search recording of pane 73 for lines mentioning 'sudo'", "job": "logs"}
+{"request": "what was the outcome of the claude session titled security review", "job": "logs"}
+{"request": "ok summarize pane 74's session", "job": "logs"}
+{"request": "Quick recap of what the agents did overnight: check the recorded session for pane 75.", "job": "logs"}
+{"request": "which user prompts are in the codex log for pane 76", "job": "logs"}
+{"request": "list the events in rollout file ~/.codex/sessions/2026/10/rollout-aa90.jsonl with provider codex, json please", "job": "logs"}
+{"request": "get events from the pane-77 recording as json", "job": "logs"}
+{"request": "what errors did the assistant report in its last turn of session claude-ml", "job": "logs"}
+{"request": "In the session titled db-tuning, did the agent mention vacuum anywhere?", "job": "logs"}
+{"request": "find any approval requests in the session record for pane 78", "job": "logs"}
+{"request": "lookup text 'invariant' in the session transcript for pane 79", "job": "logs"}
+{"request": "log brief of the session from this morning in pane 80", "job": "logs"}
+{"request": "what did the grok session in pane 59 end up doing, according to its recorded log", "job": "logs"}
+{"request": "list the file edits the claude agent made, from its session transcript in pane 81", "job": "logs"}
+{"request": "search the session titled kernel-bisect for 'good commit'", "job": "logs"}

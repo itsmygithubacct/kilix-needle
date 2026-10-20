@@ -1,0 +1,160 @@
+{"request": "open btop in a pane on the right", "job": "panes"}
+{"request": "is the cpu pegged right now?", "job": "system"}
+{"request": "split below and run htop", "job": "panes"}
+{"request": "what's the cpu load average", "job": "system"}
+{"request": "new tab running top", "job": "panes"}
+{"request": "which processes are using the most cpu", "job": "system"}
+{"request": "put a watch free -m in a pane to my left", "job": "panes"}
+{"request": "how much memory is free", "job": "system"}
+{"request": "open the memory view", "job": "apps"}
+{"request": "show me the ram numbers", "job": "system"}
+{"request": "bring up the system center", "job": "apps"}
+{"request": "is the disk getting full", "job": "system"}
+{"request": "launch the calculator", "job": "apps"}
+{"request": "run bc in a new pane", "job": "panes"}
+{"request": "start the notepad app", "job": "apps"}
+{"request": "open vim in the pane below", "job": "panes"}
+{"request": "play lunar lander", "job": "apps"}
+{"request": "run ./lander.sh in a split on the right", "job": "panes"}
+{"request": "open the file browser app", "job": "apps"}
+{"request": "list the biggest files in Downloads", "job": "files"}
+{"request": "show the settings center", "job": "apps"}
+{"request": "type make test into the build pane and press Enter", "job": "panes"}
+{"request": "start codex in the needle repo and have it run make test", "job": "agents"}
+{"request": "run 'cargo build' in the left pane", "job": "panes"}
+{"request": "open claude code in kilix and fix the build", "job": "agents"}
+{"request": "in pane 5 type git status", "job": "panes"}
+{"request": "tell the codex session in kilix to run git status", "job": "agents"}
+{"request": "split right and run a shell", "job": "panes"}
+{"request": "split right and start grok in the os repo", "job": "agents"}
+{"request": "close the pane titled build", "job": "panes"}
+{"request": "wait for the claude session in the os repo to finish", "job": "agents"}
+{"request": "jump to the pane after this one", "job": "panes"}
+{"request": "go to tab 3", "job": "panes"}
+{"request": "switch to the Thunderbird window", "job": "desktop"}
+{"request": "type 'hello' in the pane on the left", "job": "panes"}
+{"request": "type 'hello' into the focused Firefox window", "job": "desktop"}
+{"request": "press ctrl+s in the gedit window", "job": "desktop"}
+{"request": "scroll down in the image viewer window", "job": "desktop"}
+{"request": "scroll back through the output of the logs pane", "job": "panes"}
+{"request": "click at 500, 300 on the screen", "job": "desktop"}
+{"request": "resize this pane wider by 10 cells", "job": "panes"}
+{"request": "resize the LibreOffice window to 900x700", "job": "desktop"}
+{"request": "rename this tab to deploy", "job": "panes"}
+{"request": "rename the tmux session deploy to deploy-old", "job": "tmux"}
+{"request": "close the tmux session deploy", "job": "tmux"}
+{"request": "close the tab I'm in", "job": "panes"}
+{"request": "close the GIMP window", "job": "desktop"}
+{"request": "list the persistent pane sessions", "job": "pty"}
+{"request": "which tmux session is running the tests", "job": "tmux"}
+{"request": "which persistent session is pane 20", "job": "pty"}
+{"request": "read the last 40 lines from the tmux session ci", "job": "tmux"}
+{"request": "show the last 40 lines of session 7a1c3e90b24d5f68", "job": "pty"}
+{"request": "send 'ls' to tmux session scratch", "job": "tmux"}
+{"request": "type ls in the scratch pane", "job": "panes"}
+{"request": "kill the tmux session worker", "job": "tmux"}
+{"request": "end session 5be7a40c19d3f862", "job": "pty"}
+{"request": "new tmux session called build", "job": "tmux"}
+{"request": "new tab called build", "job": "panes"}
+{"request": "what did the claude session in pane 14 do, per its log", "job": "logs"}
+{"request": "search the codex session log for 'timeout'", "job": "logs"}
+{"request": "search my files for the text 'timeout'", "job": "files"}
+{"request": "show errors from the journal for the ssh service", "job": "system"}
+{"request": "show errors from the claude session in pane 9", "job": "logs"}
+{"request": "what did sshd log during the last boot", "job": "system"}
+{"request": "what did the agent in pane 22 say at the end of its run", "job": "logs"}
+{"request": "journal errors from the program my-worker in the last 15 minutes", "job": "system"}
+{"request": "find 'my-worker' in the pane 3 session recording", "job": "logs"}
+{"request": "start nginx", "job": "none"}
+{"request": "install ripgrep", "job": "none"}
+{"request": "uninstall curl", "job": "none"}
+{"request": "kill the process using the most memory", "job": "none"}
+{"request": "what process is using the most memory", "job": "system"}
+{"request": "restart the ssh service", "job": "none"}
+{"request": "has the ssh service failed?", "job": "system"}
+{"request": "which files in /home are the largest", "job": "files"}
+{"request": "free space on the root disk", "job": "system"}
+{"request": "largest files in this checkout", "job": "files"}
+{"request": "delete the largest files in Downloads", "job": "none"}
+{"request": "find pdf files in Documents", "job": "files"}
+{"request": "open the pdf viewer app", "job": "apps"}
+{"request": "open report.pdf in the PDF viewer window and scroll down", "job": "desktop"}
+{"request": "preview 'notes.txt' in Documents", "job": "files"}
+{"request": "open notes.txt in vim in a new pane", "job": "panes"}
+{"request": "edit notes.txt and fix the typo", "job": "none"}
+{"request": "find text 'TODO' in this project", "job": "files"}
+{"request": "run grep -rn TODO . in the left pane", "job": "panes"}
+{"request": "what does grep -r do?", "job": "none"}
+{"request": "what is tmux?", "job": "none"}
+{"request": "what is a pty broker?", "job": "none"}
+{"request": "how do I split a pane in kilix", "job": "none"}
+{"request": "make a new pane on my right side", "job": "panes"}
+{"request": "how do I start a new tmux session?", "job": "none"}
+{"request": "start a new tmux session called demo", "job": "tmux"}
+{"request": "what does 'free -m' print?", "job": "none"}
+{"request": "run free -m in a new pane", "job": "panes"}
+{"request": "how much memory do I have free?", "job": "system"}
+{"request": "what's the difference between codex and claude code?", "job": "none"}
+{"request": "open codex in the needle repo", "job": "agents"}
+{"request": "start grok here and ask it to explain the router", "job": "agents"}
+{"request": "message the claude session here: stop and summarize", "job": "agents"}
+{"request": "type 'stop and summarize' into the claude pane", "job": "panes"}
+{"request": "send 'stop and summarize' to the tmux session claude-run", "job": "tmux"}
+{"request": "tell the agent in the third tab to stop", "job": "agents"}
+{"request": "go to the third tab", "job": "panes"}
+{"request": "pane 12 session?", "job": "pty"}
+{"request": "pane 12 recording summary", "job": "logs"}
+{"request": "close pane 12", "job": "panes"}
+{"request": "end the persistent session behind pane 12, id 8d2e5f0a71c4b936", "job": "pty"}
+{"request": "ending session 8d2e5f0a71c4b936 is what I want", "job": "pty"}
+{"request": "my colleague says session 8d2e5f0a71c4b936 should be killed", "job": "pty"}
+{"request": "what's inside the archived journal 8d2e5f0a71c4b936.1760700000123", "job": "pty"}
+{"request": "what's inside the session log of that pane", "job": "logs"}
+{"request": "read the claude session file ~/.claude/projects/kilix/c41f.jsonl", "job": "logs"}
+{"request": "read the file notes/c41f.txt in Documents", "job": "files"}
+{"request": "open the session log viewer app", "job": "apps"}
+{"request": "open the transcript reader", "job": "apps"}
+{"request": "open the tmux manager", "job": "apps"}
+{"request": "show me the tmux sessions on /tmp/ci.sock", "job": "tmux"}
+{"request": "show the clock in the top bar again", "job": "apps"}
+{"request": "what's today's date, and which day of the week is it", "job": "none"}
+{"request": "hide the battery indicator", "job": "apps"}
+{"request": "how's my battery? run upower in a pane", "job": "panes"}
+{"request": "make the font bigger on the pane buttons", "job": "apps"}
+{"request": "increase the system volume", "job": "none"}
+{"request": "open the volume mixer", "job": "apps"}
+{"request": "enable the doom game in the games list", "job": "apps"}
+{"request": "what is the doom game about", "job": "none"}
+{"request": "launch doom", "job": "apps"}
+{"request": "click the start button at 12,1060", "job": "desktop"}
+{"request": "wait 2 seconds then press Return in the dialog", "job": "desktop"}
+{"request": "wait for the codex session to be idle", "job": "agents"}
+{"request": "resume the claude session from yesterday in kilix", "job": "agents"}
+{"request": "what did the claude session from yesterday do", "job": "logs"}
+{"request": "who won the world series in 2016", "job": "none"}
+{"request": "email the build report to Dana", "job": "none"}
+{"request": "email me the largest files in Downloads", "job": "none"}
+{"request": "list recent files in Documents", "job": "files"}
+{"request": "git commit everything", "job": "none"}
+{"request": "run git commit -am wip in the build pane", "job": "panes"}
+{"request": "have codex commit everything in the needle repo", "job": "agents"}
+{"request": "how many cpu cores do I have", "job": "system"}
+{"request": "write a python script that prints the cpu count", "job": "none"}
+{"request": "run nproc in a new split", "job": "panes"}
+{"request": "which window has focus right now", "job": "desktop"}
+{"request": "which pane has focus right now", "job": "panes"}
+{"request": "move the browser window to the left half of the screen", "job": "desktop"}
+{"request": "move this pane to a new tab", "job": "panes"}
+{"request": "lay out my panes as a 2x2 grid", "job": "panes"}
+{"request": "switch to the Firefox window and press ctrl+t", "job": "desktop"}
+{"request": "go to the editor pane", "job": "panes"}
+{"request": "is apache2 running", "job": "system"}
+{"request": "start apache2", "job": "none"}
+{"request": "which tmux sessions are open on the private socket /tmp/ci.sock?", "job": "tmux"}
+{"request": "which package owns /usr/bin/fdfind", "job": "system"}
+{"request": "how much room is left on /srv", "job": "system"}
+{"request": "list the largest files under /srv", "job": "files"}
+{"request": "type q in the pager pane", "job": "panes"}
+{"request": "press q in the Evince window", "job": "desktop"}
+{"request": "run tail -f app.log in a pane below", "job": "panes"}
+{"request": "show the last events from the claude session of pane 6", "job": "logs"}

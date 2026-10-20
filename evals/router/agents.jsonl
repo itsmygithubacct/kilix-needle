@@ -1,0 +1,120 @@
+{"request": "start claude in the needle repo", "job": "agents"}
+{"request": "open codex here", "job": "agents"}
+{"request": "launch grok in ~/research", "job": "agents"}
+{"request": "spin up qwen omp in the ml repo", "job": "agents"}
+{"request": "start claude code in kilix and fix the failing resize test", "job": "agents"}
+{"request": "open codex in the os repo and write a README section on the boot flow", "job": "agents"}
+{"request": "launch grok in the catalog repo with model grok-5 and dedupe fonts.toml", "job": "agents"}
+{"request": "start a claude session in ~/gpu_terminal/kilix-content using opus: audit the manifest schema", "job": "agents"}
+{"request": "open cc in the desktop repo to my right", "job": "agents"}
+{"request": "put codex in a split below me in kilix-needle", "job": "agents"}
+{"request": "start qwen in research in a new tab and summarize notes/kv-cache", "job": "agents"}
+{"request": "Launch Claude Code in /home/pleb/gpu_terminal/kilix-95 and migrate the start menu code to the new layout API.", "job": "agents"}
+{"request": "Spawn a codex reviewer in the needle repo to check the planner diff for regressions.", "job": "agents"}
+{"request": "kick off grok build here: add a --json flag to the status command", "job": "agents"}
+{"request": "bring up an interactive codex session in /srv/projects/api, do not give it a task", "job": "agents"}
+{"request": "fire up claude in this repo, split left, and have it write unit tests for parse_duration", "job": "agents"}
+{"request": "open claude with sonnet in the ml repo and tune the dataloader", "job": "agents"}
+{"request": "start codex using gpt-6 in plebian-os and bisect the boot hang", "job": "agents"}
+{"request": "launch omp with qwen3.7-max in the kilix repo above me", "job": "agents"}
+{"request": "begin a new claude session in the research dir: collect the loss numbers from all runs in notes/", "job": "agents"}
+{"request": "start two agents: claude in needle and codex in kilix", "job": "agents"}
+{"request": "open grok in the os repo and qwen in research", "job": "agents"}
+{"request": "Please launch codex in the catalog repo, then tell it to validate every url in sources.yaml", "job": "agents"}
+{"request": "get claude going in kilix-ml: task is to rerun the eval on checkpoint 3000", "job": "agents"}
+{"request": "claude in kilix, split down, task: reproduce the scrollback bug", "job": "agents"}
+{"request": "new codex session in ~/gpu_terminal/kilix, please", "job": "agents"}
+{"request": "spawn grok in kilix-needle with grok-5-code and review the apps module", "job": "agents"}
+{"request": "Start a Claude Code session in the needle repo with model claude-opus-5-5 to refactor the grammar tables. Split it to the right.", "job": "agents"}
+{"request": "As part of the plan, launch a codex worker in the catalog repo to regenerate the thumbnails index.", "job": "agents"}
+{"request": "Delegate the lint cleanup to a new claude session in kilix-95.", "job": "agents"}
+{"request": "Hand the migration to a codex agent: start codex in the os repo and give it the task 'port init scripts to systemd units'.", "job": "agents"}
+{"request": "Launch a reviewer agent (grok) in needle and have it read the diff against main.", "job": "agents"}
+{"request": "resume codex session 8f21c4d9 in the needle repo", "job": "agents"}
+{"request": "continue the claude session called planner refactor in kilix", "job": "agents"}
+{"request": "resume grok session 51bd90e3 here, split right", "job": "agents"}
+{"request": "pick up the qwen omp session release notes draft in the content repo", "job": "agents"}
+{"request": "resume the claude code session titled flaky tests in the ml repo and finish the fix", "job": "agents"}
+{"request": "reopen codex session c93a77f1 in kilix-95 below me", "job": "agents"}
+{"request": "continue session 2a6e0d14 with claude in research", "job": "agents"}
+{"request": "hold off until the codex run in the needle repo is complete", "job": "agents"}
+{"request": "wait until claude in the os repo goes idle", "job": "agents"}
+{"request": "block until grok in kilix asks me something", "job": "agents"}
+{"request": "wait for the qwen session in research to finish, up to 15 minutes", "job": "agents"}
+{"request": "hang on until codex in the ml repo needs approval", "job": "agents"}
+{"request": "hold until the claude session here is idle, give up after 90 seconds", "job": "agents"}
+{"request": "wait on cc in kilix-95 to finish its turn", "job": "agents"}
+{"request": "Wait for the grok session in the catalog to stop and ask a question; timeout 5 minutes.", "job": "agents"}
+{"request": "pause here until the codex session in kilix-content is done", "job": "agents"}
+{"request": "wait up to 20 minutes for claude in plebian to be idle", "job": "agents"}
+{"request": "Block until the omp session in the desktop repo has finished its turn.", "job": "agents"}
+{"request": "Don't proceed until the codex agent in needle reports it is idle; wait at most ten minutes.", "job": "agents"}
+{"request": "tell the claude session in needle to also update the changelog", "job": "agents"}
+{"request": "message codex in the os repo: skip the flaky test and move on", "job": "agents"}
+{"request": "ask grok in kilix to summarize what it changed", "job": "agents"}
+{"request": "send the qwen omp session in research this: use the 2025 numbers", "job": "agents"}
+{"request": "tell codex here to stop editing the theme files", "job": "agents"}
+{"request": "tell the claude session in kilix-ml: the eval split is data/heldout", "job": "agents"}
+{"request": "when claude in needle is done, tell it to open a PR", "job": "agents"}
+{"request": "once the codex session in the catalog is idle, ask it to run the full test suite", "job": "agents"}
+{"request": "tell grok in plebian to rebase onto main, then wait for it to finish", "job": "agents"}
+{"request": "Message the claude session in kilix-95 with: please add a regression test for the taskbar crash.", "job": "agents"}
+{"request": "Relay to the codex session in the ml repo that the checkpoint path moved to /data/ckpt.", "job": "agents"}
+{"request": "Tell the cc session in the research dir to cite page numbers inline.", "job": "agents"}
+{"request": "ask the omp session in content whether the manifest change is finished", "job": "agents"}
+{"request": "After grok in the os repo finishes, tell it to write the root cause into NOTES.md.", "job": "agents"}
+{"request": "tell codex in needle and claude in needle to pause", "job": "agents"}
+{"request": "send claude here: use the existing retry helper, don't write a new one", "job": "agents"}
+{"request": "start claude in needle, wait until it asks for approval", "job": "agents"}
+{"request": "launch codex in the os repo and wait for it to finish", "job": "agents"}
+{"request": "open grok in research with the task of tabulating latency numbers, then wait for it to go idle", "job": "agents"}
+{"request": "open codex in kilix, have it run the benchmarks, and when it's done tell it to save the results to bench.md", "job": "agents"}
+{"request": "wait for claude in the catalog to go idle, then start codex in the catalog to review claude's last commit", "job": "agents"}
+{"request": "Spin up claude in kilix-ml, wait for it to finish, then tell it to commit with a descriptive message.", "job": "agents"}
+{"request": "resume claude session 7be1a203 in research and wait for it to finish", "job": "agents"}
+{"request": "start claude code in needle, give it up to 10 minutes to finish, then tell it to summarize", "job": "agents"}
+{"request": "launch grok and codex side by side in the kilix repo", "job": "agents"}
+{"request": "Start claude in kilix and tell the codex session in kilix-95 to hold off on merging.", "job": "agents"}
+{"request": "claude, codex and grok in the research dir please", "job": "agents"}
+{"request": "start clade in the needle repo", "job": "agents"}
+{"request": "opne codex in kilix", "job": "agents"}
+{"request": "lauch grok here", "job": "agents"}
+{"request": "wiat for the codex session in needle to finish", "job": "agents"}
+{"request": "tel the claude session in os to run the tests", "job": "agents"}
+{"request": "resum the claude session flaky tests in kilix", "job": "agents"}
+{"request": "codex pane to my left in kilix, then give it the task: review the last commit", "job": "agents"}
+{"request": "I want claude working on the glyph atlas bug in kilix, split to the right", "job": "agents"}
+{"request": "have codex rewrite the router tests in the needle repo; open it in a new tab", "job": "agents"}
+{"request": "put grok on the font audit in the catalog", "job": "agents"}
+{"request": "get a codex agent to profile the sixel decoder in kilix", "job": "agents"}
+{"request": "I need another claude on the ml repo, make it work on the tokenizer cache", "job": "agents"}
+{"request": "set an agent on the failing CI: launch claude code in needle with that as the task", "job": "agents"}
+{"request": "Please start Claude Code in /home/pleb/gpu_terminal/kilix-needle on opus. Task: add a test for the pty hint rule. Open it in a split to my left.", "job": "agents"}
+{"request": "Dispatch a codex agent to kilix-content to normalize icon names; wait for its first idle.", "job": "agents"}
+{"request": "Run codex in kilix-needle with the task 'grep for TODO and list them', and report when it's idle.", "job": "agents"}
+{"request": "Launch an agent (grok) in the os repo, task: audit the sudoers file. Then wait up to 5 minutes.", "job": "agents"}
+{"request": "ask the codex session in ~/gpu_terminal/kilix whether it needs anything", "job": "agents"}
+{"request": "prod the claude session in needle: are you still working?", "job": "agents"}
+{"request": "Tell the qwen omp session in kilix-ml to lower the batch size to 8 and retry.", "job": "agents"}
+{"request": "answer yes to the claude session in kilix-95 that is waiting for approval", "job": "agents"}
+{"request": "tell the codex session here: yes, go ahead and format the test partition", "job": "agents"}
+{"request": "wait for claude in plebian to ask for approval and then tell it: go ahead", "job": "agents"}
+{"request": "wait for qwen in the ml repo to finish, then launch codex in the ml repo and verify the results", "job": "agents"}
+{"request": "launch claude with opus 5.5 in the needle repo: investigate why the hybrid parser misses the second clause", "job": "agents"}
+{"request": "start codex in this directory with o5-mini and explain how the config loader resolves overrides", "job": "agents"}
+{"request": "open omp in the research notes to my left and hand it the task of cleaning the bibliography", "job": "agents"}
+{"request": "claude code, kilix-needle, task: write a docstring for every function in panes_exact.py", "job": "agents"}
+{"request": "start another codex session in the current directory, below me", "job": "agents"}
+{"request": "spawn a qwen omp agent in kilix-95, split up", "job": "agents"}
+{"request": "resume the grok session titled sampler rewrite in research", "job": "agents"}
+{"request": "continue the codex session 03e8a5b6 here and then wait for it to be idle", "job": "agents"}
+{"request": "Pick back up claude session aa41907e in the catalog, split right, and ask it to finish the manifest cleanup.", "job": "agents"}
+{"request": "bring back the omp session b91d0a3c in the os repo", "job": "agents"}
+{"request": "wait until the codex session in kilix-needle needs input, then ping me", "job": "agents"}
+{"request": "delegate: codex in the catalog, task is 'validate all URLs'; claude in kilix-95, task is 'fix the taskbar drag bug'", "job": "agents"}
+{"request": "Kick off an agent run: codex in needle with the task 'update the eval README', max wait 8 minutes.", "job": "agents"}
+{"request": "Start grok here, split right, and tell the claude session in needle to hold off.", "job": "agents"}
+{"request": "message the claude session in the catalog this: bump the ripgrep pin to 14.1.1", "job": "agents"}
+{"request": "ask cc in needle to write up what it changed once it is idle", "job": "agents"}
+{"request": "when the codex review in kilix finishes, ask it to list the findings as a checklist", "job": "agents"}
+{"request": "start codex in ~/gpu_terminal/kilix-ml, task: sweep learning rates from 1e-5 to 5e-4", "job": "agents"}

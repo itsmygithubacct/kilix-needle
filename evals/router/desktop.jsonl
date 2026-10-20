@@ -1,0 +1,160 @@
+{"request": "focus the Firefox window", "job": "desktop"}
+{"request": "bring the gedit window to the front", "job": "desktop"}
+{"request": "list the open windows", "job": "desktop"}
+{"request": "what windows are open on my desktop", "job": "desktop"}
+{"request": "click at 400, 300", "job": "desktop"}
+{"request": "move the mouse to 1200,80 and click", "job": "desktop"}
+{"request": "double-click at x 640 y 360", "job": "desktop"}
+{"request": "right click at 220, 510", "job": "desktop"}
+{"request": "type hello world into the focused window", "job": "desktop"}
+{"request": "type \"meeting notes for monday\" in the active window", "job": "desktop"}
+{"request": "press ctrl+s", "job": "desktop"}
+{"request": "hit ctrl+shift+t in the browser window", "job": "desktop"}
+{"request": "press Escape", "job": "desktop"}
+{"request": "scroll down 5 notches", "job": "desktop"}
+{"request": "scroll up a bit in the image viewer", "job": "desktop"}
+{"request": "wait half a second", "job": "desktop"}
+{"request": "pause for 2 seconds then press Return", "job": "desktop"}
+{"request": "minimize the LibreOffice Writer window", "job": "desktop"}
+{"request": "maximize the active window", "job": "desktop"}
+{"request": "resize the active window to 1024 by 768", "job": "desktop"}
+{"request": "move this window to the top left corner", "job": "desktop"}
+{"request": "move the Firefox window to x 100 y 50", "job": "desktop"}
+{"request": "close the gedit window", "job": "desktop"}
+{"request": "gracefully close the Eye of GNOME window", "job": "desktop"}
+{"request": "focus the window titled \"Untitled Document 1 - LibreOffice Writer\"", "job": "desktop"}
+{"request": "focus window id 62914563", "job": "desktop"}
+{"request": "switch to the Thunderbird window and press ctrl+n", "job": "desktop"}
+{"request": "click the middle of the screen", "job": "desktop"}
+{"request": "drag from 100,100 to 400,300", "job": "desktop"}
+{"request": "type my email address into the focused text box", "job": "desktop"}
+{"request": "In the Firefox window, press ctrl+l, type the address, and press Return.", "job": "desktop"}
+{"request": "Focus gedit, type 'TODO: refactor', then press ctrl+s.", "job": "desktop"}
+{"request": "Click at 812, 447 to dismiss the dialog in the other app.", "job": "desktop"}
+{"request": "press alt+tab", "job": "desktop"}
+{"request": "press F5 in the browser to reload it", "job": "desktop"}
+{"request": "scroll down 10 steps in the PDF viewer window", "job": "desktop"}
+{"request": "page down in the document window", "job": "desktop"}
+{"request": "wait 500 ms and then click at 300 200", "job": "desktop"}
+{"request": "tell the Firefox window to go back with alt+Left", "job": "desktop"}
+{"request": "put the Slack window on top", "job": "desktop"}
+{"request": "enlarge the calculator window to 600x800", "job": "desktop"}
+{"request": "shrink this window to 400 by 300", "job": "desktop"}
+{"request": "which window is active right now", "job": "desktop"}
+{"request": "show me the titles of all the windows currently on screen", "job": "desktop"}
+{"request": "move the pointer to 50, 50", "job": "desktop"}
+{"request": "middle-click at 700, 400", "job": "desktop"}
+{"request": "click the top right corner at 1900, 10", "job": "desktop"}
+{"request": "press ctrl+a then ctrl+c in the active window", "job": "desktop"}
+{"request": "paste with ctrl+v into the focused window", "job": "desktop"}
+{"request": "undo with ctrl+z", "job": "desktop"}
+{"request": "press the Enter key", "job": "desktop"}
+{"request": "hit Tab three times, then type john", "job": "desktop"}
+{"request": "focus VLC and press space", "job": "desktop"}
+{"request": "send alt+F4 to the stuck image viewer", "job": "desktop"}
+{"request": "restore the minimized Firefox window", "job": "desktop"}
+{"request": "unmaximize the active window", "job": "desktop"}
+{"request": "bring up the GIMP window and press ctrl+shift+e", "job": "desktop"}
+{"request": "type the text 'The quick brown fox' in the LibreOffice window", "job": "desktop"}
+{"request": "focus LibreOffice Calc and click at 250, 180", "job": "desktop"}
+{"request": "Use the desktop controls to focus the Firefox window titled Mozilla Firefox and scroll down three steps.", "job": "desktop"}
+{"request": "Check which windows are open via X11, then focus the one called Notes.", "job": "desktop"}
+{"request": "Click the 'Save' button of the gedit window; it's at around 612, 88.", "job": "desktop"}
+{"request": "Type 'git status' into the focused X11 window and do not press Enter.", "job": "desktop"}
+{"request": "Send ctrl+s to the editor window to save the file, then wait 1 second.", "job": "desktop"}
+{"request": "Resize the 'Calculator' window to 320x480 and move it to 20, 20.", "job": "desktop"}
+{"request": "Gracefully close the window titled 'Preferences' via the window manager.", "job": "desktop"}
+{"request": "press ctrl+w to close the tab in the browser", "job": "desktop"}
+{"request": "refresh the page in the browser window with ctrl+r", "job": "desktop"}
+{"request": "zoom in on the image viewer with ctrl+plus", "job": "desktop"}
+{"request": "scroll the mouse wheel down 3 clicks", "job": "desktop"}
+{"request": "scroll left 2 steps", "job": "desktop"}
+{"request": "scroll right", "job": "desktop"}
+{"request": "scroll up 7 in the active window", "job": "desktop"}
+{"request": "wait 2 s", "job": "desktop"}
+{"request": "give it a 1.5 second pause", "job": "desktop"}
+{"request": "hold on for 300 milliseconds then press Tab", "job": "desktop"}
+{"request": "type pasword123 into the box that has focus", "job": "desktop"}
+{"request": "write 'Dear team,' in the document window that's focused", "job": "desktop"}
+{"request": "enter my name Alice in the active text field", "job": "desktop"}
+{"request": "click on the OK button at 540,390", "job": "desktop"}
+{"request": "left click at 15, 15", "job": "desktop"}
+{"request": "double click at 300,300 to open the file in the file manager window", "job": "desktop"}
+{"request": "move the cursor to the bottom right and click", "job": "desktop"}
+{"request": "hover the mouse at 960, 540", "job": "desktop"}
+{"request": "grab the title bar of the Firefox window and drag it to 600,200", "job": "desktop"}
+{"request": "focus the PDF viewer", "job": "desktop"}
+{"request": "switch to the terminal emulator window, not a kilix pane, the xterm one", "job": "desktop"}
+{"request": "go to the window called Settings", "job": "desktop"}
+{"request": "put the Chrome window in focus", "job": "desktop"}
+{"request": "raise the mail window", "job": "desktop"}
+{"request": "activate the window 'Document Viewer'", "job": "desktop"}
+{"request": "snap the active window to 800 by 600 at 0,0", "job": "desktop"}
+{"request": "make the active window full screen", "job": "desktop"}
+{"request": "fullscreen Firefox", "job": "desktop"}
+{"request": "send the window with title 'Downloads' to the back", "job": "desktop"}
+{"request": "hide the Spotify window by minimizing it", "job": "desktop"}
+{"request": "iconify the active window", "job": "desktop"}
+{"request": "ctrl+shift+n in the browser", "job": "desktop"}
+{"request": "key combo super+d", "job": "desktop"}
+{"request": "press F11", "job": "desktop"}
+{"request": "hit the Delete key", "job": "desktop"}
+{"request": "press Home then shift+End", "job": "desktop"}
+{"request": "press ctrl+f and type invoice in the PDF window", "job": "desktop"}
+{"request": "type 42 into the calculator and press Return", "job": "desktop"}
+{"request": "focus the Calculator window then type 7*6 then press Return", "job": "desktop"}
+{"request": "ok focus gedit, ctrl+a, then type the new text", "job": "desktop"}
+{"request": "can you click at 100,100 for me", "job": "desktop"}
+{"request": "please press ctrl+s in the gedit window", "job": "desktop"}
+{"request": "would you scroll down 4 in the browser", "job": "desktop"}
+{"request": "could you list all windows and their ids", "job": "desktop"}
+{"request": "list windows pls", "job": "desktop"}
+{"request": "clik at 640, 480", "job": "desktop"}
+{"request": "fcous the firefox window", "job": "desktop"}
+{"request": "typ hello in the active window", "job": "desktop"}
+{"request": "presss ctrl+s", "job": "desktop"}
+{"request": "scrol down 3", "job": "desktop"}
+{"request": "Run a desktop action batch: focus 'Notes', type 'hello', press Return.", "job": "desktop"}
+{"request": "Preview only: resize the active window to 800x600 without applying it.", "job": "desktop"}
+{"request": "The save dialog is stuck behind another app. Click at 700, 420 and press Return.", "job": "desktop"}
+{"request": "Nothing is focused, so focus the Evince window first and then press Page_Down twice.", "job": "desktop"}
+{"request": "I want the image viewer to show the next picture, so press Right in that window", "job": "desktop"}
+{"request": "advance the slideshow in the LibreOffice Impress window by pressing Right", "job": "desktop"}
+{"request": "start the presentation by pressing F5 in the Impress window", "job": "desktop"}
+{"request": "Save the open spreadsheet by pressing ctrl+s in LibreOffice Calc.", "job": "desktop"}
+{"request": "Press ctrl+q in the gedit window to quit it.", "job": "desktop"}
+{"request": "undo the last change in the editor with ctrl+z and then ctrl+s", "job": "desktop"}
+{"request": "type the URL https://example.org into the address bar of the focused browser", "job": "desktop"}
+{"request": "type my password into the focused login window", "job": "desktop"}
+{"request": "move the file manager window to 0 0 and resize it to 960 1080", "job": "desktop"}
+{"request": "position the Notes window at x 1000 y 100", "job": "desktop"}
+{"request": "put the calculator window next to the browser by moving it to 1300, 200", "job": "desktop"}
+{"request": "give the active window a size of 1280x720", "job": "desktop"}
+{"request": "resize Firefox to 1600x900", "job": "desktop"}
+{"request": "what's the id of the Firefox window", "job": "desktop"}
+{"request": "which windows are minimized", "job": "desktop"}
+{"request": "is the Thunderbird window open?", "job": "desktop"}
+{"request": "list the X11 windows with their geometry", "job": "desktop"}
+{"request": "get the active window title", "job": "desktop"}
+{"request": "after clicking at 400,400 wait one second and scroll down", "job": "desktop"}
+{"request": "click 200,200 then type 'x' then press Enter", "job": "desktop"}
+{"request": "move the pointer to 300, 300 then double-click", "job": "desktop"}
+{"request": "focus the editor, press ctrl+End, and type a newline-free summary line", "job": "desktop"}
+{"request": "scroll down 20 steps", "job": "desktop"}
+{"request": "scroll down fifteen notches in the browser window", "job": "desktop"}
+{"request": "right-click on the desktop at 1000, 500", "job": "desktop"}
+{"request": "click with the left button at 1 1", "job": "desktop"}
+{"request": "send the keys ctrl+alt+t", "job": "desktop"}
+{"request": "type 'ls -la' into the xterm window that has focus", "job": "desktop"}
+{"request": "focus the VLC window and press f for full screen", "job": "desktop"}
+{"request": "mute the video player by pressing m in its window", "job": "desktop"}
+{"request": "press space to pause the video in the VLC window", "job": "desktop"}
+{"request": "click the play button at 480, 900 in the media player", "job": "desktop"}
+{"request": "dismiss the popup in the GIMP window by pressing Escape", "job": "desktop"}
+{"request": "bring window 14680070 to the foreground", "job": "desktop"}
+{"request": "close window id 41943045 politely", "job": "desktop"}
+{"request": "maximize window id 29360131", "job": "desktop"}
+{"request": "type 'https://claude.ai' in Chrome's address bar, then Return", "job": "desktop"}
+{"request": "go to the Thunderbird window and type the subject line 'Weekly sync'", "job": "desktop"}
+{"request": "key press ctrl+Home in the open editor window", "job": "desktop"}
+{"request": "I need the active window moved to the second monitor, so move it to x 1920 y 0", "job": "desktop"}

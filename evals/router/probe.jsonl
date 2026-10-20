@@ -1,0 +1,27 @@
+{"request": "split right and run htop"}
+{"request": "close the pane titled build"}
+{"request": "go to tab 3"}
+{"request": "open the snake game"}
+{"request": "set the font size to 16"}
+{"request": "mute the microphone"}
+{"request": "start codex in ~/src/kilix and have it fix the failing test"}
+{"request": "wait for the claude session in kilix-needle to finish"}
+{"request": "find the pdf files in my Downloads folder"}
+{"request": "which files in projects mention TODO"}
+{"request": "is docker running?"}
+{"request": "what is using all my memory"}
+{"request": "show journal errors from nginx since boot"}
+{"request": "what did the codex session in pane 40 do"}
+{"request": "search the claude log for permission denied"}
+{"request": "list tmux sessions"}
+{"request": "read the last 50 lines of tmux session build"}
+{"request": "list persistent sessions"}
+{"request": "end session 3f9a1c0d2b7e4f61"}
+{"request": "focus the firefox window"}
+{"request": "click at 400, 300"}
+{"request": "press ctrl+s in the editor window"}
+{"request": "what's the capital of france"}
+{"request": "write me a haiku about terminals"}
+{"request": "delete the largest files in Downloads"}
+{"request": "show me htop so I can check the cpu"}
+{"request": "split right and start codex there"}

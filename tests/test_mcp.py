@@ -64,7 +64,8 @@ class Protocol(unittest.TestCase):
             {"jsonrpc": "2.0", "id": 3, "method": "nope"}])
         self.assertEqual(replies[0]["result"]["protocolVersion"], "2025-03-26")
         self.assertEqual([t["name"] for t in replies[1]["result"]["tools"]],
-                         ["kilix_plan", "kilix_act", "kilix_apps_plan", "kilix_apps_act",
+                         ["kilix_ask_plan", "kilix_ask_act",
+                          "kilix_plan", "kilix_act", "kilix_apps_plan", "kilix_apps_act",
                           "kilix_agents_plan", "kilix_agents_act", "kilix_system_plan",
                           "kilix_system_read", "kilix_system_suggest", "kilix_logs_read",
                           "kilix_files_plan", "kilix_files_read", "kilix_tmux_plan", "kilix_tmux_act",
@@ -157,10 +158,14 @@ class TokenCost(unittest.TestCase):
     def test_tool_list_stays_small(self):
         replies, _ = converse([{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}])
         tools = replies[0]["result"]["tools"]
-        existing = [t for t in tools if not t["name"].startswith(("kilix_tmux_", "kilix_action_"))]
+        existing = [t for t in tools if not t["name"].startswith(("kilix_tmux_", "kilix_action_",
+                                                                  "kilix_ask_"))]
         tmux = [t for t in tools if t["name"].startswith("kilix_tmux_")]
         actions = [t for t in tools if t["name"].startswith("kilix_action_")]
+        ask = [t for t in tools if t["name"].startswith("kilix_ask_")]
         self.assertLessEqual(len(json.dumps(existing)), 6800)
+        # The routed pair is the default for agents that do not know the job.
+        self.assertLessEqual(len(json.dumps(ask)), 800)
         # Two tools also describe the bounded structured literal input form.
         self.assertLessEqual(len(json.dumps(tmux)), 1500)
         self.assertLessEqual(len(json.dumps(actions)), 10000)
@@ -172,6 +177,7 @@ class TokenCost(unittest.TestCase):
             return sum(map(described, node)) if isinstance(node, list) else 0
         self.assertLessEqual(described(existing), 2800)
         self.assertLessEqual(described(tmux), 300)
+        self.assertLessEqual(described(ask), 300)
 
     def test_result_is_one_compact_record_without_the_echoed_request(self):
         with FakeKilix(desktop()):

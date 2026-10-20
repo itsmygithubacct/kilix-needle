@@ -10,7 +10,9 @@ kilix-apps/kilix-needle/history (default ~/.local/gpu_terminal). Each line holds
 - the job, and whether a person or an agent sent it;
 - what proposed the calls (the grammar, or which model);
 - the raw calls, and what the checks admitted or refused and why;
-- each action's outcome, and how long it took.
+- each action's outcome, and how long it took;
+- for a request that came through `ask` (ask.py), the route that chose the job:
+  its stage, job, probability, margin and alternatives.
 
 The external-inference bridge (domain_bridge) runs calls it was handed, not
 requests, and records nothing.
@@ -36,6 +38,8 @@ Recording never changes what a request does or returns:
 """
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import datetime
 import errno
 import fcntl
@@ -57,6 +61,30 @@ REASONED = frozenset({"refused", "skipped"})     # reasons from the checks and c
 _OFF = {"0", "off", "no", "false"}
 _PARTS = ("kilix-apps", "kilix-needle", "history")
 _warned = False
+# The route of the request being answered (set by ask.py), and whether entries
+# are being held back: stage-2 arbitration plans are not requests a person sent.
+_route = contextvars.ContextVar("kilix_needle_route", default=None)
+_quiet = contextvars.ContextVar("kilix_needle_quiet", default=False)
+
+
+@contextlib.contextmanager
+def routed(route: dict):
+    """Entries recorded inside this block carry `route`."""
+    token = _route.set(route)
+    try:
+        yield
+    finally:
+        _route.reset(token)
+
+
+@contextlib.contextmanager
+def quiet():
+    """Nothing is recorded inside this block."""
+    token = _quiet.set(True)
+    try:
+        yield
+    finally:
+        _quiet.reset(token)
 
 
 class Unsafe(Exception):
@@ -274,6 +302,8 @@ def entry(job: str, given, checked, engine, calls, options, result: dict, second
     }
     if isinstance(checked, str) and checked != text:
         out["checked"] = _text(checked)
+    if _route.get() is not None:
+        out["route"] = _text(_route.get())
     return out
 
 
@@ -291,7 +321,7 @@ def _line(data: dict) -> bytes:
 def record(job: str, given, checked, engine, calls, options, result: dict,
            seconds: float) -> None:
     """Append one request's entry. Never raises; a busy or unsafe history drops it."""
-    if not enabled():
+    if not enabled() or _quiet.get():
         return
     folder = None
     try:

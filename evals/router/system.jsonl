@@ -1,0 +1,220 @@
+{"request": "is nginx running", "job": "system"}
+{"request": "what's eating my ram", "job": "system"}
+{"request": "show errors from the last boot", "job": "system"}
+{"request": "which package provides rg", "job": "system"}
+{"request": "how full is my disk", "job": "system"}
+{"request": "how much memory is free right now?", "job": "system"}
+{"request": "am I about to run out of swap", "job": "system"}
+{"request": "cpu load please", "job": "system"}
+{"request": "what's the 1, 5 and 15 minute load average?", "job": "system"}
+{"request": "how much space is left on /home", "job": "system"}
+{"request": "is /var running out of room?", "job": "system"}
+{"request": "check free space on the volume mounted at /mnt/backup", "job": "system"}
+{"request": "give me a quick health check: memory, load and disk", "job": "system"}
+{"request": "Check whether available RAM is under 1 GB before I start the next training shard.", "job": "system"}
+{"request": "I need the current disk usage for /srv so I can decide if the cache can grow.", "job": "system"}
+{"request": "Read the system load averages; the build seems slow and I want to know if the host is saturated.", "job": "system"}
+{"request": "what is hogging the cpu", "job": "system"}
+{"request": "top 5 memory hogs", "job": "system"}
+{"request": "list the ten processes using the most RAM", "job": "system"}
+{"request": "which process has the biggest resident set?", "job": "system"}
+{"request": "show me the 15 busiest processes by cpu", "job": "system"}
+{"request": "Find the process currently consuming the most CPU and report its name and share.", "job": "system"}
+{"request": "something is spinning a core at 100%, which one is it", "job": "system"}
+{"request": "ranking of processes by memory, top 8", "job": "system"}
+{"request": "is sshd up?", "job": "system"}
+{"request": "status of the docker service", "job": "system"}
+{"request": "check if cron is active", "job": "system"}
+{"request": "did bluetooth.service fail?", "job": "system"}
+{"request": "are any systemd services in a failed state", "job": "system"}
+{"request": "list failed units", "job": "system"}
+{"request": "show my user services that failed", "job": "system"}
+{"request": "is the pipewire user service running", "job": "system"}
+{"request": "Report the state of postgresql.service so I know whether the integration tests can connect.", "job": "system"}
+{"request": "what's the status of NetworkManager", "job": "system"}
+{"request": "is cups running or dead?", "job": "system"}
+{"request": "show all services currently loaded", "job": "system"}
+{"request": "show the journal errors since this morning", "job": "system"}
+{"request": "any warnings in the logs from the last hour?", "job": "system"}
+{"request": "what did sshd log in the past 30 minutes", "job": "system"}
+{"request": "journal entries for docker from the previous boot", "job": "system"}
+{"request": "last 20 lines of the system journal", "job": "system"}
+{"request": "show errors from the previous boot", "job": "system"}
+{"request": "journalctl errors for today", "job": "system"}
+{"request": "Pull the 30 most recent error-level journal entries for the current boot; I'm hunting a crash.", "job": "system"}
+{"request": "show me what the program my-worker logged in the last 15 minutes", "job": "system"}
+{"request": "user journal warnings since yesterday", "job": "system"}
+{"request": "anything bad in the kernel log this boot?", "job": "system"}
+{"request": "is curl installed", "job": "system"}
+{"request": "which package owns /usr/bin/git", "job": "system"}
+{"request": "what package does the ssh command come from", "job": "system"}
+{"request": "do I have ffmpeg installed?", "job": "system"}
+{"request": "which deb ships /etc/ssh/ssh_config", "job": "system"}
+{"request": "check the package status of python3-venv", "job": "system"}
+{"request": "Determine which package provides the fd command so I can name it in the Dockerfile.", "job": "system"}
+{"request": "is libssl-dev there?", "job": "system"}
+{"request": "who owns /usr/lib/x86_64-linux-gnu/libz.so.1 package-wise", "job": "system"}
+{"request": "mem usage", "job": "system"}
+{"request": "ram status", "job": "system"}
+{"request": "swap usage?", "job": "system"}
+{"request": "df on /", "job": "system"}
+{"request": "disk free", "job": "system"}
+{"request": "storage left on /var/lib?", "job": "system"}
+{"request": "plz tell me how much ram is used", "job": "system"}
+{"request": "hey, could you check how loaded the cpu is", "job": "system"}
+{"request": "whats using the most memroy", "job": "system"}
+{"request": "is nginix running", "job": "system"}
+{"request": "chekc free space on /tmp", "job": "system"}
+{"request": "why is this machine crawling", "job": "system"}
+{"request": "the laptop fan is loud, what's burning cpu", "job": "system"}
+{"request": "is there enough memory to run another vm?", "job": "system"}
+{"request": "how's the box doing, resource-wise", "job": "system"}
+{"request": "Show a full resource overview of this host: memory, CPU and root filesystem.", "job": "system"}
+{"request": "memory and cpu load together", "job": "system"}
+{"request": "how much of / is used", "job": "system"}
+{"request": "check the disk space on /boot, the kernel upgrade keeps complaining", "job": "system"}
+{"request": "list the 3 biggest memory users and the current load", "job": "system"}
+{"request": "is redis-server running, and show its errors from today", "job": "system"}
+{"request": "failed services and the error logs from this boot", "job": "system"}
+{"request": "is git installed and which package owns /usr/bin/make", "job": "system"}
+{"request": "status of mariadb and how full /var/lib/mysql is", "job": "system"}
+{"request": "what failed during boot?", "job": "system"}
+{"request": "did anything crash on the last boot", "job": "system"}
+{"request": "show warnings from all boots, 10 entries", "job": "system"}
+{"request": "give me the last hour of journal lines for the cron service", "job": "system"}
+{"request": "what's in the system log from yesterday, errors only", "job": "system"}
+{"request": "has avahi-daemon logged anything since 2026-10-01", "job": "system"}
+{"request": "any oom-killer messages in the journal", "job": "system"}
+{"request": "Check the journal for errors from the program tailscaled over the last 2 hours.", "job": "system"}
+{"request": "verify that the postgres service is active before I run the migration", "job": "system"}
+{"request": "I need to know if wireplumber is running as a user service", "job": "system"}
+{"request": "list user units that are failing", "job": "system"}
+{"request": "Before I deploy, confirm free disk space on /opt is above 5 GB.", "job": "system"}
+{"request": "what's the free memory in the machine, in a sentence", "job": "system"}
+{"request": "is swap being used?", "job": "system"}
+{"request": "do we have rsync on this box", "job": "system"}
+{"request": "which package supplies the jq binary", "job": "system"}
+{"request": "dpkg status for build-essential", "job": "system"}
+{"request": "has openssh-server been installed", "job": "system"}
+{"request": "which package does /usr/bin/python3 belong to?", "job": "system"}
+{"request": "is docker-ce installed on this host?", "job": "system"}
+{"request": "Look up which package owns /etc/fstab.", "job": "system"}
+{"request": "top 3 cpu processes", "job": "system"}
+{"request": "heaviest process by memory, just one", "job": "system"}
+{"request": "ps by cpu, 20 rows", "job": "system"}
+{"request": "rank everything running by RSS", "job": "system"}
+{"request": "which program is using the most RAM at the moment", "job": "system"}
+{"request": "what is the biggest cpu consumer right now? list the top 5.", "job": "system"}
+{"request": "give me the 12 hungriest processes by memory", "job": "system"}
+{"request": "Collect the top 10 CPU consumers so I can attach them to the incident note.", "job": "system"}
+{"request": "is firewalld active", "job": "system"}
+{"request": "systemctl status avahi-daemon", "job": "system"}
+{"request": "check on the sshd service please", "job": "system"}
+{"request": "has the nginx unit crashed", "job": "system"}
+{"request": "systemctl --user status ssh-agent", "job": "system"}
+{"request": "whats the state of apache2", "job": "system"}
+{"request": "is the cron daemon alive", "job": "system"}
+{"request": "Check that containerd.service is running; the pod keeps getting stuck.", "job": "system"}
+{"request": "show errors for the previous boot only", "job": "system"}
+{"request": "recent journal warnings for the user session", "job": "system"}
+{"request": "show 25 journal lines from the ssh service", "job": "system"}
+{"request": "what happened to NetworkManager since yesterday", "job": "system"}
+{"request": "logs from the current boot, errors, limit 40", "job": "system"}
+{"request": "journal for bluetooth from the last 2 days", "job": "system"}
+{"request": "what has cups logged during this boot?", "job": "system"}
+{"request": "Show warnings logged by sudo in the last day.", "job": "system"}
+{"request": "ram check", "job": "system"}
+{"request": "memory?", "job": "system"}
+{"request": "cpu?", "job": "system"}
+{"request": "disk?", "job": "system"}
+{"request": "load?", "job": "system"}
+{"request": "how much RAM is the machine using, and how much is still available", "job": "system"}
+{"request": "is my disk nearly full", "job": "system"}
+{"request": "got any space left on the root partition?", "job": "system"}
+{"request": "what's the capacity situation on /data", "job": "system"}
+{"request": "are we low on memory", "job": "system"}
+{"request": "is the machine under heavy load right now", "job": "system"}
+{"request": "Read memory, swap and cpu load in one go; I'm triaging a slow CI runner.", "job": "system"}
+{"request": "The test job was OOM-killed. How much memory is available now?", "job": "system"}
+{"request": "Disk write failed with ENOSPC. Report free space on /var/tmp.", "job": "system"}
+{"request": "Report which services are in a failed state, then show journal errors for the current boot.", "job": "system"}
+{"request": "can you tell me if the ssh daemon is running", "job": "system"}
+{"request": "could you show the load average", "job": "system"}
+{"request": "would you check the free ram?", "job": "system"}
+{"request": "please list failed services thanks", "job": "system"}
+{"request": "mind checking if python3-pip is installed?", "job": "system"}
+{"request": "show warnings from the cron service since 3 hours ago", "job": "system"}
+{"request": "journal errors from the program kubelet this boot", "job": "system"}
+{"request": "I want to see journal output for docker, previous boot, last 15", "job": "system"}
+{"request": "has anything logged an error in the last 10 minutes?", "job": "system"}
+{"request": "syslog errors from today", "job": "system"}
+{"request": "dmesg-style errors from this boot, from the journal", "job": "system"}
+{"request": "which package provides the dig command", "job": "system"}
+{"request": "which package installed /usr/sbin/nginx", "job": "system"}
+{"request": "is vim-gtk3 installed here", "job": "system"}
+{"request": "do I have gcc?", "job": "system"}
+{"request": "status of the zsh package", "job": "system"}
+{"request": "which package owns the ip command?", "job": "system"}
+{"request": "Is the linux-headers package installed for the running kernel? I'm about to build a module.", "job": "system"}
+{"request": "disc space on /home pls", "job": "system"}
+{"request": "ram usgae", "job": "system"}
+{"request": "is mysqld runing", "job": "system"}
+{"request": "which pakage owns /usr/bin/tmux", "job": "system"}
+{"request": "faield services?", "job": "system"}
+{"request": "what's the busiest process", "job": "system"}
+{"request": "what is using so much memory on this server", "job": "system"}
+{"request": "which services failed to start on this boot", "job": "system"}
+{"request": "list all user services and their state", "job": "system"}
+{"request": "give me the cpu load now and the top 3 cpu processes", "job": "system"}
+{"request": "swap and memory numbers please", "job": "system"}
+{"request": "available memory, in human numbers", "job": "system"}
+{"request": "what filesystem usage does / have", "job": "system"}
+{"request": "Measure how much room is left on /var/log; logrotate looks stuck.", "job": "system"}
+{"request": "root disk usage", "job": "system"}
+{"request": "overall system resource usage", "job": "system"}
+{"request": "is my computer slow because of memory pressure?", "job": "system"}
+{"request": "which of these is lying: is ssh running or not", "job": "system"}
+{"request": "check ssh service status and show its errors since yesterday", "job": "system"}
+{"request": "Confirm the unit docker.service is active and list its warnings from the last hour.", "job": "system"}
+{"request": "is there a failed service from before the reboot? check the previous boot errors", "job": "system"}
+{"request": "journal: errors only, previous boot, 50 lines", "job": "system"}
+{"request": "journal entries from 2026-10-15 for the cron service", "job": "system"}
+{"request": "ntpd or chronyd, which is installed?", "job": "system"}
+{"request": "is chrony installed and is it running", "job": "system"}
+{"request": "give me the current cpu load average and nothing else", "job": "system"}
+{"request": "how much free memory do we have left on the build host? I want a number.", "job": "system"}
+{"request": "which user services are active", "job": "system"}
+{"request": "state of the fail2ban service", "job": "system"}
+{"request": "show nginx errors from the last 45 minutes", "job": "system"}
+{"request": "was there an error from sshd last boot?", "job": "system"}
+{"request": "list the five processes with the largest memory footprint", "job": "system"}
+{"request": "which process is the top cpu user", "job": "system"}
+{"request": "cpu hogs?", "job": "system"}
+{"request": "ram hogs", "job": "system"}
+{"request": "Use the system tools to read memory usage and report only used vs total.", "job": "system"}
+{"request": "Check the status of the ssh.service unit and the failed unit list, read only.", "job": "system"}
+{"request": "Read the last hour of error-level journal entries; do not change anything.", "job": "system"}
+{"request": "Just looking: is the apache2 package installed?", "job": "system"}
+{"request": "what does df say about /mnt/media", "job": "system"}
+{"request": "How loaded is the cpu? I'm asking because the fan just kicked in.", "job": "system"}
+{"request": "is the disk full? my write just failed", "job": "system"}
+{"request": "show 10 journal lines for the previous boot", "job": "system"}
+{"request": "list every service on this machine", "job": "system"}
+{"request": "what's running as a service right now", "job": "system"}
+{"request": "get me failed services, user scope", "job": "system"}
+{"request": "tell me whether libreoffice is installed", "job": "system"}
+{"request": "which package provides /usr/bin/convert", "job": "system"}
+{"request": "which program is the largest memory consumer?", "job": "system"}
+{"request": "do we have free space on the root filesystem for a 20 GB download?", "job": "system"}
+{"request": "give me today's journal warnings", "job": "system"}
+{"request": "I rebooted: what errors were logged during this boot", "job": "system"}
+{"request": "is tailscaled running", "job": "system"}
+{"request": "Give me service status for wpa_supplicant.", "job": "system"}
+{"request": "check the htop package is installed", "job": "system"}
+{"request": "usage of the memory right now please", "job": "system"}
+{"request": "what is the uptime load", "job": "system"}
+{"request": "available disk on /dev/shm mount path /dev/shm", "job": "system"}
+{"request": "ok so which process is thrashing the box", "job": "system"}
+{"request": "audit step: record the disk usage of /var for the report", "job": "system"}
+{"request": "audit step: list failed services", "job": "system"}
+{"request": "audit step: report which package owns /usr/bin/curl", "job": "system"}

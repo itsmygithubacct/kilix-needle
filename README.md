@@ -11,6 +11,8 @@ desktop MCP menu. Every route shares one bounded X11 executor; previews are the
 default and typing never implicitly presses Enter.
 
 ```sh
+kilix-needle is docker running  # no job named: routed to the system job
+kilix-needle ask --plan "open the pdf viewer"   # the route, then the apps plan
 kilix-needle split right
 kilix-needle close tab 2 and go to tab 1
 kilix-needle make it a grid
@@ -81,6 +83,50 @@ custom weights, or replaces a corrupt selected asset: remove/repair that asset
 explicitly before retrying. Invalid custom model selections/profiles need
 explicit repair. `KILIX_NEEDLE_ENGINE` overrides are unsupported by this desktop
 interface and must be unset. There is no unattended acceptance flag.
+
+## Routing: one entry point
+
+`kilix-needle ask "<request>"`, the no-verb default, and the MCP pair
+`kilix_ask_plan` / `kilix_ask_act` choose the job for a plain request. The chosen
+job then runs exactly as its own command would, with its own checks, consent and
+history entry. That entry gains a `route` block.
+
+1. **Exact claims.** If exactly one job's grammar reads the whole request, it goes
+   there, unless the classifier is sure of a different job.
+2. **The router.** `router.py` is a local linear classifier: word and
+   character n-grams, TF-IDF, and multinomial logistic regression. It is about
+   2 MB of JSON and takes about 0.2 ms per request. It reads only the request text.
+   At probability 0.70 or above, the top job takes the request.
+3. **Unsure.** Below that, the candidate jobs' plans run, and plans change
+   nothing. If exactly one plan admits the request, its plan is shown, but an
+   unsure route never acts. Otherwise the answer names the candidates, with one
+   accepted phrasing each.
+
+`ask` runs only these jobs: panes, apps, agents, files and system. It names but
+never runs the others:
+- **tmux** needs a socket;
+- **logs** takes structured arguments;
+- **pty** and **desktop** have opt-in MCP tools.
+A routed request is never granted access that a job's own entry point would not give.
+
+The no-verb default always meant the panes job. When the router is unsure, the
+panes job still answers it as before; only a sure route sends the request elsewhere.
+`kilix-needle panes "<request>"` names the panes job explicitly. `--job JOB`
+skips routing.
+
+```sh
+kilix-needle ask --explain "show me htop so I can check the cpu"   # ranking and features
+kilix-needle ask --interactive "close the logs pane"   # route, plan, then "Do it? [y/N]"
+```
+
+`--interactive` is what `kilix ask` runs. It acts only on an explicit yes, for
+every act, and never offers one for an unsure route.
+
+**Provenance.** The router's weights are checked in under `router-model/`, with
+a training-data manifest: every source file's digest and row count, all of them
+our own eval sets and agent-written rows. `router_train.py` retrains them
+deterministically, and the test suite checks the retrained weights against the
+checked-in ones. Current gate sets are never read. See `router-model/README.md`.
 
 ## File search
 
@@ -1080,6 +1126,10 @@ real shape, including window groups.
 | `system_normalize.py` | model query normalization, schema validation and request grounding |
 | `system_model.py` | verified weights/runtime profile for the tuned system normalizer |
 | `jobs.py` | per-job evaluation sets and model-selection boundaries |
+| `router.py` | the job router: grammar claims and the checked-in linear classifier |
+| `router_train.py` | the router's deterministic trainer, check and threshold selection |
+| `router-model/` | the router's weights and training-data manifest (provenance) |
+| `ask.py` | `kilix-needle ask`, the routed default and `kilix_ask_plan` / `kilix_ask_act` |
 | `engine.py` | the `needle` binary as a private loopback server |
 | `libengine.py` | `libneedle.so` in a worker, for tuned weights |
 | `asset.py` | admitting installed assets or pinned local copies; the first-use install |

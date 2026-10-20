@@ -13,6 +13,10 @@ explicit experimental bundle. No desktop mutation occurs without confirm_risky.
 
 Two tools per job, so a harness's own approval setting can tell them apart:
 
+- kilix_ask_plan / kilix_ask_act   any plain request: the local router picks
+               the job (ask.py) and that job runs it with its own checks and
+               consent (confirm_risky as for panes and apps); an unsure route
+               never acts, and tmux, logs, pty and desktop are only named
 - kilix_plan   what a request would do, resolved against the live panes;
                runs nothing
 - kilix_act    do it, as an agent: every check still applies, the caller's
@@ -62,6 +66,21 @@ TOOL_LIST = [
          "required": ["request"], "additionalProperties": False}},
 ]
 
+
+_ASK_REQUEST = {"type": "string", "description": "any plain Kilix request; the job is chosen"}
+TOOL_LIST[:0] = [
+    {"name": "kilix_ask_plan",
+     "description": "Route a request to its kilix-needle job and preview it; runs nothing.",
+     "inputSchema": {"type": "object", "properties": {"request": _ASK_REQUEST},
+                     "required": ["request"], "additionalProperties": False}},
+    {"name": "kilix_ask_act",
+     "description": "Route and do it with that job's own checks. confirm_risky as for "
+                    "kilix_act. Unsure routes never act.",
+     "inputSchema": {"type": "object", "properties": {
+         "request": _ASK_REQUEST,
+         "confirm_risky": {"type": "boolean", "default": False}},
+         "required": ["request"], "additionalProperties": False}},
+]
 
 _APPS_REQUEST = {"type": "string",
                  "description": "e.g. 'open solitaire', 'mute microphone', "
@@ -448,6 +467,8 @@ class Server:
                 baseline=arguments.get("baseline", False),
                 model_label=lambda: source["label"])
             return _result(record, record["status"] != 0, request)
+        if name in ("kilix_ask_plan", "kilix_ask_act"):
+            return self._ask(arguments, act=name.endswith("_act"))
         if name == "kilix_logs_read":
             _logs_arguments(arguments)
             from needle_logs.cli import read
@@ -481,6 +502,33 @@ class Server:
                 record = run(engine, request, options, needle_cli._never, cwd=caller_cwd)
             else:
                 record = run(engine, request, options, needle_cli._never)
+        except (asset.AssetError, EngineError, LibEngineError) as error:
+            return {"content": [{"type": "text", "text": f"kilix-needle unavailable: {error}"}],
+                    "isError": True}
+        return _result(record, False, request)
+
+    def _ask(self, arguments, *, act: bool) -> dict:
+        import ask
+        allowed = {"request", "confirm_risky"} if act else {"request"}
+        if not isinstance(arguments, dict) or set(arguments) - allowed \
+                or not isinstance(arguments.get("request"), str):
+            raise ValueError("ask takes request text" + (" and confirm_risky" if act else ""))
+        confirm = arguments.get("confirm_risky", False)
+        if not isinstance(confirm, bool):
+            raise ValueError("confirm_risky must be true or false")
+        request = arguments["request"]
+        if not request.strip():
+            raise ValueError("ask needs a request")
+        try:
+            import agents_kilix
+            caller_cwd = agents_kilix.calling_cwd()
+        except Exception:       # noqa: BLE001 - as kilix_agents_act: no cwd, no 'here'
+            caller_cwd = None
+        jobs = ask.Jobs(lambda job: _LazyEngine(lambda: self._ensure_engine(job)),
+                        lambda: self._ensure_engine("system"), confirm=needle_cli._never,
+                        agent=True, agents_cwd=caller_cwd)
+        try:
+            record = ask.ask(request, jobs, act=act, assume_yes=act and confirm)
         except (asset.AssetError, EngineError, LibEngineError) as error:
             return {"content": [{"type": "text", "text": f"kilix-needle unavailable: {error}"}],
                     "isError": True}
