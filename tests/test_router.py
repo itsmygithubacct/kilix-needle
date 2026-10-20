@@ -167,6 +167,13 @@ class Compatibility(unittest.TestCase):
         self.assertGreater(seen, 1500)
         self.assertEqual(away, [])
 
+    def test_the_agent_guides_no_verb_examples_stay_with_panes(self):
+        # Kilix's docs/AGENTS.md teaches these as `kilix-needle "REQUEST"` calls.
+        for text in ("split right", "run 'pwd' in the pane titled build",
+                     "focus pane 12", "close pane 12"):
+            route = router.route(text)
+            self.assertEqual((route.stage, route.job), (0, "panes"), text)
+
 
 if __name__ == "__main__":
     unittest.main()
