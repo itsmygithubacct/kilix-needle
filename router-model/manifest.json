@@ -18,7 +18,7 @@
   "round": 4,
   "max_iter": 3000,
   "gtol": 1e-06,
-  "threshold": 0.57
+  "threshold": 0.56
  },
  "excluded_gate_sets": [
   "evals/agents/heldout-v2.jsonl",
@@ -295,7 +295,7 @@
   {
    "path": "evals/router/confusables.jsonl",
    "rule": "labelled",
-   "sha256": "a36ddaa45d07d64e1a9ea18caca40cab4ff8e10b3f0340fa7531b51ac211d322",
+   "sha256": "8410f826d17e172ce63180d8bc3d2083138e220bcf36c6b70a0864609a3413c2",
    "rows": 160
   },
   {
@@ -331,7 +331,7 @@
   {
    "path": "evals/router/spent-heldout-v1.jsonl",
    "rule": "spent",
-   "sha256": "fba877f6999869546988c8a6ba517fe9f010a7d4fa84f2f1c90878f841f1ef91",
+   "sha256": "21c3b2ba39c7d129fa47c2f490db89c3ac09f0b33d956bac6919774c381e7353",
    "rows": 337
   },
   {
@@ -342,21 +342,21 @@
   }
  ],
  "rows": {
-  "panes": 1589,
+  "panes": 1583,
   "apps": 824,
   "agents": 438,
   "files": 341,
   "system": 417,
-  "logs": 219,
+  "logs": 220,
   "tmux": 222,
   "pty": 218,
   "desktop": 523,
-  "none": 585
+  "none": 590
  },
  "artifact": {
   "path": "router-model/router.json",
-  "sha256": "d4fede1015c11a3698a102103935482fc9da75e387e8e29ada57645e51fcc200",
-  "bytes": 2261089
+  "sha256": "02cc31c867a20c4243a6a537e7ef43e288a35b706fb525bb295dc752d4214f7d",
+  "bytes": 2261434
  },
  "relabels": {
   "path": "evals/router/relabels.jsonl",
@@ -365,11 +365,11 @@
  "threshold_rule": {
   "rule": "lowest p in 0.50..0.95 (step 0.01) whose accepted cross-validation rows are at least 98.5% correct",
   "folds": "grouped 5-fold: job eval files and spent held-out sets whole, router files in 5 text-hash chunks",
-  "selected": 0.57,
-  "coverage": 0.9371,
-  "accepted_accuracy": 0.9857,
-  "cv_accuracy": 0.9647,
-  "cv_macro_recall": 0.9635,
+  "selected": 0.56,
+  "coverage": 0.9401,
+  "accepted_accuracy": 0.9852,
+  "cv_accuracy": 0.965,
+  "cv_macro_recall": 0.9643,
   "frozen": "2026-10-19, before any router held-out row was read (target 99.5%); round 2 set the target to 98.5% before any round-2 held-out row was read",
   "report": "router-model/selection.json"
  }

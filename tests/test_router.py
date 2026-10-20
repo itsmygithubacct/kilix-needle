@@ -262,21 +262,33 @@ class Stages(unittest.TestCase):
                            ("split right\uff1bopen solitaire", ["panes", "apps"]),
                            ("split right\u2014open solitaire", ["panes", "apps"]),
                            ("split right\u2028open solitaire", ["panes", "apps"]),
-                           ("- close tab 2\n- show memory", ["panes", "system"])):
+                           ("- close tab 2\n- show memory", ["panes", "system"]),
+                           ("\t* split right\n\t* open solitaire", ["panes", "apps"]),
+                           ("  \u2022 close tab 2\n  \u2022 show memory", ["panes", "system"])):
             route = router.route(text)
             self.assertEqual((route.stage, route.job, route.candidates), ("multi", None, both), text)
         # One job's grammar reading all of it is not two jobs.
         self.assertEqual(router.route("start codex in /tmp and split right").job, "agents")
-        # Nor is a quoted command that names other jobs' work.
+        # Nor is a quoted command that names other jobs' work, escaped quotes included.
         for quote, end in (("\u201c", "\u201d"), ("`", "`"), ('"', '"'), ("'", "'")):
             text = f"execute {quote}echo hello; show memory; close tab 2; echo done{end} below"
             self.assertEqual(router.route(text).job, "panes", text)
+        text = 'run "echo \\"hello; show memory; close tab 2; done\\"" in the pane on the left'
+        self.assertEqual(router.route(text).job, "panes", text)
 
     def test_an_apps_reading_of_another_jobs_clause_is_no_claim(self):
         # The apps grammar reads "split right" as the split-right button; alone,
         # that clause is the panes job's.
         for text in ("hide the clock then split right", "hide the clock and split right",
-                     "hide the clock, split right", "split right\u3002hide the clock"):
+                     "hide the clock, split right", "split right\u3002hide the clock",
+                     # The grammars read NFKC text: full-width and mathematical
+                     # letters spell the same conjunctions.
+                     "hide the clock \uff54\uff48\uff45\uff4e split right",
+                     "hide the clock \uff41\uff4e\uff44 split right",
+                     "hide the clock \U0001d69d\U0001d691\U0001d68e\U0001d697 split right",
+                     # As the apps grammar divides it, and a shell's "&&".
+                     "hide the clock followed by split right", "hide the clock: split right",
+                     "close tab 2 && hide the clock"):
             route = router.route(text)
             self.assertEqual((route.stage, route.job, route.candidates), ("multi", None, ["panes", "apps"]), text)
         # Naming the button is the apps job's.
@@ -356,6 +368,13 @@ class Stages(unittest.TestCase):
                  "- close tab 2\n- show memory": ["close tab 2", "show memory"],
                  "1. close tab 2\n2) show memory": ["close tab 2", "show memory"],
                  "* close tab 2\u2029\u2022 show memory": ["close tab 2", "show memory"],
+                 "\t* split right\n\t* open solitaire": ["split right", "open solitaire"],
+                 "  \u2022 close tab 2\n  \u25e6 show memory": ["close tab 2", "show memory"],
+                 # NFKC, as the grammars read it; a shell's "&&".
+                 "hide the clock \uff54\uff48\uff45\uff4e split right": ["hide the clock", "split right"],
+                 "close tab 2 && hide the clock": ["close tab 2", "hide the clock"],
+                 # A backslash escapes a quote inside one.
+                 'run "echo \\"a; show memory\\"" below': ['run "echo \\"a; show memory\\"" below'],
                  # Every kind of quote is one payload.
                  "execute \u201cecho hello; show memory; close tab 2\u201d below":
                      ["execute \u201cecho hello; show memory; close tab 2\u201d below"],

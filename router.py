@@ -25,6 +25,7 @@ import json
 import math
 from pathlib import Path
 import re
+import unicodedata
 
 # The jobs' grammars reach about 500 distinct patterns through re's module
 # cache in a run of routes, and re keeps 512: each route evicted patterns the
@@ -187,6 +188,11 @@ def _apps_named(plain: str) -> list:
     return [apps.CANDIDATE_CALLS[number] for number in sorted(numbers)]
 
 
+# The last reading, kept for the contest that follows a claim: apps.py reads
+# nothing but the request's text, so the same text always reads the same.
+_apps_last: tuple = (None, None)     # (text, result)
+
+
 def _apps_admitted(text):
     """apps.propose's reading and admitted actions, asking only the calls whose
     object the request names: (reading, [(order, call, action)]).
@@ -195,6 +201,15 @@ def _apps_admitted(text):
     (8-50 ms); a call is admitted only for a request that names its object, so
     the others are skipped here. tests/test_router.py checks this against
     propose and interpret on the spent apps requests."""
+    global _apps_last
+    last_text, last = _apps_last
+    if last_text == text:
+        return last
+    _apps_last = (text, _apps_reading(text))
+    return _apps_last[1]
+
+
+def _apps_reading(text):
     import apps
     if len(str(text)) > apps.MAX_REQUEST:
         return None, []
@@ -257,13 +272,15 @@ def _claims_apps(text):
 # words ("start codex in ~/x: fix the tests and push").
 _PAYLOAD = re.compile(r":\s.*", re.S)
 _AGENT_NAMED: re.Pattern | None = None
-_QUOTED = re.compile(r"(?<!\w)'[^'\n]*'(?!\w)|\"[^\"\n]*\"|`[^`\n]*`|“[^”\n]*”"
+# A backslash escapes a double quote or a backtick inside one, as a shell does:
+# run "echo \"a; b\"" below is one payload.
+_QUOTED = re.compile(r"(?<!\w)'[^'\n]*'(?!\w)|\"(?:\\.|[^\"\\\n])*\"|`(?:\\.|[^`\\\n])*`|“[^”\n]*”"
                      r"|(?<!\w)‘[^’\n]*’(?!\w)")
 # A full stop needs a space after it ("v1.2", "notes.txt" are one word); a
-# semicolon, full-width punctuation, a line break of any kind and a dash
-# (not a hyphen) break where they stand.
+# semicolon, full-width punctuation, a line break of any kind, a dash (not a
+# hyphen) and a shell "&&" break where they stand.
 _BREAK = re.compile(r"\s*(?:[.!?]+(?=\s|$)|[;;；。！？]+|[\n\r\v\f\x85\u2028\u2029]"
-                    r"|[‒-―]|\s--?(?=\s))\s*|\s*[,，]\s*(?:(?:and\s+)?then\s+|and\s+)?"
+                    r"|[‒-―]|\s--?(?=\s)|&&)\s*|\s*[,，]\s*(?:(?:and\s+)?then\s+|and\s+)?"
                     r"|\s+(?:and\s+then|then|and)\s+", re.I)
 # A list item's bullet or number, at the start of a line, is not its words.
 _BULLET = re.compile(r"(?:^|(?<=[\n\r\v\f\x85\u2028\u2029]))[ \t]*(?:[-*•‣◦▪]|\(?\d{1,3}[.)])[ \t]+")
@@ -282,11 +299,13 @@ def clauses(text: str) -> list:
     """The request's clauses: split at sentence ends, semicolons, newlines,
     dashes, commas, "and" and "then", never inside quotes. A list's words
     ("pdf and txt files") come apart too; that matters only when two jobs'
-    grammars each read one of the pieces whole."""
+    grammars each read one of the pieces whole. The text is read as the
+    grammars read it, NFKC-normalized: a full-width "ｔｈｅｎ" is "then" to them."""
     import apps
     text = str(text)
     if len(text) > apps.MAX_REQUEST:
         return []
+    text = unicodedata.normalize("NFKC", text)
     masked = _QUOTED.sub(lambda match: "x" * len(match.group(0)), text)
     payload = _PAYLOAD.search(masked)
     if payload and _agent_named(text[:payload.start()]):
@@ -444,6 +463,9 @@ def _route(text: str, model_: Model) -> Route:
     # grammar's placements, "start codex in /tmp and split right", are its own.)
     if found == ["apps"]:
         parts = clauses(text)
+        # And as the apps grammar itself divided it ("followed by", ":").
+        reading, _admitted = _apps_admitted(text)
+        parts = list(dict.fromkeys(parts + [part.text for part in (reading.parts if reading else ())]))
         if len(parts) > 1:
             contested = {_other_reader(part, model_, threshold, "apps") for part in parts} - {None}
         if contested:

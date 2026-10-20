@@ -131,6 +131,14 @@ class Pipeline(unittest.TestCase):
         record = ask.ask("split right and open solitaire", jobs, act=True, assume_yes=True)
         self.assertEqual((record["status"], record["route"]["stage"], jobs.runs), (1, "multi", []))
         self.assertIn("its own request", record["note"])
+        # The apps grammar would take "split right" as a button after "hide";
+        # full-width and mathematical conjunctions are conjunctions to it too.
+        for text in ("hide the clock ｔｈｅｎ split right",
+                     "hide the clock \U0001d69d\U0001d691\U0001d68e\U0001d697 split right",
+                     "close tab 2 && hide the clock"):
+            jobs = FakeJobs()
+            record = ask.ask(text, jobs, act=True, assume_yes=True)
+            self.assertEqual((record["status"], record["route"]["stage"], jobs.runs), (1, "multi", []), text)
 
     def test_a_default_job_acts_only_when_it_alone_admits_an_unsure_route(self):
         unsure = dict(return_value=route(2, candidates=["system", "panes"], p=0.5))

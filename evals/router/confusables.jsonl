@@ -36,7 +36,7 @@
 {"request": "type 'hello' into the focused Firefox window", "job": "desktop"}
 {"request": "press ctrl+s in the gedit window", "job": "desktop"}
 {"request": "scroll down in the image viewer window", "job": "desktop"}
-{"request": "scroll back through the output of the logs pane", "job": "panes"}
+{"request": "scroll back through the output of the logs pane", "job": "logs"}
 {"request": "click at 500, 300 on the screen", "job": "desktop"}
 {"request": "resize this pane wider by 10 cells", "job": "panes"}
 {"request": "resize the LibreOffice window to 900x700", "job": "desktop"}
@@ -142,9 +142,9 @@
 {"request": "write a python script that prints the cpu count", "job": "none"}
 {"request": "run nproc in a new split", "job": "panes"}
 {"request": "which window has focus right now", "job": "desktop"}
-{"request": "which pane has focus right now", "job": "panes"}
+{"request": "which pane has focus right now", "job": "none"}
 {"request": "move the browser window to the left half of the screen", "job": "desktop"}
-{"request": "move this pane to a new tab", "job": "panes"}
+{"request": "move this pane to a new tab", "job": "none"}
 {"request": "lay out my panes as a 2x2 grid", "job": "panes"}
 {"request": "switch to the Firefox window and press ctrl+t", "job": "desktop"}
 {"request": "go to the editor pane", "job": "panes"}

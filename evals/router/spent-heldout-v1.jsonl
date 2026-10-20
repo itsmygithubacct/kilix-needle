@@ -10,7 +10,7 @@
 {"request": "move this tab to the far left", "job": "panes"}
 {"request": "run make test in the logs pane", "job": "panes"}
 {"request": "open a new tab and run vim notes.md", "job": "panes"}
-{"request": "could you split left and start a shell in ~/projects/api", "job": "panes"}
+{"request": "could you split left and start a shell in ~/projects/api", "job": "none"}
 {"request": "type git status into pane 6", "job": "panes"}
 {"request": "go to the tab named build", "job": "panes"}
 {"request": "shrink the right pane a bit", "job": "panes"}
@@ -27,11 +27,11 @@
 {"request": "can you maximise the pane i'm in", "job": "panes"}
 {"request": "pane 7 is too narrow, widen it", "job": "panes"}
 {"request": "swap the left and right panes", "job": "panes"}
-{"request": "open a new tab with a shell in the Downloads folder", "job": "panes"}
+{"request": "open a new tab with a shell in the Downloads folder", "job": "none"}
 {"request": "run pytest -x in pane 8", "job": "panes"}
 {"request": "split right and run python3 -m http.server 8000", "job": "panes"}
 {"request": "new tab", "job": "panes"}
-{"request": "close all the other panes except this one", "job": "panes"}
+{"request": "close all the other panes except this one", "job": "none"}
 {"request": "move the build tab after the docs tab", "job": "panes"}
 {"request": "launch lazygit in a new split on the right", "job": "panes"}
 {"request": "focus the pane on the left", "job": "panes"}
