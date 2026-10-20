@@ -18,7 +18,7 @@
   "round": 4,
   "max_iter": 3000,
   "gtol": 1e-06,
-  "threshold": 0.55
+  "threshold": 0.57
  },
  "excluded_gate_sets": [
   "evals/agents/heldout-v2.jsonl",
@@ -325,7 +325,7 @@
   {
    "path": "evals/router/window-words.jsonl",
    "rule": "labelled",
-   "sha256": "4a6e70b552bca4a9fcb5f8b8f4ac9a3f5daea6cb5774e92e71bbf7be5dbfd3e8",
+   "sha256": "32730bccdeea0137a8f189238f2c21a4361e400e83d22c4da0c631d73b06423a",
    "rows": 60
   },
   {
@@ -342,7 +342,7 @@
   }
  ],
  "rows": {
-  "panes": 1597,
+  "panes": 1589,
   "apps": 824,
   "agents": 438,
   "files": 341,
@@ -351,12 +351,12 @@
   "tmux": 222,
   "pty": 218,
   "desktop": 523,
-  "none": 577
+  "none": 585
  },
  "artifact": {
   "path": "router-model/router.json",
-  "sha256": "aa67042862846b19b762d123311ce664bb67baecc9496944deb0cd22a5ca8c87",
-  "bytes": 2261735
+  "sha256": "d4fede1015c11a3698a102103935482fc9da75e387e8e29ada57645e51fcc200",
+  "bytes": 2261089
  },
  "relabels": {
   "path": "evals/router/relabels.jsonl",
@@ -365,11 +365,11 @@
  "threshold_rule": {
   "rule": "lowest p in 0.50..0.95 (step 0.01) whose accepted cross-validation rows are at least 98.5% correct",
   "folds": "grouped 5-fold: job eval files and spent held-out sets whole, router files in 5 text-hash chunks",
-  "selected": 0.55,
-  "coverage": 0.9451,
-  "accepted_accuracy": 0.9854,
-  "cv_accuracy": 0.966,
-  "cv_macro_recall": 0.9646,
+  "selected": 0.57,
+  "coverage": 0.9371,
+  "accepted_accuracy": 0.9857,
+  "cv_accuracy": 0.9647,
+  "cv_macro_recall": 0.9635,
   "frozen": "2026-10-19, before any router held-out row was read (target 99.5%); round 2 set the target to 98.5% before any round-2 held-out row was read",
   "report": "router-model/selection.json"
  }

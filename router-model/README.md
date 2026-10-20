@@ -34,12 +34,15 @@ All training text is ours. None of it comes from a third-party dataset.
     status), 60 short apps launches, 80 agents message and wait rows, and 80
     `none` questions about tools (`apps-controls`, `apps-launch`,
     `agents-message-wait`, `none-about-tools`);
-  - `window-words`: 48 panes rows that call a pane a window, by where it is
+  - `window-words`: 40 panes rows that call a pane a window, by where it is
     ("close the window below", "split this window"), and 12 desktop rows that
     name an application's window with the same words. Written on 2026-10-19 by
     the router's author (who had seen the spent round-1 sets, not round 2's),
     because "dismiss the window below", a spent panes request, routed to the
-    desktop job.
+    desktop job. Review round 2 found two rows asking for what no panes tool
+    does; an audit of all 48 against the panes tools relabelled 8 to `none`
+    (clear, scroll, move a pane to a new tab, close the others, even out the
+    sizes, undo a split).
 - **Relabels** (`evals/router/relabels.jsonl`): spent job-eval rows tagged
   `none` that a current job answers. A job eval's `none` tag means "not this
   job", which is not always "no job":
@@ -71,7 +74,8 @@ python3 router_train.py --select   # grouped 5-fold cross-validation -> selectio
 Training needs NumPy; inference does not. The trainer is deterministic:
 - it runs single-threaded;
 - it uses a sorted vocabulary (features seen in at least 2 rows);
-- it uses its own L-BFGS, run to a gradient max-norm of 1e-6;
+- it uses its own L-BFGS, run to a gradient max-norm of 1e-6, or until no
+  decrease of the loss is measurable in double precision;
 - it rounds weights to 4 decimals.
 
 BLAS rounding can differ between CPUs, so `--check` (and
@@ -88,7 +92,9 @@ a 99.5% target. That router failed its first held-out gate: about 20% of fresh
 requests fell below the threshold and were asked to clarify. Round 2 moved the
 target to 98.5%, on cross-validation only, before any round-2 held-out row was
 read. On the spent round-1 rows, held out whole, a threshold of 0.55 left 8.1%
-unsure for 2.7% wrong, where 0.70 left 20.0% unsure for 1.4% wrong.
+unsure for 2.7% wrong, where 0.70 left 20.0% unsure for 1.4% wrong. After
+review round 2 relabelled 8 rows and the trainer's stop rule changed, the same
+rule selected 0.57.
 
 **The folds** are grouped 5-fold:
 - each job eval file and each spent held-out set stays whole, so it measures
@@ -99,7 +105,7 @@ unsure for 2.7% wrong, where 0.70 left 20.0% unsure for 1.4% wrong.
 
 | Measure | Value |
 |---|---:|
-| Cross-validation accuracy | 96.6% (macro recall 96.5%) |
-| Selected threshold | 0.55 |
-| Rows above the threshold | 94.5% |
-| Accuracy above the threshold | 98.5% |
+| Cross-validation accuracy | 96.5% (macro recall 96.4%) |
+| Selected threshold | 0.57 |
+| Rows above the threshold | 93.7% |
+| Accuracy above the threshold | 98.6% |

@@ -62,20 +62,25 @@ def _identity(path) -> tuple:
         return real, None
 
 
-def refuse_gates(manifest: dict) -> None:
-    """Refuse a manifest naming a gate set, as a source or as relabels, under
-    any spelling (./, an absolute path, a symlink or a hard link), before any
-    file it names is opened or hashed."""
+def _refuse(paths) -> None:
+    """Refuse any of these paths that is a gate set under any spelling (./, an
+    absolute path, a symlink or a hard link), without opening it."""
     gates = [_identity(HERE / gate) for gate in GATES]
     names = {real for real, _inode in gates}
     inodes = {inode for _real, inode in gates if inode}
-    named = [source["path"] for source in manifest["sources"]]
-    if manifest.get("relabels"):
-        named.append(manifest["relabels"]["path"])
-    for path in named:
+    for path in paths:
         real, inode = _identity(HERE / path)
         if real in names or inode in inodes:
             raise SystemExit(f"router_train: {path} is a current gate set and is never read")
+
+
+def refuse_gates(manifest: dict) -> None:
+    """Refuse a manifest naming a gate set, as a source or as relabels, or a
+    probe set that is one, before any file is opened or hashed."""
+    named = [source["path"] for source in manifest["sources"]]
+    if manifest.get("relabels"):
+        named.append(manifest["relabels"]["path"])
+    _refuse(named + [PROBE])
 
 
 def load_rows(manifest: dict) -> list:
@@ -196,8 +201,12 @@ def fit(x: Sparse, y, k: int, c: float, *, max_iter: int, gtol: float):
 
 
 def lbfgs(f, x, *, memory: int = 10, max_iter: int, gtol: float):
-    """Minimise a smooth convex f (returning value, gradient) to max|g| <= gtol."""
+    """Minimise a smooth convex f (returning value, gradient) to max|g| <= gtol,
+    or until no decrease is measurable: when the expected decrease is within
+    rounding of f, the line search would accept steps on rounding alone and
+    crawl to max_iter (round 2's relabelled rows stalled at max|g| 1.2e-6)."""
     import numpy as np
+    floor = 4 * np.finfo(np.float64).eps      # twice the decrease a rounding unit hides
     fx, g = f(x)
     s_hist, y_hist = [], []
     for _ in range(max_iter):
@@ -221,6 +230,8 @@ def lbfgs(f, x, *, memory: int = 10, max_iter: int, gtol: float):
         if slope >= 0:              # not a descent direction: restart from the gradient
             s_hist, y_hist = [], []
             d, slope = -g, -float(g @ g)
+        if -slope <= floor * max(1.0, abs(fx)):
+            break
         step = 1.0
         while True:
             xn = x + step * d
@@ -266,6 +277,7 @@ def dump(artifact: dict) -> bytes:
 
 
 def probe_texts() -> list:
+    _refuse([PROBE])
     return [row["request"] for _n, row in _lines(PROBE)]
 
 

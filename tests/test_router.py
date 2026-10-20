@@ -14,6 +14,7 @@ import router
 import router_train
 
 HERE = Path(__file__).resolve().parent.parent
+GATES = frozenset(job.heldout for job in jobs.JOBS.values())
 
 
 def model_sure_of(label: str, p: float = 0.99) -> router.Model:
@@ -33,6 +34,8 @@ class Features(unittest.TestCase):
         self.assertIn("c: go", f)
         self.assertIn("c:tab ", f)
         self.assertNotIn("c:o t", f)        # never across a word boundary
+        f = router.features("split, then go")
+        self.assertEqual((f["w:,"], f["b:split ,"]), (1, 1))     # punctuation is a word
 
     def test_text_is_bounded(self):
         self.assertEqual(router.features("x " * 100000), router.features("x " * 2000))
@@ -92,6 +95,44 @@ class Artifact(unittest.TestCase):
                         router_train.load_rows(manifest)
                     with self.assertRaisesRegex(SystemExit, "gate set"):
                         router_train.check(manifest)
+
+    def test_the_checker_refuses_a_probe_set_that_is_a_gate_set(self):
+        gate = jobs.JOBS["panes"].heldout
+        manifest = json.loads((router.MODEL_DIR / "manifest.json").read_text())
+        with tempfile.TemporaryDirectory() as tmp:
+            link = Path(tmp) / "probe.jsonl"
+            link.symlink_to(HERE / gate)
+            hard = Path(tmp) / "hard-probe.jsonl"
+            try:
+                os.link(HERE / gate, hard)
+            except OSError:
+                hard = link
+            for probe in (link, hard, HERE / gate):
+                with self.subTest(probe), mock.patch.object(router_train, "PROBE", probe), \
+                        mock.patch.object(router_train, "_lines", side_effect=AssertionError("read")), \
+                        mock.patch.object(router_train, "_sha", side_effect=AssertionError("hashed")):
+                    with self.assertRaisesRegex(SystemExit, "gate set"):
+                        router_train.check(manifest)
+                    with self.assertRaisesRegex(SystemExit, "gate set"):
+                        router_train.probe_texts()
+
+    def test_training_stops_where_no_decrease_is_measurable(self):
+        # A minimum the gradient tolerance cannot reach in double precision:
+        # an ill-conditioned quadratic far from zero. Without the stop, the
+        # line search accepts steps on rounding alone until max_iter.
+        import numpy as np
+        a = np.logspace(0, 3, 40)
+        c = np.random.default_rng(0).normal(size=40)
+        evaluations = []
+
+        def f(x):
+            evaluations.append(1)
+            r = x - c
+            return 1e6 + 0.5 * float(a @ (r * r)), a * r
+
+        x = router_train.lbfgs(f, np.zeros(40), max_iter=3000, gtol=1e-30)
+        self.assertLess(len(evaluations), 500)
+        self.assertLess(float(np.abs(x - c).max()), 1e-3)
 
     def test_the_trainer_refuses_one_text_with_two_labels(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -171,6 +212,27 @@ class Stages(unittest.TestCase):
                                      __import__("app_controls").parse(text) is None, text)
         self.assertNotIn("apps", router.claims("show the clock and hide the clock"))
 
+    def test_the_apps_name_index_finds_every_named_call(self):
+        # Against searching every call's every name, over every spent request.
+        import re
+        import apps
+        every = [(call, [re.compile(rf"(?<![\w]){re.escape(name)}(?![\w])")
+                         for name in apps._object_names(call)]) for call in apps.CANDIDATE_CALLS]
+        names = [n for n in sorted((HERE / "evals").rglob("*.jsonl"))
+                 if str(n.relative_to(HERE)) not in GATES and "results" not in n.parts]
+        found = 0
+        for name in names:
+            for line in name.read_text(encoding="utf-8").splitlines():
+                row = json.loads(line) if line.strip() else {}
+                text = row.get("request") if isinstance(row, dict) else None
+                if not isinstance(text, str):
+                    continue
+                plain = apps._plain_words(text)
+                expected = [call for call, patterns in every if any(p.search(plain) for p in patterns)]
+                self.assertEqual(router._apps_named(plain), expected, text)
+                found += bool(expected)
+        self.assertGreater(found, 500)
+
     def test_two_jobs_work_in_one_request_goes_back_as_two(self):
         # However sure the classifier is of one of them: that job would act on
         # its own clause and drop the other.
@@ -195,11 +257,70 @@ class Stages(unittest.TestCase):
                            ("close pane 3 and start codex in ~/x", ["panes", "agents"]),
                            ("close tab 2. start claude in ~/gpu_terminal", ["panes", "agents"]),
                            ("close tab 2 — show memory", ["panes", "system"]),
-                           ("close tab 2\nshow memory", ["panes", "system"])):
+                           ("close tab 2\nshow memory", ["panes", "system"]),
+                           ("split right;open solitaire", ["panes", "apps"]),
+                           ("split right\uff1bopen solitaire", ["panes", "apps"]),
+                           ("split right\u2014open solitaire", ["panes", "apps"]),
+                           ("split right\u2028open solitaire", ["panes", "apps"]),
+                           ("- close tab 2\n- show memory", ["panes", "system"])):
             route = router.route(text)
             self.assertEqual((route.stage, route.job, route.candidates), ("multi", None, both), text)
         # One job's grammar reading all of it is not two jobs.
         self.assertEqual(router.route("start codex in /tmp and split right").job, "agents")
+        # Nor is a quoted command that names other jobs' work.
+        for quote, end in (("\u201c", "\u201d"), ("`", "`"), ('"', '"'), ("'", "'")):
+            text = f"execute {quote}echo hello; show memory; close tab 2; echo done{end} below"
+            self.assertEqual(router.route(text).job, "panes", text)
+
+    def test_an_apps_reading_of_another_jobs_clause_is_no_claim(self):
+        # The apps grammar reads "split right" as the split-right button; alone,
+        # that clause is the panes job's.
+        for text in ("hide the clock then split right", "hide the clock and split right",
+                     "hide the clock, split right", "split right\u3002hide the clock"):
+            route = router.route(text)
+            self.assertEqual((route.stage, route.job, route.candidates), ("multi", None, ["panes", "apps"]), text)
+        # Naming the button is the apps job's.
+        for text in ("hide the clock and the split right button", "hide the split right button"):
+            route = router.route(text)
+            self.assertEqual((route.stage, route.job), (0, "apps"), text)
+        # Contested, but only one job reads a clause alone: a choice, not an action.
+        reader = mock.Mock(side_effect=lambda part, *_: "panes" if part == "split right" else None)
+        with mock.patch.object(router, "_clause_reader", reader):
+            route = router.route("hide the clock then split right")
+        self.assertEqual((route.stage, route.job, route.candidates), (2, None, ["panes", "apps"]))
+
+    def test_another_jobs_clause_is_found_as_the_whole_clause_reader_finds_it(self):
+        real = router.model()
+
+        class Unsure:           # below the threshold on every clause: the slow path
+            threshold = 0.99
+
+            def rank(self, text):
+                return real.rank(text)
+
+        texts = [json.loads(line)["request"] for name in
+                 ("evals/router/confusables.jsonl", "evals/router/spent-heldout-v1.jsonl",
+                  "evals/router/window-words.jsonl", "evals/apps/test.jsonl")
+                 for line in (HERE / name).read_text().splitlines() if line.strip()]
+        parts = sorted({part for text in texts for part in router.clauses(text)})
+        self.assertGreater(len(parts), 500)
+        for model in (real, Unsure()):
+            for part in parts:
+                whole = router._clause_reader(part, model, model.threshold)
+                self.assertEqual(router._other_reader(part, model, model.threshold, "apps"),
+                                 None if whole == "apps" else whole, part)
+        # And every way the classifier and the grammars can fall out.
+        import itertools
+        jobs_ = ("panes", "apps", "system", "agents")
+        for top, p in itertools.product(("panes", "apps", "system", "none"), (0.5, 0.99)):
+            model = model_sure_of(top, p)
+            for n in range(len(jobs_) + 1):
+                for reading in itertools.combinations(jobs_, n):
+                    fake = {job: (lambda _text, job=job: job in reading) for job in router.CLAIMS}
+                    with mock.patch.dict(router.CLAIMS, fake):
+                        whole = router._clause_reader("x", model, model.threshold)
+                        other = router._other_reader("x", model, model.threshold, "apps")
+                    self.assertEqual(other, None if whole == "apps" else whole, (top, p, reading))
 
     def test_a_clause_reading_the_classifier_contests_is_not_another_jobs_work(self):
         # The apps grammar reads "show one pane at a time" (as the clock); the
@@ -221,7 +342,29 @@ class Stages(unittest.TestCase):
                  "start codex in ~/x: fix the tests and push": ["start codex in ~/x: fix the tests and push"],
                  # Only an agent's task: anything else after a colon is still clauses.
                  "close tab 2: and show memory": ["close tab 2:", "show memory"],
-                 "set it to v1.2 and show memory": ["set it to v1.2", "show memory"]}
+                 "set it to v1.2 and show memory": ["set it to v1.2", "show memory"],
+                 # Compact breaks: no space needed after a semicolon, full-width
+                 # punctuation, a dash or a line break; a hyphen is a word's.
+                 "split right;open solitaire": ["split right", "open solitaire"],
+                 "split right\uff1bopen solitaire": ["split right", "open solitaire"],
+                 "split right\u3002hide the clock": ["split right", "hide the clock"],
+                 "split right\u2014open solitaire": ["split right", "open solitaire"],
+                 "split right\u2028open solitaire": ["split right", "open solitaire"],
+                 "set volume to 0.5;show memory": ["set volume to 0.5", "show memory"],
+                 "open notes.txt in split-right": ["open notes.txt in split-right"],
+                 # A list's bullets and numbers are not its words.
+                 "- close tab 2\n- show memory": ["close tab 2", "show memory"],
+                 "1. close tab 2\n2) show memory": ["close tab 2", "show memory"],
+                 "* close tab 2\u2029\u2022 show memory": ["close tab 2", "show memory"],
+                 # Every kind of quote is one payload.
+                 "execute \u201cecho hello; show memory; close tab 2\u201d below":
+                     ["execute \u201cecho hello; show memory; close tab 2\u201d below"],
+                 "execute `echo hello; show memory; close tab 2` below":
+                     ["execute `echo hello; show memory; close tab 2` below"],
+                 'execute "echo hello; show memory; close tab 2" below':
+                     ['execute "echo hello; show memory; close tab 2" below'],
+                 "execute \u2018echo hello; show memory\u2019 below":
+                     ["execute \u2018echo hello; show memory\u2019 below"]}
         for text, parts in cases.items():
             self.assertEqual(router.clauses(text), parts, text)
         self.assertEqual(router.clauses("x " * apps.MAX_REQUEST), [])
@@ -250,6 +393,19 @@ class Stages(unittest.TestCase):
             route = router.route("close tab 2")
         self.assertEqual((route.stage, route.job), ("error", None))
         self.assertIn("RuntimeError", route.note)
+
+    def test_a_parser_fault_is_not_a_refusal(self):
+        # Each grammar's own refusal type is "not this job's"; any other error,
+        # a plain ValueError included, routes nothing.
+        import desktop_grammar
+        import files_job
+        import pty_job
+        import tmux_job
+        for module in (files_job, pty_job, tmux_job, desktop_grammar):
+            with mock.patch.object(module, "parse", side_effect=ValueError("parser bug")):
+                route = router.route("close tab 2")
+            self.assertEqual((route.stage, route.job), ("error", None), module.__name__)
+            self.assertIn("ValueError", route.note)
 
     def test_the_router_reads_only_the_text(self):
         import kilix

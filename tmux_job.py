@@ -5,6 +5,11 @@ import re
 import unicodedata
 
 
+class Refused(ValueError):
+    """This job does not read the request. Only this is a refusal: any other
+    error is a fault, and callers that route on the reading fail closed on it."""
+
+
 MAX_TEXT = 65536
 KEYS = ("Enter", "Tab", "Escape", "BSpace", "Space", "Up", "Down", "Left", "Right",
         "Home", "End", "PageUp", "PageDown", "Delete", "C-c", "C-d", "C-u", "C-a", "C-e", "C-l")
@@ -58,7 +63,7 @@ def literal_request(request: dict) -> dict:
             or not re.fullmatch(_TARGET, request["target"])
             or not isinstance(request.get("text"), str)
             or not 1 <= len(request["text"]) <= MAX_TEXT or controls(request["text"])):
-        raise ValueError("literal request needs operation send|type, exact target, and nonempty text without controls except tab")
+        raise Refused("literal request needs operation send|type, exact target, and nonempty text without controls except tab")
     return dict(request)
 
 
@@ -74,9 +79,9 @@ def parse(request: str) -> dict:
     The socket is a separate, mandatory CLI/MCP field.
     """
     if not isinstance(request, str) or not request.strip() or len(request) > MAX_TEXT + 1024:
-        raise ValueError("provide one bounded tmux request. " + USAGE)
+        raise Refused("provide one bounded tmux request. " + USAGE)
     if controls(request):
-        raise ValueError("control characters other than tab are not supported")
+        raise Refused("control characters other than tab are not supported")
     original = _HEAD.sub("", request.strip())
     found = None
     # Prefer the complete literal reading: a session named "thanks" and a
@@ -90,41 +95,41 @@ def parse(request: str) -> dict:
         if found:
             break
     if not found:
-        raise ValueError("unsupported or compound tmux request. " + USAGE)
+        raise Refused("unsupported or compound tmux request. " + USAGE)
     operation, match = found
     args = {k: v for k, v in match.groupdict().items() if v is not None}
     for key in ("name", "new_name"):
         if key in args and not re.fullmatch(_NAME, args[key]):
-            raise ValueError("session names must use ASCII letters, digits, underscore or hyphen")
+            raise Refused("session names must use ASCII letters, digits, underscore or hyphen")
     if "target" in args and not re.fullmatch(_SESSION if operation in ("rename", "close") else _TARGET,
                                              args["target"]):
-        raise ValueError("use an exact supported session name, stable ID or numeric pane target")
+        raise Refused("use an exact supported session name, stable ID or numeric pane target")
     if "text" in args:
         args["text"] = args["text"][1:-1]
         if not args["text"] or len(args["text"]) > MAX_TEXT:
-            raise ValueError("quote nonempty text of at most 65536 characters")
+            raise Refused("quote nonempty text of at most 65536 characters")
     if "cwd" in args:
         path = args["cwd"]
         args["cwd"] = path[1:-1] if path[:1] in ("'", '"', "`") else path
         if not args["cwd"].startswith("/") or len(args["cwd"]) > 4096:
-            raise ValueError("new-session directory must be an absolute bounded path")
+            raise Refused("new-session directory must be an absolute bounded path")
     if "lines" in args:
         if len(args["lines"]) > 4 or not 1 <= int(args["lines"]) <= 2000:
-            raise ValueError("read lines must be from 1 to 2000")
+            raise Refused("read lines must be from 1 to 2000")
         args["lines"] = int(args["lines"])
     if "keys" in args:
         names = {key.casefold(): key for key in KEYS}
         keys = args["keys"].split()
         if not 1 <= len(keys) <= 16 or any(k.casefold() not in names for k in keys):
-            raise ValueError("use 1–16 allowed named keys: " + ", ".join(KEYS))
+            raise Refused("use 1–16 allowed named keys: " + ", ".join(KEYS))
         args["keys"] = [names[k.casefold()] for k in keys]
     if "target" in args and len(args["target"]) > 160:
-        raise ValueError("target is too long")
+        raise Refused("target is too long")
     return {"operation": operation, **args}
 
 
 def socket_path(value: str) -> str:
     if (not isinstance(value, str) or not value.startswith("/") or len(value) > 4096
             or any(unicodedata.category(c) in ("Cc", "Cf", "Cs", "Zl", "Zp") for c in value)):
-        raise ValueError("provide an explicit absolute private socket path")
+        raise Refused("provide an explicit absolute private socket path")
     return value

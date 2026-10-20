@@ -8,6 +8,11 @@ import unicodedata
 from actions import Refusal
 
 
+class Refused(ValueError):
+    """This job does not read the request. Only this is a refusal: any other
+    error is a fault, and callers that route on the reading fail closed on it."""
+
+
 @dataclass(frozen=True)
 class Action:
     kind: str
@@ -62,11 +67,11 @@ def _scope(s):
     if value.casefold() in _SCOPES:
         return _SCOPES[value.casefold()]
     if not (value.startswith(('/', '~/', './'))):
-        raise ValueError('name a scope: here, Downloads, Documents, research, projects, or an explicit path')
+        raise Refused('name a scope: here, Downloads, Documents, research, projects, or an explicit path')
     if s[:1] not in ('\"', "'") and any(c.isspace() for c in value):
-        raise ValueError('quote directory paths containing spaces')
+        raise Refused('quote directory paths containing spaces')
     if any(p in ('.', '..') for p in value.removeprefix('./').split('/')):
-        raise ValueError('scope must not contain dot or parent components')
+        raise Refused('scope must not contain dot or parent components')
     return value
 
 
@@ -126,23 +131,23 @@ def _canonical(q: str) -> str:
     if not literal or (not quoted and any(c in literal for c in '*?"')):
         return q
     if m['scope1'] and m['scope2']:
-        raise ValueError('state one file scope; multiple scopes are ambiguous')
+        raise Refused('state one file scope; multiple scopes are ambiguous')
     scope = m['scope1'] or m['scope2']
     relation = 'starting with' if prefix else 'named'
     if not scope:
-        raise ValueError(f'name a scope, e.g.: find files {relation} "{literal}" in here  ({USAGE})')
+        raise Refused(f'name a scope, e.g.: find files {relation} "{literal}" in here  ({USAGE})')
     value = name if quoted else f'"{literal}"'
     return f'find files {relation} {value} in {scope}'
 
 
 def parse(request: str) -> list[Action]:
     if not isinstance(request, str) or not request.strip() or len(request.encode('utf-8')) > 4096:
-        raise ValueError('provide a request of 1–4096 UTF-8 bytes')
+        raise Refused('provide a request of 1–4096 UTF-8 bytes')
     if any(unicodedata.category(c) in ('Cc', 'Cf', 'Zl', 'Zp') for c in request):
-        raise ValueError('control characters are not supported')
+        raise Refused('control characters are not supported')
     q = request.strip()
     if _HELP.fullmatch(q):
-        raise ValueError(USAGE)
+        raise Refused(USAGE)
     q = _DEFAULT_VISIBILITY.sub('', q)
     q = _canonical(q)
     # Full matches preserve quoted payloads and reject unaccounted instructions.
@@ -170,7 +175,7 @@ def parse(request: str) -> list[Action]:
             if extension in ('all', 'my', 'some', 'hidden', 'system', 'deleted', 'large', 'largest', 'recent', 'newest'):
                 continue
             if extension in _CATEGORIES:
-                raise ValueError('name one file extension; a category spans several')
+                raise Refused('name one file extension; a category spans several')
             # A type word is not an extension: "markdown files" are *.md, not *.markdown.
             extension = _TYPE_WORDS.get(extension, extension)
             return [Action('find_files', {'scope': _scope(m[2]), 'name': '', 'extension': extension, 'modified': (m[3] or 'any').lower()})]
@@ -182,9 +187,9 @@ def parse(request: str) -> list[Action]:
             return [Action('list_files', {'scope': _scope(m[2]), 'order': 'size' if m[1].lower() in ('large', 'largest') else 'modified'})]
         path = _literal(m[1])
         if path.startswith('/') or any(p in ('', '.', '..') or p.startswith('.') for p in path.split('/')):
-            raise ValueError('preview needs a relative path without hidden or parent components')
+            raise Refused('preview needs a relative path without hidden or parent components')
         return [Action('preview_file', {'scope': _scope(m[2]), 'path': path})]
-    raise ValueError('unsupported or ambiguous files request; ' + USAGE)
+    raise Refused('unsupported or ambiguous files request; ' + USAGE)
 
 
 def interpret(request, calls):

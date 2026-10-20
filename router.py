@@ -163,7 +163,28 @@ def _claims_agents(text):
     return bool(agents.exact_calls(text))
 
 
-_apps_names: list | None = None
+_apps_index: dict | None = None
+_NAME_WORD = re.compile(r"\w+")
+
+
+def _apps_named(plain: str) -> list:
+    """The candidate calls, in order, one of whose objects the request names as
+    whole words. A name can only be found where its first word is one of the
+    request's words, so only those names are searched for."""
+    import apps
+    global _apps_index
+    if _apps_index is None:
+        index = {}
+        for number, call in enumerate(apps.CANDIDATE_CALLS):
+            for name in apps._object_names(call):
+                first = _NAME_WORD.match(name)
+                index.setdefault(first[0] if first else "", []).append(
+                    (number, name, re.compile(rf"(?<![\w]){re.escape(name)}(?![\w])")))
+        _apps_index = index
+    words = set(_NAME_WORD.findall(plain)) | {""}
+    numbers = {number for word in words for number, name, pattern in _apps_index.get(word, ())
+               if name in plain and pattern.search(plain)}
+    return [apps.CANDIDATE_CALLS[number] for number in sorted(numbers)]
 
 
 def _apps_admitted(text):
@@ -175,16 +196,9 @@ def _apps_admitted(text):
     the others are skipped here. tests/test_router.py checks this against
     propose and interpret on the spent apps requests."""
     import apps
-    global _apps_names
-    if _apps_names is None:
-        _apps_names = [(call, [(name, re.compile(rf"(?<![\w]){re.escape(name)}(?![\w])"))
-                               for name in apps._object_names(call)])
-                       for call in apps.CANDIDATE_CALLS]
     if len(str(text)) > apps.MAX_REQUEST:
         return None, []
-    plain = apps._plain_words(text)
-    named = [call for call, names in _apps_names
-             if any(name in plain and pattern.search(plain) for name, pattern in names)]
+    named = _apps_named(apps._plain_words(text))
     if not named:
         return None, []
     reading = apps._read(text, widen=True)
@@ -245,9 +259,15 @@ _PAYLOAD = re.compile(r":\s.*", re.S)
 _AGENT_NAMED: re.Pattern | None = None
 _QUOTED = re.compile(r"(?<!\w)'[^'\n]*'(?!\w)|\"[^\"\n]*\"|`[^`\n]*`|“[^”\n]*”"
                      r"|(?<!\w)‘[^’\n]*’(?!\w)")
-_BREAK = re.compile(r"\s*(?:[.;!?;；。]+(?=\s|$)|\n|\s[‒-―]|[‒-―]\s"
-                    r"|\s--?(?=\s))\s*|\s*,\s*(?:(?:and\s+)?then\s+|and\s+)?"
+# A full stop needs a space after it ("v1.2", "notes.txt" are one word); a
+# semicolon, full-width punctuation, a line break of any kind and a dash
+# (not a hyphen) break where they stand.
+_BREAK = re.compile(r"\s*(?:[.!?]+(?=\s|$)|[;;；。！？]+|[\n\r\v\f\x85\u2028\u2029]"
+                    r"|[‒-―]|\s--?(?=\s))\s*|\s*[,，]\s*(?:(?:and\s+)?then\s+|and\s+)?"
                     r"|\s+(?:and\s+then|then|and)\s+", re.I)
+# A list item's bullet or number, at the start of a line, is not its words.
+_BULLET = re.compile(r"(?:^|(?<=[\n\r\v\f\x85\u2028\u2029]))[ \t]*(?:[-*•‣◦▪]|\(?\d{1,3}[.)])[ \t]+")
+_EDGES = " .,;!?;；。！？，"
 
 
 def _agent_named(text: str) -> bool:
@@ -271,19 +291,25 @@ def clauses(text: str) -> list:
     payload = _PAYLOAD.search(masked)
     if payload and _agent_named(text[:payload.start()]):
         masked = masked[:payload.start() + 1] + "x" * (len(masked) - payload.start() - 1)
+    for start, end in [match.span() for match in _BULLET.finditer(masked)]:
+        text = text[:start] + " " * (end - start) + text[end:]
+        masked = masked[:start] + " " * (end - start) + masked[end:]
     parts, at = [], 0
     for match in _BREAK.finditer(masked):
         parts.append(text[at:match.start()])
         at = match.end()
     parts.append(text[at:])
-    return [part.strip() for part in parts if part.strip(" .,;!?;；。")]
+    return [part.strip() for part in parts if part.strip(_EDGES)]
 
 
+# A grammar's own refusal type means "not this job's request". Any other
+# exception, a ValueError from a parser fault included, reaches route(), which
+# fails closed.
 def _claims_files(text):
     import files_job
     try:
         return bool(files_job.parse(text))
-    except ValueError:
+    except files_job.Refused:
         return False
 
 
@@ -296,7 +322,7 @@ def _claims_pty(text):
     import pty_job
     try:
         return bool(pty_job.parse(text))
-    except ValueError:
+    except pty_job.Refused:
         return False
 
 
@@ -304,15 +330,16 @@ def _claims_tmux(text):
     import tmux_job
     try:
         return bool(tmux_job.parse(text))
-    except ValueError:
+    except tmux_job.Refused:
         return False
 
 
 def _claims_desktop(text):
     import desktop_grammar
+    import desktop_job
     try:
         return desktop_grammar.parse(text) is not None
-    except ValueError:          # desktop_job.DesktopError: not a desktop instruction
+    except desktop_job.DesktopError:        # not a desktop instruction
         return False
 
 
@@ -388,6 +415,20 @@ def _clause_reader(part: str, model_: Model, threshold: float) -> str | None:
     return readers[0] if len(readers) == 1 else None
 
 
+def _other_reader(part: str, model_: Model, threshold: float, job: str) -> str | None:
+    """_clause_reader(part) when that is not `job`, else None, asking `job`'s
+    own grammar only when the answer turns on it."""
+    top, p = model_.rank(part)[0]
+    if top != job and top in RUNS and CLAIMS[top](part):
+        return top
+    if p >= threshold:
+        return None
+    # Unsure: the one job whose grammar reads it. `job` reading it too makes
+    # two, or makes it `job`'s: either way no other job's.
+    others = [other for other in RUNS if other not in (top, job) and CLAIMS[other](part)]
+    return others[0] if len(others) == 1 and not CLAIMS[job](part) else None
+
+
 def _route(text: str, model_: Model) -> Route:
     ranking = model_.rank(text)
     threshold = model_.threshold
@@ -395,13 +436,25 @@ def _route(text: str, model_: Model) -> Route:
     (top, p), (_second, q) = ranking[0], ranking[1]
     alternatives = [(job, prob) for job, prob in ranking[1:3]]
     common = dict(p=p, margin=p - q, alternatives=alternatives, claims=found)
+    parts, contested = None, set()
+    # The apps grammar reads a button by name, so it can read another job's
+    # clause as one: "hide the clock then split right" would hide the clock and
+    # the split-right button. When a clause alone is another job's, as stage 0
+    # would route it, the apps reading is no claim. (Only apps: the agents
+    # grammar's placements, "start codex in /tmp and split right", are its own.)
+    if found == ["apps"]:
+        parts = clauses(text)
+        if len(parts) > 1:
+            contested = {_other_reader(part, model_, threshold, "apps") for part in parts} - {None}
+        if contested:
+            found = []
     # Two jobs' work in one request (a non-goal): no grammar reads all of it,
     # and clauses are each read by a different job that ask runs. It goes back
     # as two requests, however sure the classifier is of one job: that job
     # would act on its own clause and drop the other.
     # (Sure of no job, or of one ask only names, nothing acts: no need to look.)
     if not found and (top in RUNS or p < threshold):
-        parts = clauses(text)
+        parts = clauses(text) if parts is None else parts
         only = set()
         for part in parts if len(parts) > 1 else ():
             reader = _clause_reader(part, model_, threshold)
@@ -412,6 +465,9 @@ def _route(text: str, model_: Model) -> Route:
         if len(only) > 1:
             return Route("multi", None, candidates=[job for job in LABELS if job in only],
                          note="this asks two jobs; send it as two requests", **common)
+    if contested:
+        return Route(2, None, candidates=[job for job in LABELS if job in contested | {"apps"}],
+                     note="another job reads a clause the apps grammar read", **common)
     # One grammar's claim routes unless the classifier is sure of another job:
     # a grammar can read more than its job means ("send 'x' to the pane below"
     # is a well-formed tmux sentence), so that disagreement is settled by plans.
