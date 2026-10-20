@@ -104,11 +104,23 @@ class Jobs:
         raise ValueError(f"ask does not run the {job} job")
 
 
+# Inside WSL the desktop is Windows': a desktop request is the windows job's.
+_WINDOWS = ("kilix-needle windows", "kilix_windows_read / plan / act (kilix-needle mcp --tools windows)",
+            "Windows applications and their windows, from WSL")
+_WINDOWS_PHRASE = 'open notepad then type "hello"'
+
+
 def _named(job: str, request: str) -> dict:
     cli, tools, what = router.NAMED[job]
+    phrase = PHRASES[job]
+    if job == "desktop":
+        import desktop_windows
+        if desktop_windows.in_wsl():
+            job, phrase = "windows", _WINDOWS_PHRASE
+            cli, tools, what = _WINDOWS
     return {"request": request, "status": 1, "items": [],
             "note": f"this reads as a request for the {job} job ({what}); ask names it but does not run it",
-            "hint": f"{cli} {json.dumps(request)}  (MCP: {tools}); accepted form: {PHRASES[job]}"}
+            "hint": f"{cli} {json.dumps(request)}  (MCP: {tools}); accepted form: {phrase}"}
 
 
 def _none(request: str) -> dict:

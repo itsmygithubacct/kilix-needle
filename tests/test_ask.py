@@ -66,16 +66,21 @@ class Pipeline(unittest.TestCase):
         self.assertFalse(seen["options"].assume_yes)
 
     def test_none_and_named_jobs_run_nothing(self):
+        import desktop_windows
         jobs = FakeJobs()
         with mock.patch.object(router, "route", return_value=route(1, "none")):
             record = ask.ask("what is a monad", jobs, act=True)
         self.assertEqual((record["status"], jobs.runs), (1, []))
-        for job, cli in (("tmux", "kilix-needle tmux"), ("pty", "kilix-needle pty"),
-                         ("desktop", "kilix-needle desktop"), ("logs", "kilix-needle logs")):
-            with mock.patch.object(router, "route", return_value=route(0, job, claims=[job])):
+        # Inside WSL the desktop is Windows', so a desktop request names the windows job.
+        for wsl, job, cli in ((False, "tmux", "kilix-needle tmux"), (False, "pty", "kilix-needle pty"),
+                              (False, "desktop", "kilix-needle desktop"), (False, "logs", "kilix-needle logs"),
+                              (True, "desktop", "kilix-needle windows"), (True, "pty", "kilix-needle pty")):
+            with mock.patch.object(router, "route", return_value=route(0, job, claims=[job])), \
+                    mock.patch.object(desktop_windows, "in_wsl", return_value=wsl):
                 record = ask.ask("do the thing", jobs, act=True, assume_yes=True)
             self.assertEqual(record["status"], 1)
             self.assertIn(cli, record["hint"])
+            self.assertIn(f"for the {cli.split()[-1]} job", record["note"])
             self.assertEqual(jobs.runs, [])
 
     def test_stage_2_plans_quietly_and_never_acts(self):

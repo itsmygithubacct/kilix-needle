@@ -107,22 +107,26 @@ history entry. That entry gains a `route` block.
    are each read by a different job, nothing runs, however sure the classifier
    is: the job it chose would act on its own clause and drop the other. The
    answer asks for one request per job. Clauses split at sentence ends,
-   semicolons, dashes, new lines, commas, "and" and "then", never inside quotes
-   or in an agent's task after ": ". A clause's reading counts as it would at
-   stage 0: not when the classifier is sure that clause is another job's.
+   semicolons, dashes, line breaks, commas, "and" and "then" (full-width
+   punctuation too, and a list's bullets are dropped), never inside quotes or
+   in an agent's task after ": ". A clause's reading counts as it would at
+   stage 0: not when the classifier is sure that clause is another job's. An
+   apps reading that takes another job's clause as a button's name ("hide the
+   clock then split right") is no claim either.
 4. **Unsure.** Otherwise, below the threshold, the candidate jobs' plans run, and
    plans change nothing. If exactly one plan admits the request, its plan is
    shown, but an unsure route never acts. Otherwise the answer names the
    candidates, with one accepted phrasing each.
 
 Routing fails closed. A missing or altered `router.json`, or a grammar that
-raises, routes to no job, and nothing acts.
+raises anything but its own refusal, routes to no job, and nothing acts.
 
 `ask` runs only these jobs: panes, apps, agents, files and system. It names but
 never runs the others:
 - **tmux** needs a socket;
 - **logs** takes structured arguments;
-- **pty** and **desktop** have opt-in MCP tools.
+- **pty** and **desktop** have opt-in MCP tools. Inside WSL a desktop request
+  names the **windows** job instead.
 A routed request is never granted access that a job's own entry point would not give.
 
 The no-verb default always meant the panes job. A sure route sends the request
