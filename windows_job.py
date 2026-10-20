@@ -474,6 +474,11 @@ def validate(request, calls):
         elif "app" in args:
             if not _app_mentioned(args["app"], clause, quoted):
                 raise WindowsActionError("window app was not requested")
+            # ApplicationFrameHost.exe grounded by "calculator" must keep Calculator's title.
+            implied = {title for alias, (_program, owner, title) in APPS.items()
+                       if title and owner.lower() == args["app"].lower() and _mentions(alias, clause, quoted)}
+            if implied and not _mentions(args["app"], clause, quoted) and args.get("title") not in implied:
+                raise WindowsActionError("the window title implied by the app was dropped")
             if args["app"] in quoted:
                 used.append(args["app"])
         if "text" in args and args["text"] not in quoted:

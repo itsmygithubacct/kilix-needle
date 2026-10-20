@@ -282,7 +282,9 @@ class Windows:
         if "launch" in window:
             launched = launches.get(window["launch"])
             if launched and launched.get("target"):
-                window["identity"] = launched["target"]
+                # The SDK found a window of the launched process itself, whose program
+                # the plan already screened; its title would cost another request.
+                window.update(identity=launched["target"], window={"app": window["selector"].get("app"), "title": None})
                 return window["identity"]
             # Applications such as Calculator hand their window to another process.
             row = self._wait_window(window["selector"], "visible", 9000)
@@ -384,8 +386,8 @@ class Windows:
                 item["_binds"].update(identity=found["target"], window=describe(found))
             return "confirmed", {"state": args["state"], **({"window": describe(found)} if found else {})}, None
         identity = self._identity(item, launches)
-        if _is_input(item) and "window" in item["_window"]:
-            _refuse_shell(item["_window"]["window"])  # a deferred window, known only now
+        if (_is_input(item) or item.get("implied")) and "window" in item["_window"]:
+            _refuse_shell(item["_window"]["window"])  # a deferred window, known only now; before focusing it
         if name == "window":
             if action in ("move", "resize"):
                 rect = self._row(identity)["rect"]

@@ -212,6 +212,9 @@ class Grammar(unittest.TestCase):
         self.assertEqual(actions[0]["arguments"]["title"], "Calculator")
         self.assertEqual(job.validate('type "x" in calculator', [{"name": "keyboard", "arguments": {
             "action": "type", "text": "x", "app": "calculator"}}])[0]["arguments"]["app"], "ApplicationFrameHost.exe")
+        with self.assertRaises(job.WindowsActionError):  # the owner spelled out, its title dropped
+            job.validate('type "x" in calculator', [{"name": "keyboard", "arguments": {
+                "action": "type", "text": "x", "app": "ApplicationFrameHost.exe"}}])
         settings = row(196696, "Settings", "ApplicationFrameHost.exe")
         win, _fake = desktop(settings)
         with self.assertRaises(backend.WindowsDesktopError) as caught:
@@ -429,6 +432,7 @@ class Execution(unittest.TestCase):
         self.assertEqual(record["results"][-1]["status"], "blocked", record)
         self.assertEqual(record["results"][-1]["error"]["code"], "shell_window")
         self.assertNotIn("type", fake.ops())
+        self.assertNotIn("focus", fake.ops())  # refused before the implied focus raised it
 
     def test_calculator_window_is_found_after_launch(self):
         record, fake = self.run_request("open calculator then press 7")
