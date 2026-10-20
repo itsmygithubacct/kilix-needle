@@ -8,7 +8,10 @@ run the chosen job exactly as its own command or MCP tool would, with that job's
 own checks and consent. Below the router's threshold, stage 2 asks the candidate
 jobs' plans, which run nothing: when exactly one admits the request, its plan is
 shown, but an unsure route never acts. Otherwise the answer is a clarification
-naming each candidate job with one accepted phrasing.
+naming each candidate job with one accepted phrasing. Two jobs' work in one
+request runs nothing and asks for two requests. The one exception is the
+no-verb CLI default (`default="panes"`): at stage 2, when only the panes plan
+admits the request, the panes job answers as it did before routing.
 
 Jobs that need arguments a sentence cannot carry (tmux: a socket; logs: a file or
 session) and the opt-in pty and desktop tools are named, never run, so routing
@@ -123,17 +126,22 @@ def _clarify(request: str, candidates: list, note: str = "") -> dict:
 
 
 def ask(request: str, jobs: Jobs, *, act: bool, assume_yes: bool = False,
-        job: str | None = None, route: router.Route | None = None) -> dict:
+        job: str | None = None, route: router.Route | None = None,
+        default: str | None = None) -> dict:
     """One routed request, as the chosen job's record plus a `route` block.
 
     `job` skips routing; `route` reuses one already made (an interactive act
-    after its plan), so the act runs on exactly the job the plan showed."""
+    after its plan), so the act runs on exactly the job the plan showed.
+
+    `default` is the job an entry point always meant before routing (the
+    no-verb CLI: panes). At stage 2, when that job's plan is the only one that
+    admits the request, it runs as it did before routing, with its own checks
+    and consent. A clarification or a router error never acts."""
     if not isinstance(request, str) or not request.strip():
         raise ValueError("ask needs a request")
     if route is not None:
-        # A route made by the caller: an interactive act after its plan, or the
-        # no-verb default's panes answer ("default").
-        if route.stage not in (0, 1, "forced", "default") or not (
+        # A route made by the caller: an interactive act after its plan.
+        if route.stage not in (0, 1, "forced") or not (
                 route.job in router.RUNS or route.job == "none" or route.job in router.NAMED):
             raise ValueError("ask runs only a sure route to a job")
     elif job is not None:
@@ -145,7 +153,7 @@ def ask(request: str, jobs: Jobs, *, act: bool, assume_yes: bool = False,
             route = router.route(request)
         except Exception as error:      # noqa: BLE001 - a router failure fails closed
             route = router.Route("error", None, note=f"router failed: {type(error).__name__}")
-    if route.stage in (0, 1, "forced", "default"):
+    if route.stage in (0, 1, "forced"):
         if route.job == "none":
             record = _none(request)
         elif route.job in router.NAMED:
@@ -155,20 +163,38 @@ def ask(request: str, jobs: Jobs, *, act: bool, assume_yes: bool = False,
                 record = jobs.run(route.job, request, dry_run=not act, assume_yes=assume_yes)
         record["route"] = route.record()
         return record
+    if route.stage == "multi":
+        record = _clarify(request, route.candidates,
+                          f"this asks for {' and '.join(route.candidates)} work at once; "
+                          "nothing was run. Send each part as its own request")
+        record["route"] = route.record()
+        with history.routed(route.record()):
+            _record_unsure(request, record, act)
+        return record
     # Stage 2: the candidates' plans decide; a plan runs nothing and is not recorded.
-    plans = {}
+    plans, failures = {}, {}
     for candidate in route.candidates:
         if candidate in router.RUNS:
             try:
                 with history.quiet():
                     plans[candidate] = jobs.run(candidate, request, dry_run=True)
-            except Exception:       # noqa: BLE001 - a failing plan admits nothing
-                plans[candidate] = None
+            except Exception as error:      # noqa: BLE001 - a failing plan admits nothing
+                plans[candidate], failures[candidate] = None, error
     admitted = [c for c in route.candidates
                 if (c in plans and admits(c, plans[c])) or (c in router.NAMED and c in route.claims)]
+    if not admitted and default in failures:
+        # The entry point's own job could not plan (its model is missing, say):
+        # its error, with its recovery hint, is the answer it always gave.
+        raise failures[default]
     if len(admitted) == 1 and admitted[0] in plans:
         chosen = admitted[0]
         route.job = chosen
+        if act and route.stage == 2 and chosen == default:
+            route.note = f"unsure; only the {chosen} job's plan admits it, and this entry point is that job"
+            with history.routed(route.record()):
+                record = jobs.run(chosen, request, dry_run=False, assume_yes=assume_yes)
+            record["route"] = route.record()
+            return record
         record = dict(plans[chosen])
         if act:
             record["status"] = 1
@@ -211,6 +237,8 @@ def describe(route: dict) -> str:
         head = f"route: {job} (chosen with --job)"
     elif stage == 2 and job:
         head = f"route: unsure; only the {job} job's plan admits it{p}"
+    elif stage == "multi":
+        head = f"route: two jobs' work ({', '.join(route.get('candidates') or [])})"
     else:
         head = "route: unsure" + (f"; candidates {', '.join(route.get('candidates') or [])}"
                                   if route.get("candidates") else "")
@@ -332,8 +360,8 @@ def main(argv=None) -> int:
             print(f"kilix-needle ask: {error}", file=sys.stderr)
             return 1
         return 0
-    if args.interactive and (args.agent or args.json or args.yes):
-        parser.error("--interactive cannot be combined with --agent, --json or --yes")
+    if args.interactive and (args.agent or args.json or args.yes or args.plan or args.job):
+        parser.error("--interactive cannot be combined with --agent, --json, --yes, --plan or --job")
     jobs, stack = cli_jobs(args, interactive=args.interactive)
     try:
         with stack:
@@ -345,7 +373,7 @@ def main(argv=None) -> int:
                 status = 0 if record.get("status") == 0 else 1
     except KeyboardInterrupt:
         print("\nkilix-needle ask: interrupted", file=sys.stderr)
-        status = 130
+        status = 1
     except Exception as error:      # noqa: BLE001 - engines and assets fail with a message
         print(f"kilix-needle ask: {error}", file=sys.stderr)
         status = 2 if not args.interactive else 1

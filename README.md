@@ -92,15 +92,23 @@ job then runs exactly as its own command would, with its own checks, consent and
 history entry. That entry gains a `route` block.
 
 1. **Exact claims.** If exactly one job's grammar reads the whole request, it goes
-   there, unless the classifier is sure of a different job.
+   there, unless the classifier is sure of a different job. An apps reading that
+   leaves another job's clause unread ("split right and open solitaire") is no claim.
 2. **The router.** `router.py` is a local linear classifier: word and
    character n-grams, TF-IDF, and multinomial logistic regression. It is about
-   2 MB of JSON and takes about 0.2 ms per request. It reads only the request text.
+   2 MB of JSON and takes about 0.2 ms per request; with the grammar claims, a
+   route takes about 1.5 ms (p95 under 5 ms). It reads only the request text.
    At probability 0.70 or above, the top job takes the request.
-3. **Unsure.** Below that, the candidate jobs' plans run, and plans change
-   nothing. If exactly one plan admits the request, its plan is shown, but an
-   unsure route never acts. Otherwise the answer names the candidates, with one
-   accepted phrasing each.
+3. **Two jobs.** When no grammar reads the whole request, the classifier is
+   unsure, and different clauses are each read by a different job, nothing runs:
+   the answer asks for one request per job.
+4. **Unsure.** Otherwise, below the threshold, the candidate jobs' plans run, and
+   plans change nothing. If exactly one plan admits the request, its plan is
+   shown, but an unsure route never acts. Otherwise the answer names the
+   candidates, with one accepted phrasing each.
+
+Routing fails closed. A missing or altered `router.json`, or a grammar that
+raises, routes to no job, and nothing acts.
 
 `ask` runs only these jobs: panes, apps, agents, files and system. It names but
 never runs the others:
@@ -109,10 +117,11 @@ never runs the others:
 - **pty** and **desktop** have opt-in MCP tools.
 A routed request is never granted access that a job's own entry point would not give.
 
-The no-verb default always meant the panes job. When the router is unsure, the
-panes job still answers it as before; only a sure route sends the request elsewhere.
-`kilix-needle panes "<request>"` names the panes job explicitly. `--job JOB`
-skips routing.
+The no-verb default always meant the panes job. A sure route sends the request
+elsewhere. When the router is unsure and only the panes job's plan admits the
+request, the panes job answers it as before. A clarification, two jobs' work or
+a router failure runs nothing; the answer names `kilix-needle panes "<request>"`,
+which sends it to the panes job explicitly. `--job JOB` skips routing.
 
 ```sh
 kilix-needle ask --explain "show me htop so I can check the cpu"   # ranking and features

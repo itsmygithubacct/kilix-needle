@@ -52,8 +52,35 @@ def _lines(path: Path):
                 yield number, json.loads(line)
 
 
+def _identity(path) -> tuple:
+    """Where a path really is, without opening it: its resolved name and inode."""
+    real = os.path.realpath(path)
+    try:
+        info = os.stat(real)
+        return real, (info.st_dev, info.st_ino)
+    except OSError:
+        return real, None
+
+
+def refuse_gates(manifest: dict) -> None:
+    """Refuse a manifest naming a gate set, as a source or as relabels, under
+    any spelling (./, an absolute path, a symlink or a hard link), before any
+    file it names is opened or hashed."""
+    gates = [_identity(HERE / gate) for gate in GATES]
+    names = {real for real, _inode in gates}
+    inodes = {inode for _real, inode in gates if inode}
+    named = [source["path"] for source in manifest["sources"]]
+    if manifest.get("relabels"):
+        named.append(manifest["relabels"]["path"])
+    for path in named:
+        real, inode = _identity(HERE / path)
+        if real in names or inode in inodes:
+            raise SystemExit(f"router_train: {path} is a current gate set and is never read")
+
+
 def load_rows(manifest: dict) -> list:
     """[(source, label, request)], relabelled and de-duplicated by normalised text."""
+    refuse_gates(manifest)
     relabel = {}
     if manifest.get("relabels"):
         for _n, row in _lines(HERE / manifest["relabels"]["path"]):
@@ -61,8 +88,6 @@ def load_rows(manifest: dict) -> list:
     rows, seen = [], {}
     for source in manifest["sources"]:
         path = source["path"]
-        if path in GATES:
-            raise SystemExit(f"router_train: {path} is a current gate set and is never read")
         for _n, case in _lines(HERE / path):
             if source["rule"] == "eval":
                 # An eval row with calls is its job's; a "none"-tagged row is no
@@ -246,6 +271,7 @@ def probe_texts() -> list:
 
 def check(manifest: dict) -> int:
     """Retrain from the manifest and compare with the checked-in artifact."""
+    refuse_gates(manifest)
     for source in manifest["sources"] + ([manifest["relabels"]] if manifest.get("relabels") else []):
         if _sha(HERE / source["path"]) != source["sha256"]:
             print(f"router_train: {source['path']} differs from its manifest digest")

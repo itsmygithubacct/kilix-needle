@@ -757,27 +757,23 @@ def _handle_system(args, request: str, modes: dict) -> int:
 def _handle_routed(args, panes_engine, request: str, modes: dict) -> int:
     """The no-verb default: route the request (ask.py) and run the chosen job.
 
-    This entry point always meant the panes job, so when the router is unsure
-    the panes job answers, as it did before routing; only a sure route (stage 0
-    or 1) sends the request elsewhere. A panes route prints exactly what the
-    panes job prints; JSON gains `route`."""
+    This entry point always meant the panes job. A sure route (stage 0 or 1)
+    runs its job. At stage 2 the panes job still answers when its plan is the
+    only one that admits the request, as it did before routing; a
+    clarification or a router error runs nothing. A panes answer prints
+    exactly what the panes job prints; JSON gains `route`."""
     import ask
-    import router
     routed_jobs, stack = ask.cli_jobs(args, interactive=False, engines={"panes": panes_engine})
     with stack:
-        try:
-            route = router.route(request)
-        except Exception as error:      # noqa: BLE001 - unsure: the panes job answers
-            route = router.Route("error", None, note=f"router failed: {type(error).__name__}")
-        if route.stage not in (0, 1):
-            route.note = "unsure; the no-verb default answers with the panes job"
-            route.job, route.stage = "panes", "default"
         record = ask.ask(request, routed_jobs, act=not modes["dry_run"],
-                         assume_yes=modes["assume_yes"], route=route)
+                         assume_yes=modes["assume_yes"], default="panes")
     route = record.get("route") or {}
+    if route.get("stage") in ("clarify", "error"):
+        record["hint"] = (record.get("hint", "") + f"  |  to send it to the panes job: "
+                          f"kilix-needle panes {json.dumps(request)}").lstrip(" |")
     if modes["as_json"]:
         print(json.dumps(record, ensure_ascii=False))
-    elif route.get("job") == "panes" and route.get("stage") in (0, 1, "default"):
+    elif route.get("job") == "panes" and "planned, not run" not in record.get("note", ""):
         print(render(record))
     else:
         print(ask.render(record))

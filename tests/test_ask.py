@@ -107,6 +107,84 @@ class Pipeline(unittest.TestCase):
         self.assertEqual((record["status"], record["route"]["stage"]), (1, "clarify"))
         self.assertEqual(jobs.runs, [])
 
+    def test_stage_2_asks_every_candidate_and_takes_the_one_that_admits(self):
+        files = {"status": 0, "plan": [{"kind": "find_files"}], "items": []}
+        jobs = FakeJobs({"system": REFUSED, "files": files})
+        with mock.patch.object(router, "route",
+                               return_value=route(2, candidates=["system", "panes", "files"], p=0.5)):
+            record = ask.ask("show me htop", jobs, act=False)
+        self.assertEqual([run[0] for run in jobs.runs], ["system", "panes", "files"])
+        self.assertEqual(record["route"]["stage"], "clarify")       # panes and files both admit
+        jobs = FakeJobs({"system": REFUSED, "files": REFUSED})
+        with mock.patch.object(router, "route",
+                               return_value=route(2, candidates=["system", "panes", "files"], p=0.5)):
+            record = ask.ask("show me htop", jobs, act=False)
+        self.assertEqual((record["route"]["stage"], record["route"]["job"]), (2, "panes"))
+
+    def test_two_jobs_work_runs_nothing(self):
+        jobs = FakeJobs()
+        record = ask.ask("split right and open solitaire", jobs, act=True, assume_yes=True)
+        self.assertEqual((record["status"], record["route"]["stage"], jobs.runs), (1, "multi", []))
+        self.assertIn("its own request", record["note"])
+
+    def test_a_default_job_acts_only_when_it_alone_admits_an_unsure_route(self):
+        unsure = dict(return_value=route(2, candidates=["system", "panes"], p=0.5))
+        jobs = FakeJobs({"system": REFUSED})
+        with mock.patch.object(router, "route", **unsure):
+            record = ask.ask("close tab 2", jobs, act=True, assume_yes=True, default="panes")
+        self.assertEqual(jobs.runs[-1], ("panes", False, True, False))
+        self.assertEqual((record["status"], record["route"]["job"]), (0, "panes"))
+        for records, why in (({"panes": REFUSED}, "another job admits"),
+                             ({}, "two jobs admit")):
+            jobs = FakeJobs(records)
+            with self.subTest(why), mock.patch.object(router, "route", **unsure):
+                record = ask.ask("close tab 2", jobs, act=True, assume_yes=True, default="panes")
+            self.assertTrue(all(dry for _job, dry, _yes, _quiet in jobs.runs), why)
+            self.assertEqual(record["status"], 1)
+        for failure in (dict(side_effect=RuntimeError("boom")),
+                        dict(return_value=router.Route("error", None, note="router failed")),
+                        dict(return_value=router.Route("error", None, candidates=["panes"],
+                                                       note="router failed"))):
+            jobs = FakeJobs()
+            with self.subTest(failure), mock.patch.object(router, "route", **failure):
+                record = ask.ask("close tab 2", jobs, act=True, assume_yes=True, default="panes")
+            self.assertEqual(record["status"], 1)
+            self.assertTrue(all(dry for _job, dry, _yes, _quiet in jobs.runs))
+
+    def test_a_default_jobs_failing_plan_is_its_answer_when_nothing_admits(self):
+        class Failing(FakeJobs):
+            def run(self, job, request, **kw):
+                if job == "panes":
+                    raise LookupError("panes model missing")
+                return super().run(job, request, **kw)
+        unsure = route(2, candidates=["system", "panes"], p=0.5)
+        with mock.patch.object(router, "route", return_value=unsure):
+            with self.assertRaisesRegex(LookupError, "panes model"):
+                ask.ask("arrange my workspace", Failing({"system": REFUSED}), act=True, default="panes")
+            record = ask.ask("arrange my workspace", Failing({"system": REFUSED}), act=True)
+        self.assertEqual(record["route"]["stage"], "clarify")
+
+    def test_a_route_context_ends_with_its_request(self):
+        self.assertIsNone(history._route.get())
+        with history.routed({"stage": 0, "job": "panes"}):
+            self.assertEqual(history._route.get()["job"], "panes")
+            with history.routed({"stage": 1, "job": "files"}), history.quiet():
+                self.assertTrue(history._quiet.get())
+            self.assertEqual(history._route.get()["job"], "panes")
+        self.assertIsNone(history._route.get())
+        with self.assertRaises(RuntimeError), history.routed({"stage": 0, "job": "panes"}), \
+                history.quiet():
+            raise RuntimeError("job failed")
+        self.assertEqual((history._route.get(), history._quiet.get()), (None, False))
+        entries = []
+        with mock.patch.object(history, "_append",
+                               lambda folder, line: entries.append(json.loads(line))):
+            with mock.patch.object(router, "route", return_value=route(1, "files")):
+                ask.ask("find pdf files in Downloads", FakeJobs(), act=False)
+            history.record("panes", "x", None, None, None, needle_cli.Options(),
+                           {"status": 0, "items": []}, 0.0)
+        self.assertNotIn("route", entries[-1])     # the next, explicit request carries none
+
     def test_the_history_records_the_route(self):
         entries = []
         with mock.patch.object(history, "_append",
@@ -163,6 +241,15 @@ class Mcp(unittest.TestCase):
         with self.assertRaises(ValueError):
             server.call_tool("kilix_ask_act", {"request": "  "})
 
+    def test_only_a_real_true_is_consent(self):
+        server = mcp_server.Server(lambda job="panes": None)
+        with FakeKilix(desktop()) as fake:
+            for consent in ("true", "false", 1, 0, None, [True], {"yes": True}):
+                with self.subTest(consent), self.assertRaises(ValueError):
+                    server.call_tool("kilix_ask_act", {"request": "close tab 2",
+                                                       "confirm_risky": consent})
+            self.assertEqual([c for c in fake.calls() if c[0][0] not in ("ls", "list")], [])
+
 
 class Cli(unittest.TestCase):
     def setUp(self):
@@ -178,7 +265,7 @@ class Cli(unittest.TestCase):
         finally:
             sys.stdin, sys.stdout = saved
 
-    def test_the_no_verb_default_answers_with_panes_when_unsure(self):
+    def test_the_no_verb_default_answers_with_panes_when_only_panes_admits(self):
         unsure = route(2, candidates=["system", "panes"], p=0.5)
         with FakeKilix(desktop()), mock.patch.object(router, "route", return_value=unsure):
             status, out = self.main(["--dry-run", "close tab 2"])
@@ -187,7 +274,30 @@ class Cli(unittest.TestCase):
             _s, panes = self.main(["panes", "--dry-run", "close tab 2"])
         self.assertEqual((status, out), (0, panes))         # exactly the panes job's output
         record = json.loads(out_json)
-        self.assertEqual((record["route"]["stage"], record["route"]["job"]), ("default", "panes"))
+        self.assertEqual((record["route"]["stage"], record["route"]["job"]), (2, "panes"))
+        with FakeKilix(desktop()) as fake, mock.patch.object(router, "route", return_value=unsure):
+            status, _out = self.main(["--agent", "--yes", "close tab 2"])
+            closed = [c for c in fake.calls() if c[0][0] == "close-tab"]
+        self.assertEqual((status, len(closed)), (0, 1))     # as before routing
+
+    def test_the_no_verb_default_never_acts_on_a_clarification_or_a_failure(self):
+        cases = {"clarification": dict(return_value=route(2, candidates=["system", "agents"], p=0.5)),
+                 "router error": dict(side_effect=RuntimeError("boom")),
+                 "error route": dict(return_value=router.Route("error", None, note="digest")),
+                 "two jobs": dict(return_value=router.Route("multi", None, candidates=["panes", "apps"]))}
+        for name, how in cases.items():
+            with self.subTest(name), FakeKilix(desktop()) as fake, \
+                    mock.patch.object(router, "route", **how), \
+                    mock.patch.object(ask.Jobs, "run", side_effect=lambda job, *a, **k:
+                                      {"status": 0, "items": [{"outcome": "would"}]}
+                                      if job == "agents" else {"status": 1, "items": []}):
+                status, out = self.main(["--agent", "--yes", "--json", "close tab 2"])
+                self.assertEqual([c for c in fake.calls() if c[0][0] not in ("ls", "list")], [])
+            record = json.loads(out)
+            self.assertEqual(status, 1, name)
+            self.assertIsNone(record["route"]["job"] if name != "clarification" else None)
+            if name in ("router error", "error route"):
+                self.assertIn("kilix-needle panes", record["hint"])
 
     def test_the_no_verb_default_sends_a_sure_route_elsewhere(self):
         with mock.patch.object(router, "route", return_value=route(1, "none")):
@@ -221,6 +331,37 @@ class Cli(unittest.TestCase):
         self.assertIn("not run", out)
         self.assertEqual(accepted, 0)
         self.assertEqual(len(closed), 1)
+
+    def test_interactive_takes_only_y_or_yes(self):
+        for answer in ("yesterday\n", "ye\n", "\n", "n\n", "y es\n", "no yes\n"):
+            with self.subTest(answer), FakeKilix(desktop()) as fake, \
+                    mock.patch.object(sys, "stdin") as stdin:
+                stdin.isatty.return_value = True
+                stdin.readline.return_value = answer
+                saved, sys.stdout = sys.stdout, io.StringIO()
+                try:
+                    status = ask.main(["--interactive", "close tab 2"])
+                finally:
+                    sys.stdout = saved
+                self.assertEqual([c for c in fake.calls() if c[0][0] == "close-tab"], [])
+            self.assertEqual(status, 1)
+
+    def test_interactive_cannot_be_a_plan_or_a_forced_job(self):
+        for extra in (["--plan"], ["--dry-run"], ["--job", "panes"], ["--yes"], ["--json"]):
+            with self.subTest(extra), FakeKilix(desktop()) as fake, \
+                    mock.patch.object(sys, "stdin") as stdin, \
+                    mock.patch.object(sys, "stderr", io.StringIO()):
+                stdin.isatty.return_value = True
+                stdin.readline.return_value = "y\n"
+                with self.assertRaises(SystemExit) as caught:
+                    ask.main(["--interactive", *extra, "close tab 2"])
+                self.assertEqual(caught.exception.code, 2)
+                self.assertEqual([c for c in fake.calls() if c[0][0] not in ("ls", "list")], [])
+
+    def test_an_interrupted_ask_exits_1(self):
+        with mock.patch.object(ask, "interactive", side_effect=KeyboardInterrupt), \
+                mock.patch.object(sys, "stderr", io.StringIO()):
+            self.assertEqual(ask.main(["--interactive", "close tab 2"]), 1)
 
     def test_interactive_never_offers_yes_for_an_unsure_route(self):
         unsure = route(2, candidates=["system", "panes"], p=0.5)

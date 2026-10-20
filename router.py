@@ -88,8 +88,9 @@ class Model:
             raise RouterError("router artifact labels, bias or threshold do not match this code")
 
     @classmethod
-    def load(cls, directory: Path = MODEL_DIR) -> "Model":
+    def load(cls, directory: Path | None = None) -> "Model":
         """Read the artifact and check it against the digest its manifest records."""
+        directory = MODEL_DIR if directory is None else directory
         try:
             raw = (directory / "router.json").read_bytes()
             manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
@@ -156,11 +157,63 @@ def _claims_agents(text):
     return bool(agents.exact_calls(text))
 
 
-def _claims_apps(text):
+_apps_names: list | None = None
+
+
+def _apps_calls(text):
+    """apps.propose, asking only the calls whose object the request names.
+
+    propose tries all ~130 candidate calls, compiling patterns per request
+    (8-50 ms); a call is admitted only for a request that names its object, so
+    the others are skipped here. tests/test_router.py checks that this gives
+    propose's calls on every spent apps request."""
     import apps
-    calls = apps.propose(text)
+    global _apps_names
+    if _apps_names is None:
+        _apps_names = [(call, [(name, re.compile(rf"(?<![\w]){re.escape(name)}(?![\w])"))
+                               for name in apps._object_names(call)])
+                       for call in apps.CANDIDATE_CALLS]
+    if len(str(text)) > apps.MAX_REQUEST:
+        return []
+    plain = apps._plain_words(text)
+    named = [call for call, names in _apps_names
+             if any(name in plain and pattern.search(plain) for name, pattern in names)]
+    if not named:
+        return []
+    reading = apps._read(text, widen=True)
+    if reading.refusal:
+        return []
+    supported = []
+    for call in named:
+        if reading.way and call["name"] != "settings":
+            continue
+        action = apps._admit(call["name"], call["arguments"], reading)
+        if isinstance(action, apps.Action):
+            supported.append((apps._order(reading, action, call), call))
+    return [call for _key, call in sorted(supported, key=lambda pair: pair[0])]
+
+
+def _claims_apps(text):
+    """Every call is admitted, and no clause the calls leave unread is another
+    job's: "split right and open solitaire" is not an apps request, while "I'm
+    bored, open solitaire" is."""
+    import apps
+    calls = _apps_calls(text)
     results = apps.interpret(text, calls) if calls else []
-    return bool(results) and all(isinstance(r, apps.Action) for r in results)
+    if not results or not all(isinstance(r, apps.Action) for r in results):
+        return False
+    read = {r.at for r in results}
+    return not any(claim(part.text) for i, part in enumerate(apps._read(text, widen=True).parts)
+                   if i not in read for job, claim in CLAIMS.items() if job != "apps")
+
+
+def clauses(text: str) -> list:
+    """The request's clauses, as the apps grammar splits them (commas, "and",
+    "then", sentences)."""
+    import apps
+    if len(str(text)) > apps.MAX_REQUEST:
+        return []
+    return [part.text for part in apps._read(text, widen=True).parts]
 
 
 def _claims_files(text):
@@ -194,7 +247,10 @@ def _claims_tmux(text):
 
 def _claims_desktop(text):
     import desktop_grammar
-    return desktop_grammar.parse(text) is not None
+    try:
+        return desktop_grammar.parse(text) is not None
+    except ValueError:          # desktop_job.DesktopError: not a desktop instruction
+        return False
 
 
 CLAIMS = {"panes": _claims_panes, "apps": _claims_apps, "agents": _claims_agents,
@@ -202,30 +258,19 @@ CLAIMS = {"panes": _claims_panes, "apps": _claims_apps, "agents": _claims_agents
           "tmux": _claims_tmux, "desktop": _claims_desktop}
 
 
-# The apps checks try every candidate call (about 50 ms); the others take
-# under 2 ms. Apps is asked only when the classifier gives it this much.
-APPS_CLAIM_FLOOR = 0.01
+def claims(text: str) -> list:
+    """The jobs whose own grammar reads the whole request, in LABELS order.
 
-
-def claims(text: str, ranking: list | None = None) -> list:
-    """The jobs whose own grammar reads the whole request, in LABELS order."""
-    found = []
-    p = dict(ranking or ())
-    for job, claim in CLAIMS.items():
-        if job == "apps" and ranking is not None and p.get("apps", 0.0) < APPS_CLAIM_FLOOR:
-            continue
-        try:
-            if claim(text):
-                found.append(job)
-        except Exception:       # noqa: BLE001 - a grammar failure is no claim
-            pass
-    return found
+    A grammar that fails raises: route() then fails closed, rather than letting
+    another claim or the classifier decide without it."""
+    return [job for job, claim in CLAIMS.items() if claim(text)]
 
 
 @dataclass
 class Route:
     """stage 0 = one grammar claims it; 1 = the classifier is sure; 2 = unsure:
-    the candidates' plans decide (ask.py); "error" = the router failed."""
+    the candidates' plans decide (ask.py); "multi" = two jobs' work in one
+    request; "error" = the router failed."""
     stage: object
     job: str | None
     p: float | None = None
@@ -255,19 +300,36 @@ CANDIDATE_FLOOR = 0.1       # a job below this probability is not a stage-2 cand
 
 
 def route(text: str, model_: Model | None = None) -> Route:
-    """Stage 0 or 1 when sure; otherwise stage 2 with the candidate jobs."""
+    """Stage 0 or 1 when sure; otherwise stage 2 with the candidate jobs.
+
+    Any failure, a missing or altered artifact or a grammar that raises, is
+    the "error" stage: it names no job, so nothing acts on it."""
     try:
-        ranking = (model_ or model()).rank(text)
-        threshold = (model_ or model()).threshold
-    except RouterError as error:
-        found = claims(text)
-        if len(found) == 1:
-            return Route(0, found[0], claims=found)
-        return Route("error", None, claims=found, candidates=found, note=str(error))
-    found = claims(text, ranking)
+        return _route(text, model_ or model())
+    except Exception as error:      # noqa: BLE001 - fail closed
+        return Route("error", None, note=f"router failed: {type(error).__name__}: {error}"[:300])
+
+
+def _route(text: str, model_: Model) -> Route:
+    ranking = model_.rank(text)
+    threshold = model_.threshold
+    found = claims(text)
     (top, p), (_second, q) = ranking[0], ranking[1]
     alternatives = [(job, prob) for job, prob in ranking[1:3]]
     common = dict(p=p, margin=p - q, alternatives=alternatives, claims=found)
+    # Two jobs' work in one request (a non-goal): no grammar reads all of it,
+    # the classifier is not sure, and clauses are each read by one different
+    # job that ask runs. It goes back as two requests.
+    if not found and p < threshold:
+        parts = clauses(text)
+        only = set()
+        for part in parts if len(parts) > 1 else ():
+            readers = [job for job in claims(part) if job in RUNS]
+            if len(readers) == 1:
+                only.add(readers[0])
+        if len(only) > 1:
+            return Route("multi", None, candidates=[job for job in LABELS if job in only],
+                         note="this asks two jobs; send it as two requests", **common)
     # One grammar's claim routes unless the classifier is sure of another job:
     # a grammar can read more than its job means ("send 'x' to the pane below"
     # is a well-formed tmux sentence), so that disagreement is settled by plans.
