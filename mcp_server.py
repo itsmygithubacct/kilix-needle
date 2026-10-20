@@ -347,6 +347,30 @@ for _tool in DESKTOP_TOOL_LIST[1:]:
     # before model access or any desktop connection.
     _tool["description"] += " Supply request (natural language) or actions (structured list), exclusively."
 
+# Windows control is opt-in too, and its machine is chosen when the server
+# starts: a caller cannot point the menu at another SSH host.
+WINDOWS_TOOL_LIST = [
+    {"name": "kilix_windows_read", "description": "List titled Windows desktop windows with app, title and HWND; no model or input.",
+     "annotations": {"readOnlyHint": True},
+     "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False}},
+    {"name": "kilix_windows_plan", "description": "Preview a Windows desktop request (open apps, focus, inspect or click controls, type, wait), resolving exact windows; sends no input.",
+     "annotations": {"readOnlyHint": True},
+     "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False}},
+    {"name": "kilix_windows_act", "description": "Execute a Windows desktop request through the Kilix SDK. Requires confirm_risky. Input submission does not prove application completion.",
+     "annotations": {"readOnlyHint": False, "destructiveHint": True},
+     "inputSchema": {"type": "object", "properties": {"confirm_risky": {"type": "boolean"}}, "required": ["confirm_risky"], "additionalProperties": False}},
+]
+_WINDOWS_NAMES = frozenset(tool["name"] for tool in WINDOWS_TOOL_LIST)
+for _tool in WINDOWS_TOOL_LIST[1:]:
+    _tool["inputSchema"]["properties"].update({
+        "request": {"type": "string", "description": 'e.g. open notepad then type "hello" then press ctrl+s'},
+        "actions": {"type": "array", "minItems": 1, "maxItems": 8,
+                    "items": {"type": "object", "properties": {"name": {"type": "string", "enum": ["launch", "window", "control", "keyboard", "pointer", "scroll", "wait"]},
+                              "arguments": {"type": "object"}}, "required": ["name", "arguments"], "additionalProperties": False}},
+        "parser": {"type": "string", "enum": ["grammar", "needle", "hybrid"], "description": "Natural-language parser override; omitted uses server selection."},
+    })
+    _tool["description"] += " Supply request (natural language) or actions (structured list), exclusively."
+
 
 def _result(record, is_error: bool, request=None) -> dict:
     """One record, sent once as compact text and once structured.
@@ -380,16 +404,21 @@ class _LazyEngine:
 
 
 class Server:
-    def __init__(self, runtime_factory, *, tools="all", desktop_parser="hybrid"):
-        if tools not in ("all", "actions", "pty", "desktop"):
-            raise ValueError("tools must be all, actions, pty or desktop")
+    def __init__(self, runtime_factory, *, tools="all", desktop_parser="hybrid", windows_host=None,
+                 windows_parser="grammar"):
+        if tools not in ("all", "actions", "pty", "desktop", "windows"):
+            raise ValueError("tools must be all, actions, pty, desktop or windows")
+        if windows_parser not in ("grammar", "needle", "hybrid"):
+            raise ValueError("invalid windows parser")
+        self._windows = dict(host=windows_host, parser_mode=windows_parser)
         self._runtime_factory = runtime_factory
         if desktop_parser not in ("grammar", "needle", "hybrid"):
             raise ValueError("invalid desktop parser")
         self._desktop_parser = desktop_parser
         self._runtimes = {}
         action_names = ("kilix_action_plan", "kilix_action_act", "kilix_action_status")
-        self._tools = (list(DESKTOP_TOOL_LIST) if tools == "desktop" else list(PTY_TOOL_LIST) if tools == "pty" else
+        self._tools = (list(DESKTOP_TOOL_LIST) if tools == "desktop" else list(WINDOWS_TOOL_LIST) if tools == "windows" else
+                       list(PTY_TOOL_LIST) if tools == "pty" else
                        [tool for tool in TOOL_LIST if tools == "all" or tool["name"] in action_names])
         self._tool_names = frozenset(tool["name"] for tool in self._tools)
 
@@ -413,6 +442,11 @@ class Server:
             import desktop_cli
             record = desktop_cli.mcp(arguments, engine=_LazyEngine(lambda: self._ensure_engine("desktop")),
                                      plan=name.endswith("_plan"), read=name.endswith("_read"), parser_mode=self._desktop_parser)
+            return _result(record, record["status"] != 0)
+        if name in _WINDOWS_NAMES:
+            import windows_cli
+            record = windows_cli.mcp(arguments, engine=_LazyEngine(lambda: self._ensure_engine("windows")),
+                                     plan=name.endswith("_plan"), read=name.endswith("_read"), **self._windows)
             return _result(record, record["status"] != 0)
         if name in _PTY_NAMES:
             import pty_cli
@@ -560,8 +594,10 @@ class Server:
         return {"jsonrpc": "2.0", "id": ident, "result": result}
 
 
-def serve(runtime_factory, stdin=sys.stdin, stdout=sys.stdout, *, tools="all", desktop_parser="hybrid") -> int:
-    server = Server(runtime_factory, tools=tools, desktop_parser=desktop_parser)
+def serve(runtime_factory, stdin=sys.stdin, stdout=sys.stdout, *, tools="all", desktop_parser="hybrid",
+          windows_host=None, windows_parser="grammar") -> int:
+    server = Server(runtime_factory, tools=tools, desktop_parser=desktop_parser, windows_host=windows_host,
+                    windows_parser=windows_parser)
     try:
         for line in stdin:
             if not line.strip():

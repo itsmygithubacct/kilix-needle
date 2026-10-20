@@ -10,6 +10,10 @@ JSON batches, `kilix desktop-action`, grammar/Needle/hybrid parsing and an opt-i
 desktop MCP menu. Every route shares one bounded X11 executor; previews are the
 default and typing never implicitly presses Enter.
 
+Experimental [Windows actions](docs/windows.md) launch, focus and type into
+Windows applications and press their buttons by name through the Kilix Windows
+desktop SDK, inside WSL or over SSH with `--host`.
+
 ```sh
 kilix-needle is docker running  # no job named: routed to the system job
 kilix-needle ask --plan "open the pdf viewer"   # the route, then the apps plan
@@ -514,6 +518,7 @@ Requests are grouped into these jobs:
 | `tmux` | `kilix-needle tmux --socket PATH REQUEST` | Exact tmux session and pane control on an explicit socket |
 | `pty` | `kilix-needle pty REQUEST` | Persistent pane sessions: list, show, read the tail, archived journals, end one by its exact ID |
 | `desktop` (experimental) | `kilix-needle desktop REQUEST` | X11 windows, pointer, keyboard, scrolling and short sequences; preview by default, explicit model bundle and execution consent. See [desktop actions](docs/desktop.md). |
+| `windows` (experimental) | `kilix-needle windows REQUEST` | Windows applications through the Kilix desktop SDK: launch, windows, UI Automation controls, keyboard, pointer, scrolling and waits; preview by default, `--host` from Linux. See [Windows actions](docs/windows.md). |
 
 ### How each job understands a request
 

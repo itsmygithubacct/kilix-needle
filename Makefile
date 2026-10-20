@@ -11,7 +11,7 @@ all:
 		{ echo "third_party/kilix-tui-utils is missing: run git submodule update --init"; exit 1; }
 	@test -f third_party/kilix-transcript-clean/src/kilix_transcript_clean/__init__.py || \
 		{ echo "third_party/kilix-transcript-clean is missing: run git submodule update --init"; exit 1; }
-	@$(PYTHON) -B -c 'import needle_cli, mcp_server, tuning, workflows, desktop_cli, desktop_control, desktop_grammar' && echo "kilix-needle: ready"
+	@$(PYTHON) -B -c 'import needle_cli, mcp_server, tuning, workflows, desktop_cli, desktop_control, desktop_grammar, windows_cli, windows_grammar, desktop_windows' && echo "kilix-needle: ready"
 
 test:
 	$(PYTHON) -B -m unittest discover -s tests -v
