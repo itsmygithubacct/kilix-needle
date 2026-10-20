@@ -1,53 +1,53 @@
 {
- "rows": 4528,
- "accuracy": 0.9752650176678446,
- "macro_recall": 0.9722206182450946,
+ "rows": 5376,
+ "accuracy": 0.9659598214285714,
+ "macro_recall": 0.9645841091972279,
  "recall": {
-  "panes": 0.9913793103448276,
-  "apps": 0.9806576402321083,
-  "agents": 0.9905362776025236,
-  "files": 0.9866666666666667,
-  "system": 0.9445910290237467,
-  "logs": 0.9842105263157894,
-  "tmux": 0.9738219895287958,
-  "pty": 0.9735449735449735,
-  "desktop": 0.9873150105708245,
-  "none": 0.9094827586206896
+  "panes": 0.9874765184721352,
+  "apps": 0.9538834951456311,
+  "agents": 0.9863013698630136,
+  "files": 0.9853372434017595,
+  "system": 0.947242206235012,
+  "logs": 0.9726027397260274,
+  "tmux": 0.9684684684684685,
+  "pty": 0.9724770642201835,
+  "desktop": 0.9847036328871893,
+  "none": 0.8873483535528596
  },
- "target": 0.995,
- "threshold": 0.7,
- "coverage": 0.8946554770318021,
- "accepted_accuracy": 0.99506294742039,
+ "target": 0.985,
+ "threshold": 0.55,
+ "coverage": 0.9451264880952381,
+ "accepted_accuracy": 0.9854359378075183,
  "selective": [
   {
    "coverage": 1.0,
-   "accuracy": 0.9752650176678446,
-   "threshold": 0.2318702475670971
+   "accuracy": 0.9659598214285714,
+   "threshold": 0.21320040614739108
   },
   {
    "coverage": 0.98,
-   "accuracy": 0.9821951769213433,
-   "threshold": 0.4391364783288307
+   "accuracy": 0.9745634016704632,
+   "threshold": 0.4213343418322194
   },
   {
    "coverage": 0.95,
-   "accuracy": 0.9890748489074849,
-   "threshold": 0.562004819010612
+   "accuracy": 0.9839436068141766,
+   "threshold": 0.5351057489122574
   },
   {
    "coverage": 0.9,
-   "accuracy": 0.994601226993865,
-   "threshold": 0.6925405464303325
+   "accuracy": 0.9919388176932616,
+   "threshold": 0.6716429313185136
   },
   {
    "coverage": 0.85,
-   "accuracy": 0.9963626916082099,
-   "threshold": 0.7716041205245351
+   "accuracy": 0.9949671772428884,
+   "threshold": 0.7540494356100055
   },
   {
    "coverage": 0.8,
-   "accuracy": 0.9969630038652678,
-   "threshold": 0.8303617339056443
+   "accuracy": 0.9965124389676819,
+   "threshold": 0.8112901530168595
   }
  ],
  "errors": [
@@ -56,693 +56,1155 @@
    "request": "email me the largest files in Downloads",
    "job": "none",
    "predicted": "files",
-   "p": 0.992
+   "p": 0.993
   },
   {
    "file": "evals/router/confusables.jsonl",
    "request": "delete the largest files in Downloads",
    "job": "none",
    "predicted": "files",
-   "p": 0.989
-  },
-  {
-   "file": "evals/router/confusables.jsonl",
-   "request": "how do I start a new tmux session?",
-   "job": "none",
-   "predicted": "tmux",
-   "p": 0.967
+   "p": 0.982
   },
   {
    "file": "evals/router/none.jsonl",
    "request": "move report.pdf from Downloads to Documents",
    "job": "none",
    "predicted": "files",
-   "p": 0.963
+   "p": 0.969
   },
   {
    "file": "evals/router/confusables.jsonl",
    "request": "kill the process using the most memory",
    "job": "none",
    "predicted": "system",
-   "p": 0.956
+   "p": 0.965
   },
   {
-   "file": "evals/heldout-v3.jsonl",
-   "request": "dismiss the window below",
-   "job": "panes",
-   "predicted": "desktop",
-   "p": 0.925
+   "file": "evals/router/confusables.jsonl",
+   "request": "how do I start a new tmux session?",
+   "job": "none",
+   "predicted": "tmux",
+   "p": 0.965
   },
   {
    "file": "evals/test.jsonl",
    "request": "open the pod bay doors",
    "job": "none",
    "predicted": "apps",
-   "p": 0.912
-  },
-  {
-   "file": "evals/router/none.jsonl",
-   "request": "stop the cron service",
-   "job": "none",
-   "predicted": "system",
-   "p": 0.872
-  },
-  {
-   "file": "evals/system/heldout-v1.jsonl",
-   "request": "what's eating my ram",
-   "job": "system",
-   "predicted": "none",
-   "p": 0.868
-  },
-  {
-   "file": "evals/router/system.jsonl",
-   "request": "what's the busiest process",
-   "job": "system",
-   "predicted": "none",
-   "p": 0.843
+   "p": 0.961
   },
   {
    "file": "evals/router/none.jsonl",
    "request": "open YouTube and play lo-fi beats",
    "job": "none",
    "predicted": "apps",
-   "p": 0.832
-  },
-  {
-   "file": "evals/router/none.jsonl",
-   "request": "sorry, wrong window",
-   "job": "none",
-   "predicted": "desktop",
-   "p": 0.829
-  },
-  {
-   "file": "evals/router/pty.jsonl",
-   "request": "what's the id of the session in pane 12?",
-   "job": "pty",
-   "predicted": "logs",
-   "p": 0.827
-  },
-  {
-   "file": "evals/router/pty.jsonl",
-   "request": "give me the session record behind pane 26",
-   "job": "pty",
-   "predicted": "logs",
-   "p": 0.799
-  },
-  {
-   "file": "evals/heldout-v5.jsonl",
-   "request": "the tab at the restaurant was huge",
-   "job": "none",
-   "predicted": "panes",
-   "p": 0.753
-  },
-  {
-   "file": "evals/router/none.jsonl",
-   "request": "terminate the chrome process eating my memory",
-   "job": "none",
-   "predicted": "system",
-   "p": 0.753
-  },
-  {
-   "file": "evals/heldout-v3.jsonl",
-   "request": "go back to the previous window",
-   "job": "panes",
-   "predicted": "desktop",
-   "p": 0.748
-  },
-  {
-   "file": "evals/router/tmux.jsonl",
-   "request": "kill the session build",
-   "job": "tmux",
-   "predicted": "pty",
-   "p": 0.716
-  },
-  {
-   "file": "evals/router/none.jsonl",
-   "request": "reboot the machine",
-   "job": "none",
-   "predicted": "system",
-   "p": 0.713
-  },
-  {
-   "file": "evals/router/system.jsonl",
-   "request": "what's the capacity situation on /data",
-   "job": "system",
-   "predicted": "none",
-   "p": 0.703
-  },
-  {
-   "file": "evals/router/none.jsonl",
-   "request": "enable ssh at boot",
-   "job": "none",
-   "predicted": "system",
-   "p": 0.695
-  },
-  {
-   "file": "evals/apps/heldout-v4.jsonl",
-   "request": "Pull up the system overview so I can check CPU and storage.",
-   "job": "apps",
-   "predicted": "system",
-   "p": 0.694
-  },
-  {
-   "file": "evals/router/none.jsonl",
-   "request": "which is faster, quicksort or mergesort, on average?",
-   "job": "none",
-   "predicted": "system",
-   "p": 0.69
-  },
-  {
-   "file": "evals/router/none.jsonl",
-   "request": "Please install the missing package and re-run the failing build.",
-   "job": "none",
-   "predicted": "system",
-   "p": 0.689
-  },
-  {
-   "file": "evals/router/confusables.jsonl",
-   "request": "how do I split a pane in kilix",
-   "job": "none",
-   "predicted": "panes",
-   "p": 0.688
-  },
-  {
-   "file": "evals/heldout-v3.jsonl",
-   "request": "could you make the window shorter?",
-   "job": "panes",
-   "predicted": "desktop",
-   "p": 0.67
-  },
-  {
-   "file": "evals/router/system.jsonl",
-   "request": "list user units that are failing",
-   "job": "system",
-   "predicted": "none",
-   "p": 0.668
-  },
-  {
-   "file": "evals/heldout-v2.jsonl",
-   "request": "split the window and start less",
-   "job": "panes",
-   "predicted": "desktop",
-   "p": 0.665
-  },
-  {
-   "file": "evals/heldout-v4.jsonl",
-   "request": "shut the window above, thanks",
-   "job": "panes",
-   "predicted": "desktop",
-   "p": 0.661
-  },
-  {
-   "file": "evals/router/confusables.jsonl",
-   "request": "what is tmux?",
-   "job": "none",
-   "predicted": "tmux",
-   "p": 0.657
-  },
-  {
-   "file": "evals/apps/heldout-v2.jsonl",
-   "request": "launch the session center and the tmux manager",
-   "job": "apps",
-   "predicted": "tmux",
-   "p": 0.652
-  },
-  {
-   "file": "evals/router/desktop.jsonl",
-   "request": "hit Tab three times, then type john",
-   "job": "desktop",
-   "predicted": "panes",
-   "p": 0.65
-  },
-  {
-   "file": "evals/system/heldout-v1.jsonl",
-   "request": "who ships the htop command",
-   "job": "system",
-   "predicted": "none",
-   "p": 0.626
-  },
-  {
-   "file": "evals/router/tmux.jsonl",
-   "request": "close session review",
-   "job": "tmux",
-   "predicted": "pty",
-   "p": 0.626
-  },
-  {
-   "file": "evals/heldout-v5.jsonl",
-   "request": "my window pane is cracked",
-   "job": "none",
-   "predicted": "desktop",
-   "p": 0.624
-  },
-  {
-   "file": "evals/router/files.jsonl",
-   "request": "what does Dockerfile look like at the top? here",
-   "job": "files",
-   "predicted": "none",
-   "p": 0.618
-  },
-  {
-   "file": "evals/router/none.jsonl",
-   "request": "zip up the research folder",
-   "job": "none",
-   "predicted": "files",
-   "p": 0.616
-  },
-  {
-   "file": "evals/router/pty.jsonl",
-   "request": "give me the session id for pane 9",
-   "job": "pty",
-   "predicted": "logs",
-   "p": 0.6
-  },
-  {
-   "file": "evals/router/confusables.jsonl",
-   "request": "tell the agent in the third tab to stop",
-   "job": "agents",
-   "predicted": "panes",
-   "p": 0.6
-  },
-  {
-   "file": "evals/router/none.jsonl",
-   "request": "remove the htop package",
-   "job": "none",
-   "predicted": "system",
-   "p": 0.595
-  },
-  {
-   "file": "evals/heldout-v6.jsonl",
-   "request": "increase the width by fifteen",
-   "job": "panes",
-   "predicted": "none",
-   "p": 0.593
-  },
-  {
-   "file": "evals/router/none.jsonl",
-   "request": "enable dark mode in GNOME",
-   "job": "none",
-   "predicted": "apps",
-   "p": 0.587
-  },
-  {
-   "file": "evals/router/system.jsonl",
-   "request": "what does df say about /mnt/media",
-   "job": "system",
-   "predicted": "none",
-   "p": 0.581
-  },
-  {
-   "file": "evals/router/desktop-v3.jsonl",
-   "request": "write \"Indigo report 1279\"",
-   "job": "desktop",
-   "predicted": "none",
-   "p": 0.578
-  },
-  {
-   "file": "evals/router/confusables.jsonl",
-   "request": "type 'stop and summarize' into the claude pane",
-   "job": "panes",
-   "predicted": "logs",
-   "p": 0.573
-  },
-  {
-   "file": "evals/router/none.jsonl",
-   "request": "enable the firewall and open port 443",
-   "job": "none",
-   "predicted": "apps",
-   "p": 0.566
-  },
-  {
-   "file": "evals/router/none.jsonl",
-   "request": "implement a binary search in Rust",
-   "job": "none",
-   "predicted": "files",
-   "p": 0.562
-  },
-  {
-   "file": "evals/router/system.jsonl",
-   "request": "do I have gcc?",
-   "job": "system",
-   "predicted": "none",
-   "p": 0.561
-  },
-  {
-   "file": "evals/router/desktop-v3.jsonl",
-   "request": "insert \"hello world\"",
-   "job": "desktop",
-   "predicted": "none",
-   "p": 0.555
-  },
-  {
-   "file": "evals/router/pty.jsonl",
-   "request": "get the session for pane 15",
-   "job": "pty",
-   "predicted": "logs",
-   "p": 0.551
-  },
-  {
-   "file": "evals/apps/heldout-v1.jsonl",
-   "request": "fancy a round of joustix",
-   "job": "apps",
-   "predicted": "none",
-   "p": 0.549
-  },
-  {
-   "file": "evals/router/files.jsonl",
-   "request": "serach for \"error\" in logs dir ./logs",
-   "job": "files",
-   "predicted": "system",
-   "p": 0.547
-  },
-  {
-   "file": "evals/apps/dev.jsonl",
-   "request": "show me how hot the machine is running, open temps",
-   "job": "apps",
-   "predicted": "system",
-   "p": 0.54
-  },
-  {
-   "file": "evals/files/heldout-v1.jsonl",
-   "request": "rank my documents from largest to smallest",
-   "job": "files",
-   "predicted": "none",
-   "p": 0.535
-  },
-  {
-   "file": "evals/apps/heldout-v3.jsonl",
-   "request": "Which code point is the em dash again? Open the character map for me.",
-   "job": "apps",
-   "predicted": "none",
-   "p": 0.53
-  },
-  {
-   "file": "evals/router/system.jsonl",
-   "request": "what's the free memory in the machine, in a sentence",
-   "job": "system",
-   "predicted": "none",
-   "p": 0.528
-  },
-  {
-   "file": "evals/system/dev.jsonl",
-   "request": "why is my machine slow?",
-   "job": "system",
-   "predicted": "none",
-   "p": 0.526
-  },
-  {
-   "file": "evals/apps/heldout-v2.jsonl",
-   "request": "my buddy just challenged me to a match, set up the chess bash board",
-   "job": "apps",
-   "predicted": "none",
-   "p": 0.521
-  },
-  {
-   "file": "evals/router/system.jsonl",
-   "request": "what is the uptime load",
-   "job": "system",
-   "predicted": "none",
-   "p": 0.519
-  },
-  {
-   "file": "evals/router/tmux.jsonl",
-   "request": "please close session monitoring",
-   "job": "tmux",
-   "predicted": "pty",
-   "p": 0.514
-  },
-  {
-   "file": "evals/apps/heldout-v2.jsonl",
-   "request": "open the transcripts list and then the session log",
-   "job": "apps",
-   "predicted": "logs",
-   "p": 0.513
-  },
-  {
-   "file": "evals/router/none.jsonl",
-   "request": "Is it okay to use tabs instead of spaces?",
-   "job": "none",
-   "predicted": "system",
-   "p": 0.511
-  },
-  {
-   "file": "evals/router/system.jsonl",
-   "request": "recent journal warnings for the user session",
-   "job": "system",
-   "predicted": "pty",
-   "p": 0.507
-  },
-  {
-   "file": "evals/heldout-v14.jsonl",
-   "request": "trade places with my upper neighbour and afterwards stretch me vertically",
-   "job": "panes",
-   "predicted": "none",
-   "p": 0.503
-  },
-  {
-   "file": "evals/system/heldout-v1.jsonl",
-   "request": "is cups ok",
-   "job": "system",
-   "predicted": "none",
-   "p": 0.502
+   "p": 0.907
   },
   {
    "file": "evals/router/none.jsonl",
    "request": "set the mouse speed to fast in system settings",
    "job": "none",
    "predicted": "apps",
-   "p": 0.488
+   "p": 0.9
+  },
+  {
+   "file": "evals/router/spent-heldout-v1.jsonl",
+   "request": "run the system monitor in a new tab",
+   "job": "apps",
+   "predicted": "panes",
+   "p": 0.891
+  },
+  {
+   "file": "evals/router/window-words.jsonl",
+   "request": "scroll the window below to the bottom",
+   "job": "panes",
+   "predicted": "desktop",
+   "p": 0.89
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "stop the cron service",
+   "job": "none",
+   "predicted": "system",
+   "p": 0.882
+  },
+  {
+   "file": "evals/router/spent-heldout-v1.jsonl",
+   "request": "launch a coding agent in ~/projects/dotfiles",
+   "job": "agents",
+   "predicted": "files",
+   "p": 0.84
+  },
+  {
+   "file": "evals/router/apps-launch.jsonl",
+   "request": "pull up the session log",
+   "job": "apps",
+   "predicted": "logs",
+   "p": 0.829
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "which is faster, quicksort or mergesort, on average?",
+   "job": "none",
+   "predicted": "system",
+   "p": 0.824
+  },
+  {
+   "file": "evals/router/none-about-tools.jsonl",
+   "request": "bring every installed package up to date",
+   "job": "none",
+   "predicted": "system",
+   "p": 0.819
+  },
+  {
+   "file": "evals/router/pty.jsonl",
+   "request": "give me the session record behind pane 26",
+   "job": "pty",
+   "predicted": "logs",
+   "p": 0.808
+  },
+  {
+   "file": "evals/router/apps-controls.jsonl",
+   "request": "what's playing",
+   "job": "apps",
+   "predicted": "none",
+   "p": 0.806
+  },
+  {
+   "file": "evals/heldout-v5.jsonl",
+   "request": "the tab at the restaurant was huge",
+   "job": "none",
+   "predicted": "panes",
+   "p": 0.804
+  },
+  {
+   "file": "evals/router/apps-controls.jsonl",
+   "request": "what is the default read extent",
+   "job": "apps",
+   "predicted": "none",
+   "p": 0.793
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "sorry, wrong window",
+   "job": "none",
+   "predicted": "desktop",
+   "p": 0.789
+  },
+  {
+   "file": "evals/router/window-words.jsonl",
+   "request": "move focus to the window on my left",
+   "job": "panes",
+   "predicted": "desktop",
+   "p": 0.789
+  },
+  {
+   "file": "evals/router/none-about-tools.jsonl",
+   "request": "how would I open a split window inside vim",
+   "job": "none",
+   "predicted": "panes",
+   "p": 0.765
+  },
+  {
+   "file": "evals/router/spent-heldout-v1.jsonl",
+   "request": "list the commands the claude session ran in the infra repo",
+   "job": "logs",
+   "predicted": "agents",
+   "p": 0.757
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "set the default browser to Firefox",
+   "job": "none",
+   "predicted": "apps",
+   "p": 0.753
+  },
+  {
+   "file": "evals/router/spent-voice-v1.jsonl",
+   "request": "List my Teamux sessions.",
+   "job": "tmux",
+   "predicted": "pty",
+   "p": 0.752
+  },
+  {
+   "file": "evals/router/files.jsonl",
+   "request": "what does Dockerfile look like at the top? here",
+   "job": "files",
+   "predicted": "none",
+   "p": 0.733
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "zip up the research folder",
+   "job": "none",
+   "predicted": "files",
+   "p": 0.73
+  },
+  {
+   "file": "evals/router/apps-controls.jsonl",
+   "request": "how long does dictation run before stopping",
+   "job": "apps",
+   "predicted": "none",
+   "p": 0.728
+  },
+  {
+   "file": "evals/router/system.jsonl",
+   "request": "what does df say about /mnt/media",
+   "job": "system",
+   "predicted": "none",
+   "p": 0.712
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "terminate the chrome process eating my memory",
+   "job": "none",
+   "predicted": "system",
+   "p": 0.709
+  },
+  {
+   "file": "evals/apps/heldout-v2.jsonl",
+   "request": "launch the session center and the tmux manager",
+   "job": "apps",
+   "predicted": "tmux",
+   "p": 0.694
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "Please install the missing package and re-run the failing build.",
+   "job": "none",
+   "predicted": "system",
+   "p": 0.694
   },
   {
    "file": "evals/router/confusables.jsonl",
-   "request": "start apache2",
-   "job": "none",
-   "predicted": "system",
-   "p": 0.485
-  },
-  {
-   "file": "evals/heldout-v4.jsonl",
-   "request": "flip back to the previous window",
+   "request": "type 'stop and summarize' into the claude pane",
    "job": "panes",
-   "predicted": "desktop",
-   "p": 0.48
-  },
-  {
-   "file": "evals/router/system.jsonl",
-   "request": "Collect the top 10 CPU consumers so I can attach them to the incident note.",
-   "job": "system",
-   "predicted": "apps",
-   "p": 0.48
-  },
-  {
-   "file": "evals/router/system.jsonl",
-   "request": "am I about to run out of swap",
-   "job": "system",
-   "predicted": "none",
-   "p": 0.478
+   "predicted": "logs",
+   "p": 0.691
   },
   {
    "file": "evals/router/tmux.jsonl",
-   "request": "rename session logs to logs-archive",
+   "request": "close session review",
    "job": "tmux",
    "predicted": "pty",
-   "p": 0.472
+   "p": 0.687
+  },
+  {
+   "file": "evals/router/apps-controls.jsonl",
+   "request": "how big is the text",
+   "job": "apps",
+   "predicted": "none",
+   "p": 0.686
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "enable ssh at boot",
+   "job": "none",
+   "predicted": "system",
+   "p": 0.684
+  },
+  {
+   "file": "evals/router/apps-controls.jsonl",
+   "request": "what song is this",
+   "job": "apps",
+   "predicted": "none",
+   "p": 0.682
+  },
+  {
+   "file": "evals/router/spent-voice-v1.jsonl",
+   "request": "Swap pain two and pain four.",
+   "job": "panes",
+   "predicted": "none",
+   "p": 0.679
+  },
+  {
+   "file": "evals/router/window-words.jsonl",
+   "request": "focus the window below",
+   "job": "panes",
+   "predicted": "desktop",
+   "p": 0.678
+  },
+  {
+   "file": "evals/router/apps-launch.jsonl",
+   "request": "start the drum machine",
+   "job": "apps",
+   "predicted": "none",
+   "p": 0.672
+  },
+  {
+   "file": "evals/router/desktop.jsonl",
+   "request": "hit Tab three times, then type john",
+   "job": "desktop",
+   "predicted": "panes",
+   "p": 0.671
+  },
+  {
+   "file": "evals/router/none-about-tools.jsonl",
+   "request": "what does the load average in top mean",
+   "job": "none",
+   "predicted": "system",
+   "p": 0.668
+  },
+  {
+   "file": "evals/router/apps-controls.jsonl",
+   "request": "shut up for a second",
+   "job": "apps",
+   "predicted": "none",
+   "p": 0.651
+  },
+  {
+   "file": "evals/router/spent-heldout-v1.jsonl",
+   "request": "how much RAM does a typical laptop have these days",
+   "job": "none",
+   "predicted": "system",
+   "p": 0.641
+  },
+  {
+   "file": "evals/router/spent-heldout-v1.jsonl",
+   "request": "did the claude session in the api repo touch the config file",
+   "job": "logs",
+   "predicted": "agents",
+   "p": 0.637
+  },
+  {
+   "file": "evals/router/system.jsonl",
+   "request": "what's the capacity situation on /data",
+   "job": "system",
+   "predicted": "none",
+   "p": 0.636
+  },
+  {
+   "file": "evals/router/apps-launch.jsonl",
+   "request": "pdf reader in a fresh tab",
+   "job": "apps",
+   "predicted": "panes",
+   "p": 0.63
+  },
+  {
+   "file": "evals/system/heldout-v1.jsonl",
+   "request": "who ships the htop command",
+   "job": "system",
+   "predicted": "none",
+   "p": 0.627
+  },
+  {
+   "file": "evals/router/spent-heldout-v1.jsonl",
+   "request": "how do I split a pane in vim",
+   "job": "none",
+   "predicted": "panes",
+   "p": 0.624
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "set the system timezone to UTC",
+   "job": "none",
+   "predicted": "apps",
+   "p": 0.614
+  },
+  {
+   "file": "evals/router/apps-controls.jsonl",
+   "request": "turn it down a notch",
+   "job": "apps",
+   "predicted": "none",
+   "p": 0.611
+  },
+  {
+   "file": "evals/router/system.jsonl",
+   "request": "recent journal warnings for the user session",
+   "job": "system",
+   "predicted": "pty",
+   "p": 0.601
+  },
+  {
+   "file": "evals/system/heldout-v1.jsonl",
+   "request": "is cups ok",
+   "job": "system",
+   "predicted": "none",
+   "p": 0.598
+  },
+  {
+   "file": "evals/router/pty.jsonl",
+   "request": "what's the id of the session in pane 12?",
+   "job": "pty",
+   "predicted": "logs",
+   "p": 0.596
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "enable dark mode in GNOME",
+   "job": "none",
+   "predicted": "apps",
+   "p": 0.596
+  },
+  {
+   "file": "evals/router/apps-controls.jsonl",
+   "request": "which audio inputs do I have",
+   "job": "apps",
+   "predicted": "system",
+   "p": 0.593
+  },
+  {
+   "file": "evals/router/tmux.jsonl",
+   "request": "kill the session build",
+   "job": "tmux",
+   "predicted": "pty",
+   "p": 0.59
+  },
+  {
+   "file": "evals/router/tmux.jsonl",
+   "request": "Open a new tmux session named grok-run in /home/pleb/gpu_terminal/kilix, I'll start the agent in it myself.",
+   "job": "tmux",
+   "predicted": "agents",
+   "p": 0.589
+  },
+  {
+   "file": "evals/router/system.jsonl",
+   "request": "what is the uptime load",
+   "job": "system",
+   "predicted": "none",
+   "p": 0.586
+  },
+  {
+   "file": "evals/router/apps-controls.jsonl",
+   "request": "how fast is the voice set to talk",
+   "job": "apps",
+   "predicted": "none",
+   "p": 0.584
+  },
+  {
+   "file": "evals/router/spent-heldout-v1.jsonl",
+   "request": "why is my build failing? error: undefined reference to foo",
+   "job": "none",
+   "predicted": "system",
+   "p": 0.584
+  },
+  {
+   "file": "evals/router/system.jsonl",
+   "request": "list user units that are failing",
+   "job": "system",
+   "predicted": "none",
+   "p": 0.579
+  },
+  {
+   "file": "evals/router/confusables.jsonl",
+   "request": "how do I split a pane in kilix",
+   "job": "none",
+   "predicted": "panes",
+   "p": 0.579
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "systemctl disable bluetooth",
+   "job": "none",
+   "predicted": "system",
+   "p": 0.573
+  },
+  {
+   "file": "evals/router/system.jsonl",
+   "request": "what's the busiest process",
+   "job": "system",
+   "predicted": "none",
+   "p": 0.567
   },
   {
    "file": "evals/router/none.jsonl",
    "request": "go to news.ycombinator.com and read me the top story",
    "job": "none",
    "predicted": "apps",
-   "p": 0.472
+   "p": 0.567
   },
   {
-   "file": "evals/apps/heldout-v1.jsonl",
-   "request": "how hot is this box running? bring up the temps",
+   "file": "evals/router/window-words.jsonl",
+   "request": "type ls -la into the window on the left",
+   "job": "panes",
+   "predicted": "desktop",
+   "p": 0.566
+  },
+  {
+   "file": "evals/heldout-v5.jsonl",
+   "request": "my window pane is cracked",
+   "job": "none",
+   "predicted": "panes",
+   "p": 0.563
+  },
+  {
+   "file": "evals/apps/heldout-v2.jsonl",
+   "request": "why is the sky blue?",
+   "job": "none",
+   "predicted": "system",
+   "p": 0.56
+  },
+  {
+   "file": "evals/apps/heldout-v4.jsonl",
+   "request": "Pull up the system overview so I can check CPU and storage.",
    "job": "apps",
    "predicted": "system",
-   "p": 0.467
+   "p": 0.56
   },
   {
-   "file": "evals/router/confusables.jsonl",
-   "request": "open the tmux manager",
+   "file": "evals/apps/heldout-v4.jsonl",
+   "request": "Get rid of the windows indicator at the top.",
    "job": "apps",
-   "predicted": "tmux",
-   "p": 0.466
-  },
-  {
-   "file": "evals/router/desktop.jsonl",
-   "request": "switch to the terminal emulator window, not a kilix pane, the xterm one",
-   "job": "desktop",
-   "predicted": "panes",
-   "p": 0.464
-  },
-  {
-   "file": "evals/router/desktop.jsonl",
-   "request": "fullscreen Firefox",
-   "job": "desktop",
-   "predicted": "none",
-   "p": 0.463
+   "predicted": "desktop",
+   "p": 0.558
   },
   {
    "file": "evals/agents/test.jsonl",
    "request": "Could you launch grok build here, split below me?",
    "job": "agents",
    "predicted": "panes",
-   "p": 0.457
+   "p": 0.553
   },
   {
-   "file": "evals/apps/heldout-v4.jsonl",
-   "request": "Show the split-left control on panes.",
+   "file": "evals/router/spent-heldout-v1.jsonl",
+   "request": "is the kilix pane-session service running",
+   "job": "system",
+   "predicted": "pty",
+   "p": 0.553
+  },
+  {
+   "file": "evals/router/spent-heldout-v1.jsonl",
+   "request": "close pane 7's session for good",
+   "job": "pty",
+   "predicted": "logs",
+   "p": 0.553
+  },
+  {
+   "file": "evals/router/apps-launch.jsonl",
+   "request": "deal me a hand of solitaire",
+   "job": "apps",
+   "predicted": "none",
+   "p": 0.548
+  },
+  {
+   "file": "evals/router/apps-controls.jsonl",
+   "request": "go back to the original zoom",
    "job": "apps",
    "predicted": "panes",
-   "p": 0.446
+   "p": 0.545
   },
   {
-   "file": "evals/router/system.jsonl",
-   "request": "rank everything running by RSS",
-   "job": "system",
-   "predicted": "panes",
-   "p": 0.44
+   "file": "evals/router/pty.jsonl",
+   "request": "give me the session id for pane 9",
+   "job": "pty",
+   "predicted": "logs",
+   "p": 0.544
   },
   {
-   "file": "evals/system/heldout-v1.jsonl",
-   "request": "what units are sitting in a failed state",
-   "job": "system",
-   "predicted": "none",
-   "p": 0.422
+   "file": "evals/router/pty.jsonl",
+   "request": "get the session for pane 15",
+   "job": "pty",
+   "predicted": "logs",
+   "p": 0.541
   },
   {
-   "file": "evals/router/logs.jsonl",
-   "request": "give me the evidence snapshot for the event we looked at",
-   "job": "logs",
-   "predicted": "none",
-   "p": 0.419
-  },
-  {
-   "file": "evals/router/none.jsonl",
-   "request": "sign me out of my user session",
-   "job": "none",
-   "predicted": "pty",
-   "p": 0.415
-  },
-  {
-   "file": "evals/agents/test.jsonl",
-   "request": "open omp in this directory",
-   "job": "agents",
-   "predicted": "files",
-   "p": 0.412
-  },
-  {
-   "file": "evals/files/dev.jsonl",
-   "request": "find \"delete everything; then exit\" in here",
-   "job": "files",
-   "predicted": "desktop",
-   "p": 0.411
-  },
-  {
-   "file": "evals/router/system.jsonl",
-   "request": "has the nginx unit crashed",
-   "job": "system",
-   "predicted": "none",
-   "p": 0.407
-  },
-  {
-   "file": "evals/router/none.jsonl",
-   "request": "npm install express in the project",
-   "job": "none",
-   "predicted": "files",
-   "p": 0.399
-  },
-  {
-   "file": "evals/router/system.jsonl",
-   "request": "Check whether available RAM is under 1 GB before I start the next training shard.",
-   "job": "system",
-   "predicted": "apps",
-   "p": 0.388
-  },
-  {
-   "file": "evals/heldout-v8.jsonl",
-   "request": "make the font bigger",
-   "job": "none",
-   "predicted": "apps",
-   "p": 0.387
-  },
-  {
-   "file": "evals/router/desktop.jsonl",
-   "request": "give it a 1.5 second pause",
+   "file": "evals/router/spent-voice-v1.jsonl",
+   "request": "Minimize the text editor.",
    "job": "desktop",
-   "predicted": "none",
-   "p": 0.387
-  },
-  {
-   "file": "evals/router/logs.jsonl",
-   "request": "what were the tool errors in that rollout file?",
-   "job": "logs",
-   "predicted": "none",
-   "p": 0.383
-  },
-  {
-   "file": "evals/heldout-v14.jsonl",
-   "request": "i love this terminal",
-   "job": "none",
-   "predicted": "panes",
-   "p": 0.378
+   "predicted": "apps",
+   "p": 0.54
   },
   {
    "file": "evals/router/none.jsonl",
-   "request": "turn the screen brightness down",
+   "request": "clean out my Downloads folder",
    "job": "none",
-   "predicted": "desktop",
-   "p": 0.375
-  },
-  {
-   "file": "evals/router/confusables.jsonl",
-   "request": "increase the system volume",
-   "job": "none",
-   "predicted": "apps",
-   "p": 0.36
-  },
-  {
-   "file": "evals/heldout-v14.jsonl",
-   "request": "gimme one more split, direction doesn't matter",
-   "job": "panes",
-   "predicted": "apps",
-   "p": 0.347
-  },
-  {
-   "file": "evals/test.jsonl",
-   "request": "stack everything",
-   "job": "panes",
-   "predicted": "none",
-   "p": 0.342
-  },
-  {
-   "file": "evals/router/none.jsonl",
-   "request": "add milk to my shopping list",
-   "job": "none",
-   "predicted": "apps",
-   "p": 0.336
+   "predicted": "files",
+   "p": 0.538
   },
   {
    "file": "evals/router/none.jsonl",
    "request": "i need a vacation",
    "job": "none",
    "predicted": "apps",
-   "p": 0.335
+   "p": 0.536
+  },
+  {
+   "file": "evals/router/spent-heldout-v1.jsonl",
+   "request": "open help and search for tmux",
+   "job": "apps",
+   "predicted": "tmux",
+   "p": 0.535
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "turn the whole machine off now",
+   "job": "none",
+   "predicted": "apps",
+   "p": 0.531
+  },
+  {
+   "file": "evals/heldout-v3.jsonl",
+   "request": "go back to the previous window",
+   "job": "panes",
+   "predicted": "desktop",
+   "p": 0.53
+  },
+  {
+   "file": "evals/router/desktop.jsonl",
+   "request": "send the window with title 'Downloads' to the back",
+   "job": "desktop",
+   "predicted": "panes",
+   "p": 0.53
+  },
+  {
+   "file": "evals/apps/heldout-v4.jsonl",
+   "request": "Show the split-left control on panes.",
+   "job": "apps",
+   "predicted": "panes",
+   "p": 0.529
+  },
+  {
+   "file": "evals/router/system.jsonl",
+   "request": "do I have gcc?",
+   "job": "system",
+   "predicted": "none",
+   "p": 0.527
+  },
+  {
+   "file": "evals/router/desktop-v3.jsonl",
+   "request": "write \"Indigo report 1279\"",
+   "job": "desktop",
+   "predicted": "none",
+   "p": 0.526
+  },
+  {
+   "file": "evals/router/tmux.jsonl",
+   "request": "please close session monitoring",
+   "job": "tmux",
+   "predicted": "pty",
+   "p": 0.525
+  },
+  {
+   "file": "evals/router/tmux.jsonl",
+   "request": "show 15 lines from pane %7",
+   "job": "tmux",
+   "predicted": "pty",
+   "p": 0.523
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "enable the firewall and open port 443",
+   "job": "none",
+   "predicted": "apps",
+   "p": 0.515
+  },
+  {
+   "file": "evals/heldout-v14.jsonl",
+   "request": "trade places with my upper neighbour and afterwards stretch me vertically",
+   "job": "panes",
+   "predicted": "none",
+   "p": 0.514
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "which planet has the most moons?",
+   "job": "none",
+   "predicted": "system",
+   "p": 0.514
+  },
+  {
+   "file": "evals/heldout-v8.jsonl",
+   "request": "copy the selected text",
+   "job": "none",
+   "predicted": "apps",
+   "p": 0.513
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "this song is stuck in my head",
+   "job": "none",
+   "predicted": "apps",
+   "p": 0.513
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "set my wallpaper to something calming",
+   "job": "none",
+   "predicted": "apps",
+   "p": 0.509
+  },
+  {
+   "file": "evals/apps/heldout-v2.jsonl",
+   "request": "open the transcripts list and then the session log",
+   "job": "apps",
+   "predicted": "logs",
+   "p": 0.504
+  },
+  {
+   "file": "evals/router/desktop.jsonl",
+   "request": "focus the PDF viewer",
+   "job": "desktop",
+   "predicted": "apps",
+   "p": 0.502
+  },
+  {
+   "file": "evals/router/apps-controls.jsonl",
+   "request": "what's the speaking speed right now",
+   "job": "apps",
+   "predicted": "none",
+   "p": 0.499
+  },
+  {
+   "file": "evals/router/spent-heldout-v1.jsonl",
+   "request": "shut down the computer",
+   "job": "none",
+   "predicted": "apps",
+   "p": 0.498
+  },
+  {
+   "file": "evals/router/spent-heldout-v1.jsonl",
+   "request": "ask the claude session in pane 22 what it is blocked on",
+   "job": "agents",
+   "predicted": "logs",
+   "p": 0.493
+  },
+  {
+   "file": "evals/apps/heldout-v1.jsonl",
+   "request": "fancy a round of joustix",
+   "job": "apps",
+   "predicted": "none",
+   "p": 0.492
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "reboot the machine",
+   "job": "none",
+   "predicted": "system",
+   "p": 0.492
+  },
+  {
+   "file": "evals/router/window-words.jsonl",
+   "request": "clear the window on the right",
+   "job": "panes",
+   "predicted": "desktop",
+   "p": 0.491
+  },
+  {
+   "file": "evals/router/system.jsonl",
+   "request": "which deb ships /etc/ssh/ssh_config",
+   "job": "system",
+   "predicted": "files",
+   "p": 0.489
+  },
+  {
+   "file": "evals/router/pty.jsonl",
+   "request": "Kill the stuck session 1b9e5c37d4a08f62; the process inside has been frozen for an hour and is mine.",
+   "job": "pty",
+   "predicted": "none",
+   "p": 0.481
+  },
+  {
+   "file": "evals/router/desktop-v3.jsonl",
+   "request": "insert \"hello world\"",
+   "job": "desktop",
+   "predicted": "none",
+   "p": 0.477
+  },
+  {
+   "file": "evals/router/files.jsonl",
+   "request": "serach for \"error\" in logs dir ./logs",
+   "job": "files",
+   "predicted": "system",
+   "p": 0.477
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "text my wife that I'm on my way",
+   "job": "none",
+   "predicted": "apps",
+   "p": 0.477
+  },
+  {
+   "file": "evals/apps/heldout-v1.jsonl",
+   "request": "how hot is this box running? bring up the temps",
+   "job": "apps",
+   "predicted": "system",
+   "p": 0.474
+  },
+  {
+   "file": "evals/router/desktop.jsonl",
+   "request": "switch to the terminal emulator window, not a kilix pane, the xterm one",
+   "job": "desktop",
+   "predicted": "panes",
+   "p": 0.47
+  },
+  {
+   "file": "evals/router/system.jsonl",
+   "request": "has the nginx unit crashed",
+   "job": "system",
+   "predicted": "none",
+   "p": 0.467
+  },
+  {
+   "file": "evals/heldout-v14.jsonl",
+   "request": "Good morning! Please would you open another tab for me? I would like to keep my work separated.",
+   "job": "panes",
+   "predicted": "none",
+   "p": 0.465
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "why is the sky blue",
+   "job": "none",
+   "predicted": "system",
+   "p": 0.463
+  },
+  {
+   "file": "evals/router/apps-launch.jsonl",
+   "request": "chess time",
+   "job": "apps",
+   "predicted": "none",
+   "p": 0.463
+  },
+  {
+   "file": "evals/router/system.jsonl",
+   "request": "rank everything running by RSS",
+   "job": "system",
+   "predicted": "panes",
+   "p": 0.462
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "Is it okay to use tabs instead of spaces?",
+   "job": "none",
+   "predicted": "system",
+   "p": 0.459
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "kill pid 31337 right now",
+   "job": "none",
+   "predicted": "panes",
+   "p": 0.457
+  },
+  {
+   "file": "evals/system/heldout-v1.jsonl",
+   "request": "whats the state of apache2",
+   "job": "system",
+   "predicted": "none",
+   "p": 0.456
+  },
+  {
+   "file": "evals/router/none-about-tools.jsonl",
+   "request": "remove tmux from this machine",
+   "job": "none",
+   "predicted": "tmux",
+   "p": 0.456
+  },
+  {
+   "file": "evals/router/apps-controls.jsonl",
+   "request": "use a 15 point font",
+   "job": "apps",
+   "predicted": "none",
+   "p": 0.456
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "add milk to my shopping list",
+   "job": "none",
+   "predicted": "apps",
+   "p": 0.455
+  },
+  {
+   "file": "evals/router/tmux.jsonl",
+   "request": "rename session logs to logs-archive",
+   "job": "tmux",
+   "predicted": "pty",
+   "p": 0.454
+  },
+  {
+   "file": "evals/router/confusables.jsonl",
+   "request": "how's my battery? run upower in a pane",
+   "job": "panes",
+   "predicted": "none",
+   "p": 0.454
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "change the keyboard layout to Dvorak",
+   "job": "none",
+   "predicted": "panes",
+   "p": 0.445
+  },
+  {
+   "file": "evals/files/heldout-v1.jsonl",
+   "request": "rank my documents from largest to smallest",
+   "job": "files",
+   "predicted": "none",
+   "p": 0.444
+  },
+  {
+   "file": "evals/router/agents-message-wait.jsonl",
+   "request": "message grok: rebase first",
+   "job": "agents",
+   "predicted": "none",
+   "p": 0.441
+  },
+  {
+   "file": "evals/router/agents-message-wait.jsonl",
+   "request": "tell cc to add type hints to the module it just wrote",
+   "job": "agents",
+   "predicted": "none",
+   "p": 0.441
+  },
+  {
+   "file": "evals/apps/heldout-v3.jsonl",
+   "request": "I've closed three panes by mistake today with that little X, remove the close button from the panes.",
+   "job": "apps",
+   "predicted": "panes",
+   "p": 0.435
+  },
+  {
+   "file": "evals/heldout-v14.jsonl",
+   "request": "terminate whichever pane comes after mine in the cycle - kill it",
+   "job": "panes",
+   "predicted": "none",
+   "p": 0.432
+  },
+  {
+   "file": "evals/router/none-about-tools.jsonl",
+   "request": "upgrade claude code to the newest version",
+   "job": "none",
+   "predicted": "agents",
+   "p": 0.428
+  },
+  {
+   "file": "evals/router/spent-heldout-v1.jsonl",
+   "request": "scroll back through what pane 2 printed earlier",
+   "job": "logs",
+   "predicted": "none",
+   "p": 0.427
+  },
+  {
+   "file": "evals/router/agents-message-wait.jsonl",
+   "request": "wait for cc in plebian, timeout 300 seconds",
+   "job": "agents",
+   "predicted": "desktop",
+   "p": 0.425
+  },
+  {
+   "file": "evals/router/apps-controls.jsonl",
+   "request": "say \"hello from Kilix\"",
+   "job": "apps",
+   "predicted": "desktop",
+   "p": 0.422
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "implement a binary search in Rust",
+   "job": "none",
+   "predicted": "files",
+   "p": 0.421
+  },
+  {
+   "file": "evals/router/confusables.jsonl",
+   "request": "scroll back through the output of the logs pane",
+   "job": "panes",
+   "predicted": "logs",
+   "p": 0.418
   },
   {
    "file": "evals/router/none.jsonl",
    "request": "Open an issue on GitHub titled 'router misses second clause'.",
    "job": "none",
    "predicted": "apps",
-   "p": 0.335
+   "p": 0.417
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "purchase the annual subscription",
+   "job": "none",
+   "predicted": "apps",
+   "p": 0.415
+  },
+  {
+   "file": "evals/router/system.jsonl",
+   "request": "Check whether available RAM is under 1 GB before I start the next training shard.",
+   "job": "system",
+   "predicted": "apps",
+   "p": 0.413
+  },
+  {
+   "file": "evals/router/apps-controls.jsonl",
+   "request": "pause it for a sec",
+   "job": "apps",
+   "predicted": "none",
+   "p": 0.413
+  },
+  {
+   "file": "evals/system/heldout-v1.jsonl",
+   "request": "what units are sitting in a failed state",
+   "job": "system",
+   "predicted": "none",
+   "p": 0.412
+  },
+  {
+   "file": "evals/router/logs.jsonl",
+   "request": "give me the evidence snapshot for the event we looked at",
+   "job": "logs",
+   "predicted": "none",
+   "p": 0.411
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "change the system language to German",
+   "job": "none",
+   "predicted": "apps",
+   "p": 0.411
+  },
+  {
+   "file": "evals/apps/heldout-v2.jsonl",
+   "request": "my sister's birthday is next week, any gift ideas?",
+   "job": "none",
+   "predicted": "system",
+   "p": 0.41
+  },
+  {
+   "file": "evals/heldout-v14.jsonl",
+   "request": "glances is eating cpu, kill its pane",
+   "job": "panes",
+   "predicted": "system",
+   "p": 0.398
+  },
+  {
+   "file": "evals/router/system.jsonl",
+   "request": "am I about to run out of swap",
+   "job": "system",
+   "predicted": "panes",
+   "p": 0.398
+  },
+  {
+   "file": "evals/router/system.jsonl",
+   "request": "is firewalld active",
+   "job": "system",
+   "predicted": "none",
+   "p": 0.396
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "sign me out of my user session",
+   "job": "none",
+   "predicted": "pty",
+   "p": 0.396
+  },
+  {
+   "file": "evals/router/confusables.jsonl",
+   "request": "start apache2",
+   "job": "none",
+   "predicted": "system",
+   "p": 0.394
+  },
+  {
+   "file": "evals/heldout-v13.jsonl",
+   "request": "could you start python in a split? want to test a regex real quick",
+   "job": "panes",
+   "predicted": "none",
+   "p": 0.386
+  },
+  {
+   "file": "evals/router/system.jsonl",
+   "request": "Collect the top 10 CPU consumers so I can attach them to the incident note.",
+   "job": "system",
+   "predicted": "apps",
+   "p": 0.385
+  },
+  {
+   "file": "evals/router/apps-controls.jsonl",
+   "request": "make it a lot quieter",
+   "job": "apps",
+   "predicted": "none",
+   "p": 0.384
+  },
+  {
+   "file": "evals/heldout-v14.jsonl",
+   "request": "gimme one more split, direction doesn't matter",
+   "job": "panes",
+   "predicted": "apps",
+   "p": 0.382
+  },
+  {
+   "file": "evals/router/logs.jsonl",
+   "request": "what were the tool errors in that rollout file?",
+   "job": "logs",
+   "predicted": "none",
+   "p": 0.381
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "empty the trash",
+   "job": "none",
+   "predicted": "apps",
+   "p": 0.373
+  },
+  {
+   "file": "evals/router/apps-launch.jsonl",
+   "request": "open a web browser tab",
+   "job": "apps",
+   "predicted": "panes",
+   "p": 0.373
+  },
+  {
+   "file": "evals/router/apps-controls.jsonl",
+   "request": "set the read extent to scrollback",
+   "job": "apps",
+   "predicted": "none",
+   "p": 0.373
+  },
+  {
+   "file": "evals/apps/heldout-v1.jsonl",
+   "request": "my codex session died, open the thing that recovers agent sessions",
+   "job": "apps",
+   "predicted": "logs",
+   "p": 0.372
+  },
+  {
+   "file": "evals/files/dev.jsonl",
+   "request": "find \"delete everything; then exit\" in here",
+   "job": "files",
+   "predicted": "desktop",
+   "p": 0.364
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "Summarize the plot of The Hobbit in one paragraph.",
+   "job": "none",
+   "predicted": "logs",
+   "p": 0.348
   },
   {
    "file": "evals/router/none.jsonl",
    "request": "make a new directory called experiments",
    "job": "none",
    "predicted": "files",
-   "p": 0.333
+   "p": 0.346
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "turn the screen brightness down",
+   "job": "none",
+   "predicted": "apps",
+   "p": 0.344
+  },
+  {
+   "file": "evals/apps/heldout-v2.jsonl",
+   "request": "my codex session died, open the thing that recovers coding-agent sessions",
+   "job": "apps",
+   "predicted": "logs",
+   "p": 0.339
+  },
+  {
+   "file": "evals/heldout-v14.jsonl",
+   "request": "right here where I am, launch bundle exec rspec",
+   "job": "panes",
+   "predicted": "apps",
+   "p": 0.329
+  },
+  {
+   "file": "evals/router/desktop.jsonl",
+   "request": "give it a 1.5 second pause",
+   "job": "desktop",
+   "predicted": "apps",
+   "p": 0.328
   },
   {
    "file": "evals/router/none.jsonl",
@@ -752,88 +1214,123 @@
    "p": 0.328
   },
   {
-   "file": "evals/router/none.jsonl",
-   "request": "convert 100 km/h to mph",
+   "file": "evals/router/none-about-tools.jsonl",
+   "request": "Agent task: install the tmux package before running the setup script.",
    "job": "none",
    "predicted": "system",
-   "p": 0.313
+   "p": 0.327
   },
   {
-   "file": "evals/router/logs.jsonl",
-   "request": "show the source behind event evt-2f91",
-   "job": "logs",
+   "file": "evals/router/spent-heldout-v1.jsonl",
+   "request": "could you split left and start a shell in ~/projects/api",
+   "job": "panes",
+   "predicted": "files",
+   "p": 0.327
+  },
+  {
+   "file": "evals/apps/heldout-v3.jsonl",
+   "request": "I'm profiling a render job, have every pane show its CPU load at all times.",
+   "job": "apps",
    "predicted": "system",
-   "p": 0.31
+   "p": 0.323
   },
   {
    "file": "evals/system/heldout-v1.jsonl",
    "request": "show recent logs",
    "job": "system",
    "predicted": "files",
-   "p": 0.303
+   "p": 0.319
+  },
+  {
+   "file": "evals/router/spent-voice-v1.jsonl",
+   "request": "FOCUS PAIN 3",
+   "job": "panes",
+   "predicted": "desktop",
+   "p": 0.315
+  },
+  {
+   "file": "evals/router/spent-heldout-v1.jsonl",
+   "request": "check the docs folder for the word deprecated",
+   "job": "files",
+   "predicted": "none",
+   "p": 0.31
+  },
+  {
+   "file": "evals/router/apps-controls.jsonl",
+   "request": "say \"build finished successfully\"",
+   "job": "apps",
+   "predicted": "desktop",
+   "p": 0.305
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "Rotate the log files and truncate the big one.",
+   "job": "none",
+   "predicted": "apps",
+   "p": 0.301
   },
   {
    "file": "evals/heldout-v14.jsonl",
    "request": "add 8 cells of width to where I'm working",
    "job": "panes",
    "predicted": "none",
-   "p": 0.301
+   "p": 0.3
   },
   {
-   "file": "evals/router/pty.jsonl",
-   "request": "Kill the stuck session 1b9e5c37d4a08f62; the process inside has been frozen for an hour and is mine.",
-   "job": "pty",
+   "file": "evals/router/spent-heldout-v1.jsonl",
+   "request": "search the help for how to resize panes",
+   "job": "apps",
    "predicted": "none",
-   "p": 0.299
-  },
-  {
-   "file": "evals/system/heldout-v1.jsonl",
-   "request": "ps sorted by rss, top 15",
-   "job": "system",
-   "predicted": "none",
-   "p": 0.298
-  },
-  {
-   "file": "evals/heldout-v3.jsonl",
-   "request": "increase the font size",
-   "job": "none",
-   "predicted": "apps",
-   "p": 0.291
+   "p": 0.271
   },
   {
    "file": "evals/router/system.jsonl",
    "request": "something is spinning a core at 100%, which one is it",
    "job": "system",
    "predicted": "none",
-   "p": 0.277
+   "p": 0.267
   },
   {
    "file": "evals/router/none.jsonl",
-   "request": "Rotate the log files and truncate the big one.",
+   "request": "power off in 10 minutes",
    "job": "none",
-   "predicted": "files",
-   "p": 0.275
+   "predicted": "apps",
+   "p": 0.267
+  },
+  {
+   "file": "evals/router/apps-controls.jsonl",
+   "request": "pause the tunes for now",
+   "job": "apps",
+   "predicted": "desktop",
+   "p": 0.264
   },
   {
    "file": "evals/router/none.jsonl",
-   "request": "purchase the annual subscription",
+   "request": "give me three tips for staying focused",
+   "job": "none",
+   "predicted": "desktop",
+   "p": 0.256
+  },
+  {
+   "file": "evals/router/none.jsonl",
+   "request": "which came first, the chicken or the egg",
    "job": "none",
    "predicted": "apps",
-   "p": 0.274
+   "p": 0.231
   },
   {
-   "file": "evals/heldout-v14.jsonl",
-   "request": "right here where I am, launch bundle exec rspec",
-   "job": "panes",
+   "file": "evals/router/logs.jsonl",
+   "request": "show the source behind event evt-2f91",
+   "job": "logs",
    "predicted": "apps",
-   "p": 0.268
+   "p": 0.223
   },
   {
-   "file": "evals/router/tmux.jsonl",
-   "request": "show 15 lines from pane %7",
-   "job": "tmux",
-   "predicted": "system",
-   "p": 0.232
+   "file": "evals/system/heldout-v1.jsonl",
+   "request": "ps sorted by rss, top 15",
+   "job": "system",
+   "predicted": "desktop",
+   "p": 0.22
   }
  ]
 }

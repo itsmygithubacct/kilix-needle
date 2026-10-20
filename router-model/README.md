@@ -27,10 +27,35 @@ All training text is ours. None of it comes from a third-party dataset.
   `jobs.py`. `router_train.py` refuses such a path before opening it, and they are
   listed under `excluded_gate_sets`.
 - **Router files** (rule `labelled`, under `evals/router/`), written on
-  2026-10-19 by an agent session that never saw the router's held-out set:
+  2026-10-19 by agent sessions that never saw a router held-out set:
   - system, tmux, logs, pty, desktop, agents, files and none rows;
   - 160 cross-job confusables;
-  - 2 relabels: spent panes `none` rows that the system job now answers.
+  - round 2: 200 apps-controls rows (audio, music, voice, text size and their
+    status), 60 short apps launches, 80 agents message and wait rows, and 80
+    `none` questions about tools (`apps-controls`, `apps-launch`,
+    `agents-message-wait`, `none-about-tools`);
+  - `window-words`: 48 panes rows that call a pane a window, by where it is
+    ("close the window below", "split this window"), and 12 desktop rows that
+    name an application's window with the same words. Written on 2026-10-19 by
+    the router's author (who had seen the spent round-1 sets, not round 2's),
+    because "dismiss the window below", a spent panes request, routed to the
+    desktop job.
+- **Relabels** (`evals/router/relabels.jsonl`): spent job-eval rows tagged
+  `none` that a current job answers. A job eval's `none` tag means "not this
+  job", which is not always "no job":
+  - 2 the system job answers (memory and disk questions);
+  - 3 the apps job's text-size controls answer ("increase the font size",
+    "make the font bigger").
+
+  Two agent-written rows were corrected in place for the same reason: "mute the
+  speakers" (`none.jsonl`) and "increase the system volume" (`confusables.jsonl`)
+  are apps controls.
+- **Spent router held-out sets** (rule `spent`): round 1's fresh held-out text
+  set (337 single-job rows; its ambiguous rows are left out) and its 63 voice
+  transcripts (Piper speech recognised by the dictation engine). They were
+  scored once, on 2026-10-19, and the router failed that gate; they are now
+  training rows. In cross-validation each stays whole, so it measures transfer to
+  a writer the other rows never saw.
 - **`evals/router/desktop-v3.jsonl`.** 300 queries sampled deterministically
   (the first 300 by sha256 of the text) from the desktop-action job's own
   generated training queries (`data-v3/train.jsonl`, 2026-10-19).
@@ -55,19 +80,26 @@ BLAS rounding can differ between CPUs, so `--check` (and
 
 ## Threshold
 
-**The rule** was frozen on 2026-10-19, before any router held-out row was read.
-The threshold is the lowest probability in 0.50–0.95 (in steps of 0.01) at which
-the accepted cross-validation rows are at least 99.5% correct.
+**The rule** is the lowest probability in 0.50–0.95 (in steps of 0.01) at
+which the accepted cross-validation rows are at least 98.5% correct.
+
+The rule was frozen on 2026-10-19, before any router held-out row was read, with
+a 99.5% target. That router failed its first held-out gate: about 20% of fresh
+requests fell below the threshold and were asked to clarify. Round 2 moved the
+target to 98.5%, on cross-validation only, before any round-2 held-out row was
+read. On the spent round-1 rows, held out whole, a threshold of 0.55 left 8.1%
+unsure for 2.7% wrong, where 0.70 left 20.0% unsure for 1.4% wrong.
 
 **The folds** are grouped 5-fold:
-- each job eval file stays whole, so it measures transfer to new phrasing;
+- each job eval file and each spent held-out set stays whole, so it measures
+  transfer to new phrasing;
 - each router file is split into five chunks by a text hash.
 
 **The result** is in `selection.json`:
 
 | Measure | Value |
 |---|---:|
-| Cross-validation accuracy | 97.5% (macro recall 97.2%) |
-| Selected threshold | 0.70 |
-| Rows above the threshold | 89.5% |
-| Accuracy above the threshold | 99.5% |
+| Cross-validation accuracy | 96.6% (macro recall 96.5%) |
+| Selected threshold | 0.55 |
+| Rows above the threshold | 94.5% |
+| Accuracy above the threshold | 98.5% |

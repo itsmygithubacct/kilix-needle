@@ -121,7 +121,7 @@
 {"request": "hide the battery indicator", "job": "apps"}
 {"request": "how's my battery? run upower in a pane", "job": "panes"}
 {"request": "make the font bigger on the pane buttons", "job": "apps"}
-{"request": "increase the system volume", "job": "none"}
+{"request": "increase the system volume", "job": "apps"}
 {"request": "open the volume mixer", "job": "apps"}
 {"request": "enable the doom game in the games list", "job": "apps"}
 {"request": "what is the doom game about", "job": "none"}

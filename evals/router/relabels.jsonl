@@ -1,2 +1,5 @@
 {"file": "evals/heldout-v2.jsonl", "request": "how much RAM does my laptop have", "old": "none", "new": "system", "reason": "The system job answers read-only memory questions (resources kind=memory), so this is no longer an unhandled request."}
 {"file": "evals/heldout-v4.jsonl", "request": "how much disk space do I have", "old": "none", "new": "system", "reason": "The system job answers disk capacity questions (resources kind=disk, default path /), so a current job clearly does this."}
+{"file": "evals/heldout-v3.jsonl", "request": "increase the font size", "old": "none", "new": "apps", "reason": "The apps job's exact controls change the text size (app_controls font larger), so a current job does this."}
+{"file": "evals/heldout-v7.jsonl", "request": "increase the font size", "old": "none", "new": "apps", "reason": "The apps job's exact controls change the text size (app_controls font larger), so a current job does this."}
+{"file": "evals/heldout-v8.jsonl", "request": "make the font bigger", "old": "none", "new": "apps", "reason": "The apps job's exact controls change the text size (app_controls font larger), so a current job does this."}

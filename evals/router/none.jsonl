@@ -222,7 +222,7 @@
 {"request": "format the SD card as ext4", "job": "none"}
 {"request": "enable the firewall and open port 443", "job": "none"}
 {"request": "change the keyboard layout to Dvorak", "job": "none"}
-{"request": "mute the speakers", "job": "none"}
+{"request": "mute the speakers", "job": "apps"}
 {"request": "set the mouse speed to fast in system settings", "job": "none"}
 {"request": "clear my browser cache", "job": "none"}
 {"request": "ssh into the staging server and restart the app", "job": "none"}

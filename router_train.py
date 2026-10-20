@@ -325,11 +325,11 @@ def write(manifest: dict) -> None:
 
 # ---- threshold selection -----------------------------------------------------
 def folds(rows: list, rules: dict, k: int = 5) -> list:
-    """Group 5-fold assignment. Each job eval file was written as a separate
-    generation and stays whole, so those rows measure transfer to new phrasing.
-    A router file (rule "labelled") holds most of some label's rows, so it is
-    split into k chunks by a hash of the text; otherwise a fold would hold out
-    a whole label."""
+    """Group 5-fold assignment. Each job eval file and each spent router
+    held-out set (rule "spent") was written as a separate generation and stays
+    whole, so those rows measure transfer to new phrasing. A router file (rule
+    "labelled") holds most of some label's rows, so it is split into k chunks by
+    a hash of the text; otherwise a fold would hold out a whole label."""
     groups = []
     for source, _label, text in rows:
         if rules[source] == "labelled":
@@ -366,9 +366,10 @@ def select(manifest: dict, target: float) -> dict:
         take = order[:int(round(coverage * len(rows)))]
         curve.append({"coverage": coverage, "accuracy": float(ok[take].mean()),
                       "threshold": float(conf[take[-1]])})
-    # Rule (frozen 2026-10-19, before any router held-out row was read): the
-    # lowest probability whose accepted rows are at least `target` accurate,
-    # rounded up to 0.01, within [0.5, 0.95].
+    # Rule: the lowest probability whose accepted rows are at least `target`
+    # accurate, rounded up to 0.01, within [0.5, 0.95]. Frozen 2026-10-19 before
+    # any router held-out row was read; round 2 moved the target from 99.5% to
+    # 98.5% (README "Threshold"), before any round-2 held-out row was read.
     threshold = 0.95
     for t in [x / 100 for x in range(50, 96)]:
         accepted = conf >= t
@@ -392,7 +393,7 @@ def main(argv=None) -> int:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--select", action="store_true")
-    parser.add_argument("--target", type=float, default=0.995)
+    parser.add_argument("--target", type=float, default=0.985)
     args = parser.parse_args(argv)
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     if args.check:

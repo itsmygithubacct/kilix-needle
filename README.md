@@ -98,10 +98,14 @@ history entry. That entry gains a `route` block.
    character n-grams, TF-IDF, and multinomial logistic regression. It is about
    2 MB of JSON and takes about 0.2 ms per request; with the grammar claims, a
    route takes about 1.5 ms (p95 under 5 ms). It reads only the request text.
-   At probability 0.70 or above, the top job takes the request.
-3. **Two jobs.** When no grammar reads the whole request, the classifier is
-   unsure, and different clauses are each read by a different job, nothing runs:
-   the answer asks for one request per job.
+   At probability 0.55 or above, the top job takes the request.
+3. **Two jobs.** When no grammar reads the whole request and different clauses
+   are each read by a different job, nothing runs, however sure the classifier
+   is: the job it chose would act on its own clause and drop the other. The
+   answer asks for one request per job. Clauses split at sentence ends,
+   semicolons, dashes, new lines, commas, "and" and "then", never inside quotes
+   or in an agent's task after ": ". A clause's reading counts as it would at
+   stage 0: not when the classifier is sure that clause is another job's.
 4. **Unsure.** Otherwise, below the threshold, the candidate jobs' plans run, and
    plans change nothing. If exactly one plan admits the request, its plan is
    shown, but an unsure route never acts. Otherwise the answer names the

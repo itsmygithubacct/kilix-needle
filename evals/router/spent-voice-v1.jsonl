@@ -1,0 +1,63 @@
+{"request": "Split the screen to the right and run H-stop.", "job": "panes"}
+{"request": "FOCUS PAIN 3", "job": "panes"}
+{"request": "Close the current tab", "job": "panes"}
+{"request": "Rename this tab to Build Server.", "job": "panes"}
+{"request": "Make this pain a little wider", "job": "panes"}
+{"request": "Swap pain two and pain four.", "job": "panes"}
+{"request": "Open a new tab and run VIM.", "job": "panes"}
+{"request": "had make test into the logs pane.", "job": "panes"}
+{"request": "Open solitaire in a new tab.", "job": "apps"}
+{"request": "Turn the font size up", "job": "apps"}
+{"request": "Mute my microphone", "job": "apps"}
+{"request": "Hide the clock.", "job": "apps"}
+{"request": "Pause the music", "job": "apps"}
+{"request": "What's the volume set to?", "job": "apps"}
+{"request": "Open the System Monitor app.", "job": "apps"}
+{"request": "Let's play a game of snake", "job": "apps"}
+{"request": "Start code in the API project.", "job": "agents"}
+{"request": "Start codex in the billing repo and have it fix the failing tests.", "job": "agents"}
+{"request": "Wait for the codec's session to finish.", "job": "agents"}
+{"request": "Tell the Claude session in Paine 12 to run the tests.", "job": "agents"}
+{"request": "Launch GROC in my research folder", "job": "agents"}
+{"request": "Let me know when the agent in Pain 8 is idle.", "job": "agents"}
+{"request": "Start Q1 in the Ledger project with a task to write unit tests.", "job": "agents"}
+{"request": "Find files named invoice in my documents folder", "job": "files"}
+{"request": "What are the 10 largest files and downloads?", "job": "files"}
+{"request": "search my projects folder for the word deprecated", "job": "files"}
+{"request": "Show me the newest files and research.", "job": "files"}
+{"request": "Find all PDF files and downloads.", "job": "files"}
+{"request": "How much space does my documents folder take up?", "job": "files"}
+{"request": "preview the readme in my projects folder", "job": "files"}
+{"request": "How much memory is free.", "job": "system"}
+{"request": "What's using the most CPU?", "job": "system"}
+{"request": "is the darkest service running.", "job": "system"}
+{"request": "Show me any failed services.", "job": "system"}
+{"request": "How much disk space is left?", "job": "system"}
+{"request": "is VIM installed", "job": "system"}
+{"request": "Show me errors from the system journal in the last hour", "job": "system"}
+{"request": "List all the open windows", "job": "desktop"}
+{"request": "Focus the Firefox window.", "job": "desktop"}
+{"request": "Minimize the text editor.", "job": "desktop"}
+{"request": "Scroll down a few clicks", "job": "desktop"}
+{"request": "Press Ctrl L", "job": "desktop"}
+{"request": "Type a low world into the focused window.", "job": "desktop"}
+{"request": "Close the Image Viewer window.", "job": "desktop"}
+{"request": "Move the mouse to 500 and 200.", "job": "desktop"}
+{"request": "What's the capital of France?", "job": "none"}
+{"request": "Commit my changes with the Message Fix Typo.", "job": "none"}
+{"request": "Restart the NGIN X service.", "job": "none"}
+{"request": "Write me a poem about autumn", "job": "none"}
+{"request": "How many ounces are in a pound?", "job": "none"}
+{"request": "Send an email to Sam saying I'm running late.", "job": "none"}
+{"request": "Install ripgrep for me", "job": "none"}
+{"request": "What did the code accession in pane 12 do?", "job": "logs"}
+{"request": "Look through the grok session log for timeout errors.", "job": "logs"}
+{"request": "Summarize the last session in Paint 20.", "job": "logs"}
+{"request": "List my Teamux sessions.", "job": "tmux"}
+{"request": "Create a new Team Box session called Builds.", "job": "tmux"}
+{"request": "Send control C to the Team Accession, Worker.", "job": "tmux"}
+{"request": "Show me what the TMUX session training printed recently.", "job": "tmux"}
+{"request": "Which session is Payne 7?", "job": "pty"}
+{"request": "List my persistent sessions.", "job": "pty"}
+{"request": "Show me archived session journals.", "job": "pty"}
+{"request": "Show the last 50 lines of the session in pain 13", "job": "pty"}

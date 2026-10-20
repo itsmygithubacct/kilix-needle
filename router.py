@@ -26,6 +26,12 @@ import math
 from pathlib import Path
 import re
 
+# The jobs' grammars reach about 500 distinct patterns through re's module
+# cache in a run of routes, and re keeps 512: each route evicted patterns the
+# next one needed and compiled them again (route p95 6.1 ms against 4.4 ms with
+# room for them). This only raises the ceiling.
+re._MAXCACHE = max(getattr(re, "_MAXCACHE", 0), 2048)
+
 LABELS = ("panes", "apps", "agents", "files", "system", "logs", "tmux", "pty", "desktop", "none")
 # Jobs `ask` runs. The others are only named, with their explicit command and
 # tools: tmux needs a socket, logs takes structured arguments, and the pty and
@@ -231,13 +237,46 @@ def _claims_apps(text):
                    if i not in read for job, claim in CLAIMS.items() if job != "apps")
 
 
+# Quoted text is one payload ("run 'make && make test' below"); an apostrophe
+# inside a word ("I'm", "don't") opens no quote. So is everything after ": "
+# when an agent is named before it, which the agents job keeps as the person's
+# words ("start codex in ~/x: fix the tests and push").
+_PAYLOAD = re.compile(r":\s.*", re.S)
+_AGENT_NAMED: re.Pattern | None = None
+_QUOTED = re.compile(r"(?<!\w)'[^'\n]*'(?!\w)|\"[^\"\n]*\"|`[^`\n]*`|“[^”\n]*”"
+                     r"|(?<!\w)‘[^’\n]*’(?!\w)")
+_BREAK = re.compile(r"\s*(?:[.;!?;；。]+(?=\s|$)|\n|\s[‒-―]|[‒-―]\s"
+                    r"|\s--?(?=\s))\s*|\s*,\s*(?:(?:and\s+)?then\s+|and\s+)?"
+                    r"|\s+(?:and\s+then|then|and)\s+", re.I)
+
+
+def _agent_named(text: str) -> bool:
+    import agents
+    global _AGENT_NAMED
+    if _AGENT_NAMED is None:
+        _AGENT_NAMED = re.compile(rf"(?<![\w-])(?:{agents._AGENT_WORDS})(?![\w-])", re.I)
+    return bool(_AGENT_NAMED.search(text))
+
+
 def clauses(text: str) -> list:
-    """The request's clauses, as the apps grammar splits them (commas, "and",
-    "then", sentences)."""
+    """The request's clauses: split at sentence ends, semicolons, newlines,
+    dashes, commas, "and" and "then", never inside quotes. A list's words
+    ("pdf and txt files") come apart too; that matters only when two jobs'
+    grammars each read one of the pieces whole."""
     import apps
-    if len(str(text)) > apps.MAX_REQUEST:
+    text = str(text)
+    if len(text) > apps.MAX_REQUEST:
         return []
-    return [part.text for part in apps._read(text, widen=True).parts]
+    masked = _QUOTED.sub(lambda match: "x" * len(match.group(0)), text)
+    payload = _PAYLOAD.search(masked)
+    if payload and _agent_named(text[:payload.start()]):
+        masked = masked[:payload.start() + 1] + "x" * (len(masked) - payload.start() - 1)
+    parts, at = [], 0
+    for match in _BREAK.finditer(masked):
+        parts.append(text[at:match.start()])
+        at = match.end()
+    parts.append(text[at:])
+    return [part.strip() for part in parts if part.strip(" .,;!?;；。")]
 
 
 def _claims_files(text):
@@ -334,6 +373,21 @@ def route(text: str, model_: Model | None = None) -> Route:
         return Route("error", None, note=f"router failed: {type(error).__name__}: {error}"[:300])
 
 
+def _clause_reader(part: str, model_: Model, threshold: float) -> str | None:
+    """The job ask runs whose grammar reads this clause, as stage 0 would
+    route it alone: the classifier's top job when its grammar reads the clause;
+    otherwise, when the classifier is unsure, the one such job whose grammar
+    does. (Asking the top job's grammar first keeps this to one grammar for most
+    clauses.)"""
+    top, p = model_.rank(part)[0]
+    if top in RUNS and CLAIMS[top](part):
+        return top
+    if p >= threshold:
+        return None
+    readers = [job for job in RUNS if job != top and CLAIMS[job](part)]
+    return readers[0] if len(readers) == 1 else None
+
+
 def _route(text: str, model_: Model) -> Route:
     ranking = model_.rank(text)
     threshold = model_.threshold
@@ -342,15 +396,19 @@ def _route(text: str, model_: Model) -> Route:
     alternatives = [(job, prob) for job, prob in ranking[1:3]]
     common = dict(p=p, margin=p - q, alternatives=alternatives, claims=found)
     # Two jobs' work in one request (a non-goal): no grammar reads all of it,
-    # the classifier is not sure, and clauses are each read by one different
-    # job that ask runs. It goes back as two requests.
-    if not found and p < threshold:
+    # and clauses are each read by a different job that ask runs. It goes back
+    # as two requests, however sure the classifier is of one job: that job
+    # would act on its own clause and drop the other.
+    # (Sure of no job, or of one ask only names, nothing acts: no need to look.)
+    if not found and (top in RUNS or p < threshold):
         parts = clauses(text)
         only = set()
         for part in parts if len(parts) > 1 else ():
-            readers = [job for job in claims(part) if job in RUNS]
-            if len(readers) == 1:
-                only.add(readers[0])
+            reader = _clause_reader(part, model_, threshold)
+            if reader:
+                only.add(reader)
+                if len(only) > 1:
+                    break
         if len(only) > 1:
             return Route("multi", None, candidates=[job for job in LABELS if job in only],
                          note="this asks two jobs; send it as two requests", **common)

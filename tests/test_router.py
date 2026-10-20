@@ -172,12 +172,59 @@ class Stages(unittest.TestCase):
         self.assertNotIn("apps", router.claims("show the clock and hide the clock"))
 
     def test_two_jobs_work_in_one_request_goes_back_as_two(self):
-        route = router.route("split right and open solitaire", model_sure_of("panes", 0.5))
-        self.assertEqual((route.stage, route.job, route.candidates), ("multi", None, ["panes", "apps"]))
-        # One job's grammar reading all of it, or a sure classifier, is not two jobs.
+        # However sure the classifier is of one of them: that job would act on
+        # its own clause and drop the other.
+        whole = "split right and open solitaire"
+        real = router.model()
+
+        class SureOfTheWhole:
+            threshold = real.threshold
+
+            def __init__(self, job):
+                self.job = job
+
+            def rank(self, text):       # the clauses are ranked as the real model ranks them
+                if text != whole:
+                    return real.rank(text)
+                return [(self.job, 0.99)] + [(j, 0.01 / 9) for j in router.LABELS if j != self.job]
+
+        for model in (model_sure_of("panes", 0.5), SureOfTheWhole("panes"), SureOfTheWhole("apps")):
+            route = router.route(whole, model)
+            self.assertEqual((route.stage, route.job, route.candidates), ("multi", None, ["panes", "apps"]))
+        for text, both in (("find pdf files in Downloads and show memory", ["files", "system"]),
+                           ("close pane 3 and start codex in ~/x", ["panes", "agents"]),
+                           ("close tab 2. start claude in ~/gpu_terminal", ["panes", "agents"]),
+                           ("close tab 2 — show memory", ["panes", "system"]),
+                           ("close tab 2\nshow memory", ["panes", "system"])):
+            route = router.route(text)
+            self.assertEqual((route.stage, route.job, route.candidates), ("multi", None, both), text)
+        # One job's grammar reading all of it is not two jobs.
         self.assertEqual(router.route("start codex in /tmp and split right").job, "agents")
-        route = router.route("split right and open solitaire", model_sure_of("panes"))
-        self.assertEqual(route.stage, 1)
+
+    def test_a_clause_reading_the_classifier_contests_is_not_another_jobs_work(self):
+        # The apps grammar reads "show one pane at a time" (as the clock); the
+        # classifier is sure that clause is the panes job's, as at stage 0.
+        self.assertEqual(router.claims("show one pane at a time"), ["apps"])
+        route = router.route("switch to the previous tab, then show one pane at a time")
+        self.assertEqual((route.stage, route.job), (1, "panes"))
+
+    def test_clauses_split_at_breaks_but_not_inside_quotes_or_an_agents_task(self):
+        import apps
+        cases = {"split right; open solitaire": ["split right", "open solitaire"],
+                 "split right, then open solitaire": ["split right", "open solitaire"],
+                 "close tab 2 — show memory": ["close tab 2", "show memory"],
+                 "close tab 2 - show memory": ["close tab 2", "show memory"],
+                 "close tab 2\nshow memory": ["close tab 2", "show memory"],
+                 "I'm bored, open solitaire": ["I'm bored", "open solitaire"],
+                 "run 'make && make test and deploy' in the pane below":
+                     ["run 'make && make test and deploy' in the pane below"],
+                 "start codex in ~/x: fix the tests and push": ["start codex in ~/x: fix the tests and push"],
+                 # Only an agent's task: anything else after a colon is still clauses.
+                 "close tab 2: and show memory": ["close tab 2:", "show memory"],
+                 "set it to v1.2 and show memory": ["set it to v1.2", "show memory"]}
+        for text, parts in cases.items():
+            self.assertEqual(router.clauses(text), parts, text)
+        self.assertEqual(router.clauses("x " * apps.MAX_REQUEST), [])
 
     def test_a_router_failure_is_unsure_not_a_guess(self):
         for text in ("show me htop so I can check the cpu", "split right and run htop"):

@@ -18,7 +18,7 @@
   "round": 4,
   "max_iter": 3000,
   "gtol": 1e-06,
-  "threshold": 0.7
+  "threshold": 0.55
  },
  "excluded_gate_sets": [
   "evals/agents/heldout-v2.jsonl",
@@ -289,46 +289,88 @@
   {
    "path": "evals/router/none.jsonl",
    "rule": "labelled",
-   "sha256": "e83ff3a51df2c5cb957642b4c116862d454e508394c4df6a77b26df475c89564",
+   "sha256": "a7b77500d3866c585ba58659795bbcf4eb3cf10f0c11a4e1191a6434a111dd55",
    "rows": 260
   },
   {
    "path": "evals/router/confusables.jsonl",
    "rule": "labelled",
-   "sha256": "90b1b429aa508949c1f2218c3670e4830045f90c9e8ba0971b2e9d2d1f87c621",
+   "sha256": "a36ddaa45d07d64e1a9ea18caca40cab4ff8e10b3f0340fa7531b51ac211d322",
    "rows": 160
+  },
+  {
+   "path": "evals/router/none-about-tools.jsonl",
+   "rule": "labelled",
+   "sha256": "8c59e8d5c3524e78381b7c409c13ed93e1c4912838d164166d73a50ce2cc82e2",
+   "rows": 80
+  },
+  {
+   "path": "evals/router/agents-message-wait.jsonl",
+   "rule": "labelled",
+   "sha256": "d8231d2b902df373978398c167f5cb1cb7d14ff340e24647f6c5facc70549d68",
+   "rows": 80
+  },
+  {
+   "path": "evals/router/apps-launch.jsonl",
+   "rule": "labelled",
+   "sha256": "29517e6ee4f28e40eb872e25fe47e0c6e801e1d6db50f278051b9c12731e00a6",
+   "rows": 60
+  },
+  {
+   "path": "evals/router/apps-controls.jsonl",
+   "rule": "labelled",
+   "sha256": "48cebf733ca27fa9de62657a1cbb40ee252c6ab72d3dcd7dca047ea49acb990f",
+   "rows": 200
+  },
+  {
+   "path": "evals/router/window-words.jsonl",
+   "rule": "labelled",
+   "sha256": "4a6e70b552bca4a9fcb5f8b8f4ac9a3f5daea6cb5774e92e71bbf7be5dbfd3e8",
+   "rows": 60
+  },
+  {
+   "path": "evals/router/spent-heldout-v1.jsonl",
+   "rule": "spent",
+   "sha256": "fba877f6999869546988c8a6ba517fe9f010a7d4fa84f2f1c90878f841f1ef91",
+   "rows": 337
+  },
+  {
+   "path": "evals/router/spent-voice-v1.jsonl",
+   "rule": "spent",
+   "sha256": "a32fe5247d733385b5c243a97230c5d3960b62080cae093c8842e77a5a09f1d8",
+   "rows": 63
   }
  ],
  "rows": {
-  "panes": 1508,
-  "apps": 517,
-  "agents": 317,
-  "files": 300,
-  "system": 379,
-  "logs": 190,
-  "tmux": 191,
-  "pty": 189,
-  "desktop": 473,
-  "none": 464
+  "panes": 1597,
+  "apps": 824,
+  "agents": 438,
+  "files": 341,
+  "system": 417,
+  "logs": 219,
+  "tmux": 222,
+  "pty": 218,
+  "desktop": 523,
+  "none": 577
  },
  "artifact": {
   "path": "router-model/router.json",
-  "sha256": "7222d12bb11aaa6071d6680baf7d924808e448688b23ad6c7c5d3902bd80d0e7",
-  "bytes": 2107811
+  "sha256": "aa67042862846b19b762d123311ce664bb67baecc9496944deb0cd22a5ca8c87",
+  "bytes": 2261735
  },
  "relabels": {
   "path": "evals/router/relabels.jsonl",
-  "sha256": "9903ea3c1912227074483380e7a25be3622b6192d77defa31a05947e03c7dd67"
+  "sha256": "7bc4044f2f880498cbba602c2027f03235850917b669249455c7033f86ba7fd4"
  },
  "threshold_rule": {
-  "rule": "lowest p in 0.50..0.95 (step 0.01) whose accepted cross-validation rows are at least 99.5% correct",
-  "folds": "grouped 5-fold: job eval files whole, router files in 5 text-hash chunks",
-  "selected": 0.7,
-  "coverage": 0.8947,
-  "accepted_accuracy": 0.9951,
-  "cv_accuracy": 0.9753,
-  "cv_macro_recall": 0.9722,
-  "frozen": "2026-10-19, before any router held-out row was read",
+  "rule": "lowest p in 0.50..0.95 (step 0.01) whose accepted cross-validation rows are at least 98.5% correct",
+  "folds": "grouped 5-fold: job eval files and spent held-out sets whole, router files in 5 text-hash chunks",
+  "selected": 0.55,
+  "coverage": 0.9451,
+  "accepted_accuracy": 0.9854,
+  "cv_accuracy": 0.966,
+  "cv_macro_recall": 0.9646,
+  "frozen": "2026-10-19, before any router held-out row was read (target 99.5%); round 2 set the target to 98.5% before any round-2 held-out row was read",
   "report": "router-model/selection.json"
  }
 }

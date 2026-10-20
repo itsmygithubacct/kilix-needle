@@ -1,0 +1,60 @@
+{"request": "close the window below", "job": "panes"}
+{"request": "close the window above", "job": "panes"}
+{"request": "close the window on the left", "job": "panes"}
+{"request": "close the window to the right", "job": "panes"}
+{"request": "shut the window underneath this one", "job": "panes"}
+{"request": "kill the window to my left", "job": "panes"}
+{"request": "get rid of the window above me", "job": "panes"}
+{"request": "dismiss the window to the right", "job": "panes"}
+{"request": "dismiss the window above this one", "job": "panes"}
+{"request": "focus the window below", "job": "panes"}
+{"request": "jump to the window on the right", "job": "panes"}
+{"request": "switch to the window above", "job": "panes"}
+{"request": "move focus to the window on my left", "job": "panes"}
+{"request": "go to the window underneath", "job": "panes"}
+{"request": "make the window below taller", "job": "panes"}
+{"request": "make the window on the right wider", "job": "panes"}
+{"request": "shrink the window above a bit", "job": "panes"}
+{"request": "give the window to my left more room", "job": "panes"}
+{"request": "swap this window with the one below", "job": "panes"}
+{"request": "swap places with the window on the right", "job": "panes"}
+{"request": "move this window into a new tab", "job": "panes"}
+{"request": "detach this window into its own tab", "job": "panes"}
+{"request": "split this window vertically", "job": "panes"}
+{"request": "split this window in half side by side", "job": "panes"}
+{"request": "split this window and run top in the new half", "job": "panes"}
+{"request": "open a new window below running btop", "job": "panes"}
+{"request": "open a window to the right with tail -f /var/log/syslog in it", "job": "panes"}
+{"request": "put a new window above me with watch df -h", "job": "panes"}
+{"request": "run htop in the window below", "job": "panes"}
+{"request": "type ls -la into the window on the left", "job": "panes"}
+{"request": "clear the window on the right", "job": "panes"}
+{"request": "scroll the window below to the bottom", "job": "panes"}
+{"request": "zoom in on the window to the left", "job": "panes"}
+{"request": "rename the window below to logs", "job": "panes"}
+{"request": "title the window on the right build", "job": "panes"}
+{"request": "close the other windows in this tab", "job": "panes"}
+{"request": "close every window in this tab except this one", "job": "panes"}
+{"request": "even out the windows in this tab", "job": "panes"}
+{"request": "show one window at a time in this tab", "job": "panes"}
+{"request": "lay the windows in this tab out side by side", "job": "panes"}
+{"request": "close the bottom window in this tab", "job": "panes"}
+{"request": "close the top window in this tab", "job": "panes"}
+{"request": "focus the next window in this tab", "job": "panes"}
+{"request": "go back to the previous window in this tab", "job": "panes"}
+{"request": "the window below can go", "job": "panes"}
+{"request": "I'm done with the window on the right, close it", "job": "panes"}
+{"request": "can you get rid of that window under this one", "job": "panes"}
+{"request": "put this window back where it was before the split", "job": "panes"}
+{"request": "move the gedit window to the right half of the screen", "job": "desktop"}
+{"request": "snap the file manager window to the left edge of the screen", "job": "desktop"}
+{"request": "move the VLC window to the top right corner of the screen", "job": "desktop"}
+{"request": "put the Firefox window on the left monitor", "job": "desktop"}
+{"request": "move the Chromium window below the Slack window on screen", "job": "desktop"}
+{"request": "close the LibreOffice window on the right side of the screen", "job": "desktop"}
+{"request": "minimize the Thunderbird window", "job": "desktop"}
+{"request": "bring the calculator window above the others", "job": "desktop"}
+{"request": "resize the Firefox window to 1280 by 720", "job": "desktop"}
+{"request": "focus the GIMP window on the left", "job": "desktop"}
+{"request": "raise the browser window to the top", "job": "desktop"}
+{"request": "move the active window to the bottom left of the screen", "job": "desktop"}

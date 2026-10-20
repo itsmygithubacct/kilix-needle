@@ -1,0 +1,80 @@
+{"request": "tell the codex session in the api repo to rerun the unit tests", "job": "agents"}
+{"request": "ask claude in kilix-content to stop and summarize", "job": "agents"}
+{"request": "message grok: rebase first", "job": "agents"}
+{"request": "let me know when codex goes idle", "job": "agents"}
+{"request": "block until the grok run in research is done", "job": "agents"}
+{"request": "wait for the claude session in needle to finish", "job": "agents"}
+{"request": "tell claude in the ml repo to commit what it has", "job": "agents"}
+{"request": "ping the grok session here and ask what it is stuck on", "job": "agents"}
+{"request": "send codex in the os repo: dont touch the bootloader", "job": "agents"}
+{"request": "Tell the claude session in kilix-95 to revert its last change.", "job": "agents"}
+{"request": "tell qwen in research to use bf16 instead", "job": "agents"}
+{"request": "ask omp in the catalog how far along it is", "job": "agents"}
+{"request": "tell the codex session in needle that the fixture path changed to tests/data", "job": "agents"}
+{"request": "message claude here: the failing test is flaky, ignore it", "job": "agents"}
+{"request": "relay to grok in kilix that I merged its branch", "job": "agents"}
+{"request": "tell cc to add type hints to the module it just wrote", "job": "agents"}
+{"request": "ask codex in kilix-needle to rerun the failing eval and paste the output", "job": "agents"}
+{"request": "say to the claude session in plebian: open a PR when you're done", "job": "agents"}
+{"request": "send the codex agent in the ml repo a note to checkpoint every 500 steps", "job": "agents"}
+{"request": "Tell the grok session in the desktop repo to stop refactoring and just fix the bug.", "job": "agents"}
+{"request": "tell claude to also update the docs", "job": "agents"}
+{"request": "hey claude in needle, switch to the feature branch", "job": "agents"}
+{"request": "message the omp session in kilix: nvm, use the old schema", "job": "agents"}
+{"request": "tell codex in research to drop the last two experiments", "job": "agents"}
+{"request": "instruct the claude session in the catalog to dedupe entries by url", "job": "agents"}
+{"request": "ask grok in the os repo if the build is green", "job": "agents"}
+{"request": "Please tell the claude session in kilix-needle to run the linter before committing.", "job": "agents"}
+{"request": "tell the codex session in the api repo: tests pass locally, push it", "job": "agents"}
+{"request": "let claude in kilix know the API key was rotated", "job": "agents"}
+{"request": "send \"continue\" to the codex session in needle", "job": "agents"}
+{"request": "reply yes to the grok session in kilix-ml", "job": "agents"}
+{"request": "tell the qwen omp session to hold on until I review", "job": "agents"}
+{"request": "ask the claude session in the os repo to list what files it touched", "job": "agents"}
+{"request": "Send this to codex in kilix-95: use the new theme tokens, not hex values.", "job": "agents"}
+{"request": "tell claude in research to write the results to results.md instead", "job": "agents"}
+{"request": "nudge the grok session in needle: any progress?", "job": "agents"}
+{"request": "tell cdoex in the api repo to run the tests", "job": "agents"}
+{"request": "mesage claude in kilix: stop and summarize", "job": "agents"}
+{"request": "tell the claude session in the api repo to stop, I need the lockfile", "job": "agents"}
+{"request": "Agent note: forward the failing stack trace to the codex session in needle and ask it to fix it.", "job": "agents"}
+{"request": "Task for the orchestrator: message the claude session in kilix-ml to rebase on main and force-push.", "job": "agents"}
+{"request": "Relay the reviewer's feedback to the claude session in kilix-95: rename the helper and add a docstring.", "job": "agents"}
+{"request": "Next step: tell the grok session in the catalog to regenerate thumbnails with the new size.", "job": "agents"}
+{"request": "tell claude in kilix-needle to skip the integration tests for now", "job": "agents"}
+{"request": "wait until codex in the os repo is idle", "job": "agents"}
+{"request": "wait for the claude session here to finish", "job": "agents"}
+{"request": "notify me when the grok session in kilix-ml asks something", "job": "agents"}
+{"request": "wait for codex in needle to need approval", "job": "agents"}
+{"request": "let me know when claude in the catalog finishes its turn", "job": "agents"}
+{"request": "block until qwen in research goes idle, at most 20 minutes", "job": "agents"}
+{"request": "hold on until the omp session in kilix is done", "job": "agents"}
+{"request": "tell me when the codex run in the api repo is finished", "job": "agents"}
+{"request": "wait for cc in plebian, timeout 300 seconds", "job": "agents"}
+{"request": "sit tight until the grok session in needle is finished", "job": "agents"}
+{"request": "Wait for the claude session in kilix-95 to become idle before continuing.", "job": "agents"}
+{"request": "Block until the codex agent in kilix-content reports idle, with a 10 minute cap.", "job": "agents"}
+{"request": "wait till claude in the ml repo stops and asks me something", "job": "agents"}
+{"request": "keep waiting on the codex session in needle until it finishes", "job": "agents"}
+{"request": "Please wait for the qwen session in the catalog to finish up.", "job": "agents"}
+{"request": "pause until claude here is idle", "job": "agents"}
+{"request": "give grok in research up to 3 minutes to finish, then continue", "job": "agents"}
+{"request": "wait for the other claude session to finish its task", "job": "agents"}
+{"request": "let me know once codex here goes idle", "job": "agents"}
+{"request": "Agent: wait for the codex review in kilix-needle to complete, then proceed to the merge step.", "job": "agents"}
+{"request": "Next, wait for the claude session in kilix-ml to finish its eval run before running anything else.", "job": "agents"}
+{"request": "Poll until the grok session in the os repo is idle, up to 15 minutes.", "job": "agents"}
+{"request": "wiat for claude in needle to go idle", "job": "agents"}
+{"request": "blok until codex in kilix finishes", "job": "agents"}
+{"request": "wait for the grok session in kilix-95 to ask for approval, then tell it yes", "job": "agents"}
+{"request": "when the claude session in research is idle, tell it to start the next experiment", "job": "agents"}
+{"request": "wait for codex in needle to finish and then ask it for a summary", "job": "agents"}
+{"request": "once grok in the catalog is done, message it: commit and push", "job": "agents"}
+{"request": "tell claude in the os repo to run the full suite, then wait for it to go idle", "job": "agents"}
+{"request": "ask the qwen session in kilix-ml to rerun with seed 7 and wait until it finishes", "job": "agents"}
+{"request": "send codex in kilix: run cargo check; then wait for it to be idle", "job": "agents"}
+{"request": "hold until the claude session in needle needs input, then relay my answer: go with option B", "job": "agents"}
+{"request": "Wait for the codex session in the api repo to finish, then message claude in needle that the API is ready.", "job": "agents"}
+{"request": "tell the grok session here to commit, and wait up to 2 minutes for it", "job": "agents"}
+{"request": "tell the claude session in the desktop repo to bump the version and tag it", "job": "agents"}
+{"request": "wait for the omp session in the os repo to be done, then carry on", "job": "agents"}

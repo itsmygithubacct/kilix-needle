@@ -1,0 +1,80 @@
+{"request": "explain to me what a tmux session holds", "job": "none"}
+{"request": "how would I open a split window inside vim", "job": "none"}
+{"request": "what does htop show", "job": "none"}
+{"request": "what's a pty", "job": "none"}
+{"request": "how does grep -r work", "job": "none"}
+{"request": "what is a logistic regression", "job": "none"}
+{"request": "what's the difference between a tmux window and a pane", "job": "none"}
+{"request": "why does tmux use a prefix key", "job": "none"}
+{"request": "how do I scroll back in screen", "job": "none"}
+{"request": "what does the load average in top mean", "job": "none"}
+{"request": "what is a pseudo-terminal used for", "job": "none"}
+{"request": "explain what a controlling terminal is", "job": "none"}
+{"request": "how does ssh agent forwarding work", "job": "none"}
+{"request": "what do the colors in htop mean", "job": "none"}
+{"request": "what does the S column mean in ps output", "job": "none"}
+{"request": "how is a pane different from a tab in a terminal emulator", "job": "none"}
+{"request": "what is a login shell versus an interactive shell", "job": "none"}
+{"request": "Can you explain what a file descriptor is?", "job": "none"}
+{"request": "how does tail -f know when a file grows", "job": "none"}
+{"request": "what's the point of a terminal multiplexer", "job": "none"}
+{"request": "what does ctrl-z do in a shell", "job": "none"}
+{"request": "explain how sixel graphics work", "job": "none"}
+{"request": "what is a nerd font", "job": "none"}
+{"request": "how does fzf rank its matches", "job": "none"}
+{"request": "what is the difference between grep and ripgrep", "job": "none"}
+{"request": "how do I read a journalctl log", "job": "none"}
+{"request": "what does strace actually do", "job": "none"}
+{"request": "what is an X11 window manager", "job": "none"}
+{"request": "what does the xdotool project do", "job": "none"}
+{"request": "what is a systemd unit", "job": "none"}
+{"request": "what does journald store", "job": "none"}
+{"request": "what's the difference between a process and a thread", "job": "none"}
+{"request": "how do unix pipes work internally", "job": "none"}
+{"request": "what is the OOM killer", "job": "none"}
+{"request": "explain what a gradient boosted tree is", "job": "none"}
+{"request": "what is overfitting in machine learning", "job": "none"}
+{"request": "how does attention work in a transformer", "job": "none"}
+{"request": "what's the difference between precision and recall", "job": "none"}
+{"request": "explain k-means clustering briefly", "job": "none"}
+{"request": "what is cross-validation", "job": "none"}
+{"request": "what is a confusion matrix", "job": "none"}
+{"request": "what does softmax do", "job": "none"}
+{"request": "what is a learning rate scheduler", "job": "none"}
+{"request": "why is text classification usually done with embeddings", "job": "none"}
+{"request": "what is a coding agent", "job": "none"}
+{"request": "what is the difference between claude code and codex", "job": "none"}
+{"request": "how do LLM agents call tools", "job": "none"}
+{"request": "what's an MCP server", "job": "none"}
+{"request": "what is a context window", "job": "none"}
+{"request": "what is a scrollback buffer", "job": "none"}
+{"request": "how do dotfiles work", "job": "none"}
+{"request": "what is a zombie process", "job": "none"}
+{"request": "what does sudo mean", "job": "none"}
+{"request": "install tmux", "job": "none"}
+{"request": "uninstall htop", "job": "none"}
+{"request": "update codex", "job": "none"}
+{"request": "please install ripgrep for me", "job": "none"}
+{"request": "apt remove vim", "job": "none"}
+{"request": "upgrade claude code to the newest version", "job": "none"}
+{"request": "brew install fzf", "job": "none"}
+{"request": "cargo install bat", "job": "none"}
+{"request": "Uninstall the codex CLI.", "job": "none"}
+{"request": "bring every installed package up to date", "job": "none"}
+{"request": "pip uninstall numpy", "job": "none"}
+{"request": "remove tmux from this machine", "job": "none"}
+{"request": "reinstall htop", "job": "none"}
+{"request": "install the latest kitty terminal", "job": "none"}
+{"request": "snap install btop", "job": "none"}
+{"request": "sudo apt update && sudo apt upgrade", "job": "none"}
+{"request": "npm uninstall -g typescript", "job": "none"}
+{"request": "Install node 22 and set it as the default.", "job": "none"}
+{"request": "can you update grok", "job": "none"}
+{"request": "get me a newer version of qwen", "job": "none"}
+{"request": "Agent task: install the tmux package before running the setup script.", "job": "none"}
+{"request": "Next step: uninstall htop, it is no longer needed.", "job": "none"}
+{"request": "Please update the codex binary to the latest release and restart it.", "job": "none"}
+{"request": "tell me a joke about terminals", "job": "none"}
+{"request": "write a haiku about grep", "job": "none"}
+{"request": "what's the best text editor, vim or emacs", "job": "none"}
+{"request": "translate \"good morning\" into German", "job": "none"}

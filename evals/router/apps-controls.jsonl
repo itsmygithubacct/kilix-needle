@@ -1,0 +1,200 @@
+{"request": "mute my mic", "job": "apps"}
+{"request": "silence the microphone for a minute", "job": "apps"}
+{"request": "unmute the mic, I'm about to talk", "job": "apps"}
+{"request": "please mute the speakers", "job": "apps"}
+{"request": "kill the sound", "job": "apps"}
+{"request": "unmute the speakers", "job": "apps"}
+{"request": "turn the mic back on", "job": "apps"}
+{"request": "Mute the input device and confirm it took effect.", "job": "apps"}
+{"request": "mute audio output", "job": "apps"}
+{"request": "unmute sound please", "job": "apps"}
+{"request": "cut the microphone, someone's at the door", "job": "apps"}
+{"request": "mic off", "job": "apps"}
+{"request": "mic on again", "job": "apps"}
+{"request": "Unmute the microphone before starting dictation.", "job": "apps"}
+{"request": "mute the system audio", "job": "apps"}
+{"request": "put the speakers on mute", "job": "apps"}
+{"request": "can you unmute my headset mic", "job": "apps"}
+{"request": "mute output while I take this call", "job": "apps"}
+{"request": "Set the output volume to 35 percent.", "job": "apps"}
+{"request": "volume to 50", "job": "apps"}
+{"request": "set the volume to 80%", "job": "apps"}
+{"request": "make the volume 20", "job": "apps"}
+{"request": "Please set speaker volume to 65.", "job": "apps"}
+{"request": "set system volume to 100 percent", "job": "apps"}
+{"request": "drop the volume to 10", "job": "apps"}
+{"request": "set mic volume to 70 percent", "job": "apps"}
+{"request": "set the input level to 55", "job": "apps"}
+{"request": "Set the microphone gain to 40% and report the new level.", "job": "apps"}
+{"request": "volume at zero please", "job": "apps"}
+{"request": "bump the volume up a bit", "job": "apps"}
+{"request": "turn it up a little", "job": "apps"}
+{"request": "a bit louder please", "job": "apps"}
+{"request": "louder", "job": "apps"}
+{"request": "quieter please", "job": "apps"}
+{"request": "turn it down a notch", "job": "apps"}
+{"request": "lower the volume by 15 percent", "job": "apps"}
+{"request": "raise the speaker volume by 10 points", "job": "apps"}
+{"request": "Increase output volume by 5 percentage points.", "job": "apps"}
+{"request": "make it a lot quieter", "job": "apps"}
+{"request": "crank the volume up", "job": "apps"}
+{"request": "turn the sound down, it's too loud", "job": "apps"}
+{"request": "the audio is too quiet, turn it up", "job": "apps"}
+{"request": "decrease the mic volume by 20 percent", "job": "apps"}
+{"request": "raise the input level a little", "job": "apps"}
+{"request": "nudge the volume down two notches", "job": "apps"}
+{"request": "I can't hear anything, turn the speakers up", "job": "apps"}
+{"request": "Reduce the system volume by 25% and leave everything else alone.", "job": "apps"}
+{"request": "is the mic muted", "job": "apps"}
+{"request": "are my speakers muted right now", "job": "apps"}
+{"request": "what's the volume at", "job": "apps"}
+{"request": "how loud is the system volume", "job": "apps"}
+{"request": "what is the microphone volume set to", "job": "apps"}
+{"request": "check whether the output is muted", "job": "apps"}
+{"request": "list the audio devices", "job": "apps"}
+{"request": "show me all sound devices", "job": "apps"}
+{"request": "which audio inputs do I have", "job": "apps"}
+{"request": "what outputs are available", "job": "apps"}
+{"request": "Enumerate the audio devices so I can pick the default.", "job": "apps"}
+{"request": "set the default output to \"Realtek Speakers\"", "job": "apps"}
+{"request": "make \"USB Mic\" the default input", "job": "apps"}
+{"request": "Switch the default audio output to \"HDMI Audio\" and verify.", "job": "apps"}
+{"request": "which mic is the default", "job": "apps"}
+{"request": "what's my current default speaker", "job": "apps"}
+{"request": "mute the mic and tell me when it's done", "job": "apps"}
+{"request": "play some music", "job": "apps"}
+{"request": "play the music", "job": "apps"}
+{"request": "get some music going", "job": "apps"}
+{"request": "carry on with the music", "job": "apps"}
+{"request": "resume playback", "job": "apps"}
+{"request": "pause the tunes for now", "job": "apps"}
+{"request": "pause it for a sec", "job": "apps"}
+{"request": "hold the music", "job": "apps"}
+{"request": "stop the music", "job": "apps"}
+{"request": "stop playing music", "job": "apps"}
+{"request": "next song", "job": "apps"}
+{"request": "skip this track", "job": "apps"}
+{"request": "skip it", "job": "apps"}
+{"request": "play the previous track", "job": "apps"}
+{"request": "go back a song", "job": "apps"}
+{"request": "previous song please", "job": "apps"}
+{"request": "Skip to the next track.", "job": "apps"}
+{"request": "what's playing", "job": "apps"}
+{"request": "what song is this", "job": "apps"}
+{"request": "which track is currently playing", "job": "apps"}
+{"request": "is music playing right now", "job": "apps"}
+{"request": "is the player paused", "job": "apps"}
+{"request": "set the music volume to 30", "job": "apps"}
+{"request": "music volume 45 percent", "job": "apps"}
+{"request": "turn the music down to 20%", "job": "apps"}
+{"request": "make the music louder, but only the player", "job": "apps"}
+{"request": "shuffle on", "job": "apps"}
+{"request": "turn shuffle off", "job": "apps"}
+{"request": "shuffle my music", "job": "apps"}
+{"request": "stop shuffling the playlist", "job": "apps"}
+{"request": "set repeat to all", "job": "apps"}
+{"request": "repeat this track", "job": "apps"}
+{"request": "turn repeat off", "job": "apps"}
+{"request": "loop the current song", "job": "apps"}
+{"request": "seek music to 90 seconds", "job": "apps"}
+{"request": "jump to two minutes into the song", "job": "apps"}
+{"request": "Pause the music, then confirm the player state.", "job": "apps"}
+{"request": "please resume the music player", "job": "apps"}
+{"request": "Start playback in the music player and report the current track.", "job": "apps"}
+{"request": "restart the current track from the beginning", "job": "apps"}
+{"request": "read the screen aloud", "job": "apps"}
+{"request": "read this pane aloud", "job": "apps"}
+{"request": "read the selection out loud", "job": "apps"}
+{"request": "read my selection aloud please", "job": "apps"}
+{"request": "read the scrollback aloud", "job": "apps"}
+{"request": "read out the last output", "job": "apps"}
+{"request": "Read the visible pane aloud, then stop.", "job": "apps"}
+{"request": "speak the selected text", "job": "apps"}
+{"request": "stop reading", "job": "apps"}
+{"request": "stop reading aloud", "job": "apps"}
+{"request": "stop talking", "job": "apps"}
+{"request": "be quiet, stop speaking", "job": "apps"}
+{"request": "shut up for a second", "job": "apps"}
+{"request": "stop the voice", "job": "apps"}
+{"request": "Stop speech and dictation right now.", "job": "apps"}
+{"request": "say \"build finished successfully\"", "job": "apps"}
+{"request": "speak \"the tests are green\"", "job": "apps"}
+{"request": "say \"hello from Kilix\"", "job": "apps"}
+{"request": "Speak the words \"deployment complete\" aloud.", "job": "apps"}
+{"request": "say out loud \"time for a break\"", "job": "apps"}
+{"request": "start dictation", "job": "apps"}
+{"request": "dictate for 30 seconds", "job": "apps"}
+{"request": "begin dictation for a minute", "job": "apps"}
+{"request": "Start dictation for 45 seconds.", "job": "apps"}
+{"request": "stop dictation", "job": "apps"}
+{"request": "end the dictation", "job": "apps"}
+{"request": "turn off dictation", "job": "apps"}
+{"request": "speak faster", "job": "apps"}
+{"request": "talk slower", "job": "apps"}
+{"request": "slow the speech down", "job": "apps"}
+{"request": "increase the speech rate", "job": "apps"}
+{"request": "set the speech rate to 200 words per minute", "job": "apps"}
+{"request": "speech rate 150 wpm", "job": "apps"}
+{"request": "set the voice speed to 170", "job": "apps"}
+{"request": "set speech rate to 240", "job": "apps"}
+{"request": "make the voice talk at 120 words per minute", "job": "apps"}
+{"request": "turn spoken punctuation on", "job": "apps"}
+{"request": "read punctuation out loud", "job": "apps"}
+{"request": "stop speaking the punctuation", "job": "apps"}
+{"request": "switch spoken punctuation off", "job": "apps"}
+{"request": "set dictation duration to 60 seconds", "job": "apps"}
+{"request": "dictation should last 30 seconds by default", "job": "apps"}
+{"request": "set the dictation silence timeout to 900 milliseconds", "job": "apps"}
+{"request": "end dictation after 1.5 seconds of silence", "job": "apps"}
+{"request": "make dictation wait 500 ms of quiet before ending", "job": "apps"}
+{"request": "set dictation submit to confirm", "job": "apps"}
+{"request": "dictation should never auto-submit", "job": "apps"}
+{"request": "set the read extent to scrollback", "job": "apps"}
+{"request": "make the text bigger", "job": "apps"}
+{"request": "bigger text please", "job": "apps"}
+{"request": "up the font size a couple of steps", "job": "apps"}
+{"request": "zoom in on the text", "job": "apps"}
+{"request": "text is too small, enlarge it", "job": "apps"}
+{"request": "make the font larger by 4 points", "job": "apps"}
+{"request": "a little bigger please", "job": "apps"}
+{"request": "make text smaller", "job": "apps"}
+{"request": "shrink the font", "job": "apps"}
+{"request": "smaller text", "job": "apps"}
+{"request": "zoom out on the text", "job": "apps"}
+{"request": "decrease the font size", "job": "apps"}
+{"request": "make the text smaller by 3 points", "job": "apps"}
+{"request": "text size down a bit", "job": "apps"}
+{"request": "set the font size to 14", "job": "apps"}
+{"request": "font size 16", "job": "apps"}
+{"request": "set the text size to 18 pt", "job": "apps"}
+{"request": "change the terminal font size to 12 points", "job": "apps"}
+{"request": "Set Kilix text size to 20.", "job": "apps"}
+{"request": "use a 15 point font", "job": "apps"}
+{"request": "set font to 11 px", "job": "apps"}
+{"request": "Make the font 22 points; absolute, not relative.", "job": "apps"}
+{"request": "set the font size to 9 and tell me the result", "job": "apps"}
+{"request": "reset the font size", "job": "apps"}
+{"request": "reset text size to default", "job": "apps"}
+{"request": "put the font size back to normal", "job": "apps"}
+{"request": "restore the default text size", "job": "apps"}
+{"request": "Reset the terminal font size and confirm it.", "job": "apps"}
+{"request": "go back to the original zoom", "job": "apps"}
+{"request": "what's the font size now", "job": "apps"}
+{"request": "how big is the text", "job": "apps"}
+{"request": "what is the current text size", "job": "apps"}
+{"request": "show the font size", "job": "apps"}
+{"request": "what size is the terminal font set to", "job": "apps"}
+{"request": "how fast is the voice set to talk", "job": "apps"}
+{"request": "what's the speaking speed right now", "job": "apps"}
+{"request": "is dictation running", "job": "apps"}
+{"request": "is it reading aloud at the moment", "job": "apps"}
+{"request": "is spoken punctuation on", "job": "apps"}
+{"request": "how long does dictation run before stopping", "job": "apps"}
+{"request": "what's the dictation silence timeout", "job": "apps"}
+{"request": "what's the mic volume", "job": "apps"}
+{"request": "am I muted", "job": "apps"}
+{"request": "is shuffle on", "job": "apps"}
+{"request": "what's the repeat mode set to", "job": "apps"}
+{"request": "what is the default read extent", "job": "apps"}
+{"request": "is the voice engine busy", "job": "apps"}
+{"request": "how loud are the speakers right now", "job": "apps"}

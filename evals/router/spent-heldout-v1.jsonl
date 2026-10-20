@@ -1,0 +1,337 @@
+{"request": "open a new pane on the right running htop", "job": "panes"}
+{"request": "split this pane down and run npm run dev", "job": "panes"}
+{"request": "focus pane 4", "job": "panes"}
+{"request": "close the tab called scratch", "job": "panes"}
+{"request": "rename this tab to deploy", "job": "panes"}
+{"request": "make the current pane wider", "job": "panes"}
+{"request": "maximize pane 2", "job": "panes"}
+{"request": "swap pane 3 with pane 5", "job": "panes"}
+{"request": "arrange the panes in a grid", "job": "panes"}
+{"request": "move this tab to the far left", "job": "panes"}
+{"request": "run make test in the logs pane", "job": "panes"}
+{"request": "open a new tab and run vim notes.md", "job": "panes"}
+{"request": "could you split left and start a shell in ~/projects/api", "job": "panes"}
+{"request": "type git status into pane 6", "job": "panes"}
+{"request": "go to the tab named build", "job": "panes"}
+{"request": "shrink the right pane a bit", "job": "panes"}
+{"request": "make pane 1 taller", "job": "panes"}
+{"request": "new tab running tail -f /var/log/syslog", "job": "panes"}
+{"request": "stack all panes vertically", "job": "panes"}
+{"request": "tall layout please", "job": "panes"}
+{"request": "close pane 9", "job": "panes"}
+{"request": "rename pane 2 to db-shell", "job": "panes"}
+{"request": "i need a new split below with btop in it", "job": "panes"}
+{"request": "open a pane at the bottom running cargo build --release", "job": "panes"}
+{"request": "switch to tab 3", "job": "panes"}
+{"request": "type ls -la in the pane called scratch", "job": "panes"}
+{"request": "can you maximise the pane i'm in", "job": "panes"}
+{"request": "pane 7 is too narrow, widen it", "job": "panes"}
+{"request": "swap the left and right panes", "job": "panes"}
+{"request": "open a new tab with a shell in the Downloads folder", "job": "panes"}
+{"request": "run pytest -x in pane 8", "job": "panes"}
+{"request": "split right and run python3 -m http.server 8000", "job": "panes"}
+{"request": "new tab", "job": "panes"}
+{"request": "close all the other panes except this one", "job": "panes"}
+{"request": "move the build tab after the docs tab", "job": "panes"}
+{"request": "launch lazygit in a new split on the right", "job": "panes"}
+{"request": "focus the pane on the left", "job": "panes"}
+{"request": "make the editor pane shorter", "job": "panes"}
+{"request": "open a tab and run top", "job": "panes"}
+{"request": "put the panes in a stack layout", "job": "panes"}
+{"request": "open solitaire in a new tab", "job": "apps"}
+{"request": "play snake", "job": "apps"}
+{"request": "start a game of pong", "job": "apps"}
+{"request": "open the PDF viewer on lease-2026.pdf", "job": "apps"}
+{"request": "launch the music player", "job": "apps"}
+{"request": "search the help for how to resize panes", "job": "apps"}
+{"request": "open the system monitor app", "job": "apps"}
+{"request": "open the file manager app in Documents", "job": "apps"}
+{"request": "bump the font size up a notch", "job": "apps"}
+{"request": "make the text smaller", "job": "apps"}
+{"request": "hide the clock", "job": "apps"}
+{"request": "show the clock in the status bar", "job": "apps"}
+{"request": "mute the mic", "job": "apps"}
+{"request": "unmute my microphone", "job": "apps"}
+{"request": "set volume to 35", "job": "apps"}
+{"request": "pause the music", "job": "apps"}
+{"request": "resume the music", "job": "apps"}
+{"request": "change the read-aloud voice to the british one", "job": "apps"}
+{"request": "speak faster, bump the speech rate to 200", "job": "apps"}
+{"request": "what's the font size right now?", "job": "apps"}
+{"request": "is the microphone muted?", "job": "apps"}
+{"request": "is the clock currently shown", "job": "apps"}
+{"request": "turn the volume down a bit", "job": "apps"}
+{"request": "i want to play some solitaire", "job": "apps"}
+{"request": "lanuch the snake game", "job": "apps"}
+{"request": "show me manual.pdf in the pdf viewer", "job": "apps"}
+{"request": "what is the speech rate set to", "job": "apps"}
+{"request": "run the system monitor in a new tab", "job": "apps"}
+{"request": "toggle the clock", "job": "apps"}
+{"request": "set text size to 14", "job": "apps"}
+{"request": "open help and search for tmux", "job": "apps"}
+{"request": "could you open the file manager so I can browse", "job": "apps"}
+{"request": "pong time", "job": "apps"}
+{"request": "start the music", "job": "apps"}
+{"request": "mute the microphone please, I'm in a call", "job": "apps"}
+{"request": "read things aloud at a slower rate", "job": "apps"}
+{"request": "start claude in the api project", "job": "agents"}
+{"request": "launch codex in the billing-service repo and have it fix the failing tests", "job": "agents"}
+{"request": "spin up grok in the research folder", "job": "agents"}
+{"request": "start a qwen-omp session in ~/projects/ledger", "job": "agents"}
+{"request": "open claude with opus in the web-dashboard project", "job": "agents"}
+{"request": "wait for the codex session in pane 12 to finish", "job": "agents"}
+{"request": "let me know when the claude session goes idle", "job": "agents"}
+{"request": "tell the codex session in the api repo to run the tests", "job": "agents"}
+{"request": "send a message to the claude agent in pane 3: stop and summarize what you've done", "job": "agents"}
+{"request": "ask the grok session to also update the readme", "job": "agents"}
+{"request": "tell the agent in pane 6 to run pytest", "job": "agents"}
+{"request": "start codex in this directory with the task: add pagination to the users endpoint", "job": "agents"}
+{"request": "launch a coding agent in ~/projects/dotfiles", "job": "agents"}
+{"request": "is the codex session done yet? wait on it", "job": "agents"}
+{"request": "kick off claude on the auth-refactor repo using sonnet", "job": "agents"}
+{"request": "block until every agent session is idle", "job": "agents"}
+{"request": "message the qwen-omp session: please use tabs not spaces", "job": "agents"}
+{"request": "start claude", "job": "agents"}
+{"request": "pls start grok w/ the task refactor the parser", "job": "agents"}
+{"request": "i need codex running in the mobile app project", "job": "agents"}
+{"request": "wait for claude in pane 8", "job": "agents"}
+{"request": "tell the codex session to stop and wait for me", "job": "agents"}
+{"request": "send the claude session in pane 14 the message: try the other approach", "job": "agents"}
+{"request": "launch qwen-omp on the data-pipeline project and have it write unit tests", "job": "agents"}
+{"request": "get claude to review my branch in the api repo", "job": "agents"}
+{"request": "start a new codex agent to investigate the flaky login test in the web repo", "job": "agents"}
+{"request": "can you check whether the claude session in the api repo is still working, and wait if so", "job": "agents"}
+{"request": "ping the grok session in pane 5 and ask for a status", "job": "agents"}
+{"request": "tell all running agents to pause", "job": "agents"}
+{"request": "launch claude with the haiku model in scratch", "job": "agents"}
+{"request": "start an agent in the docs folder to proofread the readme", "job": "agents"}
+{"request": "wait till the codex run is finished then tell me", "job": "agents"}
+{"request": "give codex the task: bump dependencies in the billing repo", "job": "agents"}
+{"request": "ask the claude session in pane 22 what it is blocked on", "job": "agents"}
+{"request": "find files named invoice in Documents", "job": "files"}
+{"request": "list the 10 largest files in Downloads", "job": "files"}
+{"request": "what's the biggest thing in my projects folder", "job": "files"}
+{"request": "show the most recently modified files in research", "job": "files"}
+{"request": "search Documents for the text 'quarterly forecast'", "job": "files"}
+{"request": "find all pdf files in Downloads", "job": "files"}
+{"request": "find files starting with report_ in Documents", "job": "files"}
+{"request": "which files in ~/projects/api mention DATABASE_URL", "job": "files"}
+{"request": "preview the first lines of notes.txt in Documents", "job": "files"}
+{"request": "show me what landed in Downloads last week", "job": "files"}
+{"request": "grep for TODO in the projects folder", "job": "files"}
+{"request": "look for png files modified yesterday in Downloads", "job": "files"}
+{"request": "how much space does the research folder take", "job": "files"}
+{"request": "find where 'permission denied' appears in Documents", "job": "files"}
+{"request": "list files in Downloads newest first", "job": "files"}
+{"request": "is there a file called budget.xlsx anywhere in Documents", "job": "files"}
+{"request": "show the contents of README.md in the projects folder", "job": "files"}
+{"request": "look in /srv/data for csv files", "job": "files"}
+{"request": "find the biggest log files in /var/log", "job": "files"}
+{"request": "search research for papers mentioning transformers", "job": "files"}
+{"request": "find python files changed in the last 3 days in projects", "job": "files"}
+{"request": "display config.yaml from the api project", "job": "files"}
+{"request": "Dwnloads: find zip files", "job": "files"}
+{"request": "open the newest file in Downloads", "job": "files"}
+{"request": "find files bigger than 1GB under Documents", "job": "files"}
+{"request": "check the docs folder for the word deprecated", "job": "files"}
+{"request": "show me the 20 newest files in Documents", "job": "files"}
+{"request": "search the research directory for markdown files with 'methodology'", "job": "files"}
+{"request": "find any file in projects whose name begins with test_", "job": "files"}
+{"request": "find the old backup tar files in Downloads", "job": "files"}
+{"request": "peek at the head of server.log in projects/api", "job": "files"}
+{"request": "what text files in Documents contain my phone number 555-0142", "job": "files"}
+{"request": "list the last modified files in /etc", "job": "files"}
+{"request": "which subfolder under Downloads is the largest", "job": "files"}
+{"request": "how much memory is free", "job": "system"}
+{"request": "what's eating my CPU", "job": "system"}
+{"request": "show the top 5 processes by memory", "job": "system"}
+{"request": "is nginx running", "job": "system"}
+{"request": "any failed services?", "job": "system"}
+{"request": "show journal errors from the last hour", "job": "system"}
+{"request": "how much disk space is left on the root filesystem", "job": "system"}
+{"request": "is htop installed", "job": "system"}
+{"request": "which package provides the rsync command", "job": "system"}
+{"request": "what's the load average", "job": "system"}
+{"request": "check if the docker service is active", "job": "system"}
+{"request": "show errors from the ssh service in the journal this boot", "job": "system"}
+{"request": "free mem?", "job": "system"}
+{"request": "which processes use the most cpu", "job": "system"}
+{"request": "is postgresql up", "job": "system"}
+{"request": "which processes are hogging ram", "job": "system"}
+{"request": "how full is the disk", "job": "system"}
+{"request": "list failed units", "job": "system"}
+{"request": "journal errors from the previous boot", "job": "system"}
+{"request": "do I have ripgrep installed", "job": "system"}
+{"request": "which package owns the git command", "job": "system"}
+{"request": "is memory usage getting high", "job": "system"}
+{"request": "has any service crashed recently", "job": "system"}
+{"request": "cpu load right now?", "job": "system"}
+{"request": "how much swap am I using", "job": "system"}
+{"request": "show kernel errors in the journal", "job": "system"}
+{"request": "is tmux installed on this machine", "job": "system"}
+{"request": "is sshd running or did it fail", "job": "system"}
+{"request": "how much space is free on /home", "job": "system"}
+{"request": "is the kilix pane-session service running", "job": "system"}
+{"request": "which uses more memory right now, claude or codex", "job": "system"}
+{"request": "anything in the system log about the nvidia driver in the last day", "job": "system"}
+{"request": "top memory hogs please", "job": "system"}
+{"request": "are there any errors in the journal for bluetooth", "job": "system"}
+{"request": "is vim installed", "job": "system"}
+{"request": "could you tell me how much ram the machine has left", "job": "system"}
+{"request": "what did the codex session in pane 12 do", "job": "logs"}
+{"request": "grep the grok session log for timeout", "job": "logs"}
+{"request": "summarize what happened in the session from pane 27", "job": "logs"}
+{"request": "show me the transcript of pane 9", "job": "logs"}
+{"request": "find 'segfault' in the codex log for the ledger project", "job": "logs"}
+{"request": "what commands ran in pane 5 yesterday", "job": "logs"}
+{"request": "did the claude session in the api repo touch the config file", "job": "logs"}
+{"request": "read the last session log for the web-dashboard agent", "job": "logs"}
+{"request": "how did the codex agent in pane 21 end up", "job": "logs"}
+{"request": "look through the pane 3 recording for error messages", "job": "logs"}
+{"request": "search all claude sessions for 'rate limit'", "job": "logs"}
+{"request": "recap of the grok session", "job": "logs"}
+{"request": "what did claude say about the migration earlier", "job": "logs"}
+{"request": "which tests did the agent in pane 15 run", "job": "logs"}
+{"request": "search the transcript of the build pane for 'linker error'", "job": "logs"}
+{"request": "what happened in the codex session for the mobile project last night", "job": "logs"}
+{"request": "give me a quick brief of the qwen session in pane 33", "job": "logs"}
+{"request": "find where the agent mentioned the API key in its session log", "job": "logs"}
+{"request": "was there an error in the transcript of pane 11", "job": "logs"}
+{"request": "scroll back through what pane 2 printed earlier", "job": "logs"}
+{"request": "pull up the claude log from this morning", "job": "logs"}
+{"request": "when did the codex session first mention docker in its log", "job": "logs"}
+{"request": "list the commands the claude session ran in the infra repo", "job": "logs"}
+{"request": "is there a record of what I typed in pane 6", "job": "logs"}
+{"request": "search the session history for 'npm ERR'", "job": "logs"}
+{"request": "how many times did the agent in pane 18 fail a test", "job": "logs"}
+{"request": "list my tmux sessions", "job": "tmux"}
+{"request": "create a tmux session called builds", "job": "tmux"}
+{"request": "new tmux session in ~/projects/api named api", "job": "tmux"}
+{"request": "show the recent output of the tmux session builds", "job": "tmux"}
+{"request": "type pytest -x into the tmux session tests", "job": "tmux"}
+{"request": "send ctrl-c to the tmux session worker", "job": "tmux"}
+{"request": "press enter in the tmux session deploy", "job": "tmux"}
+{"request": "rename the tmux session scratch to notes", "job": "tmux"}
+{"request": "kill the tmux session called old", "job": "tmux"}
+{"request": "what's running in tmux session 2", "job": "tmux"}
+{"request": "is there a tmux session for the database", "job": "tmux"}
+{"request": "start a detached tmux session that tails the app logs", "job": "tmux"}
+{"request": "show last 30 lines of the tmux session jobs", "job": "tmux"}
+{"request": "tmux ls", "job": "tmux"}
+{"request": "close all tmux sessions except main", "job": "tmux"}
+{"request": "in tmux, send 'tail -f app.log' to the monitor session", "job": "tmux"}
+{"request": "read what the tmux session training printed lately", "job": "tmux"}
+{"request": "make a tmux session in the research folder called papers", "job": "tmux"}
+{"request": "send the text git pull to the tmux session called deploy", "job": "tmux"}
+{"request": "press q in the tmux session htop", "job": "tmux"}
+{"request": "create a tmux session that just runs htop", "job": "tmux"}
+{"request": "does the tmux session named ci still have output scrolling", "job": "tmux"}
+{"request": "type make -j8 into tmux session build", "job": "tmux"}
+{"request": "switch me to the tmux session called work", "job": "tmux"}
+{"request": "tell tmux session agent1 to type yes", "job": "tmux"}
+{"request": "capture the output of tmux session ml-train", "job": "tmux"}
+{"request": "end the tmux session test-run", "job": "tmux"}
+{"request": "check the tmux session called syslog-watch for errors", "job": "tmux"}
+{"request": "list persistent sessions", "job": "pty"}
+{"request": "show session 9c41e07ab3d5f268", "job": "pty"}
+{"request": "which session is pane 7", "job": "pty"}
+{"request": "show the last 50 lines of session b7e203fa91c4d586", "job": "pty"}
+{"request": "list archived session journals", "job": "pty"}
+{"request": "show the archived journal 2e8f0a6d44b1c973", "job": "pty"}
+{"request": "end session 5d19a3e0c8f72b46", "job": "pty"}
+{"request": "what pane session is pane 22?", "job": "pty"}
+{"request": "are there any persistent shells still alive", "job": "pty"}
+{"request": "tail 100 lines from the persistent session of pane 13", "job": "pty"}
+{"request": "show me old session journals", "job": "pty"}
+{"request": "terminate persistent session a1c4e9d07f3b6285", "job": "pty"}
+{"request": "how many kilix sessions are open", "job": "pty"}
+{"request": "which session id belongs to the pane named api", "job": "pty"}
+{"request": "dump the journal for session f03b7d19ce6a4852", "job": "pty"}
+{"request": "list sessions held by the pane broker", "job": "pty"}
+{"request": "show the last 20 lines of session 7ad2c5e18b906f34", "job": "pty"}
+{"request": "is session 83e1f6c0b4a7d925 still running", "job": "pty"}
+{"request": "list persistent sessions, not the tmux ones", "job": "pty"}
+{"request": "what's the id of the session behind pane 4", "job": "pty"}
+{"request": "show what session 14a9c6f2e07b83d5 printed recently", "job": "pty"}
+{"request": "close pane 7's session for good", "job": "pty"}
+{"request": "show the archived journal for the session that ran in pane 3", "job": "pty"}
+{"request": "end the session cd91e4b7a02f6538", "job": "pty"}
+{"request": "show me the last 200 lines of session 6f0a2d8c35e19b74", "job": "pty"}
+{"request": "last 40 lines of the persistent shell in pane 7", "job": "pty"}
+{"request": "list the open windows", "job": "desktop"}
+{"request": "focus the Firefox window", "job": "desktop"}
+{"request": "close the Gedit window", "job": "desktop"}
+{"request": "minimize the Thunderbird window", "job": "desktop"}
+{"request": "maximize the image viewer", "job": "desktop"}
+{"request": "move the Firefox window to the left half of the screen", "job": "desktop"}
+{"request": "resize the text editor window to 1200 by 800", "job": "desktop"}
+{"request": "click at 640, 360", "job": "desktop"}
+{"request": "move the mouse to 100 200", "job": "desktop"}
+{"request": "type hello world into the focused window", "job": "desktop"}
+{"request": "press ctrl+l", "job": "desktop"}
+{"request": "press alt tab", "job": "desktop"}
+{"request": "scroll down five clicks", "job": "desktop"}
+{"request": "scroll up", "job": "desktop"}
+{"request": "wait 500 milliseconds", "job": "desktop"}
+{"request": "double click at 400 300", "job": "desktop"}
+{"request": "switch to the window titled Inbox - Mozilla Thunderbird", "job": "desktop"}
+{"request": "press ctrl+shift+t in the browser", "job": "desktop"}
+{"request": "close the Firefox window titled GitHub - Pull requests", "job": "desktop"}
+{"request": "bring the PDF reader window to the front", "job": "desktop"}
+{"request": "type my email address into the Firefox search field", "job": "desktop"}
+{"request": "minimize all windows except the terminal", "job": "desktop"}
+{"request": "which windows are open besides kilix", "job": "desktop"}
+{"request": "right-click at the top left of the screen", "job": "desktop"}
+{"request": "hit the F5 key", "job": "desktop"}
+{"request": "press escape", "job": "desktop"}
+{"request": "focus the Kilix terminal window", "job": "desktop"}
+{"request": "move the pointer to the middle of the screen at 960 540", "job": "desktop"}
+{"request": "type 'meeting at 3' into the Calendar window", "job": "desktop"}
+{"request": "scroll down in the browser a lot", "job": "desktop"}
+{"request": "move the gedit window to the second monitor at x 1920", "job": "desktop"}
+{"request": "close that LibreOffice window", "job": "desktop"}
+{"request": "click the OK button at 812, 604", "job": "desktop"}
+{"request": "focus the window 'Downloads - File Manager'", "job": "desktop"}
+{"request": "press ctrl+c in Firefox", "job": "desktop"}
+{"request": "maximize the Kilix window", "job": "desktop"}
+{"request": "what's the capital of Australia", "job": "none"}
+{"request": "write a python function that reverses a linked list", "job": "none"}
+{"request": "what is 17 times 23", "job": "none"}
+{"request": "git commit all my changes with the message fix typo", "job": "none"}
+{"request": "git push origin main", "job": "none"}
+{"request": "install ripgrep with apt", "job": "none"}
+{"request": "kill process 4312", "job": "none"}
+{"request": "restart the nginx service", "job": "none"}
+{"request": "shut down the computer", "job": "none"}
+{"request": "send an email to Priya saying I'll be late", "job": "none"}
+{"request": "book me a table for two at 7pm", "job": "none"}
+{"request": "order a new SSD from Amazon", "job": "none"}
+{"request": "explain what a tmux session is", "job": "none"}
+{"request": "how do I split a pane in vim", "job": "none"}
+{"request": "what does the journalctl command do", "job": "none"}
+{"request": "tell me a joke", "job": "none"}
+{"request": "write a commit message for this diff", "job": "none"}
+{"request": "draft a README for the router project", "job": "none"}
+{"request": "how do I make claude code respond faster", "job": "none"}
+{"request": "translate good morning into French", "job": "none"}
+{"request": "rewrite this paragraph to sound more formal", "job": "none"}
+{"request": "hello there", "job": "none"}
+{"request": "thanks, that was helpful", "job": "none"}
+{"request": "what's the weather tomorrow", "job": "none"}
+{"request": "edit config.yaml and change the port to 9090", "job": "none"}
+{"request": "slack the team that the deploy is done", "job": "none"}
+{"request": "how much RAM does a typical laptop have these days", "job": "none"}
+{"request": "create a new git branch called feature/login", "job": "none"}
+{"request": "delete everything in Downloads", "job": "none"}
+{"request": "summarize this article about solar panels", "job": "none"}
+{"request": "who wrote Moby Dick", "job": "none"}
+{"request": "why is my build failing? error: undefined reference to foo", "job": "none"}
+{"request": "rebase my branch onto main", "job": "none"}
+{"request": "apt upgrade everything", "job": "none"}
+{"request": "set a timer for ten minutes", "job": "none"}
+{"request": "fix the bug in parser.py", "job": "none"}
+{"request": "what's the difference between codex and claude", "job": "none"}
+{"request": "compose a haiku about terminals", "job": "none"}
+{"request": "write a bash script that backs up Documents", "job": "none"}
+{"request": "look up flights to Denver for next Friday", "job": "none"}
+{"request": "call mom", "job": "none"}
