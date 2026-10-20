@@ -142,15 +142,19 @@ class Stages(unittest.TestCase):
         # Stage 0 is the grammar's decision, not the classifier's: an apps claim
         # routes even when the classifier is unsure of everything.
         model = model_sure_of("none", 0.4)
-        for text in ("fancy a round of joustix", "hide the clock", "I'm bored, open solitaire"):
+        for text in ("fancy a round of joustix", "hide the clock", "I'm bored, open solitaire",
+                     "mute the microphone", "set the font size to 16", "pause the music"):
             route = router.route(text, model)
             self.assertEqual((route.stage, route.job, route.claims), (0, "apps", ["apps"]), text)
+
+    def test_a_system_status_control_is_left_to_the_system_job(self):
+        self.assertEqual(router.claims("how much memory is free"), ["system"])
 
     def test_an_apps_reading_that_leaves_another_jobs_clause_is_no_claim(self):
         for text in ("split right and open solitaire", "show memory and hide the clock"):
             self.assertNotIn("apps", router.claims(text), text)
 
-    def test_the_apps_shortcut_proposes_what_apps_proposes(self):
+    def test_the_apps_shortcut_reads_what_propose_and_interpret_read(self):
         import apps
         for name in ("evals/apps/dev.jsonl", "evals/apps/test.jsonl"):
             for line in (HERE / name).read_text().splitlines():
@@ -160,6 +164,12 @@ class Stages(unittest.TestCase):
                     self.assertEqual(fast, [], text)
                     self.assertFalse(any(isinstance(r, apps.Action)
                                          for r in apps.interpret(text, full)), text)
+                results = apps.interpret(text, full) if full else []
+                whole = bool(results) and all(isinstance(r, apps.Action) for r in results)
+                if not whole:         # the shortcut never claims what interpret refuses
+                    self.assertFalse(router._claims_apps(text) and
+                                     __import__("app_controls").parse(text) is None, text)
+        self.assertNotIn("apps", router.claims("show the clock and hide the clock"))
 
     def test_two_jobs_work_in_one_request_goes_back_as_two(self):
         route = router.route("split right and open solitaire", model_sure_of("panes", 0.5))

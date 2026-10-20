@@ -160,13 +160,14 @@ def _claims_agents(text):
 _apps_names: list | None = None
 
 
-def _apps_calls(text):
-    """apps.propose, asking only the calls whose object the request names.
+def _apps_admitted(text):
+    """apps.propose's reading and admitted actions, asking only the calls whose
+    object the request names: (reading, [(order, call, action)]).
 
     propose tries all ~130 candidate calls, compiling patterns per request
     (8-50 ms); a call is admitted only for a request that names its object, so
-    the others are skipped here. tests/test_router.py checks that this gives
-    propose's calls on every spent apps request."""
+    the others are skipped here. tests/test_router.py checks this against
+    propose and interpret on the spent apps requests."""
     import apps
     global _apps_names
     if _apps_names is None:
@@ -174,36 +175,59 @@ def _apps_calls(text):
                                for name in apps._object_names(call)])
                        for call in apps.CANDIDATE_CALLS]
     if len(str(text)) > apps.MAX_REQUEST:
-        return []
+        return None, []
     plain = apps._plain_words(text)
     named = [call for call, names in _apps_names
              if any(name in plain and pattern.search(plain) for name, pattern in names)]
     if not named:
-        return []
+        return None, []
     reading = apps._read(text, widen=True)
     if reading.refusal:
-        return []
-    supported = []
+        return reading, []
+    admitted = []
     for call in named:
         if reading.way and call["name"] != "settings":
             continue
         action = apps._admit(call["name"], call["arguments"], reading)
         if isinstance(action, apps.Action):
-            supported.append((apps._order(reading, action, call), call))
-    return [call for _key, call in sorted(supported, key=lambda pair: pair[0])]
+            admitted.append((apps._order(reading, action, call), call, action))
+    return reading, sorted(admitted, key=lambda entry: entry[0])
+
+
+def _apps_calls(text):
+    """The calls apps.propose would return, when it supports any."""
+    return [call for _order, call, _action in _apps_admitted(text)[1]]
 
 
 def _claims_apps(text):
-    """Every call is admitted, and no clause the calls leave unread is another
-    job's: "split right and open solitaire" is not an apps request, while "I'm
-    bored, open solitaire" is."""
+    """The apps job's exact controls (audio, music, voice, text size) read it, or
+    its launch and settings calls are all admitted and no clause they leave
+    unread is another job's: "split right and open solitaire" is not an apps
+    request, while "I'm bored, open solitaire" is. A controls status query
+    about the system ("how much memory is free") is left to the system job."""
+    import app_controls
     import apps
-    calls = _apps_calls(text)
-    results = apps.interpret(text, calls) if calls else []
-    if not results or not all(isinstance(r, apps.Action) for r in results):
+    control = app_controls.parse(text)
+    if control is not None:
+        return control.family != "system"
+    reading, admitted = _apps_admitted(text)
+    actions, seen = [], set()
+    for _order, _call, action in admitted:
+        key = (action.kind, tuple(sorted(action.args.items())))
+        if key not in seen:
+            seen.add(key)
+            actions.append(action)
+    if not actions:
         return False
-    read = {r.at for r in results}
-    return not any(claim(part.text) for i, part in enumerate(apps._read(text, widen=True).parts)
+    # interpret's checks between calls: one thing set two ways, or a launch of
+    # a game the request makes unavailable, is refused.
+    keys = [apps._key(action) for action in actions]
+    disabled = {a.args["game"] for a in actions if a.kind == "game" and not a.args["available"]}
+    if len(set(keys)) != len(keys) or any(a.kind == "launch" and a.args["app"] in disabled
+                                          for a in actions):
+        return False
+    read = {action.at for action in actions}
+    return not any(claim(part.text) for i, part in enumerate(reading.parts)
                    if i not in read for job, claim in CLAIMS.items() if job != "apps")
 
 
