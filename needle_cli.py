@@ -835,6 +835,9 @@ def main(argv: list[str] | None = None) -> int:
     if argv[:1] == ["desktop"]:
         from desktop_cli import main as desktop_main
         return desktop_main(argv[1:])
+    if argv[:1] == ["desktop-action"]:
+        from desktop_control import main as desktop_control_main
+        return desktop_control_main(argv[1:])
     if argv[:1] == ["logs"]:
         from needle_logs.cli import main as logs_main
         return logs_main(argv[1:])

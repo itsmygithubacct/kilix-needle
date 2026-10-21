@@ -108,13 +108,13 @@ def run(request, *, engine=None, calls=None, execute=False, parse_only=False, ba
                     raise job.DesktopError("a model runtime is required for natural-language planning")
                 record["parser"] = "needle"
                 engine.reset()
+                record["model"] = getattr(engine, "label", "desktop model")
                 reply = engine.complete(request)
                 raw, error = reply_calls(reply)
                 if error:
                     raise job.DesktopError("desktop model failed; no actions admitted")
                 raw = getattr(engine, "translate", lambda calls: calls)(raw)
                 actions = job.validate(request, raw)
-                record["model"] = getattr(engine, "label", "desktop model")
         else:
             if request is not None:
                 raise job.DesktopError("supply natural language or structured actions, not both")
