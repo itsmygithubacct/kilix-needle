@@ -11,7 +11,9 @@ arrays. There is no shell-command generation.
 
 All interfaces use the same versioned action contract, target resolution and X11
 executor. The typed interface and grammar need no model assets or licence setup.
-Install the typed command with `kilix-needle setup --only desktop-command`.
+The catalog-installed `kilix-needle desktop-action` runs the typed interface
+without extra setup. For the shorter alias, use
+`kilix-needle setup --only desktop-command`.
 
 ```sh
 kilix-desktop window list
@@ -28,7 +30,8 @@ kilix-desktop schema
 kilix desktop-action --help
 ```
 
-`kilix desktop-action` delegates to `kilix-desktop` on PATH. An explicit
+`kilix desktop-action` delegates to `kilix-desktop` on PATH, or to the installed
+`kilix-needle desktop-action` when the alias is absent. An explicit
 `KILIX_DESKTOP_CLI` executable or `KILIX_DESKTOP_MODULE_ROOT` source directory
 selects an alternative installation without automatic fallback. Help and schema
 are read-only. Every typed subcommand has `--help`. Keyboard type also accepts
@@ -68,10 +71,21 @@ Act requires `confirm_risky: true`. For example, structured arguments are
 Use `kilix-desktop schema` for all action fields and bounds.
 
 This first backend requires an X11 display, an EWMH window manager, `xprop`, and
-`xdotool`. Graceful close and maximize/restore require a recent xdotool providing
-`windowquit` and `windowstate`. The backend checks for those commands and never
-substitutes destructive `windowclose` or `windowkill`. An absolute
+`xdotool`. Graceful close and maximize/restore also use `python3-xlib`, included
+in Plebian-OS. Debian's packaged xdotool is sufficient. The bounded window helper
+preflights protocol support before execution. Close sends the client's advertised
+`WM_DELETE_WINDOW`; a client without that protocol is refused. Maximize/restore
+send one EWMH message changing both dimensions. Neither operation destroys a
+window or kills a client. An absolute
 `KILIX_NEEDLE_XDOTOOL` path selects a separately built executable.
+
+Protocol references: [ICCCM](https://www.x.org/releases/X11R7.7/doc/xorg-docs/icccm/icccm.html)
+and [EWMH window state](https://specifications.freedesktop.org/wm/latest/ar01s05.html).
+
+The experimental model can shorten literal text or misparse a quoted sequence.
+Such proposals are refused before any action runs; the receipt identifies the
+model and mismatch. Use typed actions or `--parser grammar` for exact supported
+forms. There is no automatic retry or parser substitution after a model refusal.
 
 ```sh
 kilix-needle desktop --list

@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import subprocess
+import sys
 from unittest.mock import patch
 
 import desktop_cli
@@ -76,8 +78,32 @@ class GrammarTests(unittest.TestCase):
         self.assertNotEqual(result['status'], 0)
         self.assertEqual(engine.count, 0)
 
+    def test_changed_model_literal_keeps_identity_and_blocks_the_whole_sequence(self):
+        backend = FakeX11()
+        engine = Engine([c('window', action='focus', target='title:Browser'),
+                         c('keyboard', action='type', text='naï')])
+        request = 'focus window "Browser" then type "naïve café / record 83"'
+        result = desktop_cli.run(request, engine=engine, parser_mode='needle', backend=backend, execute=True)
+        self.assertEqual(result['outcome'], 'refused')
+        self.assertEqual(result['parser'], 'needle')
+        self.assertEqual(result['model'], engine.label)
+        self.assertIn('proposed typing text differs', result['note'])
+        self.assertEqual(backend.commands, [])
+        self.assertEqual(engine.count, 1)
+
 
 class InterfaceTests(unittest.TestCase):
+    def test_installed_command_routes_typed_actions_without_a_model_or_display(self):
+        root = Path(__file__).resolve().parents[1]
+        literal = 'naïve café; $(literal) "quotes" '
+        result = subprocess.run([sys.executable, '-B', str(root/'needle_cli.py'),
+                                 'desktop-action', '--parse-only', '--json', 'keyboard', 'type',
+                                 '--text', literal], capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        record = json.loads(result.stdout)
+        self.assertEqual(record['parser'], 'structured')
+        self.assertEqual(record['actions'], [c('keyboard', action='type', text=literal)])
+
     def invoke(self, argv):
         output = io.StringIO()
         with contextlib.redirect_stdout(output):

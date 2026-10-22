@@ -283,8 +283,10 @@ def validate(request, calls):
             _only_words(plain, vocabulary + " the my a mouse pointer cursor button left right middle to at over with here current coordinates position x y pixels")
         elif name == "keyboard":
             if args["action"] == "type":
+                if len(quoted) != 1:
+                    raise DesktopError("quote exactly one literal text payload to type; typing does not add Enter")
                 if quoted != [args["text"]]:
-                    raise DesktopError("quote the exact text to type; it is copied without Enter")
+                    raise DesktopError("proposed typing text differs from the quoted request; use the grammar parser or typed interface")
                 if not re.fullmatch(r"(?:type|enter|write|insert)\s+(?:(?:the\s+)?(?:literal\s+)?text\s+)?LITERAL\d+\s*", clause, re.I):
                     raise DesktopError("type exact quoted text into the focused window; focus another window in a separate clause")
             else:

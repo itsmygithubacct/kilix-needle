@@ -1,7 +1,7 @@
 """Real input/window checks on a private Xvfb desktop, never the user's display.
 
-Requires Xvfb, xvfb-run, xauth, openbox, xprop, tkinter, and an xdotool build
-with windowquit/windowstate. The fixture records what it actually receives.
+Requires Xvfb, xvfb-run, xauth, openbox, xprop, tkinter, python3-xlib, and
+xdotool. The fixture records what it actually receives.
 """
 import argparse
 import json
@@ -156,6 +156,29 @@ def run_inside(args):
         wait_for(lambda: state()["close_requests"] == 1)
         assert any(w["id"] == main_id for w in backend().snapshot()["windows"])
         checks.append("graceful close reaches application confirmation handler without destroying window")
+        # A client without WM_DELETE_WINDOW must survive a close request. Check
+        # that batch preflight also prevents an earlier keyboard action.
+        from Xlib import Xatom, display as xdisplay
+        connection = xdisplay.Display()
+        window = connection.create_resource_object('window', main_id)
+        protocols = connection.intern_atom('WM_PROTOCOLS')
+        original_protocols = list(window.get_full_property(protocols, Xatom.ATOM).value)
+        delete = connection.intern_atom('WM_DELETE_WINDOW')
+        try:
+            window.change_property(protocols, Xatom.ATOM, 32, [p for p in original_protocols if p != delete])
+            connection.sync()
+            text_before = state()['text']
+            blocked = desktop_cli.run(None, calls=[c('keyboard', action='type', text='NEVER'),
+                                      c('window', action='close', target=f'id:{main_id}')],
+                                      execute=True, backend=backend())
+            records.append(blocked)
+            assert blocked['outcome'] == 'refused', blocked
+            assert state()['text'] == text_before
+            assert any(w['id'] == main_id for w in backend().snapshot()['windows'])
+            checks.append('unsupported close preserves window and blocks the entire batch')
+        finally:
+            window.change_property(protocols, Xatom.ATOM, 32, original_protocols)
+            connection.sync(); connection.close()
         if args.model:
             runtime = desktop_cli.open_runtime(args.model); runtime.__enter__()
             scroll_before = state()["buttons"].count(5)
@@ -209,7 +232,7 @@ def run_inside(args):
         box = state()["entry_box"]
         apply([c("window", action="focus", target=f"id:{main_id}"),
                c("pointer", action="click", x=box[0]+20, y=box[1]+10)])
-        routes = ["typed", "json", "grammar", "hybrid", "mcp-json", "mcp-grammar", "mcp-hybrid"]
+        routes = ["typed", "catalog-typed", "json", "grammar", "hybrid", "mcp-json", "mcp-grammar", "mcp-hybrid"]
         if args.model: routes += ["needle", "mcp-needle"]
         if args.kilix: routes += ["kilix"]
         for route in routes:
@@ -224,8 +247,10 @@ def run_inside(args):
                 payload = json.dumps(dict(jsonrpc="2.0", id=1, method="tools/call", params=dict(name="kilix_desktop_act", arguments=arguments))) + "\n"
                 argv = [sys.executable, "-B", str(ROOT/"needle_cli.py"), "mcp", "--tools", "desktop"]
                 if args.model: argv += ["--desktop-model", str(args.model)]
-            elif route in ("typed", "kilix"):
-                argv = ([str(args.kilix), "desktop-action"] if route == "kilix" else [sys.executable, "-B", str(ROOT/"desktop_control.py")])
+            elif route in ("typed", "kilix", "catalog-typed"):
+                argv = ([str(args.kilix), "desktop-action"] if route == "kilix" else
+                        [str(ROOT/'kilix-needle'), 'desktop-action'] if route == 'catalog-typed' else
+                        [sys.executable, "-B", str(ROOT/"desktop_control.py")])
                 argv += ["--yes", "--json", "keyboard", "type", "--text", literal]
             elif route == "json":
                 payload = json.dumps([c("keyboard", action="type", text=literal)])
@@ -241,7 +266,7 @@ def run_inside(args):
             if route.startswith("mcp-"): record = record["result"]["structuredContent"]
             records.append(dict(interface=route, receipt=record))
             assert record["status"] == 0, (route, record)
-            assert record["parser"] == ("structured" if route in ("typed", "json", "mcp-json", "kilix") else "needle" if route in ("needle", "mcp-needle") else "grammar")
+            assert record["parser"] == ("structured" if route in ("typed", "catalog-typed", "json", "mcp-json", "kilix") else "needle" if route in ("needle", "mcp-needle") else "grammar")
             wait_for(lambda: state()["text"] == literal)
             assert state()["keys"].count("Return") == enters
             checks.append(route + " interface delivers literal text without Enter")

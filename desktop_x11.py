@@ -1,14 +1,17 @@
 """Bounded xdotool backend. No shell, command chains, or model-owned argv.
 
-Requires an EWMH window manager. Close uses windowquit, never windowclose or
-windowkill. X11 input is inherently racy: a focus check and an injected event
+Requires an EWMH window manager. Close sends WM_DELETE_WINDOW, never destroys
+the client. X11 input is inherently racy: a focus check and an injected event
 are separate server operations. Receipts do not prove application completion.
 """
 from __future__ import annotations
 import os
+import json
+from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import time
 
 from desktop_job import DesktopError, normalize
@@ -55,6 +58,19 @@ class X11:
 
     def properties(self, *args):
         return self._run([self.xprop, *map(str, args)])
+
+    def window_message(self, operation, wid, *, execute=False):
+        argv = [sys.executable, "-B", str(Path(__file__).with_name("desktop_window.py")), operation, str(wid)]
+        if execute:
+            argv.append("--execute")
+        raw = self._run(argv, allow_failure=True)
+        try:
+            reply = json.loads(raw)
+        except ValueError as error:
+            raise DesktopError("window helper returned no valid receipt") from error
+        if not isinstance(reply, dict) or reply.get("ok") is not True:
+            note = reply.get("error", "window request failed") if isinstance(reply, dict) else "window request failed"
+            raise DesktopError(str(note))
 
     def active(self):
         value = self.properties("-root", "_NET_ACTIVE_WINDOW")
@@ -131,14 +147,12 @@ class X11:
                 if item["target"]["id"] in closed:
                     raise DesktopError("the typing target was closed earlier in the sequence")
             result.append(item)
-        # Feature discovery is read-only. Never replace graceful close with kill.
-        if any(c["name"] == "window" and c["arguments"]["action"] in ("close", "maximize", "restore") for c in actions):
-            help_text = self.xdo("help")
-            for c in actions:
-                op = c["arguments"].get("action")
-                needed = "windowquit" if op == "close" else "windowstate" if op in ("maximize", "restore") else None
-                if needed and not re.search(r"\b" + needed + r"\b", help_text):
-                    raise DesktopError(f"this action requires an xdotool build providing {needed}")
+        # Preflight every window protocol before any action in a batch executes.
+        # The helper works with Debian's xdotool and never substitutes a kill.
+        for item in result:
+            op = item["arguments"].get("action")
+            if item["name"] == "window" and op in ("close", "maximize", "restore"):
+                self.window_message(op, item["target"]["id"])
         return result
 
     def _recheck(self, expected):
@@ -181,12 +195,8 @@ class X11:
                         receipt["observed_geometry"] = self.geometry(wid)
                     elif op == "minimize":
                         self.xdo("windowminimize", "--sync", wid)
-                    elif op in ("maximize", "restore"):
-                        mode = "--add" if op == "maximize" else "--remove"
-                        for state in ("MAXIMIZED_VERT", "MAXIMIZED_HORZ"):
-                            self.xdo("windowstate", mode, state, wid)
-                    elif op == "close":
-                        self.xdo("windowquit", wid)
+                    elif op in ("maximize", "restore", "close"):
+                        self.window_message(op, wid, execute=True)
                 elif name == "keyboard":
                     if self.active() != target["id"]:
                         raise DesktopError("focus changed; no keyboard event sent")

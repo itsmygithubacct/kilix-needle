@@ -44,6 +44,9 @@ class FakeX11(X11):
     def identity(self, wid):
         return copy.deepcopy(next(w for w in SNAPSHOT["windows"] if w["id"] == wid))
     def geometry(self, wid): return dict(x=20, y=30, width=640, height=480)
+    def window_message(self, operation, wid, *, execute=False):
+        if execute:
+            self.commands.append(((operation, wid), None))
     def xdo(self, *args, text=None, **kwargs):
         self.commands.append((args, text))
         if args[0] == self.fail_command:
@@ -195,14 +198,18 @@ class ExecutionTests(unittest.TestCase):
         backend = FakeX11()
         result = desktop_cli.run(None, calls=[c("window", action="close", target="active")], backend=backend, execute=True)
         self.assertEqual(result['status'], 0)
-        self.assertIn(('windowquit', 11), [a for a, _ in backend.commands])
+        self.assertIn(('close', 11), [a for a, _ in backend.commands])
         with self.assertRaises(job.DesktopError):
             backend.plan([c("window", action="close", target="active"), c("keyboard", action="press", keys="Return")], backend.snapshot())
 
     def test_unavailable_graceful_close_has_no_fallback(self):
         backend = FakeX11()
-        with patch.object(backend, 'xdo', return_value='windowclose windowkill'):
-            with self.assertRaises(job.DesktopError): backend.plan([c("window", action="close", target="active")], backend.snapshot())
+        with patch.object(backend, 'window_message', side_effect=job.DesktopError('window does not support graceful close')):
+            result = desktop_cli.run(None, calls=[c('keyboard', action='type', text='never'),
+                                                  c('window', action='close', target='active')],
+                                     backend=backend, execute=True)
+        self.assertEqual(result['outcome'], 'refused')
+        self.assertEqual(backend.commands, [])
 
     def test_unknown_mouse_coordinates_fail_before_execution(self):
         backend = FakeX11()
