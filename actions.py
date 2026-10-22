@@ -25,6 +25,18 @@ LAYOUTS = ("tall", "fat", "grid", "horizontal", "vertical", "splits", "stack")
 DIRECTIONS = ("wider", "narrower", "taller", "shorter")
 
 
+def inventory_unit(request: str) -> str | None:
+    """Recognize a complete inventory request, including bare plural nouns."""
+    match = re.fullmatch(
+        r"\s*(?:(?:please|can you|could you|would you)\s+)*"
+        r"(?:(?:list|show|get|enumerate)(?:\s+me)?\s+"
+        r"(?:(?:all|the|my|open|existing|current|kilix)\s+)*|"
+        r"(?:(?:all|the|my|existing|current|kilix)\s+)*)"
+        r"(?P<unit>panes(?:\s+and\s+tabs)?|tabs(?:\s+and\s+panes)?)"
+        r"(?:\s+please)?[\s.!?]*", request, re.I)
+    return " ".join(match["unit"].lower().split()) if match else None
+
+
 def _target(what: str, choices: str) -> dict:
     return {"type": "string", "description": f"{choices}, or the name or program of a {what}"}
 
@@ -1462,6 +1474,8 @@ def _admit(name: str, args: dict, prompt: str) -> Action | Refusal:
 
     if name in ("open_pane", "open_tab"):
         # A grounded title alone does not authorize creation.
+        if inventory_unit(prompt) is not None:
+            return Refusal(name, "an inventory request does not authorize opening a pane or tab; use kilix pane list")
         unquoted = _unquoted(prompt)
         inspection = re.match(
             r"^(?:(?:please|can you|could you)\s+)*(?:find|list|show|read|inspect|locate|search)\s+"

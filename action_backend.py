@@ -47,7 +47,7 @@ def validate(request: dict) -> dict:
         "pane.open": ({"argv", "cwd", "title", "placement"}, {"direction", "bias"}),
         "agent.launch": ({"agent", "cwd", "title", "placement"},
                          {"direction", "bias", "model", "prompt", "resume", "coding_yolo", "trust_folder", "agent_arg", "reasoning_effort"}),
-        "agent.deliver": ({"text"}, {"mode"}),
+        "agent.deliver": ({"text"}, {"mode", "finish_staged_message_id"}),
         "operation.status": (set(), set()),
     }
     needed, optional = fields[request["operation"]]
@@ -55,6 +55,12 @@ def validate(request: dict) -> dict:
         raise ValueError(f"{request['operation']} params have missing or unknown fields")
     if request["operation"] == "operation.status" and request.get("dry_run", False):
         raise ValueError("operation.status is already read-only; omit dry_run")
+    if request["operation"] == "agent.deliver" and "finish_staged_message_id" in params:
+        if request.get("dry_run", False):
+            raise ValueError("finish-staged completion cannot be previewed; use an explicit deliver action")
+        if (not isinstance(params["finish_staged_message_id"], str)
+                or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", params["finish_staged_message_id"])):
+            raise ValueError("finish_staged_message_id must be a valid previous message ID")
     if request["operation"] == "agent.launch" and params.get("trust_folder", False) is not False:
         raise ValueError("trust_folder must be false; set folder trust explicitly through agent-control before launch")
     if request["operation"] == "agent.launch" and "reasoning_effort" in params:

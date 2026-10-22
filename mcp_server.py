@@ -55,7 +55,7 @@ TOOL_LIST = [
      "inputSchema": {"type": "object", "properties": {"request": _REQUEST},
                      "required": ["request"], "additionalProperties": False}},
     {"name": "kilix_act",
-     "description": "Do a plain request on Kilix panes and tabs: open, focus, arrange, "
+     "description": "Do a plain request on Kilix panes and tabs: list, open, focus, arrange, "
                     "rename, resize, close, or type a command at a pane's shell prompt. "
                     "Closing, typing and starting a program need confirm_risky. Your own "
                     "pane and tab are never closed.",
@@ -241,7 +241,8 @@ for _operation in ("plan", "act"):
 import action_cli
 
 for _action in ("plan", "act", "status"):
-    _properties = {"request": action_cli.request_schema(status=_action == "status")}
+    _properties = {"request": action_cli.request_schema(
+        status=_action == "status", plan=_action == "plan")}
     if _action == "act":
         _properties["confirm_risky"] = {"type": "boolean", "default": False}
     TOOL_LIST.append({

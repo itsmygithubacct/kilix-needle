@@ -41,10 +41,13 @@ PARAM_PROPERTIES = {
     "agent_arg": {"type": "array", "items": _STR},
     "text": {"type": "string", "maxLength": 900, "description": "literal single-line message"},
     "mode": {"type": "string", "enum": ["steer", "defer"]},
+    "finish_staged_message_id": {"type": "string", "minLength": 1, "maxLength": 64,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}(?![\\s\\S])",
+        "description": "previous delivery receipt ID to finish; operation_id remains a new action ID"},
 }
 
 
-def request_schema(*, status=False) -> dict:
+def request_schema(*, status=False, plan=False) -> dict:
     operations = ["operation.status"] if status else list(action_backend.OPERATIONS[:-1])
     result = {"type": "object", "properties": {
         "schema": {"const": action_backend.SCHEMA},
@@ -59,13 +62,29 @@ def request_schema(*, status=False) -> dict:
         "required": ["schema", "operation_id", "operation", "source", "target", "params"],
         "additionalProperties": False}
     if not status:
-        result["allOf"] = [
-            {"if": {"properties": {"operation": {"const": operation}}},
-             "then": {"properties": {"params": {"required": required}}}}
-            for operation, required in (
+        result["allOf"] = []
+        for operation, required in (
                 ("pane.open", ["argv", "cwd", "title", "placement"]),
                 ("agent.launch", ["agent", "cwd", "title", "placement"]),
-                ("agent.deliver", ["text"]))]
+                ("agent.deliver", ["text"])):
+            params_rule = {"required": required}
+            if operation != "agent.deliver":
+                params_rule["not"] = {"required": ["finish_staged_message_id"]}
+            result["allOf"].append({
+                "if": {"properties": {"operation": {"const": operation}},
+                       "required": ["operation"]},
+                "then": {"properties": {"params": params_rule}}})
+        staged_message = {
+            "properties": {
+                "operation": {"const": "agent.deliver"},
+                "params": {"required": ["finish_staged_message_id"]}},
+            "required": ["operation", "params"]}
+        if plan:
+            result["allOf"].append({"not": staged_message})
+        else:
+            result["allOf"].append({
+                "if": staged_message,
+                "then": {"properties": {"dry_run": {"const": False}}}})
     return result
 
 

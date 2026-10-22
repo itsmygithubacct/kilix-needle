@@ -3,6 +3,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -38,6 +39,74 @@ def receipt(req, status=None):
 
 
 class Adapters(unittest.TestCase):
+    def test_finish_staged_id_is_schema_validated_and_survives_fake_dispatch(self):
+        old_message_id = "message-001"
+        req = request(finish_staged_message_id=old_message_id)
+        req["operation_id"] = "finish-002"
+        forwarded = []
+
+        def fake_process(dispatched):
+            forwarded.append(json.loads(json.dumps(dispatched)))
+            return json.dumps(receipt(dispatched)).encode(), 0
+
+        with mock.patch.object(backend, "_process", side_effect=fake_process) as process:
+            result = action_cli.run(req, assume_yes=True)
+
+        self.assertEqual(result["status"], "submitted")
+        self.assertEqual(result["operation_id"], "finish-002")
+        self.assertEqual(forwarded[0]["operation_id"], "finish-002")
+        self.assertEqual(forwarded[0]["params"]["finish_staged_message_id"], old_message_id)
+        process.assert_called_once()
+
+        schema = action_cli.request_schema()
+        field = schema["properties"]["params"]["properties"]["finish_staged_message_id"]
+        self.assertEqual(field["type"], "string")
+        self.assertEqual((field["minLength"], field["maxLength"]), (1, 64))
+        self.assertEqual(field["pattern"], r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}(?![\s\S])")
+        field_pattern = re.compile(field["pattern"])
+        self.assertIsNotNone(field_pattern.search(old_message_id))
+        self.assertIsNone(field_pattern.search(old_message_id + "\n"))
+        self.assertIsNone(field_pattern.search("é"))
+        self.assertIn("new action ID", field["description"])
+        for operation in ("pane.open", "agent.launch"):
+            branch = next(rule for rule in schema["allOf"]
+                          if rule.get("if", {}).get("properties", {}).get("operation", {}).get("const") == operation)
+            self.assertEqual(branch["then"]["properties"]["params"]["not"]["required"],
+                             ["finish_staged_message_id"])
+        plan_schema = action_cli.request_schema(plan=True)
+        self.assertTrue(any("not" in rule and
+                            rule["not"].get("properties", {}).get("params", {}).get("required") ==
+                            ["finish_staged_message_id"]
+                            for rule in plan_schema["allOf"]))
+        plan_tool = next(tool for tool in mcp_server.TOOL_LIST
+                         if tool["name"] == "kilix_action_plan")
+        self.assertEqual(plan_tool["inputSchema"]["properties"]["request"], plan_schema)
+        status_schema = action_cli.request_schema(status=True)
+        self.assertEqual(status_schema["properties"]["params"]["properties"], {})
+
+    def test_finish_staged_invalid_requests_refuse_before_fake_backend(self):
+        invalid_ids = (None, 17, "", "bad/id", "line\n", "x" * 65, "é")
+        calls = []
+        fake_backend = mock.Mock(side_effect=lambda value: calls.append(value) or receipt(value))
+        for message_id in invalid_ids:
+            with self.subTest(message_id=message_id):
+                out = action_cli.run(request(finish_staged_message_id=message_id),
+                                     assume_yes=True, backend=fake_backend)
+                self.assertEqual(out["status"], "blocked")
+                self.assertIn("finish_staged_message_id", out["error"])
+
+        for bad_request, plan in (
+                ({**request(finish_staged_message_id="message-001"), "dry_run": True}, False),
+                (request(finish_staged_message_id="message-001"), True),
+                (request("pane.open", finish_staged_message_id="message-001"), False),
+                ({**request(finish_staged_message_id="message-001"), "extra": True}, False)):
+            with self.subTest(request=bad_request, plan=plan):
+                out = action_cli.run(bad_request, dry_run=plan, assume_yes=True,
+                                     backend=fake_backend)
+                self.assertEqual(out["status"], "blocked")
+        fake_backend.assert_not_called()
+        self.assertEqual(calls, [])
+
     def test_actions_menu_dispatches_only_selected_tools_without_loading_model(self):
         factory = mock.Mock(side_effect=AssertionError("model loaded"))
         server = mcp_server.Server(factory, tools="actions")

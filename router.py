@@ -155,8 +155,9 @@ def model() -> Model:
 
 
 def _claims_panes(text):
+    from actions import inventory_unit
     import panes_exact
-    return panes_exact.admitted(text) is not None
+    return inventory_unit(text) is not None or panes_exact.admitted(text) is not None
 
 
 def _claims_agents(text):

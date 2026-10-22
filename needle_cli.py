@@ -41,7 +41,7 @@ import sys
 import time
 from typing import Callable
 
-from actions import LEGACY_TOOLS, Action, Refusal, interpret, plain
+from actions import LEGACY_TOOLS, Action, Refusal, interpret, inventory_unit, plain
 import app_controls
 import asset
 import history
@@ -187,6 +187,27 @@ def run_request(engine: Engine, request: str, options: Options,
     Each item has "outcome": refused | unresolved | would | skipped | done | failed.
     """
     def exact(request):
+        # Inventory never goes through the model's action proposals.
+        unit = inventory_unit(request)
+        if unit is not None:
+            try:
+                tree = kilix.snapshot(under_overlay=options.under_overlay)
+            except kilix.KilixError as error:
+                return {"request": request, "status": 1, "items": [], "note": str(error)}
+            items = []
+            for tab in tree.tabs:
+                if "tabs" in unit:
+                    items.append({"kind": "list_tabs", "args": {}, "outcome": "done",
+                                  "tab_id": tab["id"], "title": tab.get("title", ""),
+                                  "summary": f"tab {tab['id']}: {tab.get('title', '')}"})
+                if "panes" in unit:
+                    for pane in tab.get("windows", []):
+                        items.append({"kind": "list_panes", "args": {}, "outcome": "done",
+                                      "pane_id": pane["id"], "tab_id": tab["id"],
+                                      "title": pane.get("title", ""),
+                                      "summary": f"pane {pane['id']} in tab {tab['id']}: "
+                                                 f"{pane.get('title', '')}"})
+            return {"request": request, "status": 0, "items": items}
         # "help" sent as a request answers with the jobs, not a refused open_tab.
         if re.fullmatch(r"\s*(?:(?:show|print|get)\s+(?:me\s+)?(?:the\s+)?)?(?:help|usage|--help|-h)"
                         r"(?:\s+(?:please|text|page))?[\s.!?]*", request, re.I):

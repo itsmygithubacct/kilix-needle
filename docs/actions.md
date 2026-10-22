@@ -40,8 +40,8 @@ checks. `trust_folder: true` is refused: configure folder trust explicitly with
 the existing `agent-control` setup before launching. `direction` and `bias` apply
 only to `placement: "split"`.
 
-To deliver a literal single-line message to a supported Codex composer, use a
-new operation ID, `operation: "agent.deliver"`, and:
+To deliver a literal single-line message to a supported Codex or Claude
+composer, use a new operation ID, `operation: "agent.deliver"`, and:
 
 ```json
 {"text":"Run the tests","mode":"steer"}
@@ -54,6 +54,20 @@ refused. Requests are limited to 16 KiB. `timeout` is optional and measured in
 `"timeout": 15`; millisecond values such as `15000` are invalid. Empty stdin is
 refused: `--request-json -` needs a pipe, a quoted here-document, or file
 redirection in the same invocation.
+
+To finish a previously staged delivery, include its existing delivery message
+ID in `finish_staged_message_id` and keep `operation_id` new for this action:
+
+```json
+{"schema":"kilix.actions/v1","operation_id":"finish-002","operation":"agent.deliver","source":{"pane_id":1,"broker":"aaaaaaaaaaaaaaaa"},"target":{"pane_id":2,"broker":"bbbbbbbbbbbbbbbb"},"params":{"text":"Run the tests","mode":"steer","finish_staged_message_id":"message-001"}}
+```
+
+The previous message ID identifies the existing staged delivery receipt; the
+new operation ID identifies this structured action. The field is accepted only
+for `agent.deliver`, must be 1–64 ASCII letters, digits, dots, underscores or
+hyphens, and must match the original staged text and mode. Finish-staged
+completion cannot be previewed with `--dry-run` or `kilix_action_plan`.
+
 CLI always prints one compact JSON receipt. Mutations require `--yes` or
 interactive consent; stdin JSON requires `--yes` because stdin cannot also carry
 consent. `--agent` never prompts.
