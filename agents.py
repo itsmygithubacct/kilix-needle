@@ -575,6 +575,10 @@ class _Reader:
             else:
                 break
         agent = agent or found.pop("agent", None)
+        # An explicit new-tab launch without a directory uses the caller's
+        # working directory. Keep bare agent names and resumes ambiguous.
+        if verb and not resuming and found.get("place") == "tab" and "dir" not in found:
+            found["dir"] = "here"
         if not agent or "dir" not in found or resuming != ("resume" in found):
             return None
         if verb and verb[0] == "put" and "place" not in found:
@@ -1058,7 +1062,6 @@ _LAUNCH_REWRITES = (
     # "start Codex as an interactive coding-agent session in a new tab in /x"
     (re.compile(rf"\b({_AGENT_WORDS})\s+as\s+an?\s+(?:new\s+)?(?:interactive\s+)?(?:coding[- ]agent\s+|agent\s+)?"
                 rf"session\b", re.I), r"\1"),
-    (re.compile(r",? in a new tab\b", re.I), ""),
     (re.compile(r",? (?:working |running )?in (?:the )?(?:directory|folder|dir) (?=[~/])", re.I), " in "),
     (re.compile(r",? working in (?=[~/])", re.I), " in "),
     (re.compile(r"^(?P<head>[^:]*?),? working directory (?=[~/])", re.I), r"\g<head> in "),

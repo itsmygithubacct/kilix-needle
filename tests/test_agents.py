@@ -799,6 +799,51 @@ class ReviewR14Round8(unittest.TestCase):
             self.assertEqual(len(wants) if wants else None, count, request)
 
 
+class NewTabLaunches(unittest.TestCase):
+    def test_explicit_launch_uses_here_unless_a_directory_is_named(self):
+        for verb in ("launch", "start", "open"):
+            for agent in ("claude", "codex"):
+                for tail, directory in (("in a new tab", "here"),
+                                        ("in a new tab in /tmp/project", "/tmp/project"),
+                                        ("in /tmp/project in a new tab", "/tmp/project")):
+                    request = f"{verb} {agent} {tail}"
+                    with self.subTest(request=request):
+                        self.assertEqual(agents.exact_calls(request),
+                                         [call("agent", agent=agent, dir=directory)])
+
+    def test_ambiguous_or_incomplete_requests_still_refuse(self):
+        for request in ("claude session", "claude in a new tab", "start claude",
+                        "resume claude in a new tab", "don't launch claude in a new tab",
+                        "launch claude in a new tab in", "launch claude in a new tab tomorrow",
+                        "launch claude in a new tab and close tab 2"):
+            with self.subTest(request=request):
+                self.assertIsNone(agents.exact_calls(request))
+
+    def test_tab_phrase_in_task_text_is_preserved(self):
+        request = "start claude in a new tab: document opening claude in a new tab"
+        self.assertEqual(agents.exact_calls(request),
+                         [call("agent", agent="claude", dir="here",
+                               prompt="document opening claude in a new tab")])
+
+    def test_routed_plan_uses_caller_directory_without_engine_completion(self):
+        import ask
+        engine = mock.Mock()
+        with tempfile.TemporaryDirectory() as cwd, \
+                mock.patch.object(agents_kilix, "caller_info", return_value=(1, "a" * 16, "/tmp")), \
+                mock.patch.object(agents_kilix, "_run") as run:
+            jobs = ask.Jobs(lambda job: engine, None, confirm=lambda _: False,
+                            agent=False, agents_cwd=cwd)
+            for verb in ("launch", "start"):
+                record = ask.ask(f"{verb} claude in a new tab", jobs, act=False)
+                self.assertEqual(record["status"], 0, record)
+                self.assertEqual(record["route"]["stage"], 0, record)
+                self.assertEqual(record["route"]["job"], "agents", record)
+                self.assertIn(cwd, str(record["items"]), record)
+                self.assertEqual(record["items"][0]["outcome"], "would", record)
+        engine.complete.assert_not_called()
+        run.assert_not_called()
+
+
 class RouteBenchmarkLaunches(unittest.TestCase):
     """How agents asked for a launch in the Codex route benchmark (2026-09-29)."""
 

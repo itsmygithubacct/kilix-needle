@@ -396,12 +396,13 @@ What an agent should know (measured in a Codex route benchmark, 2026-09-29):
   I am running in and run a shell there" without loading the model.
 - **Plain `sh` panes accept typed commands** when only the shell holds the
   terminal. `bash`, `zsh` and `fish` still need shell integration's prompt mark.
-- **The agents job takes an explicit directory**: "start codex in /abs/dir",
+- **The agents job accepts an explicit directory**: "start codex in /abs/dir",
   also "an interactive Codex session in a new tab, working in the directory
   /abs/dir. Do not give it a task." The grammar also reads "working directory
   /abs/dir", "leave the session without a task", and "leave it at its
   interactive prompt". A task combined with an instruction to give no task
-  still refuses; text after a task delimiter remains literal.
+  still refuses; text after a task delimiter remains literal. "Launch claude
+  in a new tab" uses the caller's current directory and needs no model.
 - **The Codex entry that `setup` writes forwards the Kilix, `GPU_TERMINAL_*`,
   XDG and kitty auth variables.** Re-run `kilix-needle setup --only codex` after
   an update.
