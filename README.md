@@ -445,7 +445,11 @@ size. Without the submodule, such a recording is reported as a
 Events cite exact Unicode spans in canonical records, which retain byte and
 JSON-pointer origins. The baseline extracts user requests/questions, assistant
 answer excerpts, and narrow test/error lines in structured tool output. An
-assistant's statement stays an assistant claim. `brief` shows the newest bounded
+assistant's statement stays an assistant claim. Raw recording lines produce
+`transcript` events labelled `unattributed_text`; displayed prompt markers and
+test summaries do not establish a speaker or a verified result. These lines
+appear under `other` in a brief and retain citations into the recorded snapshot.
+`brief` shows the newest bounded
 events with citations; it does not reconcile conflicting statements. Search is
 lexical and also searches records without event labels. Source lookup retrieves
 the cached evidence snapshot, which may differ from a subsequently edited log.

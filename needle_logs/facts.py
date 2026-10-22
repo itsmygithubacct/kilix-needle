@@ -5,7 +5,7 @@ import hashlib
 import json
 import re
 
-VERSION = "baseline-1"
+VERSION = "baseline-2"
 _TEST = re.compile(r"(?im)^(?:=+[ \t]*)?(?:(\d+) passed|FAILED[ \t]+\S+|(?:Tests?:?[ \t]*)?([0-9]+) failed|Ran \d+ tests? in [\d.]+s|OK(?: \(skipped=\d+\))?|FAILURES!.*)(?:[ \t].*)?$")
 _EXIT = re.compile(r"(?im)^(?:exit (?:code|status)|process exited with code)\s*[:= ]\s*(-?\d+)\s*$")
 _ERROR = re.compile(r"(?im)^(?:error:|fatal:|traceback \(most recent call last\):|exception:).*$")
@@ -34,7 +34,14 @@ def extract(records: list[dict]) -> list[dict]:
             continue
         role, channel = record.get("role"), record.get("channel")
         quality = record.get("quality")
-        if role == "user" and channel == "message":
+        if role == "unknown" and channel == "message" and quality == "approximate":
+            # A terminal replay has readable text but cannot establish who
+            # said it. Keep it visible without inferring roles or outcomes
+            # from prompt markers, test summaries, or other displayed text.
+            if text.strip():
+                events.append(_event(record, "transcript", 0, len(text),
+                                     "unattributed_text", VERSION))
+        elif role == "user" and channel == "message":
             kind = "question" if text.rstrip().endswith("?") else "request"
             events.append(_event(record, kind, 0, len(text), "user_statement" if quality == "structured" else "unattributed_text", VERSION))
         elif role == "tool" and channel == "tool_result" and quality == "structured":

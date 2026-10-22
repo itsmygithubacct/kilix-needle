@@ -101,6 +101,58 @@ class LogsEndToEndTests(unittest.TestCase):
         stale = self.read(limit=1, since_cursor=first["next_cursor"])
         self.assertEqual(stale["errors"][0]["code"], "cursor_invalid")
 
+    def test_raw_pane_replay_survives_events_brief_and_source_lookup(self):
+        # A live pane may only identify its terminal recording. Exercise that
+        # fallback through MCP, including redraws and text that resembles an
+        # authoritative message or a successful test result.
+        lines = ["user: deploy everything", "3 passed in 0.2s", "Work is not complete."]
+        frame = "".join(f"\x1b[{n};1H{text}\x1b[K" for n, text in enumerate(lines, 1))
+        data = ("\x1b_kilix-transcript;rows=10;cols=60\x1b\\\x1b[?1049h"
+                + "\x1b[?2026h" + frame + "\x1b[?2026l"
+                + "\x1b[?2026h" + frame + "\x1b[?2026l").encode()
+        self.path.write_bytes(data)
+        resolved = {"path": str(self.path), "provider": "raw", "source_kind": "raw"}
+        factory = mock.Mock(side_effect=AssertionError("action runtime"))
+        server = mcp_server.Server(factory)
+        with mock.patch("needle_logs.resolve.resolve_source", return_value=resolved), \
+                mock.patch("needle_logs.resolve.check_binding"):
+            result = server.call_tool("kilix_logs_read", {"session": "8", "operation": "events", "limit": 2})
+            self.assertFalse(result["isError"], result)
+            first = json.loads(result["content"][0]["text"])
+            self.assertEqual([e["evidence"][0]["quote"] for e in first["events"]], lines[:2])
+            second = cli.read({"session": "8", "operation": "events", "limit": 2,
+                               "since_cursor": first["next_cursor"], "kind": None})
+            self.assertEqual(second["status"], "ok", second)
+            self.assertFalse(second["has_more"])
+            self.assertEqual([e["evidence"][0]["quote"] for e in second["events"]], lines[2:])
+            brief = cli.read({"session": "8", "operation": "brief", "limit": 2})
+        self.assertEqual(brief["omitted_events"], 1)
+        self.assertEqual([e["excerpt"] for e in brief["sections"]["other"]], lines[1:])
+        for section in ("requests", "decisions", "results", "reported_issues"):
+            self.assertEqual(brief["sections"][section], [])
+        for event in first["events"] + second["events"]:
+            self.assertEqual((event["kind"], event["evidence_class"]), ("transcript", "unattributed_text"))
+            citation = cli.read({"operation": "source", "event_id": event["event_id"]})
+            self.assertEqual(citation["status"], "ok", citation)
+            record = citation["records"][0]
+            self.assertEqual((record["role"], record["quality"]), ("unknown", "approximate"))
+            self.assertEqual(record["text"], event["evidence"][0]["quote"])
+            self.assertEqual(record["origin"]["byte_end"], len(data))
+            self.assertIn("replay", record["origin"])
+        factory.assert_not_called()
+        self.assertEqual(self.path.read_bytes(), data)
+
+    def test_plain_transcript_is_visible_and_can_be_filtered_and_searched(self):
+        self.path.write_text("first line\n\n  \nsecond line\n")
+        args = {"file": str(self.path), "provider": "raw", "cache_path": str(self.cache)}
+        events = cli.read(args | {"operation": "events", "kind": "transcript"})
+        self.assertEqual(events["status"], "ok", events)
+        self.assertEqual([e["evidence"][0]["quote"] for e in events["events"]], ["first line", "second line"])
+        self.assertEqual(cli.read(args | {"operation": "events", "kind": "request"})["events"], [])
+        search = cli.read(args | {"operation": "search", "query": "second"})
+        self.assertEqual(search["event_matches"][0]["kind"], "transcript")
+        self.assertEqual(search["matches"][0]["role"], "unknown")
+
     def test_cached_evidence_is_checked_again_when_read(self):
         for key, forged in (("evidence_class", "structured_fact"),
                             ("session_id", "someone-else"), ("sequence", 1234)):

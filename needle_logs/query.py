@@ -14,7 +14,7 @@ MAX_LIMIT = 100
 MAX_QUERY = 256
 MAX_RENDER = 12000
 MAX_JSON_TEXT = 32768
-KINDS = {"request", "decision", "change", "test_result", "error", "blocker", "question", "completion", "answer"}
+KINDS = {"request", "decision", "change", "test_result", "error", "blocker", "question", "completion", "answer", "transcript"}
 
 
 class QueryError(ValueError):

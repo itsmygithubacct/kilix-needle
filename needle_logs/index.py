@@ -11,7 +11,7 @@ from pathlib import Path
 
 SCHEMA_VERSION = 1
 APPLICATION_ID = 0x4b4c4f47  # KLOG
-KINDS = {"request", "decision", "change", "test_result", "error", "blocker", "question", "completion", "answer"}
+KINDS = {"request", "decision", "change", "test_result", "error", "blocker", "question", "completion", "answer", "transcript"}
 CLASSES = {"structured_fact", "user_statement", "assistant_claim", "unattributed_text"}
 
 
