@@ -68,13 +68,18 @@ class Jobs:
     the agents job's 'here'; files_cwd is the files job's 'here'."""
 
     def __init__(self, engine, classify_system, *, confirm, agent: bool,
-                 agents_cwd=None, files_cwd=None, under_overlay: bool = False):
+                 agents_cwd=None, files_cwd=None, under_overlay: bool = False,
+                 commands=None):
         self.engine, self.classify_system = engine, classify_system
         self.confirm, self.agent = confirm, agent
         self.agents_cwd, self.files_cwd, self.under_overlay = agents_cwd, files_cwd, under_overlay
+        self.commands = commands
 
     def run(self, job: str, request: str, *, dry_run: bool, assume_yes: bool = False) -> dict:
         import needle_cli
+        if self.commands is not None and self.commands.recognizes(request, job):
+            return self.commands.run(request, dry_run=dry_run, assume_yes=assume_yes,
+                                     confirm=self.confirm)
         # The agents job's consent is the request itself; no yes widens it.
         options = needle_cli.Options(dry_run=dry_run,
                                      assume_yes=assume_yes and not dry_run and job != "agents",
@@ -95,10 +100,17 @@ class Jobs:
             import files_cli
             return files_cli.run(request, dry_run=dry_run, cwd=self.files_cwd, agent=self.agent)
         if job == "agents":
-            return needle_cli.run_agents_request(self.engine("agents"), request, options,
-                                                 self.confirm, cwd=self.agents_cwd)
-        if job == "apps":
-            return needle_cli.run_apps_request(self.engine("apps"), request, options, self.confirm)
+            record = needle_cli.run_agents_request(self.engine("agents"), request, options,
+                                                   self.confirm, cwd=self.agents_cwd)
+        elif job == "apps":
+            record = needle_cli.run_apps_request(self.engine("apps"), request, options, self.confirm)
+        else:
+            record = None
+        if record is not None:
+            if self.commands is not None and not admits(job, record):
+                return self.commands.run(request, dry_run=dry_run, assume_yes=assume_yes,
+                                         confirm=self.confirm)
+            return record
         if job == "panes":
             return needle_cli.run_request(self.engine("panes"), request, options, self.confirm)
         raise ValueError(f"ask does not run the {job} job")
@@ -151,6 +163,16 @@ def ask(request: str, jobs: Jobs, *, act: bool, assume_yes: bool = False,
     and consent. A clarification or a router error never acts."""
     if not isinstance(request, str) or not request.strip():
         raise ValueError("ask needs a request")
+    commands = getattr(jobs, 'commands', None)
+    if commands is not None and (
+            route is None and job is None and commands.recognizes(request)
+            or route is not None and route.stage == 0 and route.job == 'commands'):
+        record = commands.run(request, dry_run=not act, assume_yes=assume_yes,
+                              confirm=jobs.confirm)
+        record['route'] = router.Route(0, 'commands').record()
+        with history.routed(record['route']):
+            _record_unsure(request, record, act)
+        return record
     if route is not None:
         # A route made by the caller: an interactive act after its plan.
         if route.stage not in (0, 1, "forced") or not (
@@ -264,7 +286,10 @@ def render(record: dict) -> str:
     import needle_cli
     route = record.get("route") or {}
     job = route.get("job")
-    if job == "system" and "query_source" in record:
+    if 'operation_id' in record and 'interpretation' in record:
+        import commands_ask
+        body = commands_ask.render(record)
+    elif job == "system" and "query_source" in record:
         import system_collect
         body = system_collect.render(record)
     elif job == "files" and "plan" in record:
@@ -295,8 +320,21 @@ def cli_jobs(args, *, interactive: bool, engines: dict | None = None) -> tuple:
     import needle_cli
     stack = contextlib.ExitStack()
     engines = dict(engines or {})
+    backend = getattr(args, 'commands_backend', None)
+    commands = None
+    if backend:
+        import commands_ask
+        import commands_models
+        providers = stack.enter_context(commands_models.Providers(
+            backend, candidate=args.commands_candidate, bundle=args.commands_bundle,
+            root=getattr(args, 'root', None)))
+        commands = commands_ask.Session(
+            backend, provider=providers.get, cwd=os.getcwd(),
+            model_only=args.commands_model_only, operation_id=args.operation_id)
 
     def engine(job):
+        if commands is not None:
+            return commands_ask.NoProposal()
         if job not in engines:
             engines[job] = stack.enter_context(needle_cli.LazyRuntime(
                 lambda: needle_cli.open_runtime(args, may_install=not args.agent and not interactive,
@@ -309,7 +347,7 @@ def cli_jobs(args, *, interactive: bool, engines: dict | None = None) -> tuple:
     confirm = needle_cli._never if args.agent else needle_cli._terminal_confirm
     jobs = Jobs(engine, classify_system, confirm=confirm, agent=args.agent,
                 agents_cwd=os.getcwd(), files_cwd=None,
-                under_overlay=getattr(args, "under_overlay", False))
+                under_overlay=getattr(args, "under_overlay", False), commands=commands)
     return jobs, stack
 
 
@@ -326,7 +364,8 @@ def interactive(request: str, jobs: Jobs) -> int:
     plan = ask(request, jobs, act=False)
     print(render(plan))
     route = plan["route"]
-    if route.get("stage") not in (0, 1) or route.get("job") not in router.RUNS \
+    runnable = set(router.RUNS) | ({'commands'} if getattr(jobs, 'commands', None) else set())
+    if route.get("stage") not in (0, 1) or route.get("job") not in runnable \
             or not admits(route["job"], plan):
         return 1
     if not _yes("Do it? [y/N] "):
@@ -361,10 +400,21 @@ def main(argv=None) -> int:
     parser.add_argument("--under-overlay", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--engine", metavar="FILE", help=argparse.SUPPRESS)
     parser.add_argument("--root", help=argparse.SUPPRESS)
+    parser.add_argument('--commands-backend', choices=('grammar', 'needle3', 'lfm2'),
+                        default=os.environ.get('KILIX_ASK_COMMANDS_BACKEND'),
+                        help='use the shared command contract; other jobs keep deterministic parsing')
+    parser.add_argument('--commands-candidate', help='verified local Needle3 candidate manifest')
+    parser.add_argument('--commands-bundle', help='local LFM2 bundle matching the selected release pins')
+    parser.add_argument('--commands-model-only', action='store_true',
+                        help='measure model proposals without the command grammar fast path')
+    parser.add_argument('--operation-id', help='reuse an incomplete command operation without replaying actions')
     args = parser.parse_args(argv)
     request = " ".join(args.request).strip()
     if not request:
         parser.error("give a request")
+    if not args.commands_backend and (args.commands_candidate or args.commands_bundle
+                                     or args.commands_model_only or args.operation_id):
+        parser.error('command options require --commands-backend')
     if args.explain:
         try:
             print(explain(request))

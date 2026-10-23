@@ -149,6 +149,38 @@ our own eval sets and agent-written rows. `router_train.py` retrains them
 deterministically, and the test suite checks the retrained weights against the
 checked-in ones. Current gate sets are never read. See `router-model/README.md`.
 
+### Shared command backends
+
+Ask can use a common command grammar and validation path for starting coding
+sessions, waiting for or messaging a named existing session, and opening the
+calculator, notepad, file manager or PDF viewer:
+
+```sh
+kilix-needle ask --commands-backend grammar --plan "open calculator then open notepad"
+kilix-needle ask --commands-backend grammar --yes --operation-id open-tools "open calculator then open notepad"
+```
+
+`grammar` loads no generative model. `needle3` and `lfm2` retain that grammar as
+the fast path and validate every model proposal against the same complete
+request. All three modes keep the other Ask jobs' deterministic parsing; their
+older generative fallbacks are disabled. The routing classifier remains in use.
+Set `KILIX_ASK_COMMANDS_BACKEND` to select a mode for the `kilix ask` launcher.
+Without this option or setting, the existing Ask path is unchanged.
+
+Needle3 takes an explicit verified manifest with `--commands-candidate`.
+LFM2 uses the qualified release selection and Content bundle; an explicit local
+bundle can be supplied with `--commands-bundle`. Missing or mismatched assets
+fail without substituting a different model. `--commands-model-only` bypasses
+the grammar fast path for evaluation; the same validation and host checks
+still apply. A model proposal alone cannot authorize an action.
+
+At most four ordered command actions are admitted together. Host checks run
+for the complete batch before it starts, and pending readiness pauses later
+actions. Planning runs nothing; acting requires confirmation or `--yes`.
+Reuse the returned operation ID to check an incomplete operation without
+launching another copy or sending a message twice. A submitted message is
+reported as submitted; it does not imply the recipient completed the task.
+
 ## File search
 
 `kilix-needle files` adds scoped, read-only filename and text search, large/recent
