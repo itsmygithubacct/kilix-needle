@@ -77,7 +77,11 @@ class Jobs:
 
     def run(self, job: str, request: str, *, dry_run: bool, assume_yes: bool = False) -> dict:
         import needle_cli
-        if self.commands is not None and self.commands.recognizes(request, job):
+        if self.commands is not None and self.commands.recognizes(request):
+            decision = self.commands.decide(request)
+            if decision.admission.job not in (None, job):
+                return {'request': request, 'status': 1, 'items': [],
+                        'note': 'the complete command does not belong to the selected job'}
             return self.commands.run(request, dry_run=dry_run, assume_yes=assume_yes,
                                      confirm=self.confirm)
         # The agents job's consent is the request itself; no yes widens it.

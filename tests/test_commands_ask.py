@@ -99,6 +99,15 @@ class AskCommands(unittest.TestCase):
         self.assertEqual(result['route']['job'], 'panes')
         run.assert_not_called()
 
+    def test_forced_job_cannot_bypass_common_validation_or_run_a_partial_batch(self):
+        jobs = self.jobs(commands_ask.Session())
+        for text in ('start codex with model gpt-other',
+                     'start codex then open calculator'):
+            with self.subTest(text=text), patch.object(compact_runner, 'run') as run:
+                result = ask.ask(text, jobs, act=True, assume_yes=True, job='agents')
+                self.assertEqual(result['status'], 1)
+                run.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()

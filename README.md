@@ -174,6 +174,12 @@ fail without substituting a different model. `--commands-model-only` bypasses
 the grammar fast path for evaluation; the same validation and host checks
 still apply. A model proposal alone cannot authorize an action.
 
+Double-quoted task and message arguments use JSON escaping and retain their
+internal spacing and case. For example, `start codex with task "keep A  B"`
+sends `keep A  B`. Text after a task or message colon remains literal, including
+any quotes or polite words it contains. Extra instructions outside a quoted
+argument are refused when the complete request cannot be read.
+
 At most four ordered command actions are admitted together. Host checks run
 for the complete batch before it starts, and pending readiness pauses later
 actions. Planning runs nothing; acting requires confirmation or `--yes`.

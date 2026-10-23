@@ -31,16 +31,21 @@ _APP_WORDS = {"pdf viewer":"kilix-pdf", "pdf reader":"kilix-pdf",
               "file manager":"kilix-file", **{x:x for x in _APPS}}
 _NOUN = "(?:" + "|".join(map(re.escape, sorted(_APP_WORDS, key=len, reverse=True))) + ")"
 _PATH = r'(?:"(?:[^"\\]|\\.)+"|~?/[^\s;?]+)'
-_PREAMBLE = re.compile(r"^(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?|I\s+(?:want|would like)\s+to\s+)?", re.I)
-_SEPARATOR = re.compile(r";\s*(?:(?:then|next|also|after that)\s+)?|,?\s+(?:and\s+then|and|then)\s+", re.I)
+_PREAMBLE = re.compile(r"^(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?|"
+                       r"I\s+(?:want|would like)\s+(?:you\s+)?to\s+|I['’]d\s+like\s+(?:you\s+)?to\s+)?", re.I)
+_SEPARATOR = re.compile(r";\s*(?:(?:then|next|also|after that)\s+)?|"
+                        r",\s*(?=(?:open|launch|start|bring|show|get|wait|tell|send|message)\b)|"
+                        r",?\s+(?:and\s+then|and|then)\s+", re.I)
 _DIRECTORY = r'(?:"(?:[^"\\]|\\.)+"|~?/[^\s;,?]+)'
-_LOCATION = re.compile(r'\b(?:in|at|inside|within)\s+(?P<path>'+_DIRECTORY+r')|\b(?P<here>here|in (?:the )?(?:current directory|current folder|this folder|this directory))\b', re.I)
+_LOCATION = re.compile(r'\b(?:in|at|inside|within)\s+(?P<path>'+_DIRECTORY+r')|'
+                       r'\bwith\s+(?P<working>'+_DIRECTORY+r')\s+as\s+(?:(?:its|the)\s+)?working\s+directory|'
+                       r'\b(?P<here>here|in (?:the )?(?:current directory|current folder|this folder|this directory))\b', re.I)
 _PLACEMENTS = [
-    ('right', r'(?:in\s+)?(?:a\s+)?split\s+(?:to\s+)?(?:the\s+|my\s+)?right|on\s+(?:the\s+|my\s+)?right'),
-    ('left', r'(?:in\s+)?(?:a\s+)?split\s+(?:to\s+)?(?:the\s+|my\s+)?left|on\s+(?:the\s+|my\s+)?left'),
-    ('up', r'(?:in\s+)?(?:a\s+)?split\s+(?:above(?:\s+me)?|up)|above\s+me'),
-    ('down', r'(?:in\s+)?(?:a\s+)?split\s+(?:below(?:\s+me)?|down)|below\s+me'),
-    ('tab', r'(?:in\s+)?(?:a\s+)?(?:new\s+)?tab'),
+    ('right', r'(?:in\s+)?(?:a\s+)?split\s+(?:to\s+)?(?:the\s+|my\s+)?right|(?:on|to)\s+(?:the\s+|my\s+)?right'),
+    ('left', r'(?:in\s+)?(?:a\s+)?split\s+(?:to\s+)?(?:the\s+|my\s+)?left|(?:on|to)\s+(?:the\s+|my\s+)?left'),
+    ('up', r'(?:in\s+)?(?:a\s+)?split\s+(?:above(?:\s+(?:me|this pane|the current pane))?|up)|above\s+(?:me|this pane|the current pane)'),
+    ('down', r'(?:in\s+)?(?:a\s+)?split\s+(?:below(?:\s+(?:me|this pane|the current pane))?|down)|below\s+(?:me|this pane|the current pane)'),
+    ('tab', r'(?:in\s+)?(?:a\s+)?(?:(?:new|fresh)\s+)?tab'),
 ]
 
 
@@ -58,10 +63,22 @@ def _take_location(text):
     if not matches:
         return text, None
     match = matches[0]
-    directory = _literal(match['path']) if match['path'] else 'here'
+    raw = match['path'] or match['working']
+    directory = _literal(raw) if raw else 'here'
     if not directory:
         return None, None
     return text[:match.start()] + ' ' + text[match.end():], directory
+
+
+def _quoted_payload(text):
+    """Decode an explicit quoted argument, never silently discard its tail."""
+    try:
+        value, end = json.JSONDecoder().raw_decode(text)
+    except ValueError:
+        return None
+    if not isinstance(value, str) or not value or text[end:].strip() not in ('', '.', '!'):
+        return None
+    return value
 
 
 def _extended_agent_calls(request):
@@ -84,6 +101,11 @@ def _extended_agent_calls(request):
     if head:
         rest = text[head.end():]
         task = None
+        quoted = re.search(r'\s+with\s+(?:this\s+)?(?:initial\s+)?(?:task|instruction)\s+(?=")', rest, re.I)
+        if quoted and _outside_quotes(rest, quoted.start()):
+            task = _quoted_payload(rest[quoted.end():])
+            if task is None:return None
+            rest = rest[:quoted.start()]
         markers = re.compile(r';\s*(?:initial\s+)?(?:task|instruction):\s*|'
                              r'\s+with\s+(?:this\s+)?(?:initial\s+)?(?:task|instruction):\s*|'
                              r':\s*|\s+and\s+(?:ask\s+it\s+to|give\s+it\s+this\s+task:)\s*|'
@@ -93,9 +115,11 @@ def _extended_agent_calls(request):
             # "to the right" is placement, not an initial task.
             tail = rest[marker.end():]
             if marker[0].strip().casefold()=='to' and re.match(r'(?:the |my )?(?:right|left)\b', tail, re.I):continue
+            if task is not None:return None
             task = tail
             rest = rest[:marker.start()]
             break
+        rest = re.sub(r',?\s+please[.!]?$', '', rest, flags=re.I)
         rest, directory = _take_location(rest)
         if rest is None:return None
         args = {} if directory in (None,'here') else {'directory':directory}
@@ -132,12 +156,15 @@ def _extended_agent_calls(request):
     if message:
         rest=text[message.end():]
         delimiter=re.compile(r'\s+(?:with|saying|the following(?: instruction| text| message)?|this(?: exact)?(?: message| text| instruction)?):\s*|'
+                             r'\s+(?:the|this)(?: exact)? (?:message|text|instruction)\s+(?=")|'
                              r':\s*|\s+to\s+',re.I)
         for marker in delimiter.finditer(rest):
             if not _outside_quotes(rest,marker.start()):continue
             prefix,directory=_take_location(rest[:marker.start()])
             if prefix is None or prefix.strip(' ,'):continue
             payload=rest[marker.end():]
+            if marker[0].rstrip().endswith(('message', 'text', 'instruction')):
+                payload = _quoted_payload(payload)
             if not payload or len(payload.encode())>1024:return None
             args={'agent':message['agent'].casefold(),'text':payload}
             if directory not in (None,'here'):args['directory']=directory
@@ -149,13 +176,17 @@ def _extended_agent_calls(request):
                          r'(?P<rest>.*)',text,re.I)
     if waiting:
         rest=waiting['rest']
+        guard = re.search(r";\s*(?:do not|don['’]t)\s+(?:start|launch|open|create)\s+"
+                          r"(?:(?:a\s+)?new|another)\s+(?:session|agent)[.!]?$", rest, re.I)
+        if guard and _outside_quotes(rest, guard.start()):
+            rest = rest[:guard.start()]
         rest=re.sub(r'^\s+(?:session|turn)\b','',rest,flags=re.I)
         rest,directory=_take_location(rest)
         if rest is None:return None
         tail=' '.join(rest.strip(' .!').casefold().split())
         if tail not in ('','is idle','is done','is finished','becomes idle','reaches idle',
                         'finishes','finishes its turn','finishes its current turn','to finish',
-                        'to finish its turn','to finish its current turn','to become idle',
+                        'to finish its turn','to finish its current turn','to become idle','to be idle',
                         'to complete its turn','completes its current turn','finish before continuing',
                         'finish before we continue','ends'):
             return None
@@ -171,13 +202,17 @@ def _call(name, **args):
 
 def _app_calls(request):
     text = request.strip()
+    desired = re.fullmatch(r"(?:I would like|I['’]d like)\s+(?:the\s+)?("+_NOUN+
+                           r")\s+(?:opened|launched|started)[.!]?", text, re.I)
+    if desired:
+        return [_call('open_app', app=_APP_WORDS[desired[1].casefold()])]
     preamble = _PREAMBLE.match(text)
     polite = bool(re.search(r'\b(?:can|could|would|will)\s+you\b', preamble[0], re.I))
     text = text[preamble.end():]
     if text.endswith('?'):
         if not polite:return None
         text = text[:-1].rstrip()
-    text = re.sub(r'\s+(?:please|for me|now)$', '', text, flags=re.I)
+    text = re.sub(r',?\s+(?:please|for me|now)[.!]?$', '', text, flags=re.I)
     text = re.sub(r'^bring\s+(?:the\s+)?('+_NOUN+r')\s+up$',r'bring up \1',text,flags=re.I)
     noun = re.fullmatch(r'(?:open|launch|start(?: up)?|bring up|show|get)\s+(?:the\s+)?('+_NOUN+r')(?:\s+application|\s+running)?[.!]?', text, re.I)
     if noun:
@@ -207,12 +242,15 @@ def _app_calls(request):
 def _outside_quotes(text, position):
     quote = None
     escaped = False
-    for ch in text[:position]:
+    for index, ch in enumerate(text[:position]):
         if escaped:escaped=False;continue
         if ch == '\\' and quote:escaped=True;continue
         if quote:
             if ch == quote:quote=None
-        elif ch in ('"', "'"):quote=ch
+        elif ch in ('"', "'"):
+            if ch == "'" and index and text[index-1].isalnum() and text[index+1:index+2].isalnum():
+                continue
+            quote=ch
     return quote is None
 
 
@@ -235,6 +273,10 @@ def exact_calls(request, *, _depth=0):
         if not first:continue
         if any('task' in x['arguments'] or 'text' in x['arguments'] for x in first):continue
         rest=exact_calls(right,_depth=_depth+1)
+        if (not rest and separator[0].strip(' ,').casefold() in ('and', 'and then')
+                and all(x['name'].startswith('start_') for x in first)
+                and re.match(r'^(?:claude|codex)\b', right, re.I)):
+            rest=exact_calls('start '+right,_depth=_depth+1)
         if rest and len(first+rest)<=4:return first+rest
     return None
 
