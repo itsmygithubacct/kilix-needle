@@ -317,8 +317,8 @@ PTY_TOOL_LIST = [
          "request": _pty_request(*_PTY_OPERATIONS, "kill", "end")},
          "required": ["request"], "additionalProperties": False}},
     {"name": "kilix_pty_act",
-     "description": "Exact accepted forms: confirm_risky=true; never ends your own session. "
-                    "verified_absent, uncertain or refused. Reads need no confirm. "
+     "description": "Selected ends require trusted controller authority; stock MCP refuses. "
+                    "confirm_risky is not authority. Reads need no confirm. "
                     + _PTY_END_RULES + _PTY_RECORDED_RULES + _PTY_AGENT_SAFETY + _PTY_AGENT_ROUTE,
      "annotations": {"readOnlyHint": False, "destructiveHint": True},
      "inputSchema": {"type": "object", "properties": {

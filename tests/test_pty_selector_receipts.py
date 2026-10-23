@@ -1,3 +1,5 @@
+# Existing transport/receipt unit cases exercise the trusted primitive.
+# Public model ingress refusal is covered by test_pty_authority.py.
 """Synthetic selector receipts, with no broker, runtime reads or agent launch."""
 import copy
 import json
@@ -104,7 +106,7 @@ class ReceiptSemantics(unittest.TestCase):
         def backend(argv, wall=None):
             calls.append(argv)
             return pty_backend.Reply("ok", 0, doc)
-        result = pty_cli.run(action, assume_yes=True, agent=True,
+        result = pty_cli._run_supplied(action, assume_yes=True, agent=True,
                              environ={"KITTY_PTY_BROKER_SESSION": "fixture-caller"}, backend=backend)
         self.assertNotEqual(result["status"], 0)
         self.assertEqual(len(calls), 1)

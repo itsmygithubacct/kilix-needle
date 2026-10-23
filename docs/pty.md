@@ -386,7 +386,7 @@ and 64 KiB, the newest).
 | --- | --- |
 | `kilix_pty_read` | the six read forms; refuses `end session` and points to `kilix_pty_act` |
 | `kilix_pty_plan` | any form, without effect: a read prints its `argv`; `end session` resolves the session and prints the plan |
-| `kilix_pty_act` | any form; `end session ID` needs `confirm_risky=true`; reads need no confirmation |
+| `kilix_pty_act` | stock MCP refuses selected ends without controller authority; reads need no confirmation |
 
 Each takes `request`, a string in the forms above or a structured object; `act`
 also takes the boolean `confirm_risky` (default false). Extra fields are
@@ -412,7 +412,7 @@ includes the name, description, input schema and annotations.
 | --- | ---: | ---: |
 | `kilix_pty_read` | 753 | 1949 |
 | `kilix_pty_plan` | 734 | 1943 |
-| `kilix_pty_act` | 786 | 2023 |
+| `kilix_pty_act` | 779 | 2016 |
 
 **Caller identity.** The server's environment must carry the caller's
 `KITTY_PTY_BROKER_SESSION`. A server started by Claude Code inside a Kilix pane
@@ -432,3 +432,22 @@ only `end session` fails closed).
 - No attach, no reap, no typing into a session, no pane-id kill.
 - The grammar covers the wording in this document. Words outside it refuse; use
   the hint, or the structured request.
+
+## Trusted selection controller
+
+Selected-session execution now requires a controller injected by a trusted
+embedding application into `pty_cli.run` or `pty_cli.mcp`. Stock CLI and stdio
+MCP refuse destructive selected-session requests with `authority_required`,
+including legacy `end session ID`, regardless of `--yes` or `confirm_risky`.
+Read-only requests and dry-run previews remain available. These flags are
+consent inputs, not evidence of original user intent.
+
+The host `kilix_pty_controller.Controller` issues authority only through its
+separate `select(direct_user_request)` API. The embedding application must own
+the original structured user-selection event and isolate the actor from that
+API, broker runtime, state, environment and shell access. It passes only the
+controller's `dispatch` capability to Needle; no model argument injects it.
+The request must match the issued selector, qualifiers and operation ID exactly.
+Authority expires, is consumed once, and is revoked on mismatch or explicit
+revocation. See the host's `docs/pty-controller.md` for lifecycle and deployment
+requirements. Unrestricted same-user shell access is not secured by this API.
