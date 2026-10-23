@@ -5,6 +5,7 @@ import shutil
 import stat
 import subprocess
 import tempfile
+import tracemalloc
 import unittest
 
 import support  # noqa: F401
@@ -39,6 +40,26 @@ class LoadVerified(unittest.TestCase):
     def test_wrong_digest_is_refused(self):
         with self.assertRaisesRegex(asset.AssetError, "does not match"):
             asset.load_verified(self.binary, "0" * 64, self.size)
+
+    def test_large_asset_does_not_retain_full_python_copies(self):
+        path = os.path.join(self.dir.name, "large-model")
+        with open(path, "wb") as stream:
+            for _ in range(16):
+                stream.write(bytes(1024 * 1024))
+        expected = digest(path)
+        tracemalloc.start()
+        try:
+            with asset.load_verified(path, expected, 16 * 1024 * 1024) as image:
+                self.assertEqual(os.fstat(image.fd).st_size, 16 * 1024 * 1024)
+                self.assertLess(tracemalloc.get_traced_memory()[1], 4 * 1024 * 1024)
+        finally:
+            tracemalloc.stop()
+
+    def test_failed_digest_closes_its_memory_file(self):
+        before = set(os.listdir("/proc/self/fd"))
+        with self.assertRaises(asset.AssetError):
+            asset.load_verified(self.binary, "0" * 64, self.size)
+        self.assertEqual(set(os.listdir("/proc/self/fd")), before)
 
     def test_same_size_different_bytes_is_refused(self):
         with open(self.binary, "r+b") as handle:
