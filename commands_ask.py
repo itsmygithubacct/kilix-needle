@@ -22,6 +22,8 @@ class Session:
                  model_only=False, operation_id=None, host=None, journal=None):
         if model_only and backend == 'grammar':
             raise ValueError('model-only needs Needle3 or LFM2')
+        if operation_id is not None:
+            compact_runner.check_operation_id(operation_id)
         self.backend, self.provider, self.cwd = backend, provider, cwd
         self.model_only, self.operation_id = model_only, operation_id
         self.host, self.journal = host, journal

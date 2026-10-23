@@ -417,8 +417,16 @@ def main(argv=None) -> int:
     if not request:
         parser.error("give a request")
     if not args.commands_backend and (args.commands_candidate or args.commands_bundle
-                                     or args.commands_model_only or args.operation_id):
+                                     or args.commands_model_only or args.operation_id is not None):
         parser.error('command options require --commands-backend')
+    if args.commands_backend and args.commands_backend not in ('grammar', 'needle3', 'lfm2'):
+        parser.error('KILIX_ASK_COMMANDS_BACKEND must be grammar, needle3 or lfm2')
+    if args.commands_model_only and args.commands_backend == 'grammar':
+        parser.error('--commands-model-only needs Needle3 or LFM2')
+    if args.commands_candidate and args.commands_backend != 'needle3':
+        parser.error('--commands-candidate requires --commands-backend needle3')
+    if args.commands_bundle and args.commands_backend != 'lfm2':
+        parser.error('--commands-bundle requires --commands-backend lfm2')
     if args.explain:
         try:
             print(explain(request))
@@ -428,8 +436,8 @@ def main(argv=None) -> int:
         return 0
     if args.interactive and (args.agent or args.json or args.yes or args.plan or args.job):
         parser.error("--interactive cannot be combined with --agent, --json, --yes, --plan or --job")
-    jobs, stack = cli_jobs(args, interactive=args.interactive)
     try:
+        jobs, stack = cli_jobs(args, interactive=args.interactive)
         with stack:
             if args.interactive:
                 status = interactive(request, jobs)

@@ -28,6 +28,11 @@ class WorkflowError(RuntimeError):
     pass
 
 
+def check_operation_id(value):
+    if not isinstance(value, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,47}', value):
+        raise WorkflowError('operation ID must be 1–48 ASCII identifier characters')
+
+
 class Journal:
     """Private, locked, bounded and atomically replaced operation records."""
     def __init__(self, root=None):
@@ -35,8 +40,7 @@ class Journal:
 
     @contextmanager
     def open(self, operation_id):
-        if not isinstance(operation_id,str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,47}',operation_id):
-            raise WorkflowError('operation ID must be 1–48 ASCII identifier characters')
+        check_operation_id(operation_id)
         self.root.mkdir(mode=0o700,parents=True,exist_ok=True)
         directory=os.open(self.root,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
         lock=None

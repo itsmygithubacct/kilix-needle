@@ -1,5 +1,7 @@
 import support
 import argparse
+from contextlib import redirect_stderr
+import io
 import unittest
 from unittest.mock import Mock, patch
 
@@ -107,6 +109,22 @@ class AskCommands(unittest.TestCase):
                 result = ask.ask(text, jobs, act=True, assume_yes=True, job='agents')
                 self.assertEqual(result['status'], 1)
                 run.assert_not_called()
+
+    def test_invalid_explicit_retry_id_never_becomes_a_new_operation(self):
+        for operation_id in ('', '../other', 'a'*49):
+            with self.subTest(operation_id=operation_id), self.assertRaises(compact_runner.WorkflowError):
+                commands_ask.Session(operation_id=operation_id)
+
+    def test_mismatched_backend_options_refuse_before_loading(self):
+        for options in (['--commands-backend', 'grammar', '--commands-model-only'],
+                        ['--operation-id', ''],
+                        ['--commands-backend', 'lfm2', '--commands-candidate', 'candidate.json'],
+                        ['--commands-backend', 'needle3', '--commands-bundle', '/fixture']):
+            with self.subTest(options=options), patch.object(ask, 'cli_jobs') as jobs, \
+                    redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as stopped:
+                ask.main([*options, 'open calculator'])
+            self.assertEqual(stopped.exception.code, 2)
+            jobs.assert_not_called()
 
 
 if __name__ == '__main__':
