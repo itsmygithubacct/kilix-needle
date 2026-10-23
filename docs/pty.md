@@ -451,3 +451,11 @@ The request must match the issued selector, qualifiers and operation ID exactly.
 Authority expires, is consumed once, and is revoked on mismatch or explicit
 revocation. See the host's `docs/pty-controller.md` for lifecycle and deployment
 requirements. Unrestricted same-user shell access is not secured by this API.
+
+The host's `kilix pty supervise --actor FILE --needle-source DIR` provides a
+separate terminal-selected, namespace-isolated path. Inside it,
+`pty_controller_client.py` exposes only `pty --request-json` and forwards through
+the actual parser to the dispatch socket. This constrained adapter is distinct
+from the stock CLI/MCP and cannot issue authority. See the host
+`docs/pty-supervisor.md` for supported routes, R1 compatibility and admission
+limits. No existing unrestricted same-UID agent shell is retroactively isolated.
