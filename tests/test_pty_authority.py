@@ -11,6 +11,17 @@ from test_pty_selector_receipts import success
 
 
 class AuthorityIngress(unittest.TestCase):
+    def test_controller_pane_read_uses_status_contract_and_retains_unknown(self):
+        controller = mock.Mock()
+        controller.read.return_value = (0, {'schema':'kilix.pty/v1','runtime':'/fixture','session':{'id':'owned'}})
+        record = pty_cli.run('which session is pane 7', controller=controller)
+        self.assertEqual(record['status'],0,record)
+        controller.read.assert_called_once_with({'schema':'kilix.pty.request/v1','verb':'status','args':{'pane_id':7}})
+        document = {'schema':'kilix.pty/v1','pane_id':7,'result':'unknown','reason':'pane_mapping_changed'}
+        controller.read.return_value = (4,document)
+        record = pty_cli.run('which session is pane 7', controller=controller)
+        self.assertEqual((record['status'],record['result']),(4,document))
+
     def test_cli_api_and_mcp_refuse_all_selected_ends_without_controller(self):
         action, _ = success()
         for request in (action, 'end selector {"id":"target-7","attached":false} operation fixture-key',

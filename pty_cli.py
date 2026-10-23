@@ -276,7 +276,7 @@ def _run(request, held, *, dry_run=False, assume_yes=False, agent=False, confirm
             code, document = controller.dispatch(request)
         else:
             request = {"schema": "kilix.pty.request/v1",
-                       "verb": "journals" if operation == "journal" else operation,
+                       "verb": {"journal": "journals", "pane": "status"}.get(operation, operation),
                        "args": {k: v for k, v in action.items() if k in
                                 ("id", "pane_id", "max_lines", "max_bytes")}}
             if operation in ("observe", "journal"):
@@ -284,6 +284,13 @@ def _run(request, held, *, dry_run=False, assume_yes=False, agent=False, confirm
             if "timeout_seconds" in action:
                 request["timeout_seconds"] = action["timeout_seconds"]
             code, document = controller.read(request)
+            if (operation == "pane" and code in (3, 4) and isinstance(document, dict)
+                    and document.get("schema") == "kilix.pty/v1"
+                    and document.get("pane_id") == action["pane_id"]
+                    and document.get("result") in ("refused", "unknown")
+                    and isinstance(document.get("reason"), str)):
+                record.update(status=code, result=document)
+                return record
         checked = _answer(record, action, pty_backend.Reply("ok", code, document))
         if checked is not None:
             record.update(result=checked, status=code)
