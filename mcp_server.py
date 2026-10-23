@@ -414,8 +414,9 @@ class _LazyEngine:
 
 class Server:
     def __init__(self, runtime_factory, *, tools="all", desktop_parser="hybrid", windows_host=None,
-                 windows_parser="grammar", pty_controller=None):
+                 windows_parser="grammar", pty_controller=None, discovery_only=False):
         self._pty_controller = pty_controller
+        self._discovery_only = discovery_only
         if tools not in ("all", "actions", "pty", "desktop", "windows"):
             raise ValueError("tools must be all, actions, pty, desktop or windows")
         if windows_parser not in ("grammar", "needle", "hybrid"):
@@ -448,6 +449,9 @@ class Server:
     def call_tool(self, name: str, arguments: dict) -> dict:
         if not isinstance(name, str) or name not in self._tool_names:
             raise ValueError("unknown tool in selected tool set")
+        if self._discovery_only:
+            return _result({"status": 3, "refused": "capability_unavailable",
+                            "note": "Constrained full-menu discovery only; use the separate PTY server."}, True)
         if name in _DESKTOP_NAMES:
             import desktop_cli
             record = desktop_cli.mcp(arguments, engine=_LazyEngine(lambda: self._ensure_engine("desktop")),
@@ -608,9 +612,9 @@ class Server:
 
 
 def serve(runtime_factory, stdin=sys.stdin, stdout=sys.stdout, *, tools="all", desktop_parser="hybrid",
-          windows_host=None, windows_parser="grammar", pty_controller=None) -> int:
+          windows_host=None, windows_parser="grammar", pty_controller=None, discovery_only=False) -> int:
     server = Server(runtime_factory, tools=tools, desktop_parser=desktop_parser, windows_host=windows_host,
-                    windows_parser=windows_parser, pty_controller=pty_controller)
+                    windows_parser=windows_parser, pty_controller=pty_controller, discovery_only=discovery_only)
     try:
         for line in stdin:
             if not line.strip():

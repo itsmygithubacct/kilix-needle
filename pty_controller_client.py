@@ -13,12 +13,13 @@ def main(argv=None):
     if argv and argv[0] == "pty":
         # Existing CLI performs structured/text parsing, validation and rendering.
         return pty_cli.main(["--json", *argv[1:]], controller=RemoteController())
-    if argv == ["mcp", "--tools", "pty"]:
+    if argv in (["mcp", "--tools", "pty"], ["mcp", "--tools", "all"]):
         import mcp_server
         def unavailable(*args):
             raise ValueError("no model runtime is exposed by the PTY server")
-        return mcp_server.serve(unavailable, tools="pty", pty_controller=RemoteController())
-    raise ValueError("use pty ARGS or mcp --tools pty; no unrestricted tools")
+        return mcp_server.serve(unavailable, tools=argv[2], pty_controller=RemoteController(),
+                                discovery_only=argv[2] == "all")
+    raise ValueError("use pty ARGS or mcp --tools pty|all; all is discovery-only")
 
 
 if __name__ == "__main__":

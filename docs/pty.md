@@ -468,3 +468,11 @@ a dispatch-only proxy in Python. There is no issuance argument in MCP or CLI.
 The endpoint still checks the original user selection independently of parsed
 actor arguments. Typed read access is limited to the supervisor's admitted read
 verbs. Ordinary CLI/MCP defaults retain their authority-required behavior.
+
+For the explicitly changed R6-controlled pair, `kilix-needle mcp --tools all`
+uses the actual full-menu stdio server in discovery-only mode: every advertised
+tool call refuses before a backend is invoked. Run a separate `--tools pty`
+server for authorized PTY operations. The mounted PTY-GUIDANCE.txt notice states
+this limitation. This does not restore historical full host-control capabilities.
+The discovery-only switch is a Python dependency of the constrained client;
+ordinary MCP server defaults are unchanged.
