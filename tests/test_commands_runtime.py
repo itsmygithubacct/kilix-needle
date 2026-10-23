@@ -1,14 +1,40 @@
 import hashlib
+import json
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
 import asset
-from commands_runtime import CommandModelError, NativeClient, Runtime
+from commands_runtime import CommandModelError, NativeClient, Runtime, inspect_bundle
 
 
 class NativeProtocolTests(unittest.TestCase):
+    def test_explicit_manifest_selects_bundle_without_release_selection(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            chosen = {'schema': 'kilix.commands.model/v1', 'model_member': 'model.gguf',
+                      'files': {name: {'sha256': 'a'*64, 'bytes': 7}
+                                for name in ('model.gguf', 'runtime/llama-server')}}
+            manifest = root/'candidate.json'
+            manifest.write_text(json.dumps(chosen))
+            with patch('commands_runtime.ROOT', root/'no-release-selection'), \
+                    patch('commands_runtime.asset._installed_spec') as installed:
+                self.assertEqual(inspect_bundle(root, manifest=manifest), (chosen, root))
+                installed.assert_not_called()
+
+    def test_explicit_manifest_needs_bundle_and_never_falls_back(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = root/'candidate.json'
+            for contents, bundle in (('{}', root), ('[]', root), ('x'*65537, root), ('{}', None)):
+                with self.subTest(bundle=bundle, size=len(contents)):
+                    manifest.write_text(contents)
+                    with patch('commands_runtime.subprocess.Popen') as spawn, \
+                            self.assertRaises(CommandModelError):
+                        Runtime(bundle, manifest=manifest)
+                    spawn.assert_not_called()
+
     def test_native_completion_has_no_grammar_and_preserves_empty_list(self):
         client = NativeClient('http://127.0.0.1:1')
         client.prompt_tokens = Mock(return_value=[1, 2])

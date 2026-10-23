@@ -1,7 +1,8 @@
 """Lazy, caller-owned providers for the shared command policy.
 
 Neither constructing this collection nor using the grammar starts a model.
-Needle3 requires an explicit verified candidate; LFM2 requires qualified pins.
+Needle3 requires an explicit verified candidate; LFM2 uses release pins or an
+explicit local artifact manifest. Both paths verify every loaded asset.
 """
 from contextlib import ExitStack
 import time
@@ -25,11 +26,12 @@ class Needle3:
 
 
 class Providers:
-    def __init__(self, backend, *, candidate=None, bundle=None, root=None):
+    def __init__(self, backend, *, candidate=None, bundle=None, root=None, manifest=None):
         if backend not in ('grammar', 'needle3', 'lfm2'):
             raise ValueError('unknown command backend')
         self.backend = backend
         self.candidate, self.bundle, self.root = candidate, bundle, root
+        self.manifest = manifest
         self.resources = ExitStack()
         self.runtime = None
         self.closed = False
@@ -49,7 +51,8 @@ class Providers:
                     self.runtime = Needle3(runtime)
                 else:
                     import commands_runtime
-                    self.runtime = self.resources.enter_context(commands_runtime.Runtime(self.bundle, self.root))
+                    self.runtime = self.resources.enter_context(commands_runtime.Runtime(
+                        self.bundle, self.root, manifest=self.manifest))
             except BaseException:
                 self.close()
                 raise

@@ -331,7 +331,7 @@ def cli_jobs(args, *, interactive: bool, engines: dict | None = None) -> tuple:
         import commands_models
         providers = stack.enter_context(commands_models.Providers(
             backend, candidate=args.commands_candidate, bundle=args.commands_bundle,
-            root=getattr(args, 'root', None)))
+            root=getattr(args, 'root', None), manifest=getattr(args, 'commands_manifest', None)))
         commands = commands_ask.Session(
             backend, provider=providers.get, cwd=os.getcwd(),
             model_only=args.commands_model_only, operation_id=args.operation_id)
@@ -409,6 +409,7 @@ def main(argv=None) -> int:
                         help='use the shared command contract; other jobs keep deterministic parsing')
     parser.add_argument('--commands-candidate', help='verified local Needle3 candidate manifest')
     parser.add_argument('--commands-bundle', help='local LFM2 bundle matching the selected release pins')
+    parser.add_argument('--commands-manifest', help='explicit LFM2 artifact manifest for a local bundle')
     parser.add_argument('--commands-model-only', action='store_true',
                         help='measure model proposals without the command grammar fast path')
     parser.add_argument('--operation-id', help='reuse an incomplete command operation without replaying actions')
@@ -416,7 +417,7 @@ def main(argv=None) -> int:
     request = " ".join(args.request).strip()
     if not request:
         parser.error("give a request")
-    if not args.commands_backend and (args.commands_candidate or args.commands_bundle
+    if not args.commands_backend and (args.commands_candidate or args.commands_bundle or args.commands_manifest
                                      or args.commands_model_only or args.operation_id is not None):
         parser.error('command options require --commands-backend')
     if args.commands_backend and args.commands_backend not in ('grammar', 'needle3', 'lfm2'):
@@ -427,6 +428,8 @@ def main(argv=None) -> int:
         parser.error('--commands-candidate requires --commands-backend needle3')
     if args.commands_bundle and args.commands_backend != 'lfm2':
         parser.error('--commands-bundle requires --commands-backend lfm2')
+    if args.commands_manifest and (args.commands_backend != 'lfm2' or not args.commands_bundle):
+        parser.error('--commands-manifest requires --commands-backend lfm2 and --commands-bundle')
     if args.explain:
         try:
             print(explain(request))

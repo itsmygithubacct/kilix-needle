@@ -58,10 +58,10 @@ class ProviderLifecycle(unittest.TestCase):
         runtime.__exit__ = Mock(return_value=False)
         with patch.object(commands_runtime, 'Runtime', return_value=runtime) as factory:
             with self.assertRaisesRegex(RuntimeError, 'caller failed'):
-                with commands_models.Providers('lfm2', bundle='/fixture') as providers:
+                with commands_models.Providers('lfm2', bundle='/fixture', manifest='/fixture/model.json') as providers:
                     self.assertIs(providers.get(), providers.get())
                     raise RuntimeError('caller failed')
-        factory.assert_called_once_with('/fixture', None)
+        factory.assert_called_once_with('/fixture', None, manifest='/fixture/model.json')
         runtime.__exit__.assert_called_once()
 
 

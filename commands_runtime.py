@@ -107,9 +107,12 @@ class NativeClient:
                 'timings':raw.get('timings'),'tokens':output}
 
 
-def selection():
+def selection(manifest=None):
     try:
-        value=json.loads((ROOT/'commands-model.json').read_text())
+        path=ROOT/'commands-model.json' if manifest is None else Path(manifest)
+        if path.stat().st_size>65536:
+            raise ValueError('command model manifest is too large')
+        value=json.loads(path.read_text())
     except (OSError,ValueError) as exc:
         raise CommandModelError('command model selection is unavailable') from exc
     if (not isinstance(value,dict) or value.get('schema')!='kilix.commands.model/v1'
@@ -132,9 +135,11 @@ def require_platform():
         raise CommandModelError('the command runtime requires x86-64 Linux Python with memfd_create')
 
 
-def inspect_bundle(bundle=None,root=None):
+def inspect_bundle(bundle=None,root=None,*,manifest=None):
     require_platform()
-    chosen=selection()
+    if manifest is not None and bundle is None:
+        raise CommandModelError('an explicit command manifest needs a local bundle')
+    chosen=selection(manifest)
     if bundle is None:
         spec,destination=asset._installed_spec(ASSET_ID,root)
         pinned={item.path:{'sha256':item.sha256,'bytes':item.bytes} for item in spec.files}
@@ -149,10 +154,10 @@ def inspect_bundle(bundle=None,root=None):
 
 class Runtime(NativeClient):
     """One private authenticated localhost server; all files are verified first."""
-    def __init__(self,bundle=None,root=None):
+    def __init__(self,bundle=None,root=None,*,manifest=None):
         self.resources=ExitStack();self.process=None
         try:
-            chosen,path=inspect_bundle(bundle,root)
+            chosen,path=inspect_bundle(bundle,root,manifest=manifest)
             temporary=Path(self.resources.enter_context(tempfile.TemporaryDirectory(prefix='kilix-lfm2-')))
             self.log=self.resources.enter_context((temporary/'server.log').open('w+b'))
             self.images={}

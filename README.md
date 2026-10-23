@@ -169,7 +169,11 @@ Without this option or setting, the existing Ask path is unchanged.
 
 Needle3 takes an explicit verified manifest with `--commands-candidate`.
 LFM2 uses the qualified release selection and Content bundle; an explicit local
-bundle can be supplied with `--commands-bundle`. Missing or mismatched assets
+bundle can be supplied with `--commands-bundle`. To evaluate another local
+candidate, pass its artifact manifest with `--commands-manifest` together with
+`--commands-bundle`. That manifest selects the model and native runtime files;
+their recorded sizes and hashes are verified before loading. Missing or
+mismatched assets
 fail without substituting a different model. `--commands-model-only` bypasses
 the grammar fast path for evaluation; the same validation and host checks
 still apply. A model proposal alone cannot authorize an action.

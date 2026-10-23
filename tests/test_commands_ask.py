@@ -101,6 +101,23 @@ class AskCommands(unittest.TestCase):
         self.assertEqual(result['route']['job'], 'panes')
         run.assert_not_called()
 
+    def test_cli_jobs_pass_explicit_manifest_into_forced_lfm_provider(self):
+        args = argparse.Namespace(commands_backend='lfm2', commands_candidate=None,
+                                  commands_bundle='/fixture/bundle', commands_manifest='/fixture/model.json',
+                                  commands_model_only=True, operation_id=None, agent=True, root=None)
+        runtime = Mock()
+        runtime.__enter__ = Mock(return_value=runtime)
+        runtime.__exit__ = Mock(return_value=False)
+        runtime.decide.return_value = {'calls': []}
+        with patch('commands_runtime.Runtime', return_value=runtime) as factory:
+            jobs, stack = ask.cli_jobs(args, interactive=False)
+            with stack:
+                result = jobs.commands.run('No action is requested.', dry_run=True)
+        self.assertEqual(result['interpretation'], 'lfm2')
+        self.assertEqual(result['items'], [])
+        factory.assert_called_once_with('/fixture/bundle', None, manifest='/fixture/model.json')
+        runtime.__exit__.assert_called_once()
+
     def test_forced_job_cannot_bypass_common_validation_or_run_a_partial_batch(self):
         jobs = self.jobs(commands_ask.Session())
         for text in ('start codex with model gpt-other',
@@ -119,7 +136,11 @@ class AskCommands(unittest.TestCase):
         for options in (['--commands-backend', 'grammar', '--commands-model-only'],
                         ['--operation-id', ''],
                         ['--commands-backend', 'lfm2', '--commands-candidate', 'candidate.json'],
-                        ['--commands-backend', 'needle3', '--commands-bundle', '/fixture']):
+                        ['--commands-backend', 'needle3', '--commands-bundle', '/fixture'],
+                        ['--commands-manifest', 'model.json'],
+                        ['--commands-backend', 'lfm2', '--commands-manifest', 'model.json'],
+                        ['--commands-backend', 'needle3', '--commands-bundle', '/fixture',
+                         '--commands-manifest', 'model.json']):
             with self.subTest(options=options), patch.object(ask, 'cli_jobs') as jobs, \
                     redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as stopped:
                 ask.main([*options, 'open calculator'])
