@@ -48,6 +48,12 @@ def argv_for(action: dict, step: str = "run") -> list[str]:
     if "timeout_seconds" in action:
         head += ["--timeout", pty_job.timeout_arg(action["timeout_seconds"])]
     operation = action["operation"]
+    if operation in ("resolve", "end"):
+        verb = "resolve" if step == "resolve" else operation
+        args = [verb, "--selector-json", json.dumps(action["selector"], ensure_ascii=True, separators=(",", ":")), "--json"]
+        if verb == "end":
+            args += ["--operation-id", action["operation_id"], "--yes"]
+        return head + args
     bounds = []
     if "max_lines" in action:
         bounds = ["--lines", str(action["max_lines"])]
@@ -91,20 +97,41 @@ def call(argv: list[str], *, wall: float | None = None) -> Reply:
         return Reply("unavailable", error=f"kilix could not be started: {exc.strerror or exc}")
     try:
         out, err = process.communicate(timeout=wall)
-    except subprocess.TimeoutExpired:
-        # The group is the one process this call started; nothing else is signalled.
+    except BaseException as error:
+        # Keep an exited leader unreaped until after signaling its owned group.
+        # A reaped numeric group ID is no longer an ownership capability.
+        owned = process.returncode is None
+        if owned:
+            try:
+                os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+            except OSError:
+                owned = False
+        if owned:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except OSError:
+                pass
         try:
-            os.killpg(process.pid, signal.SIGKILL)
-        except OSError:
-            pass
-        process.communicate()
-        return Reply("timeout", error=f"kilix pty did not return within {wall:g} seconds")
+            process.communicate(timeout=1)
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            for stream in (process.stdout, process.stderr):
+                if stream is not None:
+                    stream.close()
+            try:
+                process.wait(timeout=1)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+        if isinstance(error, subprocess.TimeoutExpired):
+            return Reply("timeout", error=f"kilix pty did not return within {wall:g} seconds")
+        raise
     stderr = err.decode("utf-8", "replace")
     document = None
-    if 0 < len(out) <= MAX_OUTPUT:
+    selector_call = "--selector-json" in argv
+    limit = 65536 if selector_call else MAX_OUTPUT
+    if 0 < len(out) <= limit:
         try:
-            parsed = json.loads(out.decode("utf-8"))
-        except (ValueError, UnicodeError):
+            parsed = json.loads(out.decode("utf-8"), object_pairs_hook=_unique_object if selector_call else None)
+        except (ValueError, UnicodeError, RecursionError):
             parsed = None
         document = parsed if isinstance(parsed, dict) else None
     if document is None:
@@ -112,8 +139,9 @@ def call(argv: list[str], *, wall: float | None = None) -> Reply:
             return Reply("too_old", process.returncode,
                          error="this kilix has no `kilix pty list|status|observe|kill` (it only opens "
                                "the session manager); update Kilix to a version with `kilix pty --json`")
-        if len(out) > MAX_OUTPUT:
-            return Reply("failed", process.returncode, error="kilix pty wrote more than 4 MiB")
+        if len(out) > limit:
+            return Reply("failed", process.returncode, error="kilix pty wrote more than 64 KiB" if selector_call
+                         else "kilix pty wrote more than 4 MiB")
         return Reply("failed", process.returncode,
                      error=_line(stderr) or f"kilix pty exited {process.returncode} with no JSON document")
     return Reply("ok", process.returncode, document)
@@ -123,8 +151,24 @@ def _integer(value) -> bool:
     return type(value) is int
 
 
-def checked(action: dict, document: dict, returncode: int, step: str = "run") -> dict:
+def _unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate selector receipt field")
+        result[key] = value
+    return result
+
+
+def checked_selector(action, document, returncode, step, expected_caller=None):
+    import pty_selector_receipt
+    return pty_selector_receipt.checked(action, document, returncode, step, pty_job.literal_selector, expected_caller)
+
+
+def checked(action: dict, document: dict, returncode: int, step: str = "run", expected_caller=None) -> dict:
     """The document must be the contract's for this operation, or ValueError."""
+    if action["operation"] in ("resolve", "end"):
+        return checked_selector(action, document, returncode, step, expected_caller)
     if document.get("schema") != SCHEMA:
         raise ValueError(f"unexpected schema {str(document.get('schema'))[:40]!r}, not {SCHEMA}")
     if not isinstance(document.get("runtime"), str):
