@@ -1,0 +1,152 @@
+[
+  {
+    "name": "start_claude",
+    "description": "Start a new Claude coding session. Default: current directory, new tab.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "directory": {
+          "type": "string",
+          "description": "Working directory exactly as stated. Omit for here or current directory."
+        },
+        "place": {
+          "type": "string",
+          "description": "New tab by default, or a split in the named direction.",
+          "enum": [
+            "tab",
+            "right",
+            "left",
+            "down",
+            "up"
+          ]
+        },
+        "task": {
+          "type": "string",
+          "description": "Initial task text, copied exactly; omit unless requested."
+        },
+        "model": {
+          "type": "string",
+          "description": "Model name exactly as stated; omit unless requested."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "start_codex",
+    "description": "Start a new Codex coding session. Default: current directory, new tab.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "directory": {
+          "type": "string",
+          "description": "Working directory exactly as stated. Omit for here or current directory."
+        },
+        "place": {
+          "type": "string",
+          "description": "New tab by default, or a split in the named direction.",
+          "enum": [
+            "tab",
+            "right",
+            "left",
+            "down",
+            "up"
+          ]
+        },
+        "task": {
+          "type": "string",
+          "description": "Initial task text, copied exactly; omit unless requested."
+        },
+        "model": {
+          "type": "string",
+          "description": "Model name exactly as stated; omit unless requested."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "wait_for_agent",
+    "description": "Wait for an existing agent to finish its current turn. Does not start an agent.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "agent": {
+          "type": "string",
+          "description": "Existing agent client.",
+          "enum": [
+            "claude",
+            "codex"
+          ]
+        },
+        "directory": {
+          "type": "string",
+          "description": "Directory identifying the existing session. Omit for here."
+        }
+      },
+      "required": [
+        "agent"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "message_agent",
+    "description": "Send exact text to an existing agent. Does not start an agent.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "agent": {
+          "type": "string",
+          "description": "Existing agent client.",
+          "enum": [
+            "claude",
+            "codex"
+          ]
+        },
+        "directory": {
+          "type": "string",
+          "description": "Directory identifying the existing session. Omit for here."
+        },
+        "text": {
+          "type": "string",
+          "description": "Message text, copied exactly."
+        }
+      },
+      "required": [
+        "agent",
+        "text"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "open_app",
+    "description": "Open a known application. A file can be opened in the PDF viewer.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "app": {
+          "type": "string",
+          "description": "Application identifier.",
+          "enum": [
+            "kilix-pdf",
+            "kilix-calculator",
+            "kilix-notepad",
+            "kilix-file"
+          ]
+        },
+        "file_path": {
+          "type": "string",
+          "description": "Explicit PDF file path, copied exactly; omit when no file is named."
+        }
+      },
+      "required": [
+        "app"
+      ],
+      "additionalProperties": false
+    }
+  }
+]

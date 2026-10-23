@@ -149,6 +149,54 @@ our own eval sets and agent-written rows. `router_train.py` retrains them
 deterministically, and the test suite checks the retrained weights against the
 checked-in ones. Current gate sets are never read. See `router-model/README.md`.
 
+### Shared command backends
+
+Ask uses LFM2 Kilix Commands by default, with a common command grammar and
+validation path for starting coding
+sessions, waiting for or messaging a named existing session, and opening the
+calculator, notepad, file manager or PDF viewer:
+
+```sh
+kilix-needle install --commands
+kilix-needle ask --plan "open calculator then open notepad"
+kilix-needle ask --commands-backend grammar --plan "open calculator then open notepad"
+kilix-needle ask --commands-backend grammar --yes --operation-id open-tools "open calculator then open notepad"
+```
+
+`grammar` loads no generative model. `needle3` and `lfm2` retain that grammar as
+the fast path and validate every model proposal against the same complete
+request. All three modes keep the other Ask jobs' deterministic parsing; their
+older generative fallbacks are disabled. The routing classifier remains in use.
+Set `KILIX_ASK_COMMANDS_BACKEND` to select a mode for the `kilix ask` launcher.
+Without an override, Ask selects LFM2. An empty setting also uses that default.
+The grammar fast path works without loading the model. Model requests need the
+installed, licensed bundle; `install --commands` shows its full terms before
+installation. The selected CPU runtime requires x86-64 Linux.
+
+Needle3 takes an explicit verified manifest with `--commands-candidate`.
+LFM2 uses the pinned release selection and Content bundle; an explicit local
+bundle can be supplied with `--commands-bundle`. To evaluate another local
+candidate, pass its artifact manifest with `--commands-manifest` together with
+`--commands-bundle`. That manifest selects the model and native runtime files;
+their recorded sizes and hashes are verified before loading. Missing or
+mismatched assets
+fail without substituting a different model. `--commands-model-only` bypasses
+the grammar fast path for evaluation; the same validation and host checks
+still apply. A model proposal alone cannot authorize an action.
+
+Double-quoted task and message arguments use JSON escaping and retain their
+internal spacing and case. For example, `start codex with task "keep A  B"`
+sends `keep A  B`. Text after a task or message colon remains literal, including
+any quotes or polite words it contains. Extra instructions outside a quoted
+argument are refused when the complete request cannot be read.
+
+At most four ordered command actions are admitted together. Host checks run
+for the complete batch before it starts, and pending readiness pauses later
+actions. Planning runs nothing; acting requires confirmation or `--yes`.
+Reuse the returned operation ID to check an incomplete operation without
+launching another copy or sending a message twice. A submitted message is
+reported as submitted; it does not imply the recipient completed the task.
+
 ## File search
 
 `kilix-needle files` adds scoped, read-only filename and text search, large/recent

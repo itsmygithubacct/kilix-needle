@@ -930,8 +930,8 @@ def main(argv: list[str] | None = None) -> int:
         return system_model.main(argv[1:])
     if argv[:1] == ["install"]:
         parser = argparse.ArgumentParser(prog="kilix-needle install",
-                                         description="Accept the Needle 2 licence and install "
-                                                     "the engine (the needle2 content asset).")
+                                         description="Install a pinned model after its licence agreement. "
+                                                     "Use --commands for the default Ask model.")
         parser.add_argument("--from", dest="supplied", metavar="DIR",
                             help="read the files from DIR instead of downloading them")
         parser.add_argument("--tuning", action="store_true",
@@ -941,10 +941,15 @@ def main(argv: list[str] | None = None) -> int:
         parser.add_argument("--runtime", action="store_true",
                             help="also install libneedle.so (needle2-runtime), which runs a "
                                  "tuned model, with its own licence screen")
+        parser.add_argument("--commands", action="store_true",
+                            help="install the default LFM2 Ask command model and CPU runtime")
         parser.add_argument("--root")
         args = parser.parse_args(argv[1:])
-        wanted = [asset.ASSET_ID] + (list(asset.TUNING_ASSETS) if args.tuning
-                                     else [asset.RUNTIME_ID] if args.runtime else [])
+        if args.commands and (args.runtime or args.tuning):
+            parser.error('--commands cannot be combined with --runtime or --tuning')
+        wanted = (["lfm2-kilix-commands"] if args.commands else
+                  [asset.ASSET_ID] + (list(asset.TUNING_ASSETS) if args.tuning
+                                     else [asset.RUNTIME_ID] if args.runtime else []))
         for asset_id in wanted:
             # An asset already accepted and installed is not asked about again:
             # `install --runtime` after `install` re-showed the needle2 screen,

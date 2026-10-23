@@ -72,35 +72,41 @@ def load_verified(path: str | os.PathLike, sha256: str, size: int) -> EngineImag
         source = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK)
     except OSError as error:
         raise AssetError(f"cannot open the engine {os.fspath(path)!r}: {error.strerror}") from error
+    image = -1
     try:
         info = os.fstat(source)
         if not stat.S_ISREG(info.st_mode):
             raise AssetError("the engine is not a regular file")
         if info.st_size != size:
             raise AssetError(f"the engine is {info.st_size} bytes, expected {size}")
-        chunks, total = [], 0
+        # Keep Python memory bounded while copying large model files into the
+        # same verified, sealed image used for every executable/runtime asset.
+        image = os.memfd_create("kilix-needle-engine", os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING)
+        total = 0
+        checksum = hashlib.sha256()
         while chunk := os.read(source, 1 << 20):
             total += len(chunk)
             if total > size:
                 raise AssetError("the engine grew while it was read")
-            chunks.append(chunk)
-    finally:
-        os.close(source)
-    data = b"".join(chunks)
-    digest = hashlib.sha256(data).hexdigest()
-    if len(data) != size or digest != sha256:
-        raise AssetError("the engine does not match its pinned SHA-256; it will not be run")
-    image = os.memfd_create("kilix-needle-engine", os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING)
-    try:
-        view = memoryview(data)
-        while view:
-            view = view[os.write(image, view):]
+            checksum.update(chunk)
+            view = memoryview(chunk)
+            while view:
+                written = os.write(image, view)
+                if written <= 0:
+                    raise AssetError("the verified image could not be written")
+                view = view[written:]
+        digest = checksum.hexdigest()
+        if total != size or digest != sha256:
+            raise AssetError("the engine does not match its pinned SHA-256; it will not be run")
         fcntl.fcntl(image, fcntl.F_ADD_SEALS, fcntl.F_SEAL_WRITE | fcntl.F_SEAL_GROW
                     | fcntl.F_SEAL_SHRINK | fcntl.F_SEAL_SEAL)
         os.fchmod(image, 0o500)
-    except OSError:
-        os.close(image)
+    except BaseException:
+        if image >= 0:
+            os.close(image)
         raise
+    finally:
+        os.close(source)
     return EngineImage(image, digest)
 
 
@@ -150,7 +156,8 @@ def _installed_spec(asset_id: str, root: str | None):
     content, first_use, lic = _content()
     # `kilix models` is not a command on every Kilix; name the one that is here.
     install_hint = "install it with: " + {ASSET_ID: "kilix-needle install",
-                                          RUNTIME_ID: "kilix-needle install --runtime"}.get(
+                                          RUNTIME_ID: "kilix-needle install --runtime",
+                                          "lfm2-kilix-commands": "kilix-needle install --commands"}.get(
         asset_id, "kilix-needle install --tuning")
     try:
         catalog = content.verified_packaged_catalog()
