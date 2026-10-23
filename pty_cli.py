@@ -269,7 +269,15 @@ def _run(request, held, *, dry_run=False, assume_yes=False, agent=False, confirm
         return _kill(record, action, dry_run=dry_run, assume_yes=assume_yes, agent=agent,
                      confirm=confirm, call=call, env=env)
     if controller is not None and not dry_run:
-        if operation == "resolve":
+        if operation in ("marker", "foreground"):
+            response = controller.read_cli(pty_backend.argv_for(action)[1:])
+            code = response["code"]
+            try:
+                document = json.loads(response["stdout"])
+            except (KeyError, TypeError, ValueError):
+                return _refuse(record, 3, "semantic_read_unavailable",
+                               "The bounded semantic read returned no valid JSON", pty_job.HINTS["list"])
+        elif operation == "resolve":
             request = {"schema": "kilix.pty.request/v2", "verb": "resolve", "selector": action["selector"]}
             if "timeout_seconds" in action:
                 request["timeout_seconds"] = action["timeout_seconds"]

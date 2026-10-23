@@ -44,6 +44,24 @@ kilix-needle pty --dry-run 'end session 3fa9c2d41b7e6a05'
 kilix-needle pty --yes 'end session 3fa9c2d41b7e6a05'
 ```
 
+## Semantic reads
+
+`which session last showed raw marker TOKEN` compares occurrences of printable
+ASCII bytes across a complete live-session census. The response labels its
+criterion `broker_observed_output`: it does not establish the order in which
+applications printed or what the terminal rendered. Missing timing evidence,
+an unstable census, a tie, or more than eight candidates returns `unknown` with
+no winner. The structured form is
+`{"operation":"marker","marker":"TOKEN"}`.
+
+`show foreground processes of session ID` returns a bounded process sample.
+It keeps `status.command` as the launch command and reports child and foreground
+argv separately. A pipeline can have several foreground processes, so its
+singular command is null. The structured form is
+`{"operation":"foreground","id":"ID"}`. Both operations are read-only,
+available through `kilix_pty_read` in the opt-in PTY MCP menu, and return
+`kilix.pty.semantic/v1` documents.
+
 ## Additive selector forms
 
 Use `resolve selector JSON` for preview and `end selector JSON operation KEY`
@@ -410,9 +428,9 @@ includes the name, description, input schema and annotations.
 
 | Tool | Description bytes | Compact tool bytes |
 | --- | ---: | ---: |
-| `kilix_pty_read` | 753 | 1949 |
-| `kilix_pty_plan` | 734 | 1943 |
-| `kilix_pty_act` | 779 | 2016 |
+| `kilix_pty_read` | 754 | 2029 |
+| `kilix_pty_plan` | 694 | 1982 |
+| `kilix_pty_act` | 727 | 2043 |
 
 **Caller identity.** The server's environment must carry the caller's
 `KITTY_PTY_BROKER_SESSION`. A server started by Claude Code inside a Kilix pane

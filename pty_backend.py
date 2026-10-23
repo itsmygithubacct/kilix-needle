@@ -69,6 +69,10 @@ def argv_for(action: dict, step: str = "run") -> list[str]:
         return head + ["status", action["id"], "--json"]
     if operation == "observe":
         return head + ["observe", action["id"], "--once", "--text", "--json"] + bounds
+    if operation == "marker":
+        return head + ["marker", action["marker"], "--json"]
+    if operation == "foreground":
+        return head + ["foreground", action["id"], "--json"]
     if operation == "journal":
         return head + ["journals", "show", action["id"], "--text", "--json"] + bounds
     if operation == "kill":
@@ -191,6 +195,32 @@ def checked(action: dict, document: dict, returncode: int, step: str = "run", ex
     """The document must be the contract's for this operation, or ValueError."""
     if action["operation"] in ("resolve", "end"):
         return checked_selector(action, document, returncode, step, expected_caller)
+    if action["operation"] in ("marker", "foreground"):
+        if (returncode != 0 or document.get("schema") != "kilix.pty.semantic/v1"
+                or document.get("operation") != {"marker": "marker_occurrences",
+                                                  "foreground": "foreground_process_sample"}[action["operation"]]):
+            raise ValueError("semantic read schema or exit status mismatch")
+        if action["operation"] == "marker":
+            ids = document.get("candidate_ids")
+            rows = document.get("sessions")
+            result = document.get("result")
+            if (document.get("marker") != action["marker"] or
+                    document.get("match_mode") != "raw_pty_bytes" or
+                    document.get("criterion") != "broker_observed_output" or
+                    result not in ("unique", "no_match", "unknown") or
+                    not isinstance(rows, list) or len(rows) > 8 or
+                    (ids is not None and (not isinstance(ids, list) or len(ids) > 8 or
+                     any(not isinstance(i, str) for i in ids))) or
+                    (result == "unique" and (not isinstance(ids, list) or
+                     document.get("winner_session_id") not in ids)) or
+                    (result != "unique" and document.get("winner_session_id") is not None)):
+                raise ValueError("marker read is not a bounded matching observation")
+        elif (document.get("id") != action["id"] or
+              document.get("state") not in ("complete", "unknown") or
+              not isinstance(document.get("foreground_processes"), list) or
+              len(document["foreground_processes"]) > 32):
+            raise ValueError("foreground read is not a bounded matching observation")
+        return document
     if document.get("schema") != SCHEMA:
         raise ValueError(f"unexpected schema {str(document.get('schema'))[:40]!r}, not {SCHEMA}")
     if not isinstance(document.get("runtime"), str):

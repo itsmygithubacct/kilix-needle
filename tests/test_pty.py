@@ -1204,12 +1204,14 @@ elif "kill" in sys.argv:
         self.assertTrue(all(t["inputSchema"]["additionalProperties"] is False for t in mcp_server.PTY_TOOL_LIST))
 
     def test_request_schemas_preserve_types_bounds_and_operations(self):
-        reads = ["list", "journals", "status", "pane", "observe", "journal", "resolve"]
+        reads = ["list", "journals", "status", "pane", "observe", "journal",
+                 "marker", "foreground", "resolve"]
         for tool in mcp_server.PTY_TOOL_LIST:
             with self.subTest(tool=tool["name"]):
                 properties = {
                     "operation": {"enum": reads if tool["name"] == "kilix_pty_read" else reads + ["kill", "end"]},
                     "id": {"type": "string", "maxLength": 64},
+                    "marker": {"type": "string", "minLength": 1, "maxLength": 128},
                     "selector": {"type": "object", "properties": {
                         "id": {"type": "string", "minLength": 1, "maxLength": 64},
                         "id_prefix": {"type": "string", "minLength": 1, "maxLength": 64},
