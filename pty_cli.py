@@ -268,6 +268,26 @@ def _run(request, held, *, dry_run=False, assume_yes=False, agent=False, confirm
     if operation == "kill":
         return _kill(record, action, dry_run=dry_run, assume_yes=assume_yes, agent=agent,
                      confirm=confirm, call=call, env=env)
+    if controller is not None and not dry_run:
+        if operation == "resolve":
+            request = {"schema": "kilix.pty.request/v2", "verb": "resolve", "selector": action["selector"]}
+            if "timeout_seconds" in action:
+                request["timeout_seconds"] = action["timeout_seconds"]
+            code, document = controller.dispatch(request)
+        else:
+            request = {"schema": "kilix.pty.request/v1",
+                       "verb": "journals" if operation == "journal" else operation,
+                       "args": {k: v for k, v in action.items() if k in
+                                ("id", "pane_id", "max_lines", "max_bytes")}}
+            if operation in ("observe", "journal"):
+                request["args"]["text"] = True
+            if "timeout_seconds" in action:
+                request["timeout_seconds"] = action["timeout_seconds"]
+            code, document = controller.read(request)
+        checked = _answer(record, action, pty_backend.Reply("ok", code, document))
+        if checked is not None:
+            record.update(result=checked, status=code)
+        return record
     argv = pty_backend.argv_for(action)
     if dry_run:
         record.update(status=0, plan={"would": "run", "argv": argv})
@@ -304,7 +324,7 @@ def mcp(arguments, *, plan=False, read=False, controller=None) -> dict:
                agent=True, reads_only=read, controller=controller)
 
 
-def main(argv=None) -> int:
+def main(argv=None, *, controller=None) -> int:
     parser = argparse.ArgumentParser(prog="kilix-needle pty", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--dry-run", action="store_true",
@@ -341,7 +361,7 @@ def main(argv=None) -> int:
                 return 2
         record = run(request, dry_run=args.dry_run, assume_yes=args.yes, agent=args.agent,
                      confirm=confirm if sys.stdin.isatty() else None,
-                     timeout_seconds=args.timeout_seconds)
+                     timeout_seconds=args.timeout_seconds, controller=controller)
         print(json.dumps(record, ensure_ascii=True) if args.json else render(record))
         return record["status"]
     except KeyboardInterrupt:

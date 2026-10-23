@@ -1,27 +1,24 @@
 #!/usr/bin/python3
-"""Constrained supervisor PTY adapter; deployed only inside its actor sandbox.
+"""Constrained clients using the real Needle CLI grammar and stdio MCP server.
 
-The injected remote proxy can dispatch but cannot issue user authority. This
-entrypoint is intentionally distinct from the ordinary unrestricted CLI/MCP.
+RemoteController is dispatch-only. This entrypoint never establishes authority.
 """
-import argparse
-import json
 import sys
-
 import pty_cli
 from kilix_pty_agent_client import RemoteController
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("job", choices=["pty"])
-    parser.add_argument("--request-json", required=True)
-    args = parser.parse_args(argv)
-    import json_request
-    request = json_request.loads(args.request_json)
-    record = pty_cli.run(request, agent=True, controller=RemoteController())
-    print(json.dumps(record, ensure_ascii=True, separators=(",", ":")))
-    return record["status"]
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "pty":
+        # Existing CLI performs structured/text parsing, validation and rendering.
+        return pty_cli.main(["--json", *argv[1:]], controller=RemoteController())
+    if argv == ["mcp", "--tools", "pty"]:
+        import mcp_server
+        def unavailable(*args):
+            raise ValueError("no model runtime is exposed by the PTY server")
+        return mcp_server.serve(unavailable, tools="pty", pty_controller=RemoteController())
+    raise ValueError("use pty ARGS or mcp --tools pty; no unrestricted tools")
 
 
 if __name__ == "__main__":

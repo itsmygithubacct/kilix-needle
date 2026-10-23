@@ -43,7 +43,6 @@ import sys
 from engine import EngineError
 from libengine import LibEngineError
 import asset
-import needle_cli
 
 SERVER = {"name": "kilix-needle", "version": "0.1.0"}
 PROTOCOLS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
@@ -415,7 +414,8 @@ class _LazyEngine:
 
 class Server:
     def __init__(self, runtime_factory, *, tools="all", desktop_parser="hybrid", windows_host=None,
-                 windows_parser="grammar"):
+                 windows_parser="grammar", pty_controller=None):
+        self._pty_controller = pty_controller
         if tools not in ("all", "actions", "pty", "desktop", "windows"):
             raise ValueError("tools must be all, actions, pty, desktop or windows")
         if windows_parser not in ("grammar", "needle", "hybrid"):
@@ -460,7 +460,7 @@ class Server:
             return _result(record, record["status"] != 0)
         if name in _PTY_NAMES:
             import pty_cli
-            record = pty_cli.mcp(arguments, plan=name.endswith("_plan"), read=name.endswith("_read"))
+            record = pty_cli.mcp(arguments, plan=name.endswith("_plan"), read=name.endswith("_read"), controller=self._pty_controller)
             return _result(record, record["status"] != 0,
                            arguments.get("request") if isinstance(arguments, dict) else None)
         if name in ("kilix_action_plan", "kilix_action_act", "kilix_action_status"):
@@ -492,6 +492,7 @@ class Server:
                            arguments["request"])
         if name in ("kilix_system_plan", "kilix_system_read"):
             import system_dispatch
+            import needle_cli
             if (not isinstance(arguments, dict) or set(arguments) - {"request", "baseline"}
                     or not isinstance(arguments.get("request"), str)
                     or type(arguments.get("baseline", False)) is not bool):
@@ -520,6 +521,7 @@ class Server:
             return _result(record, record.get("exit_status", 1) != 0)
         if name not in _JOB_OF:
             raise ValueError(f"unknown tool {name!r}")
+        import needle_cli
         job = _JOB_OF[name]
         request = arguments.get("request") if isinstance(arguments, dict) else None
         if not isinstance(request, str):
@@ -553,6 +555,7 @@ class Server:
 
     def _ask(self, arguments, *, act: bool) -> dict:
         import ask
+        import needle_cli
         allowed = {"request", "confirm_risky"} if act else {"request"}
         if not isinstance(arguments, dict) or set(arguments) - allowed \
                 or not isinstance(arguments.get("request"), str):
@@ -605,9 +608,9 @@ class Server:
 
 
 def serve(runtime_factory, stdin=sys.stdin, stdout=sys.stdout, *, tools="all", desktop_parser="hybrid",
-          windows_host=None, windows_parser="grammar") -> int:
+          windows_host=None, windows_parser="grammar", pty_controller=None) -> int:
     server = Server(runtime_factory, tools=tools, desktop_parser=desktop_parser, windows_host=windows_host,
-                    windows_parser=windows_parser)
+                    windows_parser=windows_parser, pty_controller=pty_controller)
     try:
         for line in stdin:
             if not line.strip():

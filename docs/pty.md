@@ -459,3 +459,12 @@ the actual parser to the dispatch socket. This constrained adapter is distinct
 from the stock CLI/MCP and cannot issue authority. See the host
 `docs/pty-supervisor.md` for supported routes, R1 compatibility and admission
 limits. No existing unrestricted same-UID agent shell is retroactively isolated.
+
+
+The constrained supervisor client now passes both text grammar and structured
+requests through the existing `pty_cli.main`. It also exposes the actual newline
+stdio server as `kilix-needle mcp --tools pty`; only the trusted launcher injects
+a dispatch-only proxy in Python. There is no issuance argument in MCP or CLI.
+The endpoint still checks the original user selection independently of parsed
+actor arguments. Typed read access is limited to the supervisor's admitted read
+verbs. Ordinary CLI/MCP defaults retain their authority-required behavior.
