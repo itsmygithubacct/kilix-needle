@@ -431,6 +431,12 @@ class Server:
         self._tools = (list(DESKTOP_TOOL_LIST) if tools == "desktop" else list(WINDOWS_TOOL_LIST) if tools == "windows" else
                        list(PTY_TOOL_LIST) if tools == "pty" else
                        [tool for tool in TOOL_LIST if tools == "all" or tool["name"] in action_names])
+        if tools == "pty" and pty_controller is not None:
+            self._tools = [dict(tool, description=tool["description"].replace(
+                "retry uncertain with the same key.",
+                "reconcile uncertainty with read-only inspection; never automatically retry an action. "
+                "An identical retained-key replay can only recover its recorded outcome; "
+                "it cannot renew authority or authorize another send.")) for tool in self._tools]
         self._tool_names = frozenset(tool["name"] for tool in self._tools)
 
     def _ensure_engine(self, job: str = "panes"):
