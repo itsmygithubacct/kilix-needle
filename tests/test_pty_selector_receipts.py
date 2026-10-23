@@ -118,7 +118,7 @@ class ReceiptSemantics(unittest.TestCase):
         process = mock.Mock(returncode=0, pid=999)
         process.communicate.return_value = (raw.encode(), b"")
         with mock.patch.object(pty_backend, "kilix_executable", return_value="/tmp/unused-fixture-agent"), \
-                mock.patch.object(pty_backend.subprocess, "Popen", return_value=process):
+                mock.patch.object(pty_backend, "_OwnedProcess", return_value=process):
             reply = pty_backend.call(pty_backend.argv_for(action))
         self.assertNotEqual(reply.kind, "ok")
 

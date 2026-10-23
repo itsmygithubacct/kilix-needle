@@ -83,6 +83,40 @@ def _line(text: str) -> str:
     return json.dumps(first[:300], ensure_ascii=True)[1:-1]
 
 
+def _signal_owned_group(process):
+    # An unreaped child pins its PID, and therefore the group ID we created.
+    # Never signal a numeric group after losing that ownership capability.
+    if process.returncode is not None:
+        return
+    try:
+        os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+    except OSError:
+        return
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except OSError:
+        pass
+
+
+class _OwnedProcess(subprocess.Popen):
+    """CPython/POSIX transport that cleans up before subprocess's interrupt reap."""
+
+    def wait(self, timeout=None):
+        # Popen.wait also waits/reaps in its KeyboardInterrupt handler. Let the
+        # pipe transport's handler below see cancellation before that can happen.
+        return self._wait(timeout)
+
+    def _communicate(self, input, endtime, orig_timeout):
+        # CPython communicate catches KeyboardInterrupt outside _communicate and
+        # waits for the leader before re-raising. Signal while the child is still
+        # ours, including when it exited but a descendant keeps a pipe open.
+        try:
+            return super()._communicate(input, endtime, orig_timeout)
+        except KeyboardInterrupt:
+            _signal_owned_group(self)
+            raise
+
+
 def call(argv: list[str], *, wall: float | None = None) -> Reply:
     """Run `kilix ARGV` and return its JSON document, or why there is none."""
     executable = kilix_executable()
@@ -90,27 +124,15 @@ def call(argv: list[str], *, wall: float | None = None) -> Reply:
         return Reply("unavailable", error="kilix was not found; install Kilix or set KILIX_NEEDLE_KILIX")
     wall = wall or (WALL_SECONDS_TIMEOUT if "--timeout" in argv else WALL_SECONDS)
     try:
-        process = subprocess.Popen([executable, *argv], stdin=subprocess.DEVNULL,
-                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                   start_new_session=True)
+        process = _OwnedProcess([executable, *argv], stdin=subprocess.DEVNULL,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                start_new_session=True)
     except OSError as exc:
         return Reply("unavailable", error=f"kilix could not be started: {exc.strerror or exc}")
     try:
         out, err = process.communicate(timeout=wall)
     except BaseException as error:
-        # Keep an exited leader unreaped until after signaling its owned group.
-        # A reaped numeric group ID is no longer an ownership capability.
-        owned = process.returncode is None
-        if owned:
-            try:
-                os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
-            except OSError:
-                owned = False
-        if owned:
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except OSError:
-                pass
+        _signal_owned_group(process)
         try:
             process.communicate(timeout=1)
         except (OSError, ValueError, subprocess.TimeoutExpired):
