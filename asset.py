@@ -151,14 +151,18 @@ def _content():
     return kilix_content, first_use, kilix_license
 
 
+def _install_command(asset_id: str) -> str:
+    # `kilix models` is not a command on every Kilix; name the one that is here.
+    return {ASSET_ID: "kilix-needle install",
+            RUNTIME_ID: "kilix-needle install --runtime",
+            "lfm2-kilix-commands": "kilix-needle install --commands"}.get(
+        asset_id, "kilix-needle install --tuning")
+
+
 def _installed_spec(asset_id: str, root: str | None):
     """The verified catalog spec and install directory of a covered asset."""
     content, first_use, lic = _content()
-    # `kilix models` is not a command on every Kilix; name the one that is here.
-    install_hint = "install it with: " + {ASSET_ID: "kilix-needle install",
-                                          RUNTIME_ID: "kilix-needle install --runtime",
-                                          "lfm2-kilix-commands": "kilix-needle install --commands"}.get(
-        asset_id, "kilix-needle install --tuning")
+    install_hint = "install it with: " + _install_command(asset_id)
     try:
         catalog = content.verified_packaged_catalog()
     except RuntimeError as error:
@@ -309,7 +313,7 @@ def install(root: str | None = None, *, supplied: str | None = None,
     stdout = stdout or sys.stdout
     if not (stdin.isatty() and stdout.isatty()):
         raise AssetError(f"{asset_id} is not installed, and its licence can only be "
-                         f"accepted at a terminal: run `kilix-needle install`")
+                         f"accepted at a terminal: run `{_install_command(asset_id)}`")
     content, first_use, lic = _content()
     try:
         spec = content.verified_packaged_catalog().require_asset(asset_id)

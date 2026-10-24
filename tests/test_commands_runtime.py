@@ -6,10 +6,20 @@ import unittest
 from unittest.mock import Mock, patch
 
 import asset
-from commands_runtime import CommandModelError, NativeClient, Runtime, inspect_bundle
+from commands_runtime import CommandModelError, NativeClient, Runtime, inspect_bundle, selection
 
 
 class NativeProtocolTests(unittest.TestCase):
+    def test_default_selection_matches_every_catalog_member(self):
+        content, _first_use, _license = asset._content()
+        spec = content.verified_packaged_catalog().require_asset('lfm2-kilix-commands')
+        chosen = selection()
+        self.assertEqual(chosen['version'], spec.version)
+        self.assertEqual(chosen['files'], {item.path: {'bytes': item.bytes, 'sha256': item.sha256}
+                                         for item in spec.files})
+        self.assertEqual(chosen['files'][chosen['model_member']]['sha256'],
+                         '96f1eabf0a2b99d0f96f9868ece3fdb284718d1db6e17c9122c6a507419adf65')
+
     def test_explicit_manifest_selects_bundle_without_release_selection(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -27,7 +27,7 @@ from actions import Refusal, normalize
 
 GAMES = ("minesweeper", "solitaire", "doom", "bashed-earth", "kilix-jpak", "kilix-rancher",
          "kilix-pong", "kilix-lights", "super-kilix", "joustix", "chess-bash", "kilix-fishtank",
-         "terminal-lander", "kitty-brokeout", "kilix-land")
+         "terminal-lander", "kitty-brokeout", "kilix-land", "tictactoe-tui", "pleb-tower")
 APPS = ("dosbox", "kilix-file", "kilix-system-center", "kilix-settings-center",
         "kilix-software-center", "kilix-session-center", "kilix-model-store", "kilix-camera-wall",
         "kilix-region-painter", "kilix-voice-studio", "kilix-camera-manager",
@@ -35,7 +35,7 @@ APPS = ("dosbox", "kilix-file", "kilix-system-center", "kilix-settings-center",
         "kilix-chawan", "kilix-rollout-resume", "kilix-character-map", "kilix-notepad",
         "kilix-find-files", "kilix-session-log", "kilix-amp", "kilix-pdf", "kilix-pdf-conversion",
         "kilix-rtsp", "kilix-nvr", "kilix-object-detect", "kilix-tmux-manager", "kilix-graphs",
-        "kilix-techno")
+        "kilix-techno", "kilix-help-llm", "kilix-waydroid")
 HOST_TOOLS = ("launcher", "temps", "memory", "mixer", "transcripts")
 LAUNCHABLE = GAMES + APPS + HOST_TOOLS
 AVAILABILITY = GAMES + ("dosbox",)          # kilix-settings' game switches
@@ -64,6 +64,8 @@ LAUNCH_NAMES = {
     "terminal-lander": ["terminal lander", "lunar lander", "moon lander", "lander"],
     "kitty-brokeout": ["brokeout", "kitty brokeout", "breakout", "brick breaker"],
     "kilix-land": ["kilix land"],
+    "tictactoe-tui": ["tic tac toe", "tic-tac-toe", "noughts and crosses"],
+    "pleb-tower": ["pleb tower"],
     "dosbox": ["dosbox", "dos box", "ms-dos", "msdos", "dos prompt"],
     "kilix-file": ["file browser", "file manager", "files app", "kilix file"],
     "kilix-system-center": ["system center", "system centre", "system overview"],
@@ -98,6 +100,8 @@ LAUNCH_NAMES = {
     "kilix-graphs": ["kilix graphs", "graphs", "graph", "charts"],
     "kilix-techno": ["techno", "music workstation", "sequencer", "drum machine",
                      "sequencer workstation"],
+    "kilix-help-llm": ["help search", "documentation search"],
+    "kilix-waydroid": ["waydroid", "android"],
     "launcher": ["launcher", "app menu", "application menu", "applications menu"],
     "temps": ["temps", "temperatures", "temperature", "temperatures view", "temperature view"],
     "memory": ["memory usage", "ram usage", "memory", "ram"],
