@@ -44,6 +44,24 @@ kilix-needle pty --dry-run 'end session 3fa9c2d41b7e6a05'
 kilix-needle pty --yes 'end session 3fa9c2d41b7e6a05'
 ```
 
+## Semantic reads
+
+`which session last showed raw marker TOKEN` compares occurrences of printable
+ASCII bytes across a complete live-session census. The response labels its
+criterion `broker_observed_output`: it does not establish the order in which
+applications printed or what the terminal rendered. Missing timing evidence,
+an unstable census, a tie, or more than eight candidates returns `unknown` with
+no winner. The structured form is
+`{"operation":"marker","marker":"TOKEN"}`.
+
+`show foreground processes of session ID` returns a bounded process sample.
+It keeps `status.command` as the launch command and reports child and foreground
+argv separately. A pipeline can have several foreground processes, so its
+singular command is null. The structured form is
+`{"operation":"foreground","id":"ID"}`. Both operations are read-only,
+available through `kilix_pty_read` in the opt-in PTY MCP menu, and return
+`kilix.pty.semantic/v1` documents.
+
 ## Additive selector forms
 
 Use `resolve selector JSON` for preview and `end selector JSON operation KEY`
@@ -386,7 +404,7 @@ and 64 KiB, the newest).
 | --- | --- |
 | `kilix_pty_read` | the six read forms; refuses `end session` and points to `kilix_pty_act` |
 | `kilix_pty_plan` | any form, without effect: a read prints its `argv`; `end session` resolves the session and prints the plan |
-| `kilix_pty_act` | any form; `end session ID` needs `confirm_risky=true`; reads need no confirmation |
+| `kilix_pty_act` | stock MCP refuses selected ends without controller authority; reads need no confirmation |
 
 Each takes `request`, a string in the forms above or a structured object; `act`
 also takes the boolean `confirm_risky` (default false). Extra fields are
@@ -410,9 +428,9 @@ includes the name, description, input schema and annotations.
 
 | Tool | Description bytes | Compact tool bytes |
 | --- | ---: | ---: |
-| `kilix_pty_read` | 753 | 1949 |
-| `kilix_pty_plan` | 734 | 1943 |
-| `kilix_pty_act` | 786 | 2023 |
+| `kilix_pty_read` | 754 | 2029 |
+| `kilix_pty_plan` | 694 | 1982 |
+| `kilix_pty_act` | 727 | 2043 |
 
 **Caller identity.** The server's environment must carry the caller's
 `KITTY_PTY_BROKER_SESSION`. A server started by Claude Code inside a Kilix pane
@@ -432,3 +450,47 @@ only `end session` fails closed).
 - No attach, no reap, no typing into a session, no pane-id kill.
 - The grammar covers the wording in this document. Words outside it refuse; use
   the hint, or the structured request.
+
+## Trusted selection controller
+
+Selected-session execution now requires a controller injected by a trusted
+embedding application into `pty_cli.run` or `pty_cli.mcp`. Stock CLI and stdio
+MCP refuse destructive selected-session requests with `authority_required`,
+including legacy `end session ID`, regardless of `--yes` or `confirm_risky`.
+Read-only requests and dry-run previews remain available. These flags are
+consent inputs, not evidence of original user intent.
+
+The host `kilix_pty_controller.Controller` issues authority only through its
+separate `select(direct_user_request)` API. The embedding application must own
+the original structured user-selection event and isolate the actor from that
+API, broker runtime, state, environment and shell access. It passes only the
+controller's `dispatch` capability to Needle; no model argument injects it.
+The request must match the issued selector, qualifiers and operation ID exactly.
+Authority expires, is consumed once, and is revoked on mismatch or explicit
+revocation. See the host's `docs/pty-controller.md` for lifecycle and deployment
+requirements. Unrestricted same-user shell access is not secured by this API.
+
+The host's `kilix pty supervise --actor FILE --needle-source DIR` provides a
+separate terminal-selected, namespace-isolated path. Inside it,
+`pty_controller_client.py` exposes only `pty --request-json` and forwards through
+the actual parser to the dispatch socket. This constrained adapter is distinct
+from the stock CLI/MCP and cannot issue authority. See the host
+`docs/pty-supervisor.md` for supported routes, R1 compatibility and admission
+limits. No existing unrestricted same-UID agent shell is retroactively isolated.
+
+
+The constrained supervisor client now passes both text grammar and structured
+requests through the existing `pty_cli.main`. It also exposes the actual newline
+stdio server as `kilix-needle mcp --tools pty`; only the trusted launcher injects
+a dispatch-only proxy in Python. There is no issuance argument in MCP or CLI.
+The endpoint still checks the original user selection independently of parsed
+actor arguments. Typed read access is limited to the supervisor's admitted read
+verbs. Ordinary CLI/MCP defaults retain their authority-required behavior.
+
+For the explicitly changed R6-controlled pair, `kilix-needle mcp --tools all`
+uses the actual full-menu stdio server in discovery-only mode: every advertised
+tool call refuses before a backend is invoked. Run a separate `--tools pty`
+server for authorized PTY operations. The mounted PTY-GUIDANCE.txt notice states
+this limitation. This does not restore historical full host-control capabilities.
+The discovery-only switch is a Python dependency of the constrained client;
+ordinary MCP server defaults are unchanged.

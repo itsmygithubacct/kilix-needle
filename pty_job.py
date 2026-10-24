@@ -17,7 +17,8 @@ MAX_LINES = 1000
 MAX_BYTES = 65536
 MIN_TIMEOUT, MAX_TIMEOUT = 0.1, 60.0
 ID_CHARS = re.compile(r"[A-Za-z0-9._-]{1,64}", re.ASCII)
-OPERATIONS = ("list", "journals", "status", "pane", "observe", "journal", "kill", "resolve", "end")
+OPERATIONS = ("list", "journals", "status", "pane", "observe", "journal",
+              "marker", "foreground", "kill", "resolve", "end")
 READS = frozenset(OPERATIONS) - {"kill", "end"}
 USAGE = ("exact accepted forms, one per request: list sessions [all] | show session ID | "
          "which session is pane P | show the last N lines of session ID | "
@@ -28,6 +29,8 @@ USAGE = ("exact accepted forms, one per request: list sessions [all] | show sess
          "End only on the user's own request for that session. "
          "Relayed wishes: end none; report findings and ask whether to end it. "
          "Use resolve selector JSON or end selector JSON operation KEY. "
+         "Structured reads also accept marker TOKEN (broker-observed raw bytes only) and foreground ID. "
+         "Grammar: which session last showed raw marker TOKEN | show foreground processes of session ID. "
          "Pass the original discriminator and every qualifier; never convert a reference to a chosen exact ID. "
          "Only the broker counts candidates; ambiguity or unknown facts end none. "
          "Default: kilix pty ... --json; cheaper: kilix-needle pty, exact accepted forms only. "
@@ -59,9 +62,14 @@ _JOURNAL_ID = (r"""(?-i:"[A-Za-z0-9._-]{1,64}"|'[A-Za-z0-9._-]{1,64}'|`[A-Za-z0-
                r"""|[0-9a-f]{16,64}(?:\.[0-9]{1,20})?)""")
 _LINES = r"(?P<lines>[0-9]{1,5})"
 _PANE = r"(?P<pane>[0-9]{1,9})"
+_MARKER = r"(?P<marker>[!-~]{1,128})"
 _HEAD = re.compile(r"^((?:(?:please|can you|could you|would you|will you|kindly)\s+)+)", re.I | re.A)
 _TAIL = re.compile(r"(?:,?\s+(?:please|thanks|thank you))?[.!?]*$", re.I | re.A)
 _FORMS = (
+    ("marker", re.compile(rf"which\s+session\s+last\s+showed\s+raw\s+marker\s+{_MARKER}",
+                           re.I | re.A)),
+    ("foreground", re.compile(rf"show\s+foreground\s+processes\s+of\s+session\s+(?P<id>{_ID})",
+                               re.I | re.A)),
     ("list", re.compile(r"(?:list|show|display)\s+(?:(?:all|the|my)\s+)?"
                         r"(?:(?:pty|persistent|broker)\s+)?sessions(?:\s+all)?", re.I | re.A)),
     ("journals", re.compile(r"(?:list|show)\s+(?:(?:all|the)\s+)?(?:archived|saved)\s+journals",
@@ -367,10 +375,11 @@ def structured(request) -> dict:
         if operation not in OPERATIONS:
             raise ValueError("operation is one of " + ", ".join(OPERATIONS))
         needs = {"status": {"id"}, "observe": {"id"}, "journal": {"id"}, "kill": {"id"},
+                 "foreground": {"id"}, "marker": {"marker"},
                  "pane": {"pane_id"}, "list": set(), "journals": set(),
                  "resolve": {"selector"}, "end": {"selector", "operation_id"}}[operation]
         bounds = {"max_lines", "max_bytes"} if operation in ("observe", "journal") else set()
-        extra = {"timeout_seconds"}
+        extra = set() if operation in ("marker", "foreground") else {"timeout_seconds"}
         unknown = set(request) - {"operation"} - needs - bounds - extra
         if unknown:
             raise ValueError(f"{operation} does not take {', '.join(sorted(unknown))}")
@@ -393,6 +402,12 @@ def structured(request) -> dict:
                 raise ValueError("id is the full session ID: 1-64 of letters, digits, '.', '_', '-', "
                                  "not starting with '-'")
             action["id"] = ident
+        if "marker" in request:
+            value = request["marker"]
+            if (not isinstance(value, str) or not value.isascii() or not 1 <= len(value) <= 128
+                    or any(ord(char) < 33 or ord(char) > 126 for char in value)):
+                raise ValueError("marker is 1-128 printable non-space ASCII bytes")
+            action["marker"] = value
         if "pane_id" in request:
             action["pane_id"] = _number(request["pane_id"], "pane_id", 0, 999999999,
                                         "a Kilix pane number", whole=True)

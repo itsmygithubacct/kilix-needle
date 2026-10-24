@@ -86,7 +86,7 @@ class SelectorTools(unittest.TestCase):
         def backend(argv, wall=None):
             calls.append(argv)
             return pty_backend.Reply("ok", 3 if result == "ambiguous" else 0, document(action, result))
-        answer = pty_cli.run(action, backend=backend, environ={"KITTY_PTY_BROKER_SESSION": "caller"}, **kwargs)
+        answer = pty_cli._run_supplied(action, backend=backend, environ={"KITTY_PTY_BROKER_SESSION": "caller"}, **kwargs)
         return answer, calls
 
     def test_end_ambiguity_is_single_selector_call_and_no_fallback(self):
@@ -184,19 +184,33 @@ class RealSelectorIntegration(unittest.TestCase):
         self.patch = mock.patch.dict(os.environ, environment, clear=True); self.patch.start()
         self.addCleanup(self.patch.stop)
 
+    def controller(self):
+        import sys
+        sys.path.insert(0, str(self.kilix / "config"))
+        import kilix_pty
+        import kilix_pty_controller
+        return kilix_pty_controller.Controller(
+            kilix_pty.Broker(self.support.CLI, str(self.fx.runtime), "0.3", 5),
+            str(self.fx.root / "controller-state"))
+
+    def select(self, controller, action):
+        return controller.select({"schema": "kilix.pty.request/v2", "verb": "end",
+                                  "selector": action["selector"], "operation_id": action["operation_id"]})
+
     def tearDown(self):
         self.fx.tearDown()
 
-    def test_real_grammar_and_mcp_ambiguity_no_end_then_full_id_positive(self):
+    def test_real_grammar_and_mcp_require_direct_selection(self):
         self.fx.start("n1.a"); self.fx.start("n1.b")
-        record = pty_cli.run('end selector {"id_prefix":"n1."} operation grammar', assume_yes=True, agent=True)
-        self.assertEqual((record["status"], record["result"]["result"], record["result"]["request_sent"]), (3, "ambiguous", False))
-        record = pty_cli.mcp({"request": {"operation": "end", "selector": {"id_prefix": "n1."},
-                                        "operation_id": "mcp"}, "confirm_risky": True})
-        self.assertEqual(record["result"]["census"]["matches"], 2)
+        c = self.controller()
+        ambiguous = {"operation": "end", "selector": {"id_prefix": "n1."}, "operation_id": "ambiguous"}
+        self.assertFalse(self.select(c, ambiguous)["issued"])
+        record = pty_cli.mcp({"request": ambiguous, "confirm_risky": True}, controller=c)
+        self.assertEqual(record["result"]["reason"], "authority_required")
         self.assertTrue(self.fx.alive("n1.a")); self.assertTrue(self.fx.alive("n1.b"))
-        record = pty_cli.mcp({"request": {"operation": "end", "selector": {"id": "n1.b"},
-                                        "operation_id": "explicit"}, "confirm_risky": True})
+        exact = {"operation": "end", "selector": {"id": "n1.b"}, "operation_id": "explicit"}
+        self.assertTrue(self.select(c, exact)["issued"])
+        record = pty_cli.mcp({"request": exact, "confirm_risky": True}, controller=c)
         self.assertEqual((record["status"], record["result"]["result"]), (0, "verified_absent"))
         self.assertFalse(record["result"]["caller"]["authenticated"])
         self.assertTrue(self.fx.alive("n1.a"))
@@ -211,15 +225,14 @@ class RealSelectorIntegration(unittest.TestCase):
                                 capture_output=True, text=True, timeout=10)
         self.assertTrue(result.stdout, result.stderr)
         record = json.loads(result.stdout)
-        self.assertEqual((result.returncode, record["result"]["result"]), (3, "ambiguous"))
-        self.assertEqual(record["result"]["selector"], action["selector"])
+        self.assertEqual((result.returncode, record["refused"]), (3, "authority_required"))
+        self.assertEqual(record["request"], action)
         server = mcp_server.Server(lambda *args: self.fail("PTY must not load a model"), tools="pty")
         response = server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                                   "params": {"name": "kilix_pty_act", "arguments": {
                                       "request": action, "confirm_risky": True}}})
         record = response["result"]["structuredContent"]
-        self.assertTrue(record["result"]["duplicate"])
-        self.assertFalse(record["result"]["request_sent"])
+        self.assertEqual(record["refused"], "authority_required")
         self.assertTrue(self.fx.alive("raw.a")); self.assertTrue(self.fx.alive("raw.b"))
 
     def test_real_command_and_detached_then_retry_replays(self):
@@ -228,9 +241,11 @@ class RealSelectorIntegration(unittest.TestCase):
         self.fx.attach("attached")
         action = {"operation": "end", "selector": {"startup_words": ["sleep", "55"], "attached": False},
                   "operation_id": "command"}
-        first = pty_cli.mcp({"request": action, "confirm_risky": True})
+        c = self.controller()
+        self.assertTrue(self.select(c, action)["issued"])
+        first = pty_cli.mcp({"request": action, "confirm_risky": True}, controller=c)
         self.assertEqual((first["status"], first["result"]["resolved"]["id"]), (0, "detached"))
-        second = pty_cli.mcp({"request": action, "confirm_risky": True})
+        second = pty_cli.mcp({"request": action, "confirm_risky": True}, controller=c)
         self.assertTrue(second["result"]["duplicate"])
         self.assertTrue(self.fx.alive("attached"))
 
