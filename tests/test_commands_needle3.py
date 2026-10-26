@@ -2,6 +2,7 @@ import support
 from contextlib import contextmanager
 import copy
 import hashlib
+import io
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -20,6 +21,19 @@ def spec_for(chosen):
 
 
 class InstalledNeedle3(unittest.TestCase):
+    def test_archive_install_failure_is_a_cli_asset_error(self):
+        content, first_use, lic = asset._content()
+        record = lic.load_determined_records().by_id('needle3-kilix-commands')
+        reader, output = Mock(), Mock()
+        reader.isatty.return_value = output.isatty.return_value = True
+        reader.readline.return_value = lic.typed_agreement_line(record) + '\n'
+        output.buffer = io.BytesIO()
+        with tempfile.TemporaryDirectory() as root, \
+                patch.object(first_use, 'install_with_agreement', side_effect=content.InstallError('broken archive')):
+            with self.assertRaisesRegex(asset.AssetError, 'installation failed: broken archive'):
+                asset.install(root, stdin=reader, stdout=output,
+                              asset_id='needle3-kilix-commands')
+
     def test_catalog_selects_the_release_files(self):
         chosen = commands_needle3.selection()
         content, _, _ = asset._content()

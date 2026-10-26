@@ -336,14 +336,16 @@ def install(root: str | None = None, *, supplied: str | None = None,
         typed = stdin.readline(512).strip()
         if typed != expected:
             raise AssetError("not accepted; nothing was written or downloaded")
-        installer = content.Installer(content_root(root))
         try:
+            installer = content.Installer(content_root(root))
             first_use.install_with_agreement(
                 spec, installer=installer, store=store, records=records, texts=texts,
                 typed_text=typed, supplied=supplied,
                 report=lambda message: print(f"  {message}", file=stdout))
         except lic.LicenseError as error:
             raise AssetError(f"the licence authority refused: {error}") from error
+        except content.InstallError as error:
+            raise AssetError(f"{asset_id} installation failed: {error}") from error
         return installer.asset_destination(spec)
 
 
