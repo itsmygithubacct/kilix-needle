@@ -428,7 +428,7 @@ includes the name, description, input schema and annotations.
 
 | Tool | Description bytes | Compact tool bytes |
 | --- | ---: | ---: |
-| `kilix_pty_read` | 754 | 2029 |
+| `kilix_pty_read` | 769 | 2044 |
 | `kilix_pty_plan` | 694 | 1982 |
 | `kilix_pty_act` | 727 | 2043 |
 
