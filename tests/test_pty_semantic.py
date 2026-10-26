@@ -13,17 +13,17 @@ import pty_job
 
 class SemanticRoutes(unittest.TestCase):
     def test_explicit_grammar_labels_raw_observation_and_plural_foreground(self):
-        self.assertEqual(pty_job.parse('which session last showed raw marker deploy-ok-419ee9'),
-                         {'operation': 'marker', 'marker': 'deploy-ok-419ee9'})
+        self.assertEqual(pty_job.parse('which session last showed raw marker build-finished-ok'),
+                         {'operation': 'marker', 'marker': 'build-finished-ok'})
         self.assertEqual(pty_job.parse('show foreground processes of session "owned"'),
                          {'operation': 'foreground', 'id': 'owned'})
         with self.assertRaises(pty_job.Refused):
-            pty_job.parse('which session most recently printed deploy-ok-419ee9')
+            pty_job.parse('which session most recently printed build-finished-ok')
 
     def test_structured_marker_has_complete_census_route_and_no_timeout_override(self):
-        action = pty_job.structured({'operation': 'marker', 'marker': 'deploy-ok-419ee9'})
+        action = pty_job.structured({'operation': 'marker', 'marker': 'build-finished-ok'})
         self.assertEqual(pty_backend.argv_for(action),
-                         ['pty', 'marker', 'deploy-ok-419ee9', '--json'])
+                         ['pty', 'marker', 'build-finished-ok', '--json'])
         for bad in ({'operation': 'marker', 'marker': 'x', 'id': 'selected'},
                     {'operation': 'marker', 'marker': 'x', 'timeout_seconds': 1},
                     {'operation': 'marker', 'marker': 'x\n'}):
