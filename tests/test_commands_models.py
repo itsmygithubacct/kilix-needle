@@ -7,6 +7,7 @@ import commands_models
 import commands_policy
 import compact_model
 import commands_runtime
+import commands_needle3
 
 
 class ProviderLifecycle(unittest.TestCase):
@@ -14,11 +15,13 @@ class ProviderLifecycle(unittest.TestCase):
         for backend in ('grammar', 'needle3', 'lfm2'):
             with self.subTest(backend=backend), commands_models.Providers(backend) as providers, \
                     patch.object(compact_model, 'open_runtime') as needle, \
+                    patch.object(commands_needle3, 'open_runtime') as installed, \
                     patch.object(commands_runtime, 'Runtime') as lfm:
                 decision = commands_policy.decide('open calculator', backend=backend,
                                                    provider=providers.get)
                 self.assertTrue(decision.admission.actions)
                 needle.assert_not_called()
+                installed.assert_not_called()
                 lfm.assert_not_called()
 
     def test_needle_reuses_worker_and_resets_each_request(self):

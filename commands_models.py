@@ -44,10 +44,13 @@ class Providers:
         if self.runtime is None:
             try:
                 if self.backend == 'needle3':
-                    if not self.candidate:
-                        raise commands_policy.ProposalError('Needle3 needs a selected candidate manifest')
-                    import compact_model
-                    runtime = self.resources.enter_context(compact_model.open_runtime(self.candidate))
+                    if self.candidate:
+                        import compact_model
+                        opened = compact_model.open_runtime(self.candidate)
+                    else:
+                        import commands_needle3
+                        opened = commands_needle3.open_runtime(self.root)
+                    runtime = self.resources.enter_context(opened)
                     self.runtime = Needle3(runtime)
                 else:
                     import commands_runtime

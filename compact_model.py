@@ -49,11 +49,20 @@ def _member(root,spec,*,maximum):
 
 
 @contextmanager
-def open_runtime(manifest_path):
+def open_runtime(manifest_path, *, expected=None):
     """Keep one verified candidate worker alive for a caller-owned session."""
     manifest_path=Path(manifest_path).resolve()
-    if manifest_path.stat().st_size>65536:raise ValueError('candidate manifest is too large')
-    manifest=json.loads(manifest_path.read_text())
+    if expected is None:
+        if manifest_path.stat().st_size>65536:raise ValueError('candidate manifest is too large')
+        manifest=json.loads(manifest_path.read_text())
+    else:
+        # Installed candidates bind the manifest too: never verify it and then
+        # reopen a mutable pathname to choose a different set of model pins.
+        import os
+        if not 0 < expected['bytes'] <= 65536:
+            raise ValueError('candidate manifest is too large')
+        with asset.load_verified(manifest_path, expected['sha256'], expected['bytes']) as image:
+            manifest=json.loads(os.pread(image.fd, expected['bytes'], 0))
     if not isinstance(manifest,dict) or manifest.get('schema')!='kilix-compact-candidate-v1' or manifest.get('generation')!=3:
         raise ValueError('not a generation-3 compact candidate')
     backend=manifest.get('backend','native')

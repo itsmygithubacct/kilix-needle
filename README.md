@@ -173,7 +173,18 @@ The grammar fast path works without loading the model. Model requests need the
 installed, licensed bundle; `install --commands` shows its full terms before
 installation. The selected CPU runtime requires x86-64 Linux.
 
-Needle3 takes an explicit verified manifest with `--commands-candidate`.
+Install the Needle 3 alternate with `kilix-needle install --commands needle3`,
+then use `kilix ask --model needle3 "open calculator"`. LFM2 remains the default.
+For subsequent requests, set `export KILIX_ASK_COMMANDS_BACKEND=needle3` in your
+shell (or its startup file to keep the preference). `--model lfm2` selects LFM2
+for one request without changing that preference; `--model grammar` uses no model.
+Needle 3 uses the pinned V9 epoch-1 model and cached CPU runtime on x86-64-v3
+Linux. Missing assets name the installer; Ask never downloads them or substitutes
+another model. Both installers show the applicable licence and notices before
+asking for agreement. Existing licence receipts retain their original bindings.
+
+An explicit verified manifest with `--commands-candidate` overrides the installed
+Needle 3 selection. The `kilix ask` launcher forwards this option too.
 LFM2 uses the pinned release selection and Content bundle; an explicit local
 bundle can be supplied with `--commands-bundle`. To evaluate another local
 candidate, pass its artifact manifest with `--commands-manifest` together with

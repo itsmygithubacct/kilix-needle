@@ -175,6 +175,15 @@ class InstallCommands(unittest.TestCase):
             self.assertEqual(stopped.exception.code, 2)
             install.assert_not_called()
 
+    def test_needle3_installs_only_the_alternate_bundle(self):
+        from unittest import mock
+        import asset
+        with mock.patch.object(asset, 'install', return_value='/assets/needle3') as install, \
+                mock.patch.object(asset, '_installed_spec', side_effect=asset.AssetError('missing')), \
+                mock.patch('sys.stdout', new=io.StringIO()):
+            self.assertEqual(needle_cli.main(['install', '--commands', 'needle3', '--from', '/supplied']), 0)
+        install.assert_called_once_with(None, supplied='/supplied', asset_id='needle3-kilix-commands')
+
     def test_runtime_installs_the_engine_and_the_runtime_only(self):
         from unittest import mock
         import asset
@@ -215,7 +224,8 @@ class InstallCommands(unittest.TestCase):
         for asset_id, command in (("needle2", "kilix-needle install"),
                                   ("needle2-runtime", "kilix-needle install --runtime"),
                                   ("needle2-train", "kilix-needle install --tuning"),
-                                  ("lfm2-kilix-commands", "kilix-needle install --commands")):
+                                  ("lfm2-kilix-commands", "kilix-needle install --commands"),
+                                  ("needle3-kilix-commands", "kilix-needle install --commands needle3")):
             with mock.patch.object(asset, "_content", return_value=(content, first_use, lic)):
                 with self.assertRaises(asset.AssetError) as caught:
                     asset._installed_spec(asset_id, None)

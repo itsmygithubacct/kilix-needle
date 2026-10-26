@@ -155,6 +155,7 @@ def _install_command(asset_id: str) -> str:
     # `kilix models` is not a command on every Kilix; name the one that is here.
     return {ASSET_ID: "kilix-needle install",
             RUNTIME_ID: "kilix-needle install --runtime",
+            "needle3-kilix-commands": "kilix-needle install --commands needle3",
             "lfm2-kilix-commands": "kilix-needle install --commands"}.get(
         asset_id, "kilix-needle install --tuning")
 
