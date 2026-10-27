@@ -41,6 +41,20 @@ class CommandPolicyTests(unittest.TestCase):
                 self.assertFalse(result.admission.actions)
                 self.assertEqual(result.calls[0]["arguments"]["place"], "left")
 
+    def test_new_request_forms_share_the_grammar_fast_path(self):
+        for backend in ('grammar', 'needle3', 'lfm2'):
+            for request in (
+                'I need a fresh Codex session in "/projects/Blue Birch".',
+                'Please message Codex in /projects/birch with this exact text: Compare A, B; then C',
+                'I need the file manager opened now.',
+            ):
+                with self.subTest(backend=backend, request=request):
+                    provider = Mock(side_effect=AssertionError('model initialized'))
+                    result = decide(request, backend=backend, provider=provider)
+                    self.assertEqual(result.source, 'grammar')
+                    self.assertTrue(result.admission.actions)
+                    provider.assert_not_called()
+
     def test_order_and_payload_survive_both_model_paths(self):
         request = 'open calculator then tell codex here: keep "a  b"'
         calls = [call("open_app", app="kilix-calculator"),

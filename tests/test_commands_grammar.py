@@ -84,6 +84,71 @@ class CommandGrammar(unittest.TestCase):
                         'Launch notepad now and erase it'):
             self.assertIsNone(contract.exact_calls(request))
 
+    def test_need_a_fresh_session_preserves_agent_and_quoted_directory(self):
+        for agent in ('Claude', 'Codex'):
+            for adjective in ('new', 'fresh'):
+                request = f'I need a {adjective} {agent} session in "/projects/Blue and Birch".'
+                with self.subTest(request=request):
+                    wanted = [call('start_'+agent.lower(), directory='/projects/Blue and Birch')]
+                    self.check(request, wanted)
+                    self.assertFalse(contract.admit(request, [call('start_'+agent.lower(),
+                        directory='/projects/Blue')]).actions)
+
+    def test_with_this_exact_text_preserves_the_entire_colon_payload(self):
+        payload = 'Compare A, B; then C. Keep  “café” and say "ready", please.'
+        for noun in ('text', 'message', 'instruction'):
+            request = f'Please message Codex in "/projects/Blue Birch" with this exact {noun}: '+payload
+            with self.subTest(noun=noun):
+                self.check(request, [call('message_agent', agent='codex',
+                    directory='/projects/Blue Birch', text=payload)])
+                for changed in (payload.replace('  ', ' '), payload.split(';')[0]):
+                    self.assertFalse(contract.admit(request, [call('message_agent', agent='codex',
+                        directory='/projects/Blue Birch', text=changed)]).actions)
+        for suffix in ('', ' ', '\t'):
+            self.assertIsNone(contract.exact_calls('message codex here with this exact text:'+suffix))
+
+    def test_need_an_application_opened_now_and_ordered_session_compose(self):
+        self.check('I need the file manager opened now.', [call('open_app', app='kilix-file')])
+        self.check('I need calculator launched!', [call('open_app', app='kilix-calculator')])
+        self.check('I need a fresh Codex session here, then I need the file manager opened now.',
+                   [call('start_codex'), call('open_app', app='kilix-file')])
+        self.assertFalse(contract.admit('I need the file manager opened now.',
+                         [call('open_app', app='kilix-notepad')]).actions)
+
+    def test_new_request_forms_do_not_drop_conditions_negation_or_extra_actions(self):
+        supported = (
+            'I need a fresh Codex session in "/projects/Blue Birch"',
+            'I need the file manager opened now',
+            'Please message Codex in /projects/birch with this exact text: Keep  spaces',
+        )
+        for request in supported:
+            for prefix in ('Do not act on this: ', 'How would I say ',
+                           'If the tests pass, ', 'Tomorrow afternoon, ',
+                           'The documentation says: '):
+                with self.subTest(prefix=prefix, request=request):
+                    text = prefix+request
+                    self.assertIsNone(contract.exact_calls(text))
+                    self.assertFalse(contract.admit(text, contract.exact_calls(request)).actions)
+        # A message's colon payload is literal; tails on launch/app requests
+        # remain separate request text and must be understood in full.
+        for request in supported[:2]:
+            for suffix in (' if the tests pass', ' tomorrow', ' and erase the logs',
+                           '; then open Firefox', ' or perhaps not'):
+                with self.subTest(request=request, suffix=suffix):
+                    self.assertIsNone(contract.exact_calls(request+suffix))
+        for request in (
+            "I don't need a fresh Codex session here.",
+            "I don't need the file manager opened now.",
+            'I need the file manager opened now?',
+            'I need a fresh Codex session here?',
+            'I need a fresh Codex session in /a in /b.',
+            'Please message Codex if tests pass with this exact text: ready',
+            'Please message Codex tomorrow with this exact text: ready',
+            'I need Firefox opened now.',
+        ):
+            with self.subTest(request=request):
+                self.assertIsNone(contract.exact_calls(request))
+
 
 if __name__ == '__main__':
     unittest.main()
