@@ -142,9 +142,11 @@ def inspect_bundle(bundle=None,root=None,*,manifest=None):
     chosen=selection(manifest)
     if bundle is None:
         spec,destination=asset._installed_spec(ASSET_ID,root)
-        pinned={item.path:{'sha256':item.sha256,'bytes':item.bytes} for item in spec.files}
-        if any(pinned.get(name)!=item for name,item in chosen['files'].items()):
-            raise CommandModelError('catalog and command-model pins differ')
+        import commands_selection
+        try:
+            commands_selection.verify_catalog('lfm2', spec, chosen)
+        except ValueError as error:
+            raise CommandModelError(str(error)) from error
         bundle=destination
     path=Path(bundle)
     if not path.is_absolute() or path.is_symlink():

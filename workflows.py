@@ -13,6 +13,7 @@ import sys
 import tempfile
 
 import asset
+import commands_selection
 import state
 
 SCHEMA = "kilix.workflows/v1"
@@ -187,38 +188,60 @@ def _inspect_asset(spec, root: Path, first_use, records, store) -> dict:
     return row
 
 
-def status(root: str | None = None) -> dict:
+def status(root: str | None = None, *, model=None, legacy=False) -> dict:
     """No engine, acquisition, receipt writes, directory creation or migration."""
-    models, runtime = _model_status()
-    required = [asset.ASSET_ID] + ([asset.RUNTIME_ID] if runtime else [])
+    models, required = [], []
     assets, errors = [], []
+    backend = None
     try:
-        content, first_use, lic = asset._content()
-        catalog = content.verified_packaged_catalog()
-        records, store = lic.load_determined_records(), _readonly_store(lic)
-        content_root = _content_root(root)
+        if legacy:
+            if model is not None:
+                raise WorkflowError('--legacy cannot select an Ask model')
+            models, runtime = _model_status()
+            required = [asset.ASSET_ID] + ([asset.RUNTIME_ID] if runtime else [])
+        else:
+            backend = commands_selection.resolve(model)
+            required = [commands_selection.ASSETS[backend]] if backend != 'grammar' else []
+            commands_selection.require_platform(backend)
+        if required:
+            content, first_use, lic = asset._content()
+            catalog = content.verified_packaged_catalog()
+            records, store = lic.load_determined_records(), _readonly_store(lic)
+            content_root = _content_root(root)
         for asset_id in required:
             try:
-                assets.append(_inspect_asset(catalog.require_asset(asset_id), content_root, first_use, records, store))
+                spec = catalog.require_asset(asset_id)
+                if not legacy:
+                    commands_selection.verify_catalog(backend, spec)
+                assets.append(_inspect_asset(spec, content_root, first_use, records, store))
             except Exception as error:
                 assets.append({"id": asset_id, "version": None, "path": None, "state": "unavailable", "error": str(error)})
     except Exception as error:
         errors.append(str(error))
-    if os.environ.get("KILIX_NEEDLE_ENGINE"):
+    if legacy and os.environ.get("KILIX_NEEDLE_ENGINE"):
         errors.append("KILIX_NEEDLE_ENGINE overrides are unsupported by desktop workflow setup; unset the override before enabling workflows")
     errors.extend(f"{row['id']}: {row['error']}" for row in assets if row["state"] != "ready")
     errors.extend(f"{row['kind']} {row['job']}: {row['error']}" for row in models if row["state"] != "ready")
     ready = len(assets) == len(required) and not errors
     result = {"schema": SCHEMA, "ready": ready, "status": "ready" if ready else "not-ready",
-              "detail": "Required workflow model assets and selected models are verified." if ready else "Workflow model setup needs attention.",
+              "scope": "legacy" if legacy else "ask", "backend": backend, "grammar_ready": True,
+              "detail": ("Legacy Needle workflow assets are verified." if legacy else
+                         "Ask grammar is ready; no model download is needed." if backend == 'grammar' else
+                         f"Ask {backend} model files and licence are verified.") if ready else "Workflow model setup needs attention.",
               "required_assets": required, "assets": assets, "models": models, "errors": errors}
     if len(json.dumps(result, ensure_ascii=True).encode()) > MAX_JSON:
         result.update(ready=False, status="not-ready", detail="Workflow status exceeds its output limit.", assets=[], models=[], errors=["status output exceeded 16 KiB"])
     return result
 
 
-def setup(root: str | None = None, *, stdin=None, stdout=None) -> dict:
+def setup(root: str | None = None, *, model=None, legacy=False, stdin=None, stdout=None) -> dict:
     stdin, stdout = stdin or sys.stdin, stdout or sys.stdout
+    if not legacy:
+        model = commands_selection.resolve(model)
+        if model == 'grammar':
+            result = select(model, root)
+            print(result['detail'], file=stdout)
+            return result
     if not (stdin.isatty() and stdout.isatty()):
         raise WorkflowError("run `kilix-needle workflows setup` at a terminal for typed licence acceptance")
     # One session owns licence presentation and every required asset. Content's
@@ -235,16 +258,19 @@ def setup(root: str | None = None, *, stdin=None, stdout=None) -> dict:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as error:
             raise WorkflowError("workflow setup is already running for this Content root; finish or close that terminal before retrying") from error
-        return _setup_locked(str(directory), stdin=stdin, stdout=stdout)
+        result = _setup_locked(str(directory), model=model, legacy=legacy, stdin=stdin, stdout=stdout)
+        if not legacy:
+            commands_selection.save(model)
+        return result
     finally:
         os.close(fd)
 
 
-def _setup_locked(root: str, *, stdin, stdout) -> dict:
-    before = status(root)
+def _setup_locked(root: str, *, model=None, legacy=False, stdin, stdout) -> dict:
+    before = status(root, model=model, legacy=legacy)
     invalid = [row["error"] for row in before["models"] if row["state"] != "ready"]
     invalid.extend(row["error"] for row in before["assets"] if row["state"] in ("corrupt", "unavailable"))
-    if invalid or not before["assets"] or os.environ.get("KILIX_NEEDLE_ENGINE"):
+    if invalid or not before["assets"] or (legacy and os.environ.get("KILIX_NEEDLE_ENGINE")):
         raise WorkflowError("; ".join(invalid or before["errors"]) + "; existing custom selections and corrupt assets were left unchanged")
     for row in before["assets"]:
         if row["state"] == "ready":
@@ -262,11 +288,20 @@ def _setup_locked(root: str, *, stdin, stdout) -> dict:
                 content.Installer(asset.content_root(root)).ensure_upstream_asset(
                     spec, store=store, records=records, notices=notices,
                     report=lambda message: print(message, file=stdout))
-    after = status(root)
+    after = status(root, model=model, legacy=legacy)
     if not after["ready"]:
         raise WorkflowError("; ".join(after["errors"]) or after["detail"])
     print(after["detail"], file=stdout)
     return after
+
+
+def select(model, root=None):
+    """Select only an already ready backend; never install or accept licences."""
+    result = status(root, model=model)
+    if not result['ready']:
+        raise WorkflowError('; '.join(result['errors']) or result['detail'])
+    commands_selection.save(model)
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -277,13 +312,26 @@ def main(argv: list[str] | None = None) -> int:
     probe.add_argument("--root", help="absolute Content root (normally supplied by Kilix)")
     acquire = commands.add_parser("setup", help="interactively acquire missing licensed model assets")
     acquire.add_argument("--root", help="absolute Content root (normally supplied by Kilix)")
+    for command in (probe, acquire):
+        mode = command.add_mutually_exclusive_group()
+        mode.add_argument('--model', choices=commands_selection.BACKENDS,
+                          help='Ask model; defaults to the current Ask preference')
+        mode.add_argument('--legacy', action='store_true', help='check or set up the older Needle2 job models')
+    choose = commands.add_parser('select', help='save a ready Ask backend without downloads')
+    choose.add_argument('--model', required=True, choices=commands_selection.BACKENDS)
+    choose.add_argument('--root')
+    choose.add_argument('--json', action='store_true')
     args = parser.parse_args(argv)
     if args.command == "status":
-        result = status(args.root)
+        result = status(args.root, model=args.model, legacy=args.legacy)
         print(json.dumps(result, ensure_ascii=True, sort_keys=True) if args.json else result["detail"] + ("\n" + "\n".join(result["errors"]) if result["errors"] else ""))
         return 0 if result["ready"] else 1
     try:
-        setup(args.root)
+        if args.command == 'select':
+            result = select(args.model, args.root)
+            print(json.dumps(result, ensure_ascii=True, sort_keys=True) if args.json else result['detail'])
+        else:
+            setup(args.root, model=args.model, legacy=args.legacy)
         return 0
     except Exception as error:
         print(f"Workflow setup failed: {str(error)[:4096]}", file=sys.stderr)
