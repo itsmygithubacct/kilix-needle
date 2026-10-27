@@ -33,6 +33,11 @@ def _supports_x86_v3():
     return bool(flags) and all(required<=row and bool({'abm','lzcnt'}&row) for row in flags)
 
 
+def require_cached_platform():
+    if platform.system() != 'Linux' or not _supports_x86_v3():
+        raise ValueError('this cached CPU candidate requires x86-64-v3 Linux support')
+
+
 def _member(root,spec,*,maximum):
     if (not isinstance(spec,dict) or not isinstance(spec.get('path'),str)
             or type(spec.get('bytes')) is not int or not 0<spec['bytes']<=maximum
@@ -70,8 +75,9 @@ def open_runtime(manifest_path, *, expected=None):
         library_sha,library_bytes=LIB_SHA256,LIB_BYTES
     elif backend=='rust3':
         library_sha,library_bytes=RUST_LIB_SHA256,RUST_LIB_BYTES
-        if manifest.get('cpu_isa')!='x86-64-v3' or not _supports_x86_v3():
+        if manifest.get('cpu_isa')!='x86-64-v3':
             raise ValueError('this cached CPU candidate requires x86-64-v3 support')
+        require_cached_platform()
     else:raise ValueError('unsupported candidate backend')
     root=manifest_path.parent
     lib=manifest.get('library');weights=manifest.get('weights');tools=manifest.get('tools')

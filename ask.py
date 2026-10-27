@@ -404,9 +404,9 @@ def main(argv=None) -> int:
     parser.add_argument("--under-overlay", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--engine", metavar="FILE", help=argparse.SUPPRESS)
     parser.add_argument("--root", help=argparse.SUPPRESS)
-    parser.add_argument('--commands-backend', choices=('grammar', 'needle3', 'lfm2'),
-                        default=os.environ.get('KILIX_ASK_COMMANDS_BACKEND') or 'lfm2',
-                        help='command interpreter (default: lfm2); grammar skips model loading')
+    import commands_selection
+    parser.add_argument('--commands-backend', choices=commands_selection.BACKENDS,
+                        help='command interpreter (saved preference, otherwise lfm2); grammar skips model loading')
     parser.add_argument('--commands-candidate', help='override the installed Needle3 model with a verified local candidate manifest')
     parser.add_argument('--commands-bundle', help='local LFM2 bundle matching the selected release pins')
     parser.add_argument('--commands-manifest', help='explicit LFM2 artifact manifest for a local bundle')
@@ -414,6 +414,10 @@ def main(argv=None) -> int:
                         help='measure model proposals without the command grammar fast path')
     parser.add_argument('--operation-id', help='reuse an incomplete command operation without replaying actions')
     args = parser.parse_args(argv)
+    try:
+        args.commands_backend = commands_selection.resolve(args.commands_backend)
+    except (OSError, ValueError) as error:
+        parser.error(str(error))
     request = " ".join(args.request).strip()
     if not request:
         parser.error("give a request")

@@ -36,10 +36,8 @@ def selection():
 def open_runtime(root=None):
     chosen = selection()
     spec, destination = asset._installed_spec(ASSET_ID, root)
-    catalog = {item.path: {'bytes': item.bytes, 'sha256': item.sha256} for item in spec.files}
-    if spec.version != chosen['version'] or any(catalog.get(name) != item
-                                              for name, item in chosen['files'].items()):
-        raise ValueError('catalog and Needle3 model pins differ')
+    import commands_selection
+    commands_selection.verify_catalog('needle3', spec, chosen)
     with compact_model.open_runtime(Path(destination) / 'candidate.json',
                                     expected=chosen['files']['candidate.json']) as runtime:
         yield runtime

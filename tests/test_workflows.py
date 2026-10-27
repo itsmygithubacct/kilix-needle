@@ -77,7 +77,7 @@ class WorkflowFixtures(unittest.TestCase):
              patch.object(asset, "install", side_effect=AssertionError("acquisition")), \
              patch.object(state, "place", side_effect=AssertionError("migration")), \
              contextlib.redirect_stdout(io.StringIO()) as output:
-            code = needle_cli.main(["workflows", "status", "--json"])
+            code = needle_cli.main(["workflows", "status", "--json", "--legacy"])
         self.assertEqual(code, 1)
         result = json.loads(output.getvalue())
         self.assertEqual(result["schema"], "kilix.workflows/v1")
@@ -91,13 +91,13 @@ class WorkflowFixtures(unittest.TestCase):
         self.base.joinpath("receipts").mkdir(mode=0o755)
         before = {str(p): p.stat() for p in self.base.rglob("*")}
         with patch.object(asset, "load_verified", side_effect=AssertionError("engine image")):
-            self.assertTrue(workflows.status()["ready"])
+            self.assertTrue(workflows.status(legacy=True)["ready"])
         after = {str(p): p.stat() for p in self.base.rglob("*")}
         self.assertEqual(set(before), set(after))
         for name, info in before.items():
             self.assertEqual((info.st_mode, info.st_mtime_ns), (after[name].st_mode, after[name].st_mtime_ns))
         (directory / "payload").write_bytes(b"X" * len(self.bytes["needle2"]))
-        result = workflows.status()
+        result = workflows.status(legacy=True)
         self.assertFalse(result["ready"])
         self.assertEqual(result["assets"][0]["state"], "corrupt")
 
@@ -116,7 +116,7 @@ class WorkflowFixtures(unittest.TestCase):
                 else:
                     member.unlink()
                     os.mkfifo(member)
-                self.assertEqual(workflows.status()["assets"][0]["state"], "corrupt")
+                self.assertEqual(workflows.status(legacy=True)["assets"][0]["state"], "corrupt")
                 if member.exists():
                     member.unlink()
                 (directory / "extra").unlink(missing_ok=True)
@@ -127,44 +127,44 @@ class WorkflowFixtures(unittest.TestCase):
         source = self.base / "real-payload"
         source.write_bytes(self.bytes["needle2"])
         (directory / "payload").symlink_to(source)
-        self.assertEqual(workflows.status()["assets"][0]["state"], "corrupt")
+        self.assertEqual(workflows.status(legacy=True)["assets"][0]["state"], "corrupt")
         (directory / "payload").unlink()
         self.install_fixture()
         (directory / "linked").symlink_to(self.base, target_is_directory=True)
-        self.assertEqual(workflows.status()["assets"][0]["state"], "corrupt")
+        self.assertEqual(workflows.status(legacy=True)["assets"][0]["state"], "corrupt")
         (directory / "linked").unlink()
         moved = self.base / "moved"
         directory.rename(moved)
         directory.symlink_to(moved, target_is_directory=True)
-        self.assertEqual(workflows.status()["assets"][0]["state"], "corrupt")
+        self.assertEqual(workflows.status(legacy=True)["assets"][0]["state"], "corrupt")
 
     def test_corrupt_asset_is_detected_even_without_acceptance(self):
         directory = self.install_fixture()
         self.agreement.return_value = True
         (directory / "payload").write_bytes(b"bad")
-        self.assertEqual(workflows.status()["assets"][0]["state"], "corrupt")
+        self.assertEqual(workflows.status(legacy=True)["assets"][0]["state"], "corrupt")
 
     def test_license_not_inferred_from_installed_bytes(self):
         self.install_fixture()
         self.agreement.return_value = True
-        self.assertEqual(workflows.status()["assets"][0]["state"], "agreement-required")
+        self.assertEqual(workflows.status(legacy=True)["assets"][0]["state"], "agreement-required")
 
     def test_tuned_selection_requires_only_runtime_not_training(self):
         self.install_fixture()
         weights = self.select("agents")
-        result = workflows.status()
+        result = workflows.status(legacy=True)
         self.assertEqual(result["required_assets"], ["needle2", "needle2-runtime"])
         self.assertFalse(result["ready"])
         self.install_fixture("needle2-runtime")
-        self.assertTrue(workflows.status()["ready"])
+        self.assertTrue(workflows.status(legacy=True)["ready"])
         weights.write_bytes(b"wrong")
-        self.assertEqual(workflows.status()["models"][0]["state"], "invalid")
+        self.assertEqual(workflows.status(legacy=True)["models"][0]["state"], "invalid")
 
     def test_apps_and_files_selections_do_not_require_runtime(self):
         self.install_fixture()
         for job in ("apps", "files"):
             self.select(job)
-            result = workflows.status()
+            result = workflows.status(legacy=True)
             self.assertTrue(result["ready"])
             self.assertEqual(result["required_assets"], ["needle2"])
 
@@ -173,11 +173,11 @@ class WorkflowFixtures(unittest.TestCase):
         weights = self.select()
         selection = state.home() / "model.json"
         selection.write_text(json.dumps({"weights": str(weights), "sha256": hashlib.sha256(weights.read_bytes()).hexdigest()}))
-        self.assertIn("needle2-runtime", workflows.status()["required_assets"])
+        self.assertIn("needle2-runtime", workflows.status(legacy=True)["required_assets"])
         for value in ("not-json", json.dumps({"schema": "future"}), json.dumps({"schema": "kilix-needle.selection/v2", "jobs": {"panes": {"weights": "relative", "sha256": "0" * 64}}})):
             selection.write_text(value)
-            self.assertFalse(workflows.status()["ready"])
-            self.assertEqual(workflows.status()["models"][0]["state"], "invalid")
+            self.assertFalse(workflows.status(legacy=True)["ready"])
+            self.assertEqual(workflows.status(legacy=True)["models"][0]["state"], "invalid")
 
     def test_nonregular_oversized_and_symlink_model_metadata_refuse(self):
         self.install_fixture()
@@ -185,15 +185,15 @@ class WorkflowFixtures(unittest.TestCase):
         selection = state.home() / "model.json"
         selection.unlink()
         os.mkfifo(selection)
-        self.assertFalse(workflows.status()["ready"])
+        self.assertFalse(workflows.status(legacy=True)["ready"])
         selection.unlink()
         selection.write_bytes(b" " * 65_537)
-        self.assertFalse(workflows.status()["ready"])
+        self.assertFalse(workflows.status(legacy=True)["ready"])
         selection.unlink()
         target = self.base / "real-model.json"
         target.write_text('{"schema":"kilix-needle.selection/v2","jobs":{}}')
         selection.symlink_to(target)
-        self.assertFalse(workflows.status()["ready"])
+        self.assertFalse(workflows.status(legacy=True)["ready"])
 
     def test_profile_uses_own_verified_library_without_runtime_acquisition(self):
         self.install_fixture()
@@ -210,11 +210,11 @@ class WorkflowFixtures(unittest.TestCase):
         with patch.object(asset, "PINNED_LIB_SHA256", config["library"]["sha256"]), \
              patch.object(asset, "PINNED_LIB_BYTES", config["library"]["size"]), \
              patch.object(state, "place", side_effect=AssertionError("migration")):
-            result = workflows.status()
+            result = workflows.status(legacy=True)
             self.assertTrue(result["ready"])
             self.assertEqual(result["required_assets"], ["needle2"])
             Path(config["weights"]["path"]).write_bytes(b"wrong")
-            self.assertFalse(workflows.status()["ready"])
+            self.assertFalse(workflows.status(legacy=True)["ready"])
         self.assertTrue(directory.exists())
         self.assertFalse((state.home() / "system-normalizer").exists())
 
@@ -222,20 +222,20 @@ class WorkflowFixtures(unittest.TestCase):
         self.install_fixture()
         for value in ("relative", str(self.base / "missing-profile")):
             os.environ["KILIX_NEEDLE_SYSTEM_PROFILE"] = value
-            self.assertFalse(workflows.status()["ready"])
+            self.assertFalse(workflows.status(legacy=True)["ready"])
 
     def test_root_symlink_and_explicit_engine_never_report_ready_or_acquire(self):
         self.install_fixture()
         alias = self.base / "symlink-root"
         alias.symlink_to(self.root, target_is_directory=True)
         with patch.object(asset, "install", side_effect=AssertionError("install")):
-            self.assertFalse(workflows.status(str(alias))["ready"])
+            self.assertFalse(workflows.status(str(alias), legacy=True)["ready"])
             with self.assertRaisesRegex(workflows.WorkflowError, "real directory"):
-                workflows.setup(str(alias), stdin=Terminal(), stdout=Terminal())
+                workflows.setup(str(alias), legacy=True, stdin=Terminal(), stdout=Terminal())
             os.environ["KILIX_NEEDLE_ENGINE"] = str(self.base / "missing-explicit-engine")
-            self.assertFalse(workflows.status()["ready"])
+            self.assertFalse(workflows.status(legacy=True)["ready"])
             with self.assertRaisesRegex(workflows.WorkflowError, "unsupported"):
-                workflows.setup(stdin=Terminal(), stdout=Terminal())
+                workflows.setup(legacy=True, stdin=Terminal(), stdout=Terminal())
         self.assertTrue(alias.is_symlink())
 
     def test_explicit_pinned_library_verifies_without_catalog_runtime(self):
@@ -247,10 +247,10 @@ class WorkflowFixtures(unittest.TestCase):
         os.environ["KILIX_NEEDLE_LIBRARY"] = str(library)
         with patch.object(asset, "PINNED_LIB_SHA256", hashlib.sha256(data).hexdigest()), \
              patch.object(asset, "PINNED_LIB_BYTES", len(data)):
-            self.assertTrue(workflows.status()["ready"])
-            self.assertEqual(workflows.status()["required_assets"], ["needle2"])
+            self.assertTrue(workflows.status(legacy=True)["ready"])
+            self.assertEqual(workflows.status(legacy=True)["required_assets"], ["needle2"])
             library.write_bytes(b"wrong")
-            self.assertFalse(workflows.status()["ready"])
+            self.assertFalse(workflows.status(legacy=True)["ready"])
 
     def test_existing_current_profile_directory_does_not_adopt_legacy_profile(self):
         self.install_fixture()
@@ -260,20 +260,20 @@ class WorkflowFixtures(unittest.TestCase):
         (state.home() / "system-normalizer").mkdir(parents=True)
         # Runtime will leave the blocked legacy directory untouched; it is not
         # selected and does not become the desktop's configured profile.
-        self.assertTrue(workflows.status()["ready"])
+        self.assertTrue(workflows.status(legacy=True)["ready"])
 
     def test_catalog_refusal_and_oversized_output_fail_closed(self):
         with patch.object(self.content, "verified_packaged_catalog", side_effect=RuntimeError("catalog mismatch")):
-            self.assertFalse(workflows.status()["ready"])
+            self.assertFalse(workflows.status(legacy=True)["ready"])
         with patch.object(workflows, "_model_status", return_value=([{"kind": "selection", "job": "panes", "state": "invalid", "error": "X" * 20_000}], False)):
-            result = workflows.status()
+            result = workflows.status(legacy=True)
         self.assertFalse(result["ready"])
         self.assertLessEqual(len(json.dumps(result).encode()), workflows.MAX_JSON)
 
     def test_setup_nonterminal_does_not_create_lock_or_call_status(self):
         with patch.object(workflows, "status", side_effect=AssertionError("status")):
             with self.assertRaisesRegex(workflows.WorkflowError, "terminal"):
-                workflows.setup(stdin=io.StringIO(), stdout=io.StringIO())
+                workflows.setup(legacy=True, stdin=io.StringIO(), stdout=io.StringIO())
         self.assertFalse(self.root.exists())
 
     def test_setup_reuses_acceptance_and_verifies_after_acquisition(self):
@@ -281,7 +281,7 @@ class WorkflowFixtures(unittest.TestCase):
         with patch.object(self.content, "Installer", return_value=installer) as factory, \
              patch.object(self.lic, "load_determined_texts", return_value=object()), \
              patch.object(asset, "install", side_effect=AssertionError("new acceptance")):
-            self.assertTrue(workflows.setup(stdin=Terminal(), stdout=Terminal())["ready"])
+            self.assertTrue(workflows.setup(legacy=True, stdin=Terminal(), stdout=Terminal())["ready"])
         factory.assert_called_once_with(str(self.root))
         self.assertFalse((state.home() / "model.json").exists())
 
@@ -292,25 +292,25 @@ class WorkflowFixtures(unittest.TestCase):
             self.install_fixture()
             self.agreement.return_value = False
         with patch.object(asset, "install", side_effect=licensed) as acquire:
-            self.assertTrue(workflows.setup(stdin=Terminal(), stdout=Terminal())["ready"])
+            self.assertTrue(workflows.setup(legacy=True, stdin=Terminal(), stdout=Terminal())["ready"])
         acquire.assert_called_once()
         (self.root / "assets" / "needle2" / "payload").unlink()
         (self.root / "assets" / "needle2").rmdir()
         with patch.object(self.content, "Installer") as installer, \
              patch.object(self.lic, "load_determined_texts", return_value=object()):
             with self.assertRaisesRegex(workflows.WorkflowError, "not installed"):
-                workflows.setup(stdin=Terminal(), stdout=Terminal())
+                workflows.setup(legacy=True, stdin=Terminal(), stdout=Terminal())
 
     def test_corrupt_or_custom_invalid_setup_refuses_before_any_acquisition(self):
         self.install_fixture().joinpath("payload").write_bytes(b"bad")
         with patch.object(asset, "install", side_effect=AssertionError("install")), \
              patch.object(self.content, "Installer", side_effect=AssertionError("installer")):
             with self.assertRaisesRegex(workflows.WorkflowError, "unchanged"):
-                workflows.setup(stdin=Terminal(), stdout=Terminal())
+                workflows.setup(legacy=True, stdin=Terminal(), stdout=Terminal())
             self.install_fixture()
             self.select().unlink()
             with self.assertRaisesRegex(workflows.WorkflowError, "unchanged"):
-                workflows.setup(stdin=Terminal(), stdout=Terminal())
+                workflows.setup(legacy=True, stdin=Terminal(), stdout=Terminal())
 
     def test_whole_session_lock_refuses_concurrent_process_before_status(self):
         self.root.mkdir()
@@ -321,11 +321,11 @@ class WorkflowFixtures(unittest.TestCase):
             with patch.object(workflows, "status", side_effect=AssertionError("status")), \
                  patch.object(asset, "install", side_effect=AssertionError("install")):
                 with self.assertRaisesRegex(workflows.WorkflowError, "already running"):
-                    workflows.setup(str(self.root / ".." / self.root.name), stdin=Terminal(), stdout=Terminal())
+                    workflows.setup(str(self.root / ".." / self.root.name), legacy=True, stdin=Terminal(), stdout=Terminal())
         finally:
             child.communicate("done\n", timeout=5)
         self.install_fixture()
-        self.assertTrue(workflows.setup(stdin=Terminal(), stdout=Terminal())["ready"])
+        self.assertTrue(workflows.setup(legacy=True, stdin=Terminal(), stdout=Terminal())["ready"])
 
     def test_setup_lock_symlink_is_refused_without_touching_target(self):
         self.root.mkdir()
@@ -334,7 +334,7 @@ class WorkflowFixtures(unittest.TestCase):
         (self.root / ".needle-workflows-setup.lock").symlink_to(target)
         with patch.object(workflows, "status", side_effect=AssertionError("status")):
             with self.assertRaises(OSError):
-                workflows.setup(stdin=Terminal(), stdout=Terminal())
+                workflows.setup(legacy=True, stdin=Terminal(), stdout=Terminal())
         self.assertEqual(target.read_text(), "unchanged")
 
 
@@ -345,7 +345,7 @@ class AuthorityProbe(unittest.TestCase):
             "GPU_TERMINAL_HOME": scratch + "/state", "KILIX_CONTENT_ROOT": scratch + "/content",
             "KILIX_LICENSE_RECEIPTS": scratch + "/receipts", "XDG_DATA_HOME": scratch + "/legacy", "KILIX_NEEDLE_SYSTEM_PROFILE": "",
         }):
-            self.assertEqual(workflows.status()["assets"][0]["state"], "agreement-required")
+            self.assertEqual(workflows.status(legacy=True)["assets"][0]["state"], "agreement-required")
             self.assertEqual(list(Path(scratch).iterdir()), [])
             spec = content.verified_packaged_catalog().require_asset("needle2")
             records = lic.load_determined_records()
@@ -355,12 +355,12 @@ class AuthorityProbe(unittest.TestCase):
                                                release_digest="1" * 64, catalogue_digest="2" * 64)
             store = lic.ReceiptStore.shared()
             path = store.write(receipt)
-            self.assertEqual(workflows.status()["assets"][0]["state"], "missing")
+            self.assertEqual(workflows.status(legacy=True)["assets"][0]["state"], "missing")
             path.write_text("not-json")
-            self.assertFalse(workflows.status()["ready"])
+            self.assertFalse(workflows.status(legacy=True)["ready"])
             path.unlink()
             os.mkfifo(path)
-            self.assertEqual(workflows.status()["assets"][0]["state"], "agreement-required")
+            self.assertEqual(workflows.status(legacy=True)["assets"][0]["state"], "agreement-required")
 
     def test_wrong_typed_acceptance_never_enters_installer(self):
         content, _first_use, _lic = asset._content()
@@ -369,7 +369,7 @@ class AuthorityProbe(unittest.TestCase):
             "KILIX_LICENSE_RECEIPTS": scratch + "/receipts", "XDG_DATA_HOME": scratch + "/legacy", "KILIX_NEEDLE_SYSTEM_PROFILE": "",
         }), patch.object(content, "Installer", side_effect=AssertionError("installer")):
             with self.assertRaisesRegex(asset.AssetError, "not accepted"):
-                workflows.setup(stdin=Terminal("yes\n"), stdout=Terminal())
+                workflows.setup(legacy=True, stdin=Terminal("yes\n"), stdout=Terminal())
             self.assertEqual(list(Path(scratch + "/receipts").glob("*.json")), [])
 
 
