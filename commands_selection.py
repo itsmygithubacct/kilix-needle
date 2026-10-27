@@ -11,37 +11,53 @@ BACKENDS = ('lfm2', 'needle3', 'grammar')
 DEFAULT = 'lfm2'
 ASSETS = {'lfm2': 'lfm2-kilix-commands', 'needle3': 'needle3-kilix-commands'}
 SCHEMA = 'kilix.ask.selection/v1'
+REPAIR = ('choose a model for this request with --commands-backend (kilix ask --model) '
+          'lfm2, needle3 or grammar, or save one with '
+          '`kilix-needle workflows select --model lfm2|needle3|grammar`')
+
+
+class PreferenceError(ValueError):
+    """The saved Ask preference cannot be used; it was left as it is."""
 
 
 def preference_path():
     return state.home() / 'ask.json'
 
 
+def _saved(path):
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_size > 4096:
+            raise ValueError('Ask preference must be a small regular file')
+        raw = os.read(fd, 4097)
+        if len(raw) > 4096:
+            raise ValueError('Ask preference is too large')
+        record = json.loads(raw)
+        if not isinstance(record, dict) or record.get('schema') != SCHEMA \
+                or record.get('backend') not in BACKENDS:
+            raise ValueError('invalid Ask preference')
+        return record['backend']
+    finally:
+        os.close(fd)
+
+
 def resolve(explicit=None):
     """Explicit option, environment, saved preference, then the release default.
 
     Reading a preference never creates state or loads a model. An explicit
-    choice can also repair an invalid saved preference.
+    choice can also repair an invalid saved preference, which is refused
+    with that guidance rather than rewritten.
     """
     value = explicit or os.environ.get('KILIX_ASK_COMMANDS_BACKEND')
     if not value:
+        path = preference_path()
         try:
-            fd = os.open(preference_path(), os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK)
+            return _saved(path)
         except FileNotFoundError:
             return DEFAULT
-        try:
-            info = os.fstat(fd)
-            if not stat.S_ISREG(info.st_mode) or info.st_size > 4096:
-                raise ValueError('Ask preference must be a small regular file')
-            raw = os.read(fd, 4097)
-            if len(raw) > 4096:
-                raise ValueError('Ask preference is too large')
-            record = json.loads(raw)
-            if not isinstance(record, dict) or record.get('schema') != SCHEMA:
-                raise ValueError('invalid Ask preference')
-            value = record.get('backend')
-        finally:
-            os.close(fd)
+        except (OSError, ValueError) as error:
+            raise PreferenceError(f'unusable Ask preference {path}: {error}; {REPAIR}') from error
     if value not in BACKENDS:
         raise ValueError('Ask model must be lfm2, needle3 or grammar')
     return value

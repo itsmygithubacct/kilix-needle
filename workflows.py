@@ -236,10 +236,14 @@ def status(root: str | None = None, *, model=None, legacy=False) -> dict:
 
 def setup(root: str | None = None, *, model=None, legacy=False, stdin=None, stdout=None) -> dict:
     stdin, stdout = stdin or sys.stdin, stdout or sys.stdout
+    # Only an explicit --model becomes the saved preference. Without one, setup
+    # prepares whatever the environment, saved preference or default resolves
+    # and leaves the saved preference exactly as it was.
+    explicit = bool(model)
     if not legacy:
         model = commands_selection.resolve(model)
         if model == 'grammar':
-            result = select(model, root)
+            result = select(model, root) if explicit else _ready(model, root)
             print(result['detail'], file=stdout)
             return result
     if not (stdin.isatty() and stdout.isatty()):
@@ -259,7 +263,7 @@ def setup(root: str | None = None, *, model=None, legacy=False, stdin=None, stdo
         except BlockingIOError as error:
             raise WorkflowError("workflow setup is already running for this Content root; finish or close that terminal before retrying") from error
         result = _setup_locked(str(directory), model=model, legacy=legacy, stdin=stdin, stdout=stdout)
-        if not legacy:
+        if not legacy and explicit:
             commands_selection.save(model)
         return result
     finally:
@@ -295,11 +299,16 @@ def _setup_locked(root: str, *, model=None, legacy=False, stdin, stdout) -> dict
     return after
 
 
-def select(model, root=None):
-    """Select only an already ready backend; never install or accept licences."""
+def _ready(model, root=None):
     result = status(root, model=model)
     if not result['ready']:
         raise WorkflowError('; '.join(result['errors']) or result['detail'])
+    return result
+
+
+def select(model, root=None):
+    """Select only an already ready backend; never install or accept licences."""
+    result = _ready(model, root)
     commands_selection.save(model)
     return result
 
@@ -315,7 +324,8 @@ def main(argv: list[str] | None = None) -> int:
     for command in (probe, acquire):
         mode = command.add_mutually_exclusive_group()
         mode.add_argument('--model', choices=commands_selection.BACKENDS,
-                          help='Ask model; defaults to the current Ask preference')
+                          help='Ask model; defaults to the current Ask choice. '
+                               'Setup saves only an explicit --model')
         mode.add_argument('--legacy', action='store_true', help='check or set up the older Needle2 job models')
     choose = commands.add_parser('select', help='save a ready Ask backend without downloads')
     choose.add_argument('--model', required=True, choices=commands_selection.BACKENDS)

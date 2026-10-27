@@ -65,8 +65,10 @@ class AskSelectionTests(PreferenceFixture):
             commands_selection.resolve()
         path.unlink()
         path.symlink_to(self.base / 'missing')
-        with self.assertRaises(OSError):
+        with self.assertRaises(commands_selection.PreferenceError) as raised:
             commands_selection.resolve()
+        self.assertIsInstance(raised.exception.__cause__, OSError)
+        self.assertIn('workflows select --model', str(raised.exception))
         workflows.select('grammar')
         self.assertFalse(path.is_symlink())
         self.assertEqual(commands_selection.resolve(), 'grammar')
@@ -81,6 +83,55 @@ class AskSelectionTests(PreferenceFixture):
         self.assertEqual(json.loads(output.getvalue().splitlines()[-1])['interpretation'], 'grammar')
         self.assertFalse((self.base / 'content').exists())
         self.assertFalse((self.base / 'receipts').exists())
+
+    def test_unusable_preference_names_the_repair_and_is_never_rewritten(self):
+        path = commands_selection.preference_path()
+        path.parent.mkdir(parents=True)
+        raw = json.dumps({'schema': commands_selection.SCHEMA, 'backend': 'needle2'}).encode() + b'\n'
+        path.write_bytes(raw)
+        inode = path.stat().st_ino
+        with self.assertRaises(commands_selection.PreferenceError) as raised:
+            commands_selection.resolve()
+        for words in ('--commands-backend', 'kilix ask --model', 'workflows select --model'):
+            self.assertIn(words, str(raised.exception))
+        result = workflows.status()
+        self.assertFalse(result['ready'])
+        self.assertIn('workflows select --model', result['errors'][0])
+        with self.assertRaises(commands_selection.PreferenceError):
+            workflows.setup(stdin=io.StringIO(), stdout=io.StringIO())
+        error = io.StringIO()
+        with contextlib.redirect_stderr(error), self.assertRaises(SystemExit) as refused:
+            ask.main(['--plan', '--json', 'open calculator'])
+        self.assertEqual(refused.exception.code, 2)
+        self.assertIn('workflows select --model', error.getvalue())
+        # An explicit or environment choice bypasses the file and leaves it as it is.
+        plan = {'status': 0, 'items': [{'outcome': 'would', 'step': {'kind': 'app'}}]}
+        with patch.object(asset, '_content', side_effect=AssertionError('no model acquisition')), \
+                patch('commands_models.Providers.get', side_effect=AssertionError('no model')), \
+                patch('compact_runner.run', return_value=plan), contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(ask.main(['--commands-backend', 'grammar', '--plan', '--json', 'open calculator']), 0)
+            with patch.dict(os.environ, {'KILIX_ASK_COMMANDS_BACKEND': 'grammar'}):
+                self.assertEqual(ask.main(['--plan', '--json', 'open calculator']), 0)
+                self.assertTrue(workflows.setup(stdin=io.StringIO(), stdout=io.StringIO())['ready'])
+        self.assertEqual((path.read_bytes(), path.stat().st_ino), (raw, inode))
+        workflows.select('grammar')
+        self.assertEqual(commands_selection.resolve(), 'grammar')
+
+    def test_environment_or_saved_grammar_setup_saves_nothing(self):
+        path = commands_selection.preference_path()
+        with patch.object(asset, '_content', side_effect=AssertionError('no assets')):
+            with patch.dict(os.environ, {'KILIX_ASK_COMMANDS_BACKEND': 'grammar'}):
+                result = workflows.setup(stdin=io.StringIO(), stdout=io.StringIO())
+                self.assertEqual((result['ready'], result['backend']), (True, 'grammar'))
+                self.assertFalse(path.exists())
+                commands_selection.save('needle3')
+                saved = (path.read_bytes(), path.stat().st_ino)
+                self.assertTrue(workflows.setup(stdin=io.StringIO(), stdout=io.StringIO())['ready'])
+                self.assertEqual((path.read_bytes(), path.stat().st_ino), saved)
+            commands_selection.save('grammar')
+            saved = (path.read_bytes(), path.stat().st_ino)
+            self.assertEqual(workflows.setup(stdin=io.StringIO(), stdout=io.StringIO())['backend'], 'grammar')
+            self.assertEqual((path.read_bytes(), path.stat().st_ino), saved)
 
     def test_real_catalog_missing_models_need_their_own_agreement_without_writes(self):
         for backend, asset_id in commands_selection.ASSETS.items():
@@ -169,6 +220,55 @@ class AskAssetTests(PreferenceFixture):
             self.assertTrue(result['ready'])
             self.assertEqual(install.call_count, 1)
             self.assertEqual(commands_selection.resolve(), backend)
+
+    def setup_acquiring(self, backend=None, *, model=None, complete=True):
+        """Run setup at a terminal; the fake installer accepts and installs the asset it is asked for."""
+        from test_workflows import Terminal
+        backends = {asset_id: name for name, asset_id in commands_selection.ASSETS.items()}
+        self.agreement.return_value = True
+        def acquire(root, **kwargs):
+            if backend is not None:
+                self.assertEqual(kwargs['asset_id'], commands_selection.ASSETS[backend])
+            if complete:
+                self.install(backends[kwargs['asset_id']])
+                self.agreement.return_value = False
+        with patch.object(asset, 'install', side_effect=acquire):
+            return workflows.setup(model=model, stdin=Terminal(), stdout=Terminal())
+
+    def test_implicit_default_setup_prepares_lfm2_without_saving(self):
+        result = self.setup_acquiring('lfm2')
+        self.assertEqual((result['ready'], result['backend']), (True, 'lfm2'))
+        self.assertFalse(commands_selection.preference_path().exists())
+
+    def test_environment_only_setup_never_creates_or_changes_the_preference(self):
+        path = commands_selection.preference_path()
+        with patch.dict(os.environ, {'KILIX_ASK_COMMANDS_BACKEND': 'needle3'}):
+            self.assertEqual(self.setup_acquiring('needle3')['backend'], 'needle3')
+            self.assertFalse(path.exists())
+            commands_selection.save('grammar')
+            saved = (path.read_bytes(), path.stat().st_ino)
+            self.assertTrue(self.setup_acquiring('needle3')['ready'])
+            self.assertEqual((path.read_bytes(), path.stat().st_ino), saved)
+        self.assertEqual(commands_selection.resolve(), 'grammar')
+
+    def test_explicit_setup_saves_over_environment_and_saved_choices(self):
+        commands_selection.save('grammar')
+        with patch.dict(os.environ, {'KILIX_ASK_COMMANDS_BACKEND': 'needle3'}):
+            self.assertEqual(self.setup_acquiring('lfm2', model='lfm2')['backend'], 'lfm2')
+        self.assertEqual(commands_selection.resolve(), 'lfm2')
+
+    def test_setup_that_does_not_become_ready_keeps_the_saved_choice(self):
+        path = commands_selection.preference_path()
+        commands_selection.save('grammar')
+        saved = (path.read_bytes(), path.stat().st_ino)
+        with self.assertRaises(workflows.WorkflowError):
+            self.setup_acquiring('needle3', model='needle3', complete=False)
+        with patch.dict(os.environ, {'KILIX_ASK_COMMANDS_BACKEND': 'lfm2'}), self.assertRaises(workflows.WorkflowError):
+            self.setup_acquiring('lfm2', complete=False)
+        with self.assertRaises(workflows.WorkflowError):
+            workflows.select('lfm2')
+        self.assertEqual((path.read_bytes(), path.stat().st_ino), saved)
+        self.assertEqual(commands_selection.resolve(), 'grammar')
 
 
 if __name__ == '__main__':

@@ -60,12 +60,18 @@ selection, release pins and Content installer:
 
 ```sh
 kilix-needle workflows status --json   # read-only; exit 0 ready, 1 needs attention
-kilix-needle workflows setup          # interactive licence acceptance/acquisition
+kilix-needle workflows setup          # set up the current choice; saves nothing
 kilix-needle workflows setup --model needle3  # install and select the alternate
 kilix-needle workflows setup --model grammar  # select grammar; no download
 kilix-needle workflows select --model lfm2    # select an already installed model
 kilix-needle workflows status --legacy --json # older Needle2 jobs, separately
 ```
+
+Only an explicit `--model` is saved, and only after that model is ready.
+Setup without it prepares the model chosen by `KILIX_ASK_COMMANDS_BACKEND`,
+the saved preference or the default, and leaves the saved preference unchanged.
+An unreadable or invalid saved preference is refused and left as it is; the
+error names the explicit model option and the `workflows select` repair.
 
 Kilix supplies `KILIX_CONTENT_ROOT`; a standalone call may pass `--root` with
 an absolute Content root. Status emits at most 16 KiB of JSON with schema
