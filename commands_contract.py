@@ -87,7 +87,8 @@ def _extended_agent_calls(request):
     preamble = _PREAMBLE.match(text)
     polite = bool(re.search(r'\b(?:can|could|would|will)\s+you\b', preamble[0], re.I))
     text = text[preamble.end():]
-    text = re.sub(r'^I need a new (?=(?:claude|codex)\b)', 'start a new ', text, flags=re.I)
+    text = re.sub(r'^I\s+need\s+a\s+(?:new|fresh)\s+(?=(?:claude|codex)\b)',
+                  'start a new ', text, flags=re.I)
     if re.match(r'^a new (?:claude|codex) (?:session|agent)\b',text,re.I):
         text='start '+re.sub(r',?\s+please[.!]?$', '', text, flags=re.I)
     # A final question mark belongs to the polite request only when no payload
@@ -155,7 +156,8 @@ def _extended_agent_calls(request):
                        r'(?P<agent>claude|codex)\b(?:\s+session)?',text,re.I)
     if message:
         rest=text[message.end():]
-        delimiter=re.compile(r'\s+(?:with|saying|the following(?: instruction| text| message)?|this(?: exact)?(?: message| text| instruction)?):\s*|'
+        delimiter=re.compile(r'\s+with\s+this\s+exact\s+(?:text|message|instruction):\s*|'
+                             r'\s+(?:with|saying|the following(?: instruction| text| message)?|this(?: exact)?(?: message| text| instruction)?):\s*|'
                              r'\s+(?:the|this)(?: exact)? (?:message|text|instruction)\s+(?=")|'
                              r':\s*|\s+to\s+',re.I)
         for marker in delimiter.finditer(rest):
@@ -202,8 +204,8 @@ def _call(name, **args):
 
 def _app_calls(request):
     text = request.strip()
-    desired = re.fullmatch(r"(?:I would like|I['’]d like)\s+(?:the\s+)?("+_NOUN+
-                           r")\s+(?:opened|launched|started)[.!]?", text, re.I)
+    desired = re.fullmatch(r"(?:I would like|I['’]d like|I need)\s+(?:the\s+)?("+_NOUN+
+                           r")\s+(?:opened|launched|started)(?:\s+now)?[.!]?", text, re.I)
     if desired:
         return [_call('open_app', app=_APP_WORDS[desired[1].casefold()])]
     preamble = _PREAMBLE.match(text)
