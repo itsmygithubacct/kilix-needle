@@ -131,6 +131,7 @@ def _extended_agent_calls(request):
             rest = rest[:marker.start()]
             break
         rest = re.sub(r',?\s+please[.!]?$', '', rest, flags=re.I)
+        stated = rest
         rest, directory = _take_location(rest)
         if rest is None:return None
         args = {} if directory in (None,'here') else {'directory':directory}
@@ -145,6 +146,8 @@ def _extended_agent_calls(request):
                 rest=rest[:match.start()]+' '+rest[match.end():]
         model = _MODEL.search(rest)
         if model:
+            # A model read across a removed location or placement was not stated.
+            if model[0] not in stated:return None
             args['model']=model[1]
             rest=rest[:model.start()]+' '+rest[model.end():]
         if rest.strip(' ,.!'):return None
@@ -289,7 +292,11 @@ def exact_calls(request, *, _depth=0):
                 and all(x['name'].startswith('start_') for x in first)
                 and re.match(r'^(?:claude|codex)\b', right, re.I)):
             rest=exact_calls('start '+right,_depth=_depth+1)
-        if rest and len(first+rest)<=4:return first+rest
+        if rest and len(first+rest)<=4:
+            # One model stated for several launches does not say which it covers.
+            launches=[x for x in first+rest if x['name'].startswith('start_')]
+            if 0<sum('model' in x['arguments'] for x in launches)<len(launches):continue
+            return first+rest
     return None
 
 

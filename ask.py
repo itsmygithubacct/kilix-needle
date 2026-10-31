@@ -55,7 +55,7 @@ _MCP = {"panes": "kilix_plan / kilix_act", "apps": "kilix_apps_plan / kilix_apps
         "system": "kilix_system_plan / kilix_system_read"}
 
 
-_LABEL = re.compile(r"\s*([A-Za-z]+)\s*:\s*(?=\S)")
+_LABEL = re.compile(r"[ \t]*([A-Za-z]+)[ \t]*:[ \t]*(?=\S)")
 
 
 def labelled(request: str) -> tuple[str | None, str]:
@@ -297,7 +297,7 @@ def describe(route: dict) -> str:
     elif stage == 1:
         head = f"route: {job}{p}"
     elif stage == "forced":
-        head = f"route: {job} (chosen with --job)"
+        head = f"route: {job} ({route.get('note') or 'chosen with --job'})"
     elif stage == 2 and job:
         head = f"route: unsure; only the {job} job's plan admits it{p}"
     elif stage == "multi":

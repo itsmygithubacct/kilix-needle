@@ -88,6 +88,26 @@ class CommandGrammar(unittest.TestCase):
         self.assertEqual(calls, [call('start_codex', directory='/w', model='gpt-5')])
         self.assertFalse(contract.admit('start codex in /w model gpt-5', calls).actions)
 
+    def test_one_model_for_several_launches_refuses(self):
+        for request in ('start claude and claude, model opus',
+                        'start codex in /a and codex in /b, model gpt-6.1-sol',
+                        'start claude in /a and claude in /b --model opus',
+                        'start codex in /a and codex in /b using gpt-6.1-sol'):
+            with self.subTest(request=request):
+                self.assertIsNone(contract.exact_calls(request))
+        self.check('start codex in /a using gpt-6 and codex in /b using gpt-6.1-sol', [
+            call('start_codex', directory='/a', model='gpt-6'),
+            call('start_codex', directory='/b', model='gpt-6.1-sol')])
+        self.check('start codex in /a and claude in /b', [
+            call('start_codex', directory='/a'), call('start_claude', directory='/b')])
+
+    def test_a_model_is_not_read_across_a_removed_location_or_placement(self):
+        for request in ('start codex model in /w gpt-6', 'start codex --model on the right gpt-6',
+                        'start codex model here gpt-6', 'start codex using in /w gpt-6',
+                        'start codex in /srv/model gpt-6'):
+            with self.subTest(request=request):
+                self.assertIsNone(contract.exact_calls(request))
+
     def test_wait_only_accepts_a_complete_non_launch_constraint(self):
         self.check('wait for codex to be idle; do not launch a new agent.',
                    [call('wait_for_agent', agent='codex')])

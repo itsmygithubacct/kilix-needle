@@ -67,7 +67,8 @@ class Pipeline(unittest.TestCase):
 
     def test_only_a_runnable_jobs_label_is_taken(self):
         for request in ("tmux: list sessions", "note: close tab 2", "agents:", "close tab 2: now",
-                        "http://x: start codex"):
+                        "http://x: start codex", "agents:\x1fstart codex in /x",
+                        "agents:\u2028start codex in /x", "agents\u00a0: start codex"):
             jobs = FakeJobs()
             with self.subTest(request=request), \
                     mock.patch.object(router, "route", return_value=route(1, "panes")) as routed:
@@ -375,18 +376,22 @@ class Cli(unittest.TestCase):
         self.assertEqual(len(closed), 1)
 
     def test_interactive_acts_on_a_labelled_request_only_on_yes(self):
-        with FakeKilix(desktop()) as fake, mock.patch.object(sys, "stdin") as stdin, \
-                mock.patch.object(router, "route", side_effect=AssertionError("routed")):
-            stdin.isatty.return_value = True
-            stdin.readline.return_value = "y\n"
-            saved, sys.stdout = sys.stdout, io.StringIO()
-            try:
-                status = ask.main(["--interactive", "panes: close tab 2"])
-            finally:
-                sys.stdout = saved
-            closed = [c for c in fake.calls() if c[0][0] == "close-tab"]
-        self.assertEqual(status, 0)
-        self.assertEqual(len(closed), 1)
+        for answer, wanted_status, wanted_closes in (("n\n", 1, 0), ("y\n", 0, 1)):
+            with self.subTest(answer=answer), FakeKilix(desktop()) as fake, \
+                    mock.patch.object(sys, "stdin") as stdin, \
+                    mock.patch.object(router, "route", side_effect=AssertionError("routed")):
+                stdin.isatty.return_value = True
+                stdin.readline.return_value = answer
+                saved, sys.stdout = sys.stdout, io.StringIO()
+                try:
+                    status = ask.main(["--interactive", "panes: close tab 2"])
+                    out = sys.stdout.getvalue()
+                finally:
+                    sys.stdout = saved
+                closed = [c for c in fake.calls() if c[0][0] == "close-tab"]
+            self.assertEqual(status, wanted_status)
+            self.assertEqual(len(closed), wanted_closes)
+            self.assertIn("route: panes (the request names the panes job)", out)
 
     def test_interactive_takes_only_y_or_yes(self):
         for answer in ("yesterday\n", "ye\n", "\n", "n\n", "y es\n", "no yes\n"):

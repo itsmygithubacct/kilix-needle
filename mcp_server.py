@@ -14,7 +14,8 @@ explicit experimental bundle. No desktop mutation occurs without confirm_risky.
 Two tools per job, so a harness's own approval setting can tell them apart:
 
 - kilix_ask_plan / kilix_ask_act   any plain request: the local router picks
-               the job (ask.py) and that job runs it with its own checks and
+               the job (ask.py), or a leading "JOB:" label names it, as the
+               clarification hint writes it; that job runs it with its own checks and
                consent (confirm_risky as for panes and apps); an unsure route
                never acts, and tmux, logs, pty and desktop are only named
 - kilix_plan   what a request would do, resolved against the live panes;
