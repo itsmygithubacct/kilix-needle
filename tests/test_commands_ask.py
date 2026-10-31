@@ -76,6 +76,25 @@ class AskCommands(unittest.TestCase):
         self.assertEqual(run.call_count, 3)  # planning, fresh preflight, execution
         self.assertNotIn('dry_run', run.call_args.kwargs)
 
+    def test_a_labelled_request_reaches_admission_without_its_label(self):
+        # The clarification hint's own form; the label once reached admission and
+        # every proposal for it was refused as having no supported reading.
+        text = 'agents: start codex in /w with model gpt-6.1-sol'
+        wanted = [{'name': 'start_codex', 'arguments': {'directory': '/w', 'model': 'gpt-6.1-sol'}}]
+        planned = {'status': 0, 'items': [{'outcome': 'would', 'step': {'kind': 'agent'}}]}
+        for backend in ('grammar', 'lfm2'):
+            provider = Mock()
+            provider.return_value.decide.return_value = {'calls': wanted}
+            session = commands_ask.Session(backend, provider=provider, model_only=backend == 'lfm2')
+            with self.subTest(backend=backend), \
+                    patch.object(ask.router, 'route', side_effect=AssertionError('routed')), \
+                    patch.object(compact_runner, 'run', return_value=planned) as run:
+                record = ask.ask(text, self.jobs(session), act=False)
+            self.assertEqual(record['status'], 0)
+            self.assertEqual(record['calls'], wanted)
+            self.assertEqual(record['route']['job'], 'agents')
+            self.assertEqual(run.call_args.args[0], 'start codex in /w with model gpt-6.1-sol')
+
     def test_wrong_model_proposal_never_substitutes_grammar_or_reaches_host(self):
         provider = Mock()
         provider.return_value.decide.return_value = {

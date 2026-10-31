@@ -40,6 +40,11 @@ _DIRECTORY = r'(?:"(?:[^"\\]|\\.)+"|~?/[^\s;,?]+)'
 _LOCATION = re.compile(r'\b(?:in|at|inside|within)\s+(?P<path>'+_DIRECTORY+r')|'
                        r'\bwith\s+(?P<working>'+_DIRECTORY+r')\s+as\s+(?:(?:its|the)\s+)?working\s+directory|'
                        r'\b(?P<here>here|in (?:the )?(?:current directory|current folder|this folder|this directory))\b', re.I)
+# Models the compact contract admits for each agent (see _canonical).
+_MODELS = {'start_claude': ('sonnet', 'opus'), 'start_codex': ('gpt-6.1-sol', 'gpt-6')}
+_MODEL_NAME = r'[A-Za-z0-9][A-Za-z0-9._/-]*'
+_MODEL = re.compile(r'(?:\b(?:with\s+model|using(?:\s+model)?|on\s+model)\s+|'
+                    r'\bmodel\s*=\s*|\bmodel\s+|(?<!\S)--model(?:=|\s+))('+_MODEL_NAME+r')\b', re.I)
 _PLACEMENTS = [
     ('right', r'(?:in\s+)?(?:a\s+)?split\s+(?:to\s+)?(?:the\s+|my\s+)?right|(?:on|to)\s+(?:the\s+|my\s+)?right'),
     ('left', r'(?:in\s+)?(?:a\s+)?split\s+(?:to\s+)?(?:the\s+|my\s+)?left|(?:on|to)\s+(?:the\s+|my\s+)?left'),
@@ -96,11 +101,16 @@ def _extended_agent_calls(request):
     if polite and ':' not in text and text.endswith('?'):
         text = text[:-1].rstrip()
     head = re.match(r'^(?:start(?: up)?|launch|open|run|bring up|get(?: me)?|create|fire up|spin up)\s+'
-                    r'(?:(?:a|an|the|new|fresh)\s+)*(?P<agent>claude|codex)\b'
-                    r'(?:\s+(?:coding\s+)?(?:client|session|workspace|agent|instance))?'
+                    r'(?:one\s+)?(?:(?:a|an|the|new|fresh)\s+)*(?P<agent>claude|codex)\b'
+                    r'(?:\s+(?:coding\s+)?(?:client|session|workspace|agent|instance|worker))?'
                     r'(?:\s+(?:running|started))?', text, re.I)
     if head:
         rest = text[head.end():]
+        # A contract model name may follow the agent directly: "start codex gpt-6".
+        named = re.match(r'\s+('+'|'.join(map(re.escape, _MODELS['start_'+head['agent'].casefold()]))+r')(?![\w.-])',
+                         rest, re.I)
+        if named:
+            rest = ' --model '+named[1]+rest[named.end():]
         task = None
         quoted = re.search(r'\s+with\s+(?:this\s+)?(?:initial\s+)?(?:task|instruction)\s+(?=")', rest, re.I)
         if quoted and _outside_quotes(rest, quoted.start()):
@@ -133,7 +143,7 @@ def _extended_agent_calls(request):
                 if len(matches)!=1 or 'place' in args:return None
                 match=matches[0];args['place']=place
                 rest=rest[:match.start()]+' '+rest[match.end():]
-        model = re.search(r'\b(?:with\s+model|using(?:\s+model)?|on\s+model)\s+([A-Za-z0-9][A-Za-z0-9._/-]*)\b',rest,re.I)
+        model = _MODEL.search(rest)
         if model:
             args['model']=model[1]
             rest=rest[:model.start()]+' '+rest[model.end():]
@@ -310,8 +320,7 @@ def _canonical(calls, cwd=None):
                 args.setdefault('place','tab')
                 if args['place'] not in ('tab','right','left','up','down'):
                     raise ValueError('unknown placement')
-                if 'model' in args and args['model'] not in (
-                        ('sonnet','opus') if name=='start_claude' else ('gpt-6.1-sol','gpt-6')):
+                if 'model' in args and args['model'] not in _MODELS[name]:
                     raise ValueError('model outside the compact contract')
             elif args['agent'] not in ('claude','codex'):
                 raise ValueError('unknown agent')

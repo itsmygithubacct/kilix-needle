@@ -58,6 +58,36 @@ class CommandGrammar(unittest.TestCase):
             with self.subTest(request=request):
                 self.assertIsNone(contract.exact_calls(request))
 
+    def test_worker_one_and_model_forms_read_as_one_launch(self):
+        launch = [call('start_codex', directory='/w', model='gpt-6.1-sol')]
+        for request in ('start one codex worker in /w using model gpt-6.1-sol',
+                        'launch a Codex worker using gpt-6.1-sol in /w',
+                        'start codex in /w model gpt-6.1-sol', 'start codex in /w, model gpt-6.1-sol',
+                        'start codex in /w model=gpt-6.1-sol',
+                        'start codex --model gpt-6.1-sol in /w', 'start codex in /w --model=gpt-6.1-sol',
+                        'start codex gpt-6.1-sol in /w'):
+            with self.subTest(request=request):
+                self.check(request, launch)
+        self.check('start claude opus to the right', [call('start_claude', model='opus', place='right')])
+        self.check('start codex gpt-6', [call('start_codex', model='gpt-6')])
+
+    def test_model_forms_refuse_missing_repeated_or_foreign_models(self):
+        for request in ('start codex in /w model', 'start codex --model gpt-6 --model gpt-6.1-sol',
+                        'start codex with model gpt-6 using gpt-6.1-sol', 'start codex gpt-6.1-sol gpt-6 in /w',
+                        'start codex gpt-6.1-solx in /w', 'start claude gpt-6 in /w',
+                        'start codex modelling in /w', 'start codex in /w; model gpt-6.1-sol',
+                        'start two codex workers', 'start one one codex', 'start a one codex',
+                        'start codex worker pool in /w',
+                        # A colon opens an initial task, so this model is left over.
+                        'start codex in /w model: gpt-6.1-sol',
+                        'Open exactly one Codex worker in /w using gpt-6.1-sol.'):
+            with self.subTest(request=request):
+                self.assertIsNone(contract.exact_calls(request))
+        # A stated model outside the contract is read, then refused by admission.
+        calls = contract.exact_calls('start codex in /w model gpt-5')
+        self.assertEqual(calls, [call('start_codex', directory='/w', model='gpt-5')])
+        self.assertFalse(contract.admit('start codex in /w model gpt-5', calls).actions)
+
     def test_wait_only_accepts_a_complete_non_launch_constraint(self):
         self.check('wait for codex to be idle; do not launch a new agent.',
                    [call('wait_for_agent', agent='codex')])

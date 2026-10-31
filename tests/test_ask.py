@@ -54,6 +54,35 @@ class Pipeline(unittest.TestCase):
         self.assertEqual(plan["route"]["job"], "apps")
         self.assertEqual(done["route"]["stage"], 1)
 
+    def test_a_job_label_names_its_job_and_passes_the_rest_unchanged(self):
+        jobs = FakeJobs()
+        with mock.patch.object(router, "route", side_effect=AssertionError("routed")):
+            record = ask.ask("agents: start codex in /x", jobs, act=False)
+            spaced = ask.ask("  Agents :  start codex in /x", jobs, act=False)
+        self.assertEqual(jobs.runs, [("agents", True, False, False)] * 2)
+        self.assertEqual(record["request"], "start codex in /x")
+        self.assertEqual(spaced["request"], "start codex in /x")
+        self.assertEqual(record["route"], {"stage": "forced", "job": "agents",
+                                           "note": "the request names the agents job"})
+
+    def test_only_a_runnable_jobs_label_is_taken(self):
+        for request in ("tmux: list sessions", "note: close tab 2", "agents:", "close tab 2: now",
+                        "http://x: start codex"):
+            jobs = FakeJobs()
+            with self.subTest(request=request), \
+                    mock.patch.object(router, "route", return_value=route(1, "panes")) as routed:
+                ask.ask(request, jobs, act=False)
+            routed.assert_called_once_with(request)
+
+    def test_a_job_label_cannot_contradict_the_chosen_job(self):
+        with self.assertRaises(ValueError):
+            ask.ask("agents: start codex in /x", FakeJobs(), act=False, job="panes")
+        with self.assertRaises(ValueError):
+            ask.ask("agents: start codex in /x", FakeJobs(), act=True, route=route(1, "panes"))
+        jobs = FakeJobs()
+        ask.ask("agents: start codex in /x", jobs, act=True, route=router.Route("forced", "agents"))
+        self.assertEqual(jobs.runs, [("agents", False, False, False)])
+
     def test_no_yes_widens_the_agents_jobs_consent(self):
         jobs = ask.Jobs(lambda job: None, lambda: None, confirm=needle_cli._never, agent=True)
         seen = {}
@@ -343,6 +372,20 @@ class Cli(unittest.TestCase):
         self.assertIn("route: panes", out)
         self.assertIn("not run", out)
         self.assertEqual(accepted, 0)
+        self.assertEqual(len(closed), 1)
+
+    def test_interactive_acts_on_a_labelled_request_only_on_yes(self):
+        with FakeKilix(desktop()) as fake, mock.patch.object(sys, "stdin") as stdin, \
+                mock.patch.object(router, "route", side_effect=AssertionError("routed")):
+            stdin.isatty.return_value = True
+            stdin.readline.return_value = "y\n"
+            saved, sys.stdout = sys.stdout, io.StringIO()
+            try:
+                status = ask.main(["--interactive", "panes: close tab 2"])
+            finally:
+                sys.stdout = saved
+            closed = [c for c in fake.calls() if c[0][0] == "close-tab"]
+        self.assertEqual(status, 0)
         self.assertEqual(len(closed), 1)
 
     def test_interactive_takes_only_y_or_yes(self):

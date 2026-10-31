@@ -13,6 +13,10 @@ request runs nothing and asks for two requests. The one exception is the
 no-verb CLI default (`default="panes"`): at stage 2, when only the panes plan
 admits the request, the panes job answers as it did before routing.
 
+A clarification writes each accepted phrasing as `JOB: PHRASE`. A request that
+opens with a runnable job's label names its job, as --job does: the words after
+the label go to that job unchanged, without routing.
+
 Jobs that need arguments a sentence cannot carry (tmux: a socket; logs: a file or
 session) and the opt-in pty and desktop tools are named, never run, so routing
 grants no access their own entry points do not.
@@ -26,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 
 import history
@@ -48,6 +53,18 @@ _CLI = {"panes": "kilix-needle", "apps": "kilix-needle apps", "agents": "kilix-n
 _MCP = {"panes": "kilix_plan / kilix_act", "apps": "kilix_apps_plan / kilix_apps_act",
         "agents": "kilix_agents_plan / kilix_agents_act", "files": "kilix_files_plan / kilix_files_read",
         "system": "kilix_system_plan / kilix_system_read"}
+
+
+_LABEL = re.compile(r"\s*([A-Za-z]+)\s*:\s*(?=\S)")
+
+
+def labelled(request: str) -> tuple[str | None, str]:
+    """(job, rest) when the request opens with a runnable job's label, as the
+    clarification hint writes it; otherwise (None, request)."""
+    match = _LABEL.match(request)
+    if match and match[1].casefold() in router.RUNS:
+        return match[1].casefold(), request[match.end():]
+    return None, request
 
 
 def admits(job: str, record: dict) -> bool:
@@ -167,6 +184,13 @@ def ask(request: str, jobs: Jobs, *, act: bool, assume_yes: bool = False,
     and consent. A clarification or a router error never acts."""
     if not isinstance(request, str) or not request.strip():
         raise ValueError("ask needs a request")
+    named, request = labelled(request)
+    if named is not None:
+        chosen = route.job if route is not None else job
+        if chosen is None:
+            job = named
+        elif chosen != named:
+            raise ValueError(f"the request names the {named} job, not {chosen}")
     commands = getattr(jobs, 'commands', None)
     if commands is not None and (
             route is None and job is None and commands.recognizes(request)
@@ -185,7 +209,8 @@ def ask(request: str, jobs: Jobs, *, act: bool, assume_yes: bool = False,
     elif job is not None:
         if job not in router.RUNS:
             raise ValueError(f"--job takes one of {', '.join(router.RUNS)}")
-        route = router.Route("forced", job)
+        route = router.Route("forced", job,
+                             note=f"the request names the {job} job" if named else "")
     else:
         try:
             route = router.route(request)
@@ -369,7 +394,8 @@ def interactive(request: str, jobs: Jobs) -> int:
     print(render(plan))
     route = plan["route"]
     runnable = set(router.RUNS) | ({'commands'} if getattr(jobs, 'commands', None) else set())
-    if route.get("stage") not in (0, 1) or route.get("job") not in runnable \
+    # "forced" here is a request that names its job; --job cannot reach it.
+    if route.get("stage") not in (0, 1, "forced") or route.get("job") not in runnable \
             or not admits(route["job"], plan):
         return 1
     if not _yes("Do it? [y/N] "):
