@@ -61,7 +61,7 @@ def _literal(raw):
         return None
 
 
-def _take_location(text):
+def _take_location(text, gap=' '):
     matches = [m for m in _LOCATION.finditer(text) if _outside_quotes(text, m.start())]
     if len(matches) > 1:
         return None, None
@@ -72,7 +72,7 @@ def _take_location(text):
     directory = _literal(raw) if raw else 'here'
     if not directory:
         return None, None
-    return text[:match.start()] + ' ' + text[match.end():], directory
+    return text[:match.start()] + gap + text[match.end():], directory
 
 
 def _quoted_payload(text):
@@ -131,26 +131,25 @@ def _extended_agent_calls(request):
             rest = rest[:marker.start()]
             break
         rest = re.sub(r',?\s+please[.!]?$', '', rest, flags=re.I)
-        stated = rest
-        rest, directory = _take_location(rest)
+        # Removed spans leave a NUL gap that no model phrase can cross.
+        # Requests never contain NUL: exact_calls refuses control characters.
+        rest, directory = _take_location(rest, gap=' \0 ')
         if rest is None:return None
         args = {} if directory in (None,'here') else {'directory':directory}
         if task is not None:
             if not task or len(task.encode())>1024:return None
             args['task']=task
         for place, pattern in _PLACEMENTS:
-            matches=list(re.finditer(r'\b(?:'+pattern+r')\b',rest,re.I))
+            matches=list(re.finditer(r'\b(?:'+pattern+r')\b',rest.replace('\0',' '),re.I))
             if matches:
                 if len(matches)!=1 or 'place' in args:return None
                 match=matches[0];args['place']=place
-                rest=rest[:match.start()]+' '+rest[match.end():]
+                rest=rest[:match.start()]+' \0 '+rest[match.end():]
         model = _MODEL.search(rest)
         if model:
-            # A model read across a removed location or placement was not stated.
-            if model[0] not in stated:return None
             args['model']=model[1]
             rest=rest[:model.start()]+' '+rest[model.end():]
-        if rest.strip(' ,.!'):return None
+        if rest.replace('\0',' ').strip(' ,.!'):return None
         return [_call('start_'+head['agent'].casefold(),**args)]
 
     # Messages require a named agent; no pronoun or unnamed-session fallback.
@@ -288,14 +287,16 @@ def exact_calls(request, *, _depth=0):
         if not first:continue
         if any('task' in x['arguments'] or 'text' in x['arguments'] for x in first):continue
         rest=exact_calls(right,_depth=_depth+1)
+        shared=False
         if (not rest and separator[0].strip(' ,').casefold() in ('and', 'and then')
                 and all(x['name'].startswith('start_') for x in first)
                 and re.match(r'^(?:claude|codex)\b', right, re.I)):
             rest=exact_calls('start '+right,_depth=_depth+1)
+            shared=True
         if rest and len(first+rest)<=4:
-            # One model stated for several launches does not say which it covers.
-            launches=[x for x in first+rest if x['name'].startswith('start_')]
-            if 0<sum('model' in x['arguments'] for x in launches)<len(launches):continue
+            # A model after launches that share its verb does not say which it covers.
+            if shared and 'model' in rest[0]['arguments'] and any('model' not in x['arguments'] for x in first):
+                continue
             return first+rest
     return None
 

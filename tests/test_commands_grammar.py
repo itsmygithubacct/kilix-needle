@@ -101,12 +101,33 @@ class CommandGrammar(unittest.TestCase):
         self.check('start codex in /a and claude in /b', [
             call('start_codex', directory='/a'), call('start_claude', directory='/b')])
 
+    def test_a_model_inside_its_own_launch_still_reads(self):
+        self.check('start codex using gpt-6 and claude', [
+            call('start_codex', model='gpt-6'), call('start_claude')])
+        self.check('start codex in /a using gpt-6.1-sol and claude in /b', [
+            call('start_codex', directory='/a', model='gpt-6.1-sol'), call('start_claude', directory='/b')])
+        self.check('start codex with model gpt-6; start claude in /b', [
+            call('start_codex', model='gpt-6'), call('start_claude', directory='/b')])
+        self.check('start codex with model gpt-6, then start claude', [
+            call('start_codex', model='gpt-6'), call('start_claude')])
+        self.check('open the calculator and start codex using gpt-6 and start claude', [
+            call('open_app', app='kilix-calculator'), call('start_codex', model='gpt-6'), call('start_claude')])
+        for separator in ('; ', ' and '):
+            self.check('start codex in /a'+separator+'start codex in /b with model gpt-6', [
+                call('start_codex', directory='/a'), call('start_codex', directory='/b', model='gpt-6')])
+
     def test_a_model_is_not_read_across_a_removed_location_or_placement(self):
         for request in ('start codex model in /w gpt-6', 'start codex --model on the right gpt-6',
                         'start codex model here gpt-6', 'start codex using in /w gpt-6',
-                        'start codex in /srv/model gpt-6'):
+                        'start codex in /srv/model gpt-6',
+                        'start codex model in "/model   gpt-6" gpt-6',
+                        'start codex --model in "/a --model   gpt-6.1-sol" gpt-6.1-sol',
+                        'start codex model with "/model   gpt-6" as working directory gpt-6',
+                        'start codex using in "/w using   gpt-6" gpt-6'):
             with self.subTest(request=request):
                 self.assertIsNone(contract.exact_calls(request))
+        self.check('start codex in a split in /w to the right', [
+            call('start_codex', directory='/w', place='right')])
 
     def test_wait_only_accepts_a_complete_non_launch_constraint(self):
         self.check('wait for codex to be idle; do not launch a new agent.',
