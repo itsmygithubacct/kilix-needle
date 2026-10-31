@@ -269,8 +269,11 @@ def _outside_quotes(text, position):
     return quote is None
 
 
-def exact_calls(request, *, _depth=0):
-    """A complete reading of supported actions, or None; no partial match."""
+def exact_calls(request, *, _depth=0, _bare=False):
+    """A complete reading of supported actions, or None; no partial match.
+
+    _bare: a launch earlier in the whole request states no model.
+    """
     if (not isinstance(request,str) or not request.strip() or len(request)>2048 or _depth>3
             or any(unicodedata.category(ch) in ('Cc','Cf','Zl','Zp') for ch in request)):
         return None
@@ -284,21 +287,20 @@ def exact_calls(request, *, _depth=0):
     for separator in _SEPARATOR.finditer(request):
         if not _outside_quotes(request,separator.start()):continue
         left,right=request[:separator.start()].strip(),request[separator.end():].strip()
-        first=exact_calls(left,_depth=_depth+1)
+        first=exact_calls(left,_depth=_depth+1,_bare=_bare)
         if not first:continue
         if any('task' in x['arguments'] or 'text' in x['arguments'] for x in first):continue
-        rest=exact_calls(right,_depth=_depth+1)
+        bare=_bare or any(x['name'].startswith('start_') and 'model' not in x['arguments'] for x in first)
+        rest=exact_calls(right,_depth=_depth+1,_bare=bare)
         if (not rest and separator[0].strip(' ,').casefold() in ('and', 'and then')
                 and all(x['name'].startswith('start_') for x in first)
                 and re.match(r'^(?:claude|codex)\b', right, re.I)):
-            rest=exact_calls('start '+right,_depth=_depth+1)
+            rest=exact_calls('start '+right,_depth=_depth+1,_bare=bare)
         if rest and len(first+rest)<=4:
             # A model on a launch with no verb of its own ("and claude in /b, model opus",
             # "and a new claude session ...") does not say which earlier launches it covers.
             own_verb=re.match(_LAUNCH_VERB+r'\s',right[_PREAMBLE.match(right).end():],re.I)
-            if (not own_verb and 'model' in rest[0]['arguments']
-                    and any(x['name'].startswith('start_') and 'model' not in x['arguments'] for x in first)):
-                continue
+            if bare and not own_verb and 'model' in rest[0]['arguments']:continue
             return first+rest
     return None
 
