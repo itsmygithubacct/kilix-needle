@@ -92,7 +92,12 @@ class CommandGrammar(unittest.TestCase):
         for request in ('start claude and claude, model opus',
                         'start codex in /a and codex in /b, model gpt-6.1-sol',
                         'start claude in /a and claude in /b --model opus',
-                        'start codex in /a and codex in /b using gpt-6.1-sol'):
+                        'start codex in /a and codex in /b using gpt-6.1-sol',
+                        # These read on their own without a verb, so they share the left one.
+                        'start claude in /a and a new claude session in /b, model opus',
+                        'start codex and a new codex session, model gpt-6',
+                        'start claude and a new claude agent --model opus',
+                        'start codex in /a and a new codex session in /b using gpt-6'):
             with self.subTest(request=request):
                 self.assertIsNone(contract.exact_calls(request))
         self.check('start codex in /a using gpt-6 and codex in /b using gpt-6.1-sol', [
@@ -112,9 +117,12 @@ class CommandGrammar(unittest.TestCase):
             call('start_codex', model='gpt-6'), call('start_claude')])
         self.check('open the calculator and start codex using gpt-6 and start claude', [
             call('open_app', app='kilix-calculator'), call('start_codex', model='gpt-6'), call('start_claude')])
-        for separator in ('; ', ' and '):
+        for separator in ('; ', ' and ', ' and please '):
             self.check('start codex in /a'+separator+'start codex in /b with model gpt-6', [
                 call('start_codex', directory='/a'), call('start_codex', directory='/b', model='gpt-6')])
+        # An app is not a launch the model could also be meant for.
+        self.check('open the calculator and a new codex session, model gpt-6', [
+            call('open_app', app='kilix-calculator'), call('start_codex', model='gpt-6')])
 
     def test_a_model_is_not_read_across_a_removed_location_or_placement(self):
         for request in ('start codex model in /w gpt-6', 'start codex --model on the right gpt-6',

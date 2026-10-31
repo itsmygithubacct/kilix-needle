@@ -33,6 +33,7 @@ _NOUN = "(?:" + "|".join(map(re.escape, sorted(_APP_WORDS, key=len, reverse=True
 _PATH = r'(?:"(?:[^"\\]|\\.)+"|~?/[^\s;?]+)'
 _PREAMBLE = re.compile(r"^(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?|"
                        r"I\s+(?:want|would like)\s+(?:you\s+)?to\s+|I['’]d\s+like\s+(?:you\s+)?to\s+)?", re.I)
+_LAUNCH_VERB = r'(?:start(?: up)?|launch|open|run|bring up|get(?: me)?|create|fire up|spin up)'
 _SEPARATOR = re.compile(r";\s*(?:(?:then|next|also|after that)\s+)?|"
                         r",\s*(?=(?:open|launch|start|bring|show|get|wait|tell|send|message)\b)|"
                         r",?\s+(?:and\s+then|and|then)\s+", re.I)
@@ -100,7 +101,7 @@ def _extended_agent_calls(request):
     # is present. Payload punctuation is preserved below.
     if polite and ':' not in text and text.endswith('?'):
         text = text[:-1].rstrip()
-    head = re.match(r'^(?:start(?: up)?|launch|open|run|bring up|get(?: me)?|create|fire up|spin up)\s+'
+    head = re.match(r'^'+_LAUNCH_VERB+r'\s+'
                     r'(?:one\s+)?(?:(?:a|an|the|new|fresh)\s+)*(?P<agent>claude|codex)\b'
                     r'(?:\s+(?:coding\s+)?(?:client|session|workspace|agent|instance|worker))?'
                     r'(?:\s+(?:running|started))?', text, re.I)
@@ -287,15 +288,16 @@ def exact_calls(request, *, _depth=0):
         if not first:continue
         if any('task' in x['arguments'] or 'text' in x['arguments'] for x in first):continue
         rest=exact_calls(right,_depth=_depth+1)
-        shared=False
         if (not rest and separator[0].strip(' ,').casefold() in ('and', 'and then')
                 and all(x['name'].startswith('start_') for x in first)
                 and re.match(r'^(?:claude|codex)\b', right, re.I)):
             rest=exact_calls('start '+right,_depth=_depth+1)
-            shared=True
         if rest and len(first+rest)<=4:
-            # A model after launches that share its verb does not say which it covers.
-            if shared and 'model' in rest[0]['arguments'] and any('model' not in x['arguments'] for x in first):
+            # A model on a launch with no verb of its own ("and claude in /b, model opus",
+            # "and a new claude session ...") does not say which earlier launches it covers.
+            own_verb=re.match(_LAUNCH_VERB+r'\s',right[_PREAMBLE.match(right).end():],re.I)
+            if (not own_verb and 'model' in rest[0]['arguments']
+                    and any(x['name'].startswith('start_') and 'model' not in x['arguments'] for x in first)):
                 continue
             return first+rest
     return None
