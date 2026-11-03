@@ -39,9 +39,15 @@ _NAVIGATION_ALIAS = re.compile(
 
 
 def _navigation_alias(text: str):
-    """One pane target, preserving title/ID/relative distinctions and scope."""
     match = _NAVIGATION_ALIAS.fullmatch(text)
     if not match or "\n" in text or "\r" in text:
+        return None
+    return _navigation_target(match)
+
+
+def _navigation_target(match):
+    """One pane target, preserving title/ID/relative distinctions and scope."""
+    if "\n" in match[0] or "\r" in match[0]:
         return None
     found = match.groupdict()
     pane = _first(found, "tq", "ts", "tb", "tw", "id", "nq", "ns", "nb", "nw", "name")
@@ -86,7 +92,7 @@ _SHELLS = {"bash", "sh", "zsh", "fish", "dash", "shell", "a shell", "the shell",
            "a terminal", "terminal"}
 _FORMS = (
     ("close_pane", re.compile(rf"(?:close|kill)\s+{_pane()}", re.I)),
-    ("go_to_pane", re.compile(rf"(?:go\s+to|focus|switch\s+to)\s+{_pane()}", re.I)),
+    ("go_to_pane", re.compile(rf"(?:go\s+to|focus|switch\s+to)\s+(?P<target>{_pane()})", re.I)),
     ("run_in_pane", re.compile(rf"{_TYPE}\s+(?:{_QUOTED}|{_UNQUOTED})\s+(?:in|into)\s+{_pane()}{_ENTER}",
                                re.I)),
     ("run_in_pane", re.compile(rf"in\s+{_pane()},?\s+{_TYPE}\s+(?:{_QUOTED}|{_UNQUOTED}){_ENTER}", re.I)),
@@ -195,6 +201,8 @@ def read(request: str) -> tuple[list, str] | None:
         if not m:
             continue
         found = m.groupdict()
+        if kind == "go_to_pane":
+            return _navigation_target(m)
         if kind in ("close_tab", "go_to_tab"):
             verb = "close" if kind == "close_tab" else "go to"
             return [{"name": kind, "arguments": {"tab": found["tab"]}}], f"{verb} tab {found['tab']}"
@@ -219,10 +227,7 @@ def read(request: str) -> tuple[list, str] | None:
                     return _run_slots(text)     # it reads the command's end by its parts
             args["command"] = command
             return [{"name": kind, "arguments": args}], f"run {_quote(command)} in {_pane_words(found, pane)}"
-        verb = "close" if kind == "close_pane" else "go to"
-        canonical = f"{verb} {_pane_words(found, pane)}"
-        if kind == "go_to_pane":
-            return _checked_navigation(found, pane, canonical + _navigation_scope_words(found))
+        canonical = f"close {_pane_words(found, pane)}"
         return [{"name": kind, "arguments": args}], canonical
     return _navigation_alias(text) or _relative_navigation(text) or _open_slots(text) or _run_slots(text)
 
