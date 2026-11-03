@@ -11,6 +11,7 @@ import json
 import os
 import shutil
 import signal
+import selectors
 import subprocess
 
 import pty_job
@@ -102,6 +103,10 @@ def _signal_owned_group(process):
         pass
 
 
+class _OutputLimitExceeded(Exception):
+    pass
+
+
 class _OwnedProcess(subprocess.Popen):
     """CPython/POSIX transport that cleans up before subprocess's interrupt reap."""
 
@@ -111,12 +116,37 @@ class _OwnedProcess(subprocess.Popen):
         return self._wait(timeout)
 
     def _communicate(self, input, endtime, orig_timeout):
-        # CPython communicate catches KeyboardInterrupt outside _communicate and
-        # waits for the leader before re-raising. Signal while the child is still
-        # ours, including when it exited but a descendant keeps a pipe open.
+        # Bound bytes while reading, rather than after communicate has buffered
+        # an arbitrary response. Both pipes must drain concurrently. Keep buffers
+        # across the bounded cleanup call following timeout/cancellation.
+        if not hasattr(self, "_bounded_buffers"):
+            self._bounded_buffers = {self.stdout: bytearray(), self.stderr: bytearray()}
         try:
-            return super()._communicate(input, endtime, orig_timeout)
+            with selectors.DefaultSelector() as ready:
+                for stream in self._bounded_buffers:
+                    if not stream.closed:
+                        ready.register(stream, selectors.EVENT_READ)
+                while ready.get_map():
+                    remaining = self._remaining_time(endtime)
+                    if remaining is not None and remaining <= 0:
+                        raise subprocess.TimeoutExpired(self.args, orig_timeout)
+                    for key, _ in ready.select(remaining):
+                        stream = key.fileobj
+                        limit = getattr(self, "max_output", MAX_OUTPUT) if stream is self.stdout else MAX_OUTPUT
+                        buffer = self._bounded_buffers[stream]
+                        chunk = os.read(stream.fileno(), min(65536, limit - len(buffer) + 1))
+                        if not chunk:
+                            ready.unregister(stream)
+                            stream.close()
+                        elif len(buffer) + len(chunk) > limit:
+                            # Do not retain the over-limit chunk, even on error.
+                            raise _OutputLimitExceeded("stdout" if stream is self.stdout else "stderr")
+                        else:
+                            buffer.extend(chunk)
+            self.wait(timeout=self._remaining_time(endtime))
+            return bytes(self._bounded_buffers[self.stdout]), bytes(self._bounded_buffers[self.stderr])
         except KeyboardInterrupt:
+            # Popen.communicate reaps on interrupt; clean the owned group first.
             _signal_owned_group(self)
             raise
 
@@ -133,13 +163,16 @@ def call(argv: list[str], *, wall: float | None = None) -> Reply:
                                 start_new_session=True)
     except OSError as exc:
         return Reply("unavailable", error=f"kilix could not be started: {exc.strerror or exc}")
+    selector_call = "--selector-json" in argv
+    limit = 65536 if selector_call else MAX_OUTPUT
+    process.max_output = limit
     try:
         out, err = process.communicate(timeout=wall)
     except BaseException as error:
         _signal_owned_group(process)
         try:
             process.communicate(timeout=1)
-        except (OSError, ValueError, subprocess.TimeoutExpired):
+        except (OSError, ValueError, subprocess.TimeoutExpired, _OutputLimitExceeded):
             for stream in (process.stdout, process.stderr):
                 if stream is not None:
                     stream.close()
@@ -147,13 +180,15 @@ def call(argv: list[str], *, wall: float | None = None) -> Reply:
                 process.wait(timeout=1)
             except (OSError, subprocess.TimeoutExpired):
                 pass
+        if isinstance(error, _OutputLimitExceeded):
+            message = "kilix pty wrote more than 4 MiB to stderr" if str(error) == "stderr" else (
+                "kilix pty wrote more than 64 KiB" if selector_call else "kilix pty wrote more than 4 MiB")
+            return Reply("failed", process.returncode, error=message)
         if isinstance(error, subprocess.TimeoutExpired):
             return Reply("timeout", error=f"kilix pty did not return within {wall:g} seconds")
         raise
     stderr = err.decode("utf-8", "replace")
     document = None
-    selector_call = "--selector-json" in argv
-    limit = 65536 if selector_call else MAX_OUTPUT
     if 0 < len(out) <= limit:
         try:
             parsed = json.loads(out.decode("utf-8"), object_pairs_hook=_unique_object if selector_call else None)
