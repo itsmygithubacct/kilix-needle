@@ -34,6 +34,35 @@ def _pane(prefix: str = "") -> str:
             rf"|(?:the\s+)?(?P<{prefix}name>{_WORD})\s+pane){_HERE}")
 
 
+_NAVIGATION_ALIAS = re.compile(
+    rf"(?:jump\s+to|take\s+me\s+to|switch\s+over\s+to)\s+(?P<target>{_pane()})", re.I)
+
+
+def _navigation_alias(text: str):
+    """One pane target, preserving title/ID/relative distinctions and scope."""
+    match = _NAVIGATION_ALIAS.fullmatch(text)
+    if not match or "\n" in text or "\r" in text:
+        return None
+    found = match.groupdict()
+    pane = _first(found, "tq", "ts", "tb", "tw", "id", "nq", "ns", "nb", "nw", "name")
+    titled = any(found.get(key) is not None for key in ("tq", "ts", "tb", "tw", "nq", "ns", "nb"))
+    if not titled and pane.casefold() in ("top", "bottom"):
+        return None  # extrema do not mean the adjacent pane above/below
+    if found.get("nw") and re.fullmatch(r"[+-]?\d+(?:\.\d+)?", pane):
+        return None  # the ID alternative already consumed supported numeric IDs
+    # Keep unquoted spatial references as spoken: "pane left" is not the title
+    # "left". Explicit/quoted titles use the existing canonical title form.
+    canonical = (f"go to {_pane_words(found, pane)}" if titled
+                 else f"go to {match['target']}")
+    calls = [{"name": "go_to_pane", "arguments": {"pane": pane}}]
+    checked = interpret(canonical, calls)
+    if len(checked) != 1 or not isinstance(checked[0], Action):
+        return None
+    if titled and checked[0].args.get("pane") != "name:" + " ".join(pane.casefold().split()):
+        return None  # unsupported titles must not resolve to a different name
+    return calls, canonical
+
+
 _QUOTED = r"(?:'(?P<sq>[^'\n]+)'|\"(?P<dq>[^\"\n]+)\"|`(?P<bq>[^`\n]+)`)"
 # An unquoted command: a program, then only plain shell arguments ("touch /x/y").
 _UNQUOTED = r"(?P<uq>[A-Za-z_][\w.+-]*(?:\s+\S+)*?)"
@@ -182,7 +211,7 @@ def read(request: str) -> tuple[list, str] | None:
             return [{"name": kind, "arguments": args}], f"run {_quote(command)} in {_pane_words(found, pane)}"
         verb = "close" if kind == "close_pane" else "go to"
         return [{"name": kind, "arguments": args}], f"{verb} {_pane_words(found, pane)}"
-    return _relative_navigation(text) or _open_slots(text) or _run_slots(text)
+    return _navigation_alias(text) or _relative_navigation(text) or _open_slots(text) or _run_slots(text)
 
 
 # A plain shell pane opened to one side of the calling pane, however an agent
