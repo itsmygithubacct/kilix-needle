@@ -139,6 +139,66 @@ class CommandBoundaries(unittest.TestCase):
         ):
             self.refuse(request)
 
+    def test_launch_synonyms_keep_the_same_bounded_suffixes(self):
+        for agent in ('Claude', 'Codex'):
+            wanted = [call('start_'+agent.lower())]
+            for verb in ('start', 'launch', 'kick off'):
+                stem = f'Please {verb} the {agent} session here'
+                for ending in ('.', ', please.'):
+                    with self.subTest(agent=agent, verb=verb, ending=ending):
+                        self.check(stem+ending, wanted)
+                for ending in (' now.', ' right now.', ' for me.', ' tomorrow.',
+                               ' now, please.'):
+                    with self.subTest(agent=agent, verb=verb, ending=ending):
+                        request = stem+ending
+                        self.refuse(request)
+                        # Even a proposal for the matching agent cannot omit the tail.
+                        self.assertFalse(contract.admit(request, wanted).actions)
+            self.check(f'Could you kick off the {agent} session here?', wanted)
+
+    def test_application_now_does_not_extend_agent_launch_wording(self):
+        self.check('Please launch calculator now.',
+                   [call('open_app', app='kilix-calculator')])
+        self.check('I need the file manager opened now.',
+                   [call('open_app', app='kilix-file')])
+        self.check('Open notepad now; then kick off Codex here.',
+                   [call('open_app', app='kilix-notepad'), call('start_codex')])
+        self.refuse('Please launch Codex now.')
+        self.refuse('I need a fresh Codex session here now.')
+        self.refuse('Please launch calculator now if the tests pass.')
+
+    def test_now_inside_literal_arguments_is_preserved(self):
+        payload = '  Report now; then say "done". Keep C:\\Temp\\now.txt!  '
+        quoted = json.dumps(payload)
+        self.check('Kick off Codex with task '+quoted+'; open calculator now.',
+                   [call('start_codex', task=payload),
+                    call('open_app', app='kilix-calculator')])
+        self.check('Message Codex: '+quoted,
+                   [call('message_agent', agent='codex', text=payload)])
+        self.check('Kick off Codex in "/projects/now".',
+                   [call('start_codex', directory='/projects/now')])
+        for request, wanted in (
+            ('Kick off Codex with task '+quoted+' now.', [call('start_codex', task=payload)]),
+            ('Message Codex: '+quoted+' now.', [call('message_agent', agent='codex', text=payload)]),
+        ):
+            self.refuse(request)
+            self.assertFalse(contract.admit(request, wanted).actions)
+
+    def test_unconsumed_launch_tail_refuses_the_complete_batch(self):
+        app = call('open_app', app='kilix-calculator')
+        launch = call('start_codex')
+        message = call('message_agent', agent='codex', text='now')
+        for request, shorter in (
+            ('Open calculator now; then kick off Codex here now.', [app, launch]),
+            ('Kick off Codex here now; then open calculator.', [launch, app]),
+            ('Open calculator; kick off Codex here now; message Codex: "now"',
+             [app, launch, message]),
+            ('Kick off Codex here now; then erase the workspace', [launch]),
+        ):
+            with self.subTest(request=request):
+                self.refuse(request)
+                self.assertFalse(contract.admit(request, shorter).actions)
+
 
 if __name__ == '__main__':
     unittest.main()

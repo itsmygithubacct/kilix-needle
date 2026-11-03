@@ -229,6 +229,26 @@ punctuation. Quote paths with literal final punctuation: `start codex in
 "/projects/sample."`. Internal dots and explicit `.` or `..` path components
 remain unchanged. `kick off a Codex session` is also an explicit launch form.
 
+Agent launches in this shared command contract use bounded wording. `kick off`
+is a launch synonym with the same named-agent and explicit-field rules as
+`start` and `launch`; it does not add a general polite-suffix rule. For launches
+without a task, leading `please`, a request such as `could you ...?`, and a final
+`please` are supported.
+For example, `Please kick off the Codex session here.` and `Could you launch
+Codex here?` are complete requests. Unconsumed trailing `now`, `right now`,
+`for me`, or `tomorrow` is unsupported: `Please kick off the Codex session here
+now.` is refused. Unknown suffixes, conditions, extra actions and ambiguous
+shared fields are never discarded to admit a shorter request.
+
+Application opening has its own wording: `Open calculator now.` and `I need
+the file manager opened now.` are supported. That application suffix does not
+apply to an agent launch, and the separate panes and agents jobs do not widen
+this shared command contract. Literal arguments remain data: `kick off Codex
+with task "Report now."` keeps the task exactly, and `message Codex: "now"`
+sends `now`. A bare `now` immediately after the closed quoted argument is an unsupported tail,
+not part of that payload. A valid action beside a refused clause does not admit
+a partial batch.
+
 At most four ordered command actions are admitted together. Host checks run
 for the complete batch before it starts, and pending readiness pauses later
 actions. Planning runs nothing; acting requires confirmation or `--yes`.
