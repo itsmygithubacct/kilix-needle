@@ -21,7 +21,7 @@ _TAIL = re.compile(r"(?:[\s,]+(?:please|pls|thanks|thank you|now))*[\s.!]*$", re
 _WORD = r"[\w.+@:-]+"
 # A pane's name, bare or in quotes/backticks: "the pane titled "bench-target"".
 _NAME = rf"(?:\"(?P<{{g}}q>[^\"\n]+)\"|'(?P<{{g}}s>[^'\n]+)'|`(?P<{{g}}b>[^`\n]+)`|(?P<{{g}}w>{_WORD}))"
-_HERE = r"(?:\s+in\s+(?:this|the current)\s+tab)?(?:,?\s+not\s+the\s+tab(?:\s+itself)?)?"
+_HERE = r"(?:\s+in\s+(?P<{scope}>this|the\s+current)\s+tab)?(?:,?\s+not\s+the\s+tab(?:\s+itself)?)?"
 
 
 def _pane(prefix: str = "") -> str:
@@ -31,7 +31,7 @@ def _pane(prefix: str = "") -> str:
     return (rf"(?:(?:the\s+)?pane\s+(?:titled|named|called|labell?ed)\s+{titled}"
             rf"|(?:the\s+)?pane[:\s]\s*(?P<{prefix}id>[0-9]{{1,6}})"
             rf"|(?:the\s+)?pane\s+(?!(?:titled|named|called|labell?ed)\b){bare}"
-            rf"|(?:the\s+)?(?P<{prefix}name>{_WORD})\s+pane){_HERE}")
+            rf"|(?:the\s+)?(?P<{prefix}name>{_WORD})\s+pane){_HERE.format(scope=prefix + 'scope')}")
 
 
 _NAVIGATION_ALIAS = re.compile(
@@ -52,12 +52,22 @@ def _navigation_alias(text: str):
         return None  # the ID alternative already consumed supported numeric IDs
     # Keep unquoted spatial references as spoken: "pane left" is not the title
     # "left". Explicit/quoted titles use the existing canonical title form.
-    canonical = (f"go to {_pane_words(found, pane)}" if titled
+    canonical = (f"go to {_pane_words(found, pane)}{_navigation_scope_words(found)}" if titled
                  else f"go to {match['target']}")
+    return _checked_navigation(found, pane, canonical)
+
+
+def _navigation_scope_words(found: dict) -> str:
+    return " in this tab" if found.get("scope") else ""
+
+
+def _checked_navigation(found: dict, pane: str, canonical: str):
+    """Preserve literal titles and let interpretation carry explicit scope."""
     calls = [{"name": "go_to_pane", "arguments": {"pane": pane}}]
     checked = interpret(canonical, calls)
     if len(checked) != 1 or not isinstance(checked[0], Action):
         return None
+    titled = any(found.get(key) is not None for key in ("tq", "ts", "tb", "tw", "nq", "ns", "nb"))
     if titled and checked[0].args.get("pane") != "name:" + " ".join(pane.casefold().split()):
         return None  # unsupported titles must not resolve to a different name
     return calls, canonical
@@ -210,7 +220,10 @@ def read(request: str) -> tuple[list, str] | None:
             args["command"] = command
             return [{"name": kind, "arguments": args}], f"run {_quote(command)} in {_pane_words(found, pane)}"
         verb = "close" if kind == "close_pane" else "go to"
-        return [{"name": kind, "arguments": args}], f"{verb} {_pane_words(found, pane)}"
+        canonical = f"{verb} {_pane_words(found, pane)}"
+        if kind == "go_to_pane":
+            return _checked_navigation(found, pane, canonical + _navigation_scope_words(found))
+        return [{"name": kind, "arguments": args}], canonical
     return _navigation_alias(text) or _relative_navigation(text) or _open_slots(text) or _run_slots(text)
 
 

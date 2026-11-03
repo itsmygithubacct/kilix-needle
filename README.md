@@ -384,7 +384,14 @@ map, which reports window groups. Names match a pane's title or foreground
 program exactly, without regard to case, or else a whole word of exactly one
 title. A pane in the current tab is chosen over one elsewhere with the same
 name ("build" here, "Build" in another tab), but a yes given in advance does
-not cover that choice. Tab titles have no such preference: two tabs with the
+not cover that choice. For pane navigation, an explicit "in this tab" or
+"in the current tab" restricts the lookup to that tab before matching names or
+IDs. A target found only elsewhere is unresolved; outside duplicates do not
+affect a scoped lookup. This applies to "jump to", "take me to", "switch over
+to", "go to", "focus" and "switch to". Unscoped pane IDs and names retain their
+cross-tab lookup, and "go to tab 2" still selects a tab by position. Pane qualifiers
+such as "in tab 2" are not supported and must not be treated as unscoped.
+Tab titles have no such preference: two tabs with the
 same name are refused. The pane and tab kilix-needle was started from are never matched by a
 whole word: while it runs, Kilix titles them with the request itself. An
 ambiguous or missing reference is refused with the candidates named. "Next"
