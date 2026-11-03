@@ -216,9 +216,18 @@ still apply. A model proposal alone cannot authorize an action.
 
 Double-quoted task and message arguments use JSON escaping and retain their
 internal spacing and case. For example, `start codex with task "keep A  B"`
-sends `keep A  B`. Text after a task or message colon remains literal, including
-any quotes or polite words it contains. Extra instructions outside a quoted
-argument are refused when the complete request cannot be read.
+sends `keep A  B`. A complete quoted argument after a colon uses the same
+escaping: `tell codex: "keep A  B"` sends `keep A  B`. Other colon text remains
+literal, including embedded quotes and polite words. Quote a payload before
+adding another action, as in `tell codex: "ready"; then open calculator`.
+An apparent action after an unquoted payload is ambiguous and is refused.
+Extra instructions outside a quoted argument must have a complete supported
+reading; conditional, deferred and unsupported actions are refused.
+
+A final period or exclamation mark after an unquoted path is sentence
+punctuation. Quote paths with literal final punctuation: `start codex in
+"/projects/sample."`. Internal dots and explicit `.` or `..` path components
+remain unchanged. `kick off a Codex session` is also an explicit launch form.
 
 At most four ordered command actions are admitted together. Host checks run
 for the complete batch before it starts, and pending readiness pauses later

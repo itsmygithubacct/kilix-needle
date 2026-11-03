@@ -33,7 +33,7 @@ _NOUN = "(?:" + "|".join(map(re.escape, sorted(_APP_WORDS, key=len, reverse=True
 _PATH = r'(?:"(?:[^"\\]|\\.)+"|~?/[^\s;?]+)'
 _PREAMBLE = re.compile(r"^(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?|"
                        r"I\s+(?:want|would like)\s+(?:you\s+)?to\s+|I['’]d\s+like\s+(?:you\s+)?to\s+)?", re.I)
-_LAUNCH_VERB = r'(?:start(?: up)?|launch|open|run|bring up|get(?: me)?|create|fire up|spin up)'
+_LAUNCH_VERB = r'(?:start(?: up)?|launch|open|run|bring up|get(?: me)?|create|fire up|spin up|kick off)'
 _SEPARATOR = re.compile(r";\s*(?:(?:then|next|also|after that)\s+)?|"
                         r",\s*(?=(?:open|launch|start|bring|show|get|wait|tell|send|message)\b)|"
                         r",?\s+(?:and\s+then|and|then)\s+", re.I)
@@ -55,9 +55,16 @@ _PLACEMENTS = [
 ]
 
 
-def _literal(raw):
+def _literal(raw, *, terminal=False):
     try:
-        return json.loads(raw) if raw.startswith('"') else raw
+        if raw.startswith('"'):
+            return json.loads(raw)
+        # In unquoted request syntax a final sentence mark is not a path
+        # character. Quote a path whose final component ends in punctuation.
+        # Dot components remain path syntax, never sentence punctuation.
+        if terminal and raw.endswith(('.', '!')) and raw.rsplit('/', 1)[-1] not in ('.', '..'):
+            raw = raw[:-1]
+        return raw
     except ValueError:
         return None
 
@@ -70,7 +77,7 @@ def _take_location(text, gap=' '):
         return text, None
     match = matches[0]
     raw = match['path'] or match['working']
-    directory = _literal(raw) if raw else 'here'
+    directory = _literal(raw, terminal=not text[match.end():].strip()) if raw else 'here'
     if not directory:
         return None, None
     return text[:match.start()] + gap + text[match.end():], directory
@@ -82,12 +89,32 @@ def _quoted_payload(text):
         value, end = json.JSONDecoder().raw_decode(text)
     except ValueError:
         return None
-    if not isinstance(value, str) or not value or text[end:].strip() not in ('', '.', '!'):
+    if (not isinstance(value, str) or not value
+            or not re.fullmatch(r'(?:exactly)?[.!]?', text[end:].strip(), re.I)):
         return None
     return value
 
 
-def _extended_agent_calls(request):
+def _payload(text, *, closed=False):
+    """A complete quoted argument has a boundary; an unquoted tail does not."""
+    quoted = _quoted_payload(text)
+    if quoted is not None:
+        return quoted
+    if closed:
+        return None
+    if text.startswith('"'):
+        # Preserve the existing literal colon form: '"words", please.'
+        # Other text outside a quoted argument needs its own complete reading.
+        try:
+            value, end = json.JSONDecoder().raw_decode(text)
+        except ValueError:
+            return None
+        if not isinstance(value, str) or not re.fullmatch(r',\s+please[.!]?', text[end:], re.I):
+            return None
+    return text
+
+
+def _extended_agent_calls(request, *, closed_payload=False):
     """Parse explicit fields without normalizing the literal task or message."""
     text = request.strip()
     preamble = _PREAMBLE.match(text)
@@ -128,7 +155,8 @@ def _extended_agent_calls(request):
             tail = rest[marker.end():]
             if marker[0].strip().casefold()=='to' and re.match(r'(?:the |my )?(?:right|left)\b', tail, re.I):continue
             if task is not None:return None
-            task = tail
+            task = _payload(tail, closed=closed_payload)
+            if task is None:return None
             rest = rest[:marker.start()]
             break
         rest = re.sub(r',?\s+please[.!]?$', '', rest, flags=re.I)
@@ -158,7 +186,7 @@ def _extended_agent_calls(request):
     if front:
         rest,directory=_take_location(front['location'])
         if rest is not None and not rest.strip() and directory is not None:
-            payload=text[front.end():]
+            payload=_payload(text[front.end():], closed=closed_payload)
             if payload and len(payload.encode())<=1024:
                 args={'agent':front['agent'].casefold(),'text':payload}
                 if directory!='here':args['directory']=directory
@@ -180,6 +208,8 @@ def _extended_agent_calls(request):
             payload=rest[marker.end():]
             if marker[0].rstrip().endswith(('message', 'text', 'instruction')):
                 payload = _quoted_payload(payload)
+            else:
+                payload = _payload(payload, closed=closed_payload)
             if not payload or len(payload.encode())>1024:return None
             args={'agent':message['agent'].casefold(),'text':payload}
             if directory not in (None,'here'):args['directory']=directory
@@ -241,11 +271,10 @@ def _app_calls(request):
         r'(?:display|show)\s+(?P<path>'+_PATH+r')\s+(?:in|with|using)\s+(?:the\s+)?PDF (?:viewer|reader)',
     ]
     for pattern in patterns:
-        matched = re.fullmatch(pattern,text,re.I)
+        matched = re.fullmatch(r'(?:'+pattern+r')[.!]?',text,re.I)
         if not matched:continue
         raw = matched['path']
-        try:path = json.loads(raw) if raw.startswith('"') else raw
-        except ValueError:return None
+        path = _literal(raw, terminal=not text[matched.end('path'):].strip())
         if (not isinstance(path,str) or not path.startswith(('/','~/'))
                 or not path.casefold().endswith('.pdf')
                 or any(unicodedata.category(ch) in ('Cc','Cf','Zl','Zp') for ch in path)):
@@ -278,31 +307,57 @@ def exact_calls(request, *, _depth=0, _bare=False):
             or any(unicodedata.category(ch) in ('Cc','Cf','Zl','Zp') for ch in request)):
         return None
     found = _extended_agent_calls(request) or _app_calls(request)
-    if found:return found if len(found)<=4 else None
+    # Fully matched actions without an open payload cannot swallow a clause.
+    if found and (not any('task' in c['arguments'] or 'text' in c['arguments'] for c in found)
+                  or _extended_agent_calls(request, closed_payload=True)):
+        return found
     pair=re.fullmatch(r'give me\s+(claude|codex)\s+in\s+('+_DIRECTORY+r')\s+plus\s+(claude|codex)\s+in\s+('+_DIRECTORY+r')',request,re.I)
     if pair:
-        first,second=_literal(pair[2]),_literal(pair[4])
+        first,second=_literal(pair[2]),_literal(pair[4], terminal=True)
         if first and second:
             return [_call('start_'+pair[1].casefold(),directory=first),_call('start_'+pair[3].casefold(),directory=second)]
     for separator in _SEPARATOR.finditer(request):
         if not _outside_quotes(request,separator.start()):continue
         left,right=request[:separator.start()].strip(),request[separator.end():].strip()
-        first=exact_calls(left,_depth=_depth+1,_bare=_bare)
+        first=_extended_agent_calls(left) or _app_calls(left)
         if not first:continue
-        if any('task' in x['arguments'] or 'text' in x['arguments'] for x in first):continue
+        if (separator[0].strip().casefold()=='and'
+                and all(c['name'].startswith('start_') for c in first)
+                and re.match(r'^(?:ask it to|give it this task:)\s+',right,re.I)):
+            continue  # A task delimiter belonging to this launch, not a second action.
+        if any('task' in x['arguments'] or 'text' in x['arguments'] for x in first):
+            if not _extended_agent_calls(left, closed_payload=True):
+                # With an unquoted payload, an apparent second instruction
+                # could be data or a new action. Neither interpretation wins.
+                if re.match(r'^(?:(?:please|then|next|also)\s+)*(?:'
+                            r'open|launch|start|bring|show|get|wait|tell|send|message|ask|'
+                            r'kick|run|create|delete|erase|remove|close|quit|reboot|'
+                            r'do not|don[\x27’]t|if|unless)\b',right,re.I):
+                    return None
+                continue
         bare=_bare or any(x['name'].startswith('start_') and 'model' not in x['arguments'] for x in first)
         rest=exact_calls(right,_depth=_depth+1,_bare=bare)
+        shared_verb = (separator[0].strip(' ,').casefold() in ('and', 'and then')
+                       and all(c['name'].startswith('start_') for c in first)
+                       and re.match(r'^(?:(?:a|an|the|new|fresh)\s+)*(?:claude|codex)\b',right,re.I))
         if (not rest and separator[0].strip(' ,').casefold() in ('and', 'and then')
                 and all(x['name'].startswith('start_') for x in first)
                 and re.match(r'^(?:claude|codex)\b', right, re.I)):
             rest=exact_calls('start '+right,_depth=_depth+1,_bare=bare)
+        # A trailing field on a shared verb might apply to both agents.
+        # Require explicit fields on both sides instead of guessing scope.
+        explicit_fields = set(first[0]['arguments'])
+        if any(_outside_quotes(left, m.start()) for m in _LOCATION.finditer(left)):
+            explicit_fields.add('directory')  # An explicit "here" omits the call's default.
+        if shared_verb and rest and any(set(c['arguments'])-explicit_fields for c in rest):
+            return None
         if rest and len(first+rest)<=4:
-            # A model on a launch with no verb of its own ("and claude in /b, model opus",
-            # "and a new claude session ...") does not say which earlier launches it covers.
+            # Retain the integration base's model-scope guard across nested splits.
             own_verb=re.match(_LAUNCH_VERB+r'\s',right[_PREAMBLE.match(right).end():],re.I)
-            if bare and not own_verb and 'model' in rest[0]['arguments']:continue
+            if bare and not own_verb and 'model' in rest[0]['arguments']:return None
             return first+rest
-    return None
+        return None
+    return found
 
 
 def _canonical(calls, cwd=None):
