@@ -192,6 +192,14 @@ The grammar fast path works without loading the model. Model requests need the
 installed, licensed bundle; `install --commands` shows its full terms before
 installation. The selected CPU runtime requires x86-64 Linux.
 
+The pinned LFM2 delivery is `lfm2-kilix-commands-20261103-v21`, with weight
+revision `lfm2-kilix-v5e1-wse-20261103.21`. It retains the fine-tuned V5 lineage
+and adds direct output-weight repairs without further gradient training. The
+manifest records its parent and GGUF checksum; `notices/NOTICE.txt` describes
+the modifications. The CPU runtime is unchanged. New installations use a
+manifest-specific directory, preserving earlier model bytes and receipts for
+catalog rollback. A previous receipt does not silently authorize a new manifest.
+
 Install the Needle 3 alternate with `kilix-needle install --commands needle3`,
 then use `kilix ask --model needle3 "open calculator"`. LFM2 remains the default.
 For subsequent requests, set `export KILIX_ASK_COMMANDS_BACKEND=needle3` in your
