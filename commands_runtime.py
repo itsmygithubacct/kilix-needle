@@ -21,8 +21,6 @@ ROOT = Path(__file__).resolve().parent
 ASSET_ID = 'lfm2-kilix-commands'
 SYSTEM = ('Use the available tools for the user request. Preserve explicit arguments exactly. '
           'Use only the tools that satisfy the entire request. If no complete supported action is requested, return no tool calls.')
-LFM2_OUTPUT = (' Return only the native tool-call block, without explanatory text or Markdown. '
-               'When returning no tool calls, output exactly <|tool_call_start|>[]<|tool_call_end|>.')
 TOOLS = json.loads((ROOT / 'commands-tools.json').read_text())
 
 
@@ -78,8 +76,7 @@ class NativeClient:
 
     def prompt_tokens(self,request):
         wrapped=[{'type':'function','function':tool} for tool in TOOLS]
-        system=SYSTEM+LFM2_OUTPUT if self.backend=='lfm2' else SYSTEM
-        rendered=self.post('/apply-template',{'messages':[{'role':'system','content':system},
+        rendered=self.post('/apply-template',{'messages':[{'role':'system','content':SYSTEM},
                            {'role':'user','content':request}], 'tools':wrapped,
                            'chat_template_kwargs':({'enable_thinking':False} if self.backend=='lfm3' else {'tools':TOOLS}),'add_generation_prompt':True})
         if not isinstance(rendered,dict) or not isinstance(rendered.get('prompt'),str):

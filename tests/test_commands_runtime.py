@@ -6,32 +6,10 @@ import unittest
 from unittest.mock import Mock, patch
 
 import asset
-from commands_runtime import CommandModelError, NativeClient, Runtime, SYSTEM, TOOLS, inspect_bundle, selection
+from commands_runtime import CommandModelError, NativeClient, Runtime, inspect_bundle, selection
 
 
 class NativeProtocolTests(unittest.TestCase):
-    def test_template_receives_backend_specific_abstention_instruction(self):
-        empty = '<|tool_call_start|>[]<|tool_call_end|>'
-        for backend in ('lfm2', 'lfm3'):
-            with self.subTest(backend=backend):
-                client = NativeClient('http://127.0.0.1:1', backend=backend)
-                client.post = Mock(side_effect=[{'prompt': 'rendered'}, {'tokens': [1, 2]}])
-                self.assertEqual(client.prompt_tokens('explain a command'), [1, 2])
-                path, payload = client.post.call_args_list[0].args
-                self.assertEqual(path, '/apply-template')
-                system = payload['messages'][0]['content']
-                if backend == 'lfm2':
-                    self.assertIn('output exactly ' + empty, system)
-                    self.assertIn('without explanatory text or Markdown', system)
-                    self.assertEqual(payload['chat_template_kwargs'], {'tools': TOOLS})
-                else:
-                    self.assertEqual(system, SYSTEM)
-                    self.assertNotIn(empty, system)
-                    self.assertEqual(payload['chat_template_kwargs'], {'enable_thinking': False})
-                self.assertEqual(payload['messages'][1], {'role': 'user', 'content': 'explain a command'})
-                self.assertEqual(client.post.call_args_list[1].args,
-                                 ('/tokenize', {'content': 'rendered', 'add_special': True, 'parse_special': True}))
-
     def test_default_selection_matches_every_catalog_member(self):
         content, _first_use, _license = asset._content()
         spec = content.verified_packaged_catalog().require_asset('lfm2-kilix-commands')
