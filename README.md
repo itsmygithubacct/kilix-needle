@@ -200,6 +200,27 @@ the modifications. The CPU runtime is unchanged. New installations use a
 manifest-specific directory, preserving earlier model bytes and receipts for
 catalog rollback. A previous receipt does not silently authorize a new manifest.
 
+### LFM2 benchmark: upstream, V5 and .21
+
+All three models were evaluated on the same 208-case synthetic confirmation
+set using the shipped CPU runtime. This is strict Kilix command-contract
+scoring; prose refusals and schema mismatches count as errors:
+
+| Measure | Upstream Q8_0 | Kilix V5, pre-edit | Kilix .21 |
+| --- | ---: | ---: | ---: |
+| Correct raw responses in Kilix format | 39/208 (18.8%) | 182/208 (87.5%) | 193/208 (92.8%) |
+| Correct outcomes after application admission | 59/208 (28.4%) | 151/208 (72.6%) | 154/208 (74.0%) |
+| Incorrect actions admitted | 0 | 0 | 0 |
+
+The upstream baseline is Liquid AI's unchanged LFM2-1.2B-Tool Q8_0. V5 was
+already fine-tuned for Kilix; `.21` adds direct weight edits. Compared case by
+case, `.21` gains 11 correct raw answers over V5 with no losses. It also loses
+four upstream-correct cases involving literal message punctuation. These
+results measure command integration, not a general model ranking. Application
+checks still reject some correct proposals. See the
+[full benchmark](docs/lfm2-v21-benchmark.md) for CPU/GPU results, paired gains
+and losses, latency, memory, checksums and limits.
+
 Install the Needle 3 alternate with `kilix-needle install --commands needle3`,
 then use `kilix ask --model needle3 "open calculator"`. LFM2 remains the default.
 For subsequent requests, set `export KILIX_ASK_COMMANDS_BACKEND=needle3` in your
