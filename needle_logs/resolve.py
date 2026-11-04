@@ -21,6 +21,18 @@ class ResolveError(ValueError):
         super().__init__(message)
 
 
+SNAPSHOT_ERRORS = {
+    "caller_context_unverified": (
+        "The Kilix log reader cannot verify the calling pane. "
+        "Run codex --no-daemon from the intended Kilix pane, or read an "
+        "explicit recording with file and provider."),
+    "pane_context_unavailable": (
+        "The Kilix log reader has no usable authenticated pane connection. "
+        "Run it from the intended live Kilix pane, or read an explicit "
+        "recording with file and provider."),
+}
+
+
 def snapshot() -> dict:
     """Read one size- and time-bounded Kilix pane snapshot."""
     command = [os.environ.get("KILIX_NEEDLE_KILIX", "kilix"), "panes", "list", "--json"]
@@ -54,6 +66,18 @@ def snapshot() -> dict:
             except subprocess.TimeoutExpired as error:
                 raise ResolveError("snapshot_timeout", "Kilix pane reader did not finish") from error
         if code:
+            # Accept only the host's fixed diagnostic contract. Never echo
+            # child stderr or arbitrary JSON messages (keys/paths may occur
+            # there), and never accept pane data from a failed command.
+            try:
+                failure = json.loads(buffers["out"])
+            except (ValueError, UnicodeError):
+                failure = None
+            if (isinstance(failure, dict)
+                    and failure.get("schema") == "kilix.panes.error/v1"
+                    and isinstance(failure.get("code"), str)
+                    and failure["code"] in SNAPSHOT_ERRORS):
+                raise ResolveError(failure["code"], SNAPSHOT_ERRORS[failure["code"]])
             raise ResolveError("snapshot_unavailable", "Kilix pane reader failed")
         try:
             result = json.loads(buffers["out"])

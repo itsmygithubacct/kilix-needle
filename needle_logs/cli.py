@@ -140,7 +140,10 @@ def read(arguments: dict) -> dict:
         return _error(exc.code, str(exc), 2 if exc.code in ("invalid_input", "cursor_invalid") else 1)
     except (ValueError, TypeError, KeyError) as exc:
         code = getattr(exc, "code", "invalid_input")
-        return _source_error(code, str(exc), 1 if code in ("source_changed", "source_unavailable", "snapshot_unavailable", "snapshot_timeout", "snapshot_limit") else 2, arguments)
+        return _source_error(code, str(exc), 1 if code in (
+            "source_changed", "source_unavailable", "snapshot_unavailable",
+            "snapshot_timeout", "snapshot_limit", "caller_context_unverified",
+            "pane_context_unavailable") else 2, arguments)
     except (OSError, ImportError, RuntimeError) as exc:
         return _source_error(getattr(exc, "code", "read_error"), str(exc), 1, arguments)
     except Exception as exc:
