@@ -156,7 +156,7 @@ def _model_status() -> tuple[list[dict], bool]:
 
 
 def _inspect_asset(spec, root: Path, first_use, records, store) -> dict:
-    destination = root / "assets" / spec.asset_id
+    destination = root / "assets" / spec.install_name
     row = {"id": spec.asset_id, "version": spec.version, "path": str(destination), "state": "ready", "error": None}
     agreement = first_use.needs_agreement(spec, records=records, store=store)
     if not os.path.lexists(destination):
