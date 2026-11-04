@@ -212,6 +212,8 @@ Python callers can inspect `startup_phase` and `startup_stages` on the runtime;
 `threading.Event` to cancel initialization or requests. Preparation reports a
 stage, without claiming token-level progress. Its cache belongs to that runtime;
 no prepared state is shared between bundles or saved to disk.
+Each request's deadline covers sending it as well as receiving its reply.
+Protocol requests are limited to 1 MiB; a full or unread pipe remains cancellable.
 
 An explicit verified manifest with `--commands-candidate` overrides the installed
 Needle 3 selection. The `kilix ask` launcher forwards this option too.

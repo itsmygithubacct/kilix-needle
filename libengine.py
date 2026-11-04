@@ -30,6 +30,7 @@ import threading
 import time
 
 _BUFFER = 64 * 1024
+_MAX_FRAME = 1024 * 1024
 # Upstream's default is 256 new tokens. A call carrying a long absolute path twice
 # (command and pane) ran past it: "tool call truncated: token budget exhausted",
 # 17 times in the gpt-6-luna route benchmark. Generation stops at the end of the
@@ -40,6 +41,15 @@ _WORKER = os.path.abspath(__file__)
 
 class LibEngineError(RuntimeError):
     """The library worker could not start or answer."""
+
+
+def _unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate protocol key")
+        result[key] = value
+    return result
 
 
 class LibEngine:
@@ -107,16 +117,37 @@ class LibEngine:
 
     def _ask_locked(self, message: dict) -> dict:
         process = self._process
-        if process is None or process.poll() is not None:
-            raise LibEngineError("the Needle library worker is not running")
         try:
+            if process is None or process.poll() is not None:
+                raise LibEngineError("the Needle library worker is not running")
+            # Transmission and its first reply share one absolute deadline.
+            deadline = time.monotonic() + self.timeout
             if self.cancel_event is not None and self.cancel_event.is_set():
                 raise LibEngineError("the Needle library operation was cancelled")
-            process.stdin.write(json.dumps(message, ensure_ascii=False) + "\n")
-            process.stdin.flush()
+            payload = (json.dumps(message, ensure_ascii=False) + "\n").encode("utf-8")
+            if len(payload) > _MAX_FRAME:
+                raise LibEngineError("the Needle library request is too large")
+            fd = process.stdin.fileno()
+            os.set_blocking(fd, False)
+            pending = memoryview(payload)
+            while pending:
+                if self.cancel_event is not None and self.cancel_event.is_set():
+                    raise LibEngineError("the Needle library operation was cancelled")
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise LibEngineError(f"the Needle request transmission exceeded {self.timeout:g} s")
+                wait = min(remaining, 0.25) if self.cancel_event is not None else remaining
+                if not select.select([], [fd], [], wait)[1]:
+                    continue
+                try:
+                    written = os.write(fd, pending[:65536])
+                except BlockingIOError:
+                    continue
+                if written <= 0:
+                    raise LibEngineError("the Needle library request pipe closed")
+                pending = pending[written:]
             # Bound the entire response, including a worker that writes only
             # part of a line. A ready pipe alone does not bound readline().
-            deadline = time.monotonic() + self.timeout
             chunks = bytearray()
             received = 0
             preparing = False
@@ -135,7 +166,7 @@ class LibEngine:
                     chunks = bytearray(rest)
                     text = line.decode("utf-8")
                     try:
-                        value = json.loads(text)
+                        value = json.loads(text, object_pairs_hook=_unique_object)
                     except ValueError as error:
                         raise LibEngineError("the Needle library answered with malformed JSON") from error
                     if not isinstance(value, dict):
@@ -150,8 +181,14 @@ class LibEngine:
                             # One transition only: progress never refreshes this absolute cap.
                             deadline = time.monotonic() + self.preparation_timeout
                         continue
-                    if initializing and self.backend == "rust3" and value.get("ok") and not preparing:
-                        raise LibEngineError("the cached runtime omitted its preparation stage")
+                    if initializing:
+                        ready = set(value) == {"ok"} and value["ok"] is True
+                        failed = (set(value) == {"ok", "error"} and value["ok"] is False
+                                  and isinstance(value["error"], str))
+                        if not (ready or failed):
+                            raise LibEngineError("invalid Needle initialization control frame")
+                        if self.backend == "rust3" and ready and not preparing:
+                            raise LibEngineError("the cached runtime omitted its preparation stage")
                     if chunks:
                         raise LibEngineError("the Needle library sent extra response data")
                     return value
@@ -164,7 +201,7 @@ class LibEngine:
                     raise LibEngineError("the Needle library worker exited")
                 chunks.extend(chunk)
                 received += len(chunk)
-                if received > 1024 * 1024:
+                if received > _MAX_FRAME:
                     raise LibEngineError("the Needle library response is too large")
         except UnicodeError as error:
             self.close()
