@@ -213,7 +213,7 @@ benchmark superiority or qualify an OS release.
 
 An explicit verified manifest with `--commands-candidate` overrides the installed
 Needle 3 selection. The `kilix ask` launcher forwards this option too.
-LFM2 uses the pinned release selection and Content bundle; an explicit local
+LFM2 and LFM3 use their pinned release selections and Content bundles; an explicit local
 bundle can be supplied with `--commands-bundle`. To evaluate another local
 candidate, pass its artifact manifest with `--commands-manifest` together with
 `--commands-bundle`. That manifest selects the model and native runtime files;
