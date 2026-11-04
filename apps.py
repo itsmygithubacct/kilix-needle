@@ -35,7 +35,7 @@ APPS = ("dosbox", "kilix-file", "kilix-system-center", "kilix-settings-center",
         "kilix-chawan", "kilix-rollout-resume", "kilix-character-map", "kilix-notepad",
         "kilix-find-files", "kilix-session-log", "kilix-amp", "kilix-pdf", "kilix-pdf-conversion",
         "kilix-rtsp", "kilix-nvr", "kilix-object-detect", "kilix-tmux-manager", "kilix-graphs",
-        "kilix-techno", "kilix-help-llm", "kilix-waydroid")
+        "kilix-techno", "kilix-help-llm", "kilix-waydroid", "kilix-claudex")
 HOST_TOOLS = ("launcher", "temps", "memory", "mixer", "transcripts")
 LAUNCHABLE = GAMES + APPS + HOST_TOOLS
 AVAILABILITY = GAMES + ("dosbox",)          # kilix-settings' game switches
@@ -102,6 +102,7 @@ LAUNCH_NAMES = {
                      "sequencer workstation"],
     "kilix-help-llm": ["help search", "documentation search"],
     "kilix-waydroid": ["waydroid", "android"],
+    "kilix-claudex": ["claudex"],
     "launcher": ["launcher", "app menu", "application menu", "applications menu"],
     "temps": ["temps", "temperatures", "temperature", "temperatures view", "temperature view"],
     "memory": ["memory usage", "ram usage", "memory", "ram"],
@@ -380,13 +381,24 @@ def _plain_words(text: str) -> str:
     return " ".join(re.sub(r"[_\-]+", " ", normalize(text).casefold().replace("`", "'")).split())
 
 
+@functools.lru_cache(maxsize=1024)
+def _name_forms(key: str, aliases: tuple) -> tuple[str, ...]:
+    words = {_plain_words(key)} | {_plain_words(w) for w in aliases}
+    return tuple(sorted(words, key=len, reverse=True))
+
+
 def _names(table: dict, key: str) -> list[str]:
-    words = {_plain_words(key)} | {_plain_words(w) for w in table.get(key, [])}
-    return sorted(words, key=len, reverse=True)
+    # Include the aliases in the key so table changes cannot retain old names.
+    return list(_name_forms(key, tuple(table.get(key, ()))))
+
+
+@functools.lru_cache(maxsize=1024)
+def _name_pattern(phrase: str) -> re.Pattern:
+    return re.compile(rf"(?<![\w]){re.escape(phrase)}(?![\w])")
 
 
 def _said(phrase: str, text: str) -> re.Match | None:
-    return re.search(rf"(?<![\w]){re.escape(phrase)}(?![\w])", text)
+    return _name_pattern(phrase).search(text)
 
 
 def _resolve(table: dict, universe: tuple, value) -> str | None:
