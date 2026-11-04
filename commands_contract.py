@@ -32,13 +32,13 @@ _APP_WORDS = {"pdf viewer":"kilix-pdf", "pdf reader":"kilix-pdf",
 _NOUN = "(?:" + "|".join(map(re.escape, sorted(_APP_WORDS, key=len, reverse=True))) + ")"
 _PATH = r'(?:"(?:[^"\\]|\\.)+"|~?/[^\s;?]+)'
 _PREAMBLE = re.compile(r"^(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?|"
-                       r"I\s+(?:want|would like)\s+(?:you\s+)?to\s+|I['’]d\s+like\s+(?:you\s+)?to\s+)?", re.I)
+                       r"I\s+(?:want|need|would like)\s+(?:you\s+)?to\s+|I['’]d\s+like\s+(?:you\s+)?to\s+)?", re.I)
 _LAUNCH_VERB = r'(?:start(?: up)?|launch|open|run|bring up|get(?: me)?|create|fire up|spin up)'
-_SEPARATOR = re.compile(r";\s*(?:(?:then|next|also|after that)\s+)?|"
+_SEPARATOR = re.compile(r";\s*(?:(?:then|next|also|after that|afterwards)\s*,?\s+)?|"
                         r",\s*(?=(?:open|launch|start|bring|show|get|wait|tell|send|message)\b)|"
                         r",?\s+(?:and\s+then|and|then)\s+", re.I)
 _DIRECTORY = r'(?:"(?:[^"\\]|\\.)+"|~?/[^\s;,?]+)'
-_LOCATION = re.compile(r'\b(?:in|at|inside|within)\s+(?P<path>'+_DIRECTORY+r')|'
+_LOCATION = re.compile(r'\b(?:working\s+)?(?:in|at|inside|within)\s+(?P<path>'+_DIRECTORY+r')|'
                        r'\bwith\s+(?P<working>'+_DIRECTORY+r')\s+as\s+(?:(?:its|the)\s+)?working\s+directory|'
                        r'\b(?P<here>here|in (?:the )?(?:current directory|current folder|this folder|this directory))\b', re.I)
 # Models the compact contract admits for each agent (see _canonical).
@@ -55,14 +55,27 @@ _PLACEMENTS = [
 ]
 
 
-def _literal(raw):
+def _literal(raw, *, sentence_end=False):
     try:
-        return json.loads(raw) if raw.startswith('"') else raw
+        if raw.startswith('"'):
+            return json.loads(raw)
+        # Outside quotes a final full stop/exclamation mark ends the sentence.
+        # Preserve dot path components; quote a filename ending in punctuation.
+        return re.sub(r'(?<=[^/.!])[.!]$', '', raw) if sentence_end else raw
     except ValueError:
         return None
 
 
-def _take_location(text, gap=' '):
+def _without_courtesy(text):
+    """Remove complete courtesy suffixes outside literals, never message text."""
+    while True:
+        match = re.search(r',?\s+(?:for\s+me|please|now)[.!]?$', text, re.I)
+        if not match or not _outside_quotes(text, match.start()):
+            return text
+        text = text[:match.start()]
+
+
+def _take_location(text, gap=' ', *, sentence_end=False):
     matches = [m for m in _LOCATION.finditer(text) if _outside_quotes(text, m.start())]
     if len(matches) > 1:
         return None, None
@@ -70,7 +83,7 @@ def _take_location(text, gap=' '):
         return text, None
     match = matches[0]
     raw = match['path'] or match['working']
-    directory = _literal(raw) if raw else 'here'
+    directory = _literal(raw, sentence_end=sentence_end and match.end()==len(text.rstrip())) if raw else 'here'
     if not directory:
         return None, None
     return text[:match.start()] + gap + text[match.end():], directory
@@ -131,10 +144,12 @@ def _extended_agent_calls(request):
             task = tail
             rest = rest[:marker.start()]
             break
-        rest = re.sub(r',?\s+please[.!]?$', '', rest, flags=re.I)
+        without_courtesy = _without_courtesy(rest)
+        sentence_end = task is None and without_courtesy == rest
+        rest = without_courtesy
         # Removed spans leave a NUL gap that no model phrase can cross.
         # Requests never contain NUL: exact_calls refuses control characters.
-        rest, directory = _take_location(rest, gap=' \0 ')
+        rest, directory = _take_location(rest, gap=' \0 ', sentence_end=sentence_end)
         if rest is None:return None
         args = {} if directory in (None,'here') else {'directory':directory}
         if task is not None:
@@ -154,7 +169,7 @@ def _extended_agent_calls(request):
         return [_call('start_'+head['agent'].casefold(),**args)]
 
     # Messages require a named agent; no pronoun or unnamed-session fallback.
-    front = re.match(r'^for\s+(?:the\s+)?(?:running\s+|existing\s+)?(?P<agent>claude|codex)(?:\s+session)?\s+(?P<location>.+?),\s*send(?:\s+this\s+message)?:\s*',text,re.I)
+    front = re.match(r'^(?:for|to)\s+(?:the\s+)?(?:running\s+|existing\s+)?(?P<agent>claude|codex)(?:\s+session)?\s+(?P<location>.+?),\s*send(?:\s+this\s+message)?:\s*',text,re.I)
     if front:
         rest,directory=_take_location(front['location'])
         if rest is not None and not rest.strip() and directory is not None:
@@ -186,6 +201,8 @@ def _extended_agent_calls(request):
             return [_call('message_agent',**args)]
         return None
 
+    text = re.sub(r'^await\s+(?:the\s+)?end\s+of\s+(?:the\s+)?(claude|codex)\s+(?:current\s+)?turn\b',
+                  r'wait for \1', text, flags=re.I)
     waiting=re.fullmatch(r'(?:wait(?:\s+(?:for|until|on))?|block until|hold(?:\s+(?:on|off))? until|pause until|let)\s+'
                          r'(?:the\s+)?(?:current\s+|running\s+|existing\s+)?(?P<agent>claude|codex)\b'
                          r'(?P<rest>.*)',text,re.I)
@@ -196,7 +213,9 @@ def _extended_agent_calls(request):
         if guard and _outside_quotes(rest, guard.start()):
             rest = rest[:guard.start()]
         rest=re.sub(r'^\s+(?:session|turn)\b','',rest,flags=re.I)
-        rest,directory=_take_location(rest)
+        without_courtesy = _without_courtesy(rest)
+        sentence_end = guard is None and without_courtesy == rest
+        rest,directory=_take_location(without_courtesy, sentence_end=sentence_end)
         if rest is None:return None
         tail=' '.join(rest.strip(' .!').casefold().split())
         if tail not in ('','is idle','is done','is finished','becomes idle','reaches idle',
@@ -216,7 +235,8 @@ def _call(name, **args):
 
 
 def _app_calls(request):
-    text = request.strip()
+    text = _without_courtesy(request.strip())
+    sentence_end = text == request.strip()
     desired = re.fullmatch(r"(?:I would like|I['’]d like|I need)\s+(?:the\s+)?("+_NOUN+
                            r")\s+(?:opened|launched|started)(?:\s+now)?[.!]?", text, re.I)
     if desired:
@@ -227,16 +247,18 @@ def _app_calls(request):
     if text.endswith('?'):
         if not polite:return None
         text = text[:-1].rstrip()
-    text = re.sub(r',?\s+(?:please|for me|now)[.!]?$', '', text, flags=re.I)
+    without_courtesy = _without_courtesy(text)
+    sentence_end = sentence_end and without_courtesy == text
+    text = without_courtesy
     text = re.sub(r'^bring\s+(?:the\s+)?('+_NOUN+r')\s+up$',r'bring up \1',text,flags=re.I)
-    noun = re.fullmatch(r'(?:open|launch|start(?: up)?|bring up|show|get)\s+(?:the\s+)?('+_NOUN+r')(?:\s+application|\s+running)?[.!]?', text, re.I)
+    noun = re.fullmatch(r'(?:open|launch|start(?: up)?|bring up|show|get)\s+(?:the\s+)?('+_NOUN+r')(?:\s+application|\s+running|\s+open)?[.!]?', text, re.I)
     if noun:
         return [_call('open_app', app=_APP_WORDS[noun[1].casefold()])]
     patterns = [
-        r'(?:open|load|show)\s+(?P<path>'+_PATH+r')\s+(?:in|with|using)\s+(?:the\s+)?PDF (?:viewer|reader)[.!]?',
+        r'(?:open|load|show|view)\s+(?P<path>'+_PATH+r')\s+(?:in|with|using)\s+(?:the\s+)?PDF (?:viewer|reader)[.!]?',
         r'(?:use\s+)?(?:the\s+)?PDF (?:viewer|reader)\s+to\s+(?:open|load|show)\s+(?P<path>'+_PATH+r')',
         r'open\s+(?P<path>'+_PATH+r')',
-        r'(?:launch|bring up|start)\s+(?:the\s+)?PDF (?:viewer|reader)\s+(?:with|and (?:load|show))\s+(?P<path>'+_PATH+r')',
+        r'(?:launch|bring up|start)\s+(?:the\s+)?PDF (?:viewer|reader)\s+(?:with|for|and (?:load|show))\s+(?P<path>'+_PATH+r')',
         r'(?:get\s+)?(?:the\s+)?PDF (?:viewer|reader)\s+to\s+(?:display|open|show)\s+(?P<path>'+_PATH+r')',
         r'(?:display|show)\s+(?P<path>'+_PATH+r')\s+(?:in|with|using)\s+(?:the\s+)?PDF (?:viewer|reader)',
     ]
@@ -244,8 +266,7 @@ def _app_calls(request):
         matched = re.fullmatch(pattern,text,re.I)
         if not matched:continue
         raw = matched['path']
-        try:path = json.loads(raw) if raw.startswith('"') else raw
-        except ValueError:return None
+        path = _literal(raw, sentence_end=sentence_end and matched.end('path')==len(text))
         if (not isinstance(path,str) or not path.startswith(('/','~/'))
                 or not path.casefold().endswith('.pdf')
                 or any(unicodedata.category(ch) in ('Cc','Cf','Zl','Zp') for ch in path)):
@@ -281,7 +302,7 @@ def exact_calls(request, *, _depth=0, _bare=False):
     if found:return found if len(found)<=4 else None
     pair=re.fullmatch(r'give me\s+(claude|codex)\s+in\s+('+_DIRECTORY+r')\s+plus\s+(claude|codex)\s+in\s+('+_DIRECTORY+r')',request,re.I)
     if pair:
-        first,second=_literal(pair[2]),_literal(pair[4])
+        first,second=_literal(pair[2]),_literal(pair[4], sentence_end=True)
         if first and second:
             return [_call('start_'+pair[1].casefold(),directory=first),_call('start_'+pair[3].casefold(),directory=second)]
     for separator in _SEPARATOR.finditer(request):

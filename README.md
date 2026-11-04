@@ -229,6 +229,12 @@ sends `keep A  B`. Text after a task or message colon remains literal, including
 any quotes or polite words it contains. Extra instructions outside a quoted
 argument are refused when the complete request cannot be read.
 
+Double-quote paths containing spaces or literal trailing punctuation. A final
+`.` or `!` on an unquoted path at the end of a request ends the sentence:
+`start codex in /work/project.` uses `/work/project`, while
+`start codex in "/work/project."` preserves the final dot. Quoted paths and
+message/task text keep their exact spelling.
+
 At most four ordered command actions are admitted together. Host checks run
 for the complete batch before it starts, and pending readiness pauses later
 actions. Planning runs nothing; acting requires confirmation or `--yes`.
