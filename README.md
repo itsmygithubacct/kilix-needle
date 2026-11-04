@@ -202,24 +202,33 @@ catalog rollback. A previous receipt does not silently authorize a new manifest.
 
 ### LFM2 benchmark: upstream, V5 and .21
 
-All three models were evaluated on the same 208-case synthetic confirmation
-set using the shipped CPU runtime. This is strict Kilix command-contract
-scoring; prose refusals and schema mismatches count as errors:
+The validated CPU comparison uses the same 208 synthetic requests for all three
+models. Its retained results now separate format compliance, exact command
+correctness and application acceptance:
 
 | Measure | Upstream Q8_0 | Kilix V5, pre-edit | Kilix .21 |
 | --- | ---: | ---: | ---: |
-| Correct raw responses in Kilix format | 39/208 (18.8%) | 182/208 (87.5%) | 193/208 (92.8%) |
-| Correct outcomes after application admission | 59/208 (28.4%) | 151/208 (72.6%) | 154/208 (74.0%) |
+| Native syntax accepted / all requests | 142/208 (68.3%) | 208/208 (100.0%) | 208/208 (100.0%) |
+| Tool schema accepted / all requests | 107/208 (51.4%) | 200/208 (96.2%) | 207/208 (99.5%) |
+| Exact commands or abstention / schema-valid responses | 39/107 (36.4%) | 182/200 (91.0%) | 193/207 (93.2%) |
+| Exact model responses / all requests | 39/208 (18.8%) | 182/208 (87.5%) | 193/208 (92.8%) |
+| Correct supported proposals admitted / all supported requests | 11/96 (11.5%) | 39/96 (40.6%) | 42/96 (43.8%) |
 | Incorrect actions admitted | 0 | 0 | 0 |
 
-The upstream baseline is Liquid AI's unchanged LFM2-1.2B-Tool Q8_0. V5 was
-already fine-tuned for Kilix; `.21` adds direct weight edits. Compared case by
-case, `.21` gains 11 correct raw answers over V5 with no losses. It also loses
-four upstream-correct cases involving literal message punctuation. These
-results measure command integration, not a general model ranking. Application
-checks still reject some correct proposals. See the
-[full benchmark](docs/lfm2-v21-benchmark.md) for CPU/GPU results, paired gains
-and losses, latency, memory, checksums and limits.
+Conditional command accuracy uses only schema-valid responses; read it with
+schema coverage and the all-request score. Prose refusals remain format errors,
+without an independent semantic grade. V5 was already fine-tuned for Kilix;
+`.21` adds direct weight edits. These are repeated integration tests, not a
+general model ranking, and no model-proposed commands were executed.
+
+Under the validated prompt, `.21` preserves V5's correct CPU answers but loses
+four upstream-correct cases involving literal message punctuation.
+
+Four prompt clarifications were tested; every one lost a previously correct
+`.21` development answer, so the validated prompt remains selected. The
+[stage-by-stage benchmark](docs/lfm2-output-format-benchmark.md) records the
+trials, supported-command accuracy, GPU results, model identities and limits.
+The [original report](docs/lfm2-v21-benchmark.md) retains its numbers and timing.
 
 Install the Needle 3 alternate with `kilix-needle install --commands needle3`,
 then use `kilix ask --model needle3 "open calculator"`. LFM2 remains the default.

@@ -1,5 +1,9 @@
 # LFM2 command benchmark: upstream, V5 and weight revision .21
 
+A later [analysis of format, command correctness and application acceptance](lfm2-output-format-benchmark.md)
+separates these measurements and records rejected prompt-clarification trials.
+The original prompt and results below are retained.
+
 Measured on 2026-11-04 for `lfm2-kilix-commands-20261103-v21`. This compares
 three Q8_0 models in the Kilix command role:
 
