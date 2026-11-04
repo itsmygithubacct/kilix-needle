@@ -54,7 +54,7 @@ def _member(root,spec,*,maximum):
 
 
 @contextmanager
-def open_runtime(manifest_path, *, expected=None):
+def open_runtime(manifest_path, *, expected=None, cancel_event=None):
     """Keep one verified candidate worker alive for a caller-owned session."""
     manifest_path=Path(manifest_path).resolve()
     if expected is None:
@@ -92,7 +92,9 @@ def open_runtime(manifest_path, *, expected=None):
     with ExitStack() as stack:
         library=stack.enter_context(asset.load_verified(library_path,library_sha,library_bytes))
         archive=stack.enter_context(asset.load_verified(weights_path,weights['sha256'],weights['bytes']))
-        runtime=stack.enter_context(libengine.LibEngine(library,json.loads(data),archive,generation=3,backend=backend,timeout=30))
+        runtime=stack.enter_context(libengine.LibEngine(library,json.loads(data),archive,
+            generation=3,backend=backend,timeout=30,
+            preparation_timeout=90 if backend=='rust3' else None, cancel_event=cancel_event))
         yield runtime
 
 

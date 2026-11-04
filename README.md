@@ -192,43 +192,44 @@ The grammar fast path works without loading the model. Model requests need the
 installed, licensed bundle; `install --commands` shows its full terms before
 installation. The selected CPU runtime requires x86-64 Linux.
 
-The pinned LFM2 delivery is `lfm2-kilix-commands-20261103-v21`, with weight
-revision `lfm2-kilix-v5e1-wse-20261103.21`. It retains the fine-tuned V5 lineage
-and adds direct output-weight repairs without further gradient training. The
-manifest records its parent and GGUF checksum; `notices/NOTICE.txt` describes
-the modifications. The CPU runtime is unchanged. New installations use a
-manifest-specific directory, preserving earlier model bytes and receipts for
-catalog rollback. A previous receipt does not silently authorize a new manifest.
+The pinned LFM2 delivery is `lfm2-kilix-commands-20261104-v8`, with weight
+revision `lfm2-kilix-v5e1-wse-20261104.8`. It retains the fine-tuned V5 lineage
+and repairs four output rows on top of `.21`; all internal tensors, the prompt
+and the CPU runtime remain unchanged. The repair uses regularized output-row
+optimization on frozen activations with analytic gradients. The manifest
+records the parent, intermediate version and GGUF checksum;
+`notices/NOTICE.txt` describes the modifications.
 
-### LFM2 benchmark: upstream, V5 and .21
+New installations use a manifest-specific directory, preserving earlier model
+bytes and receipts for catalog rollback. `.21` remains available as the rollback
+release. A previous receipt does not silently authorize a new manifest.
+Plebian-OS 0.2.3 rc1 stages the verified archive during installation or upgrade;
+first selection still follows the model's own licence terms.
 
-The validated CPU comparison uses the same 208 synthetic requests for all three
-models. Its retained results now separate format compliance, exact command
-correctness and application acceptance:
+### LFM2 benchmark: upstream, V5, .21 and .8
 
-| Measure | Upstream Q8_0 | Kilix V5, pre-edit | Kilix .21 |
-| --- | ---: | ---: | ---: |
-| Native syntax accepted / all requests | 142/208 (68.3%) | 208/208 (100.0%) | 208/208 (100.0%) |
-| Tool schema accepted / all requests | 107/208 (51.4%) | 200/208 (96.2%) | 207/208 (99.5%) |
-| Exact commands or abstention / schema-valid responses | 39/107 (36.4%) | 182/200 (91.0%) | 193/207 (93.2%) |
-| Exact model responses / all requests | 39/208 (18.8%) | 182/208 (87.5%) | 193/208 (92.8%) |
-| Correct supported proposals admitted / all supported requests | 11/96 (11.5%) | 39/96 (40.6%) | 42/96 (43.8%) |
-| Incorrect actions admitted | 0 | 0 | 0 |
+The fresh 160-request comparison uses the same prompt and runtime for every
+model. Requests were written before selecting the repaired weights; they are
+internal tests, not an independent human evaluation. No proposed actions were
+executed. CPU results:
 
-Conditional command accuracy uses only schema-valid responses; read it with
-schema coverage and the all-request score. Prose refusals remain format errors,
-without an independent semantic grade. V5 was already fine-tuned for Kilix;
-`.21` adds direct weight edits. These are repeated integration tests, not a
-general model ranking, and no model-proposed commands were executed.
+| Measure | Upstream Q8_0 | Kilix V5 | Kilix .21 | Kilix .8 |
+| --- | ---: | ---: | ---: | ---: |
+| Exact model responses | 68/160 | 132/160 | 134/160 | 139/160 |
+| Correct result after application validation | 92/160 | 140/160 | 138/160 | 143/160 |
 
-Under the validated prompt, `.21` preserves V5's correct CPU answers but loses
-four upstream-correct cases involving literal message punctuation.
+`.8` gains five correct responses over `.21` on both CPU and GPU without losing
+a previously correct response in this set. It retains three false abstentions;
+no incorrect action was admitted. Development and literal-copy probes also show
+no observed loss against `.21`. On 32 operational requests the two models tie
+at 27 exact model responses and 29 correct validated results. That operational
+set includes one development overlap and one disclosed label correction; it is
+not an independent holdout. These measurements concern Kilix command requests,
+not general reasoning ability. Later application changes need their own checks.
 
-Four prompt clarifications were tested; every one lost a previously correct
-`.21` development answer, so the validated prompt remains selected. The
-[stage-by-stage benchmark](docs/lfm2-output-format-benchmark.md) records the
-trials, supported-command accuracy, GPU results, model identities and limits.
-The [original report](docs/lfm2-v21-benchmark.md) retains its numbers and timing.
+The [earlier stage-by-stage benchmark](docs/lfm2-output-format-benchmark.md) and
+[original .21 report](docs/lfm2-v21-benchmark.md) retain their historical prompts,
+application revisions and results; they do not describe the current default.
 
 Install the Needle 3 alternate with `kilix-needle install --commands needle3`,
 then use `kilix ask --model needle3 "open calculator"`. LFM2 remains the default.
@@ -249,6 +250,19 @@ for Kilix. The full model terms and runtime notices accompany the bundle under
 `notices/`; LFM2 remains the default. Adding the model does not establish
 benchmark superiority or qualify an OS release.
 
+Needle 3 prepares its fixed tool prefix once when an owned runtime starts. The
+worker must acknowledge that phase within 30 seconds; preparation then has a
+separate, absolute 90-second limit. Requests retain their 30-second limit.
+An unresponsive or cancelled runtime is closed and reaped. File and licence
+readiness alone does not prove that initialization will finish on a given CPU.
+Python callers can inspect `startup_phase` and `startup_stages` on the runtime;
+`compact_model.open_runtime(..., cancel_event=event)` also accepts a caller-owned
+`threading.Event` to cancel initialization or requests. Preparation reports a
+stage, without claiming token-level progress. Its cache belongs to that runtime;
+no prepared state is shared between bundles or saved to disk.
+Each request's deadline covers sending it as well as receiving its reply.
+Protocol requests are limited to 1 MiB; a full or unread pipe remains cancellable.
+
 An explicit verified manifest with `--commands-candidate` overrides the installed
 Needle 3 selection. The `kilix ask` launcher forwards this option too.
 LFM2 and LFM3 use their pinned release selections and Content bundles; an explicit local
@@ -263,9 +277,36 @@ still apply. A model proposal alone cannot authorize an action.
 
 Double-quoted task and message arguments use JSON escaping and retain their
 internal spacing and case. For example, `start codex with task "keep A  B"`
-sends `keep A  B`. Text after a task or message colon remains literal, including
-any quotes or polite words it contains. Extra instructions outside a quoted
-argument are refused when the complete request cannot be read.
+sends `keep A  B`. A complete quoted argument after a colon uses the same
+escaping: `tell codex: "keep A  B"` sends `keep A  B`. Other colon text remains
+literal, including embedded quotes and polite words. Quote a payload before
+adding another action, as in `tell codex: "ready"; then open calculator`.
+An apparent action after an unquoted payload is ambiguous and is refused.
+Extra instructions outside a quoted argument must have a complete supported
+reading; conditional, deferred and unsupported actions are refused.
+
+A final period or exclamation mark after an unquoted path is sentence
+punctuation. Quote paths with literal final punctuation: `start codex in
+"/projects/sample."`. Internal dots and explicit `.` or `..` path components
+remain unchanged. `kick off a Codex session` is also an explicit launch form.
+
+Agent launches in this shared command contract use bounded wording. `kick off`
+is a launch synonym with the same named-agent and explicit-field rules as
+`start` and `launch`; complete courtesy suffixes are supported outside literal arguments. For launches
+without a task, leading `please`, a request such as `could you ...?`, and final
+`please`, `now`, or `for me` are supported.
+For example, `Please kick off the Codex session here.` and `Could you launch
+Codex here?` are complete requests. `Please kick off the Codex session here now.` is also complete.
+Unconsumed trailing `right now` or `tomorrow` remains unsupported. Unknown suffixes, conditions, extra actions and ambiguous
+shared fields are never discarded to admit a shorter request.
+
+Application opening has its own wording: `Open calculator now.` and `I need
+the file manager opened now.` are supported. The same complete courtesy suffixes apply to agent launches. The separate
+panes and agents jobs do not widen this shared command contract. Literal arguments remain data: `kick off Codex
+with task "Report now."` keeps the task exactly, and `message Codex: "now"`
+sends `now`. A bare `now` immediately after the closed quoted argument is an unsupported tail,
+not part of that payload. A valid action beside a refused clause does not admit
+a partial batch.
 
 Double-quote paths containing spaces or literal trailing punctuation. A final
 `.` or `!` on an unquoted path at the end of a request ends the sentence:
@@ -415,7 +456,14 @@ map, which reports window groups. Names match a pane's title or foreground
 program exactly, without regard to case, or else a whole word of exactly one
 title. A pane in the current tab is chosen over one elsewhere with the same
 name ("build" here, "Build" in another tab), but a yes given in advance does
-not cover that choice. Tab titles have no such preference: two tabs with the
+not cover that choice. For pane navigation, an explicit "in this tab" or
+"in the current tab" restricts the lookup to that tab before matching names or
+IDs. A target found only elsewhere is unresolved; outside duplicates do not
+affect a scoped lookup. This applies to "jump to", "take me to", "switch over
+to", "go to", "focus" and "switch to". Unscoped pane IDs and names retain their
+cross-tab lookup, and "go to tab 2" still selects a tab by position. Pane qualifiers
+such as "in tab 2" are not supported and must not be treated as unscoped.
+Tab titles have no such preference: two tabs with the
 same name are refused. The pane and tab kilix-needle was started from are never matched by a
 whole word: while it runs, Kilix titles them with the request itself. An
 ambiguous or missing reference is refused with the candidates named. "Next"

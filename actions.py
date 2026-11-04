@@ -1004,6 +1004,25 @@ def _named_target(name: str, key: str, args: dict, prompt: str) -> str | Refusal
     return value
 
 
+def _navigation_scope(prompt: str) -> str | Refusal | None:
+    """Scope comes from the request, never a model-supplied target field.
+
+    Quoted titles cannot introduce scope. Other tab/window qualifiers are not
+    supported by pane navigation; declining them is safer than losing them.
+    Explicit tab navigation and unscoped pane IDs keep their existing meaning.
+    """
+    unquoted = _unquoted(prompt)
+    current = re.compile(r"\bin\s+(?:this|the\s+current)\s+tab\b", re.I)
+    scoped = bool(current.search(unquoted))
+    qualifiers = re.findall(
+        r"\b(?:in|within|inside|across|outside|on|from|of)\s+"
+        r"(?:(?![;.,]|\b(?:and|then|or)\b).)*?\b(?:tabs?|windows?)\b",
+        current.sub("", unquoted), re.I)
+    if qualifiers:
+        return Refusal("go_to_pane", "that pane navigation scope is not supported")
+    return "current" if scoped else None
+
+
 _CLAUSE = re.compile(r"\s*(?:,|;|\band then\b|\bthen\b|\band\b)\s*", re.IGNORECASE)
 
 
@@ -1554,6 +1573,12 @@ def _admit(name: str, args: dict, prompt: str) -> Action | Refusal:
         if name == "go_to_pane" and not _moves(prompt):
             return Refusal(name, "the request does not ask to go anywhere")
         out = {"pane": target}
+        if name == "go_to_pane":
+            scope = _navigation_scope(prompt)
+            if isinstance(scope, Refusal):
+                return scope
+            if scope:
+                out["pane_scope"] = scope
         if name == "run_in_pane":
             out["command"] = command
         return Action(name, out)

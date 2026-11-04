@@ -18,7 +18,7 @@ class NativeProtocolTests(unittest.TestCase):
         self.assertEqual(chosen['files'], {item.path: {'bytes': item.bytes, 'sha256': item.sha256}
                                          for item in spec.files})
         self.assertEqual(chosen['files'][chosen['model_member']]['sha256'],
-                         'c6b065d617b95745bd207c4f9c9b605a8af922f5ebb5d7ff1d4c686d9d1c8f0e')
+                         '7815032c4bdd44fbde002ec734ef3dd8eb14a8a44214b395738dae6e55ce897d')
 
     def test_explicit_manifest_selects_bundle_without_release_selection(self):
         with tempfile.TemporaryDirectory() as tmp:

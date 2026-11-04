@@ -238,12 +238,18 @@ class Tree:
             for window in tab.get("windows") or []:
                 yield tab, window
 
-    def pane(self, ref: str, *, wrap: bool = True) -> dict:
+    def pane(self, ref: str, *, wrap: bool = True, scope: str | None = None) -> dict:
+        if scope not in (None, "current"):
+            raise KilixError("unsupported pane scope")
+        # Filter before ranking or disambiguation: an exact match outside the
+        # allowed tab must not hide a unique whole-word match inside it.
+        panes = [(tab, window) for tab, window in self._all_panes()
+                 if scope is None or tab is self.active_tab]
         if ref == "current":
             return self.active_pane
         if (ref in ("next", "previous") or ref in _NEIGHBOR) and any(
                 ref in (_program(w).casefold(), str(w.get("title") or "").strip().casefold())
-                for _tab, w in self._all_panes()):
+                for _tab, w in panes):
             # As for tabs: a pane titled or running "next" makes "the next pane"
             # ambiguous (review KN-R9-02).
             raise KilixError(f"'the {ref} pane' is ambiguous: a pane is called {ref!r}")
@@ -278,7 +284,7 @@ class Tree:
             # A pane id the request states ("pane 70", "pane:70", "#70"): the
             # ids `kilix panes` prints are kitty window ids (route benchmark).
             wanted = int(ref[3:])
-            for _tab, window in self._all_panes():
+            for _tab, window in panes:
                 if window.get("id") == wanted:
                     return window
             raise KilixError(f"there is no pane {wanted}")
@@ -296,18 +302,18 @@ class Tree:
         # preference was tried (review R5, row D) and regressed in three rounds
         # (KN-R6-04, KN-R7-03, KN-R8-01); it is gone.
         local = [w for w in self.active_tab.get("windows") or [] if exact(w)]
-        found = local or [w for _tab, w in self._all_panes() if exact(w)]
+        found = local or [w for _tab, w in panes if exact(w)]
         # The current tab's pane wins, but not silently: when the name also
         # fits a pane in another tab ("build" here, "Build" there), a yes given
         # in advance does not cover the choice (review KN-R9-01).
         self.elsewhere = bool(local) and any(
-            exact(w) for tab, w in self._all_panes() if tab is not self.active_tab)
+            exact(w) for tab, w in panes if tab is not self.active_tab)
         if not found:
             # Never the requester's own pane: while kilix-needle runs, Kilix
             # titles it with the request itself (review KN-R5-01: "close the
             # webhooks tab" closed its own tab).
             own = {id(w) for w in (self.caller, self.active_pane) if w is not None}
-            found = [w for _tab, w in self._all_panes()
+            found = [w for _tab, w in panes
                      if id(w) not in own and _whole_word(name, str(w.get("title") or ""))]
             self.fuzzy = bool(found)
         if len(found) == 1:
@@ -423,7 +429,7 @@ def _resolve(action: Action, tree: Tree) -> Step:
             words += f" running {args['program']!r}"
         return Step(action, words, ((tuple(argv), None),))
     if kind in ("close_pane", "go_to_pane"):
-        window = tree.pane(args["pane"], wrap=kind == "go_to_pane")
+        window = tree.pane(args["pane"], wrap=kind == "go_to_pane", scope=args.get("pane_scope"))
         verb = "close" if kind == "close_pane" else "go to"
         command = "close-window" if kind == "close_pane" else "focus-window"
         return Step(action, f"{verb} {_describe_pane(window)}",
