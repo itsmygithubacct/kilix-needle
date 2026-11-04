@@ -450,16 +450,16 @@ def main(argv=None) -> int:
     if not args.commands_backend and (args.commands_candidate or args.commands_bundle or args.commands_manifest
                                      or args.commands_model_only or args.operation_id is not None):
         parser.error('command options require --commands-backend')
-    if args.commands_backend and args.commands_backend not in ('grammar', 'needle3', 'lfm2'):
-        parser.error('KILIX_ASK_COMMANDS_BACKEND must be grammar, needle3 or lfm2')
+    if args.commands_backend and args.commands_backend not in ('grammar', 'needle3', 'lfm2', 'lfm3'):
+        parser.error('KILIX_ASK_COMMANDS_BACKEND must be grammar, needle3, lfm2 or lfm3')
     if args.commands_model_only and args.commands_backend == 'grammar':
         parser.error('--commands-model-only needs Needle3 or LFM2')
     if args.commands_candidate and args.commands_backend != 'needle3':
         parser.error('--commands-candidate requires --commands-backend needle3')
-    if args.commands_bundle and args.commands_backend != 'lfm2':
-        parser.error('--commands-bundle requires --commands-backend lfm2')
-    if args.commands_manifest and (args.commands_backend != 'lfm2' or not args.commands_bundle):
-        parser.error('--commands-manifest requires --commands-backend lfm2 and --commands-bundle')
+    if args.commands_bundle and args.commands_backend not in ('lfm2', 'lfm3'):
+        parser.error('--commands-bundle requires --commands-backend lfm2 or lfm3')
+    if args.commands_manifest and (args.commands_backend not in ('lfm2', 'lfm3') or not args.commands_bundle):
+        parser.error('--commands-manifest requires --commands-backend lfm2 or lfm3 and --commands-bundle')
     if args.operation_id is not None:
         import compact_runner
         try:

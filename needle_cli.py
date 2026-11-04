@@ -941,7 +941,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.add_argument("--runtime", action="store_true",
                             help="also install libneedle.so (needle2-runtime), which runs a "
                                  "tuned model, with its own licence screen")
-        parser.add_argument("--commands", nargs="?", const="lfm2", choices=("lfm2", "needle3"),
+        parser.add_argument("--commands", nargs="?", const="lfm2", choices=("lfm2", "lfm3", "needle3"),
                             help="install an Ask command model and CPU runtime (default: lfm2)")
         parser.add_argument("--root")
         args = parser.parse_args(argv[1:])

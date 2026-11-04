@@ -1,0 +1,158 @@
+{
+  "schema": "kilix.commands.model/v1",
+  "model": "LiquidAI/LFM3-1.7B",
+  "model_member": "model.gguf",
+  "base_revision": "0dc4268b561499c648c7ba7c9466bf3d8d01517a",
+  "runtime_commit": "8642541b255bfb5dc39cd351a178be09013a55d6",
+  "quantization": "Q8_0",
+  "version": "lfm3-kilix-commands-20261103-v1",
+  "platform": "linux-x86_64",
+  "role": "optional Kilix Ask command model",
+  "files": {
+    "model.gguf": {
+      "bytes": 1846238496,
+      "sha256": "8f6b24182258205e9e01e21f1f24a1f208c1e8115578825d202ce39976af20b6"
+    },
+    "notices/LICENSE-LFM.txt": {
+      "bytes": 10574,
+      "sha256": "4d28ca14dedc0b3d0fcc2b3339f0e79931faa33874f3d24f522183a8fc70068c"
+    },
+    "notices/LICENSE-kilix-needle.txt": {
+      "bytes": 1072,
+      "sha256": "938e0db7e6acd7e99d205863bcbdeda47f5fbd053802519f411dbefe0799071e"
+    },
+    "notices/LICENSE-runtime.txt": {
+      "bytes": 8521,
+      "sha256": "085c0983a59a761edd8a9dea3117c513026ad80da792c21ed8bcad9148b254ad"
+    },
+    "notices/NOTICE.txt": {
+      "bytes": 500,
+      "sha256": "4b411ce9bb8a06725ea266e86e977dedcbe3a402ac3a57a1f1a2d1c028bb9312"
+    },
+    "runtime/libggml-base.so": {
+      "bytes": 889752,
+      "sha256": "169c9641089b4e2fa9d5b8f47bc3c36cda83fd972acba6f5649365bfba32527d"
+    },
+    "runtime/libggml-base.so.0": {
+      "bytes": 889752,
+      "sha256": "169c9641089b4e2fa9d5b8f47bc3c36cda83fd972acba6f5649365bfba32527d"
+    },
+    "runtime/libggml-base.so.0.28.0": {
+      "bytes": 889752,
+      "sha256": "169c9641089b4e2fa9d5b8f47bc3c36cda83fd972acba6f5649365bfba32527d"
+    },
+    "runtime/libggml-cpu-alderlake.so": {
+      "bytes": 1410256,
+      "sha256": "0a018219509234e03e73708b1b64773be8afb806953004061b1a2efb12e00305"
+    },
+    "runtime/libggml-cpu-cannonlake.so": {
+      "bytes": 1596496,
+      "sha256": "fbde6704a0c96bacb870d366ce2be6f3c4d04f39ea054d5632a1835a2871b6b7"
+    },
+    "runtime/libggml-cpu-cascadelake.so": {
+      "bytes": 1608488,
+      "sha256": "7b1902b54c0aa63dd46a5a35a82c36109b52025a94666c10e9b99ea5873a436e"
+    },
+    "runtime/libggml-cpu-cooperlake.so": {
+      "bytes": 1604560,
+      "sha256": "3f19ecf75b572dfd571207eac199afccf7af78a9caa1baab8555a060bef874ff"
+    },
+    "runtime/libggml-cpu-haswell.so": {
+      "bytes": 1414352,
+      "sha256": "de3e50550ec3799458b325832fb4036a3b76b0817710fe22ba8304ae6c0de1ed"
+    },
+    "runtime/libggml-cpu-icelake.so": {
+      "bytes": 1608488,
+      "sha256": "309e9d347ca5a65739efe372a4a5fc3f2abacbb4756345229f800f63f53794f6"
+    },
+    "runtime/libggml-cpu-ivybridge.so": {
+      "bytes": 1345840,
+      "sha256": "fb9d0ed226916ff0ac361834c226e2ecdb3eab75d114170f9d49ffa55597e413"
+    },
+    "runtime/libggml-cpu-piledriver.so": {
+      "bytes": 1341744,
+      "sha256": "dfe876feca03bffdeb09e31d43ec36894c43fc077a38ee46215bb5bcd53a45c7"
+    },
+    "runtime/libggml-cpu-sandybridge.so": {
+      "bytes": 1340800,
+      "sha256": "51d1cbd1ec695acf6881945ea4c18b5cd6037ad191ffd2810612995a50e93bf9"
+    },
+    "runtime/libggml-cpu-sapphirerapids.so": {
+      "bytes": 1878640,
+      "sha256": "4e5960ed190c26f4bc71e24d64061d50cd78c69186bb2d314fb80801cd9f7ca5"
+    },
+    "runtime/libggml-cpu-skylakex.so": {
+      "bytes": 1596496,
+      "sha256": "082a3181728261c5f9ee6ee32267fb7edec0a4aebe8327f58f0ab5d481a980b6"
+    },
+    "runtime/libggml-cpu-sse42.so": {
+      "bytes": 1013976,
+      "sha256": "42d7987e77aa8a2c621e8fc0aaa05ad1beb62d4e7ab6312472ae70992016937b"
+    },
+    "runtime/libggml-cpu-x64.so": {
+      "bytes": 989520,
+      "sha256": "0a3eca0749ab253d60221b0f47b42aa30f19a6d8ecaeb03d3d30c0546ee2765e"
+    },
+    "runtime/libggml-cpu-zen4.so": {
+      "bytes": 1604560,
+      "sha256": "064fcc21d0708fb2fed65f96331f6b1bbb83e2b3030aa3e5fa423962608f2e67"
+    },
+    "runtime/libggml.so": {
+      "bytes": 51320,
+      "sha256": "2110e3931c7ea1262a849a1877dffe52e839c93f3f4562d8a90e59d6f9fe7e0e"
+    },
+    "runtime/libggml.so.0": {
+      "bytes": 51320,
+      "sha256": "2110e3931c7ea1262a849a1877dffe52e839c93f3f4562d8a90e59d6f9fe7e0e"
+    },
+    "runtime/libggml.so.0.28.0": {
+      "bytes": 51320,
+      "sha256": "2110e3931c7ea1262a849a1877dffe52e839c93f3f4562d8a90e59d6f9fe7e0e"
+    },
+    "runtime/libllama-common.so": {
+      "bytes": 6432216,
+      "sha256": "4dbff3c4dd52998c4e19751f39525f2eb54f27b97e757c59f720712459d254ef"
+    },
+    "runtime/libllama-common.so.0": {
+      "bytes": 6432216,
+      "sha256": "4dbff3c4dd52998c4e19751f39525f2eb54f27b97e757c59f720712459d254ef"
+    },
+    "runtime/libllama-common.so.0.8.0": {
+      "bytes": 6432216,
+      "sha256": "4dbff3c4dd52998c4e19751f39525f2eb54f27b97e757c59f720712459d254ef"
+    },
+    "runtime/libllama-server-impl.so": {
+      "bytes": 7966040,
+      "sha256": "091fc64c033c9b0521bfce6b6a7e8594dc25a1be9be1d6763596ac2871572313"
+    },
+    "runtime/libllama.so": {
+      "bytes": 5243384,
+      "sha256": "832bd2791fa4ec988ee7d1bfd4a26141f127fba30b42a30276fe4ddd6174a7c6"
+    },
+    "runtime/libllama.so.0": {
+      "bytes": 5243384,
+      "sha256": "832bd2791fa4ec988ee7d1bfd4a26141f127fba30b42a30276fe4ddd6174a7c6"
+    },
+    "runtime/libllama.so.0.8.0": {
+      "bytes": 5243384,
+      "sha256": "832bd2791fa4ec988ee7d1bfd4a26141f127fba30b42a30276fe4ddd6174a7c6"
+    },
+    "runtime/libmtmd.so": {
+      "bytes": 2262136,
+      "sha256": "738173f324135b2c6bdd667e10d9a90c8e0318b1c019d9631b2d7c8e6c572c33"
+    },
+    "runtime/libmtmd.so.0": {
+      "bytes": 2262136,
+      "sha256": "738173f324135b2c6bdd667e10d9a90c8e0318b1c019d9631b2d7c8e6c572c33"
+    },
+    "runtime/libmtmd.so.0.8.0": {
+      "bytes": 2262136,
+      "sha256": "738173f324135b2c6bdd667e10d9a90c8e0318b1c019d9631b2d7c8e6c572c33"
+    },
+    "runtime/llama-server": {
+      "bytes": 17920,
+      "sha256": "7396e7e97c1b60f3db95d2fad327373ddfb84fe71727147294cc666ed2c227c9"
+    }
+  },
+  "gguf_revision": "cd0c74c575b5c416f3011b5b4c298077f26ca8c2"
+}

@@ -31,7 +31,7 @@ class AskCommands(unittest.TestCase):
                 else:
                     os.environ['KILIX_ASK_COMMANDS_BACKEND'] = setting
                 self.assertEqual(ask.main(['--commands-model-only', '--plan', 'open calculator']), 0)
-                factory.assert_called_once_with(None, None, manifest=None)
+                factory.assert_called_once_with(None, None, manifest=None, backend='lfm2')
 
     def test_grammar_override_keeps_model_loading_disabled(self):
         plan = {'status': 0, 'items': [{'outcome': 'would', 'step': {'kind': 'app'}}]}
@@ -163,7 +163,7 @@ class AskCommands(unittest.TestCase):
                 result = jobs.commands.run('No action is requested.', dry_run=True)
         self.assertEqual(result['interpretation'], 'lfm2')
         self.assertEqual(result['items'], [])
-        factory.assert_called_once_with('/fixture/bundle', None, manifest='/fixture/model.json')
+        factory.assert_called_once_with('/fixture/bundle', None, manifest='/fixture/model.json', backend='lfm2')
         runtime.__exit__.assert_called_once()
 
     def test_forced_job_cannot_bypass_common_validation_or_run_a_partial_batch(self):

@@ -64,7 +64,7 @@ class ProviderLifecycle(unittest.TestCase):
                 with commands_models.Providers('lfm2', bundle='/fixture', manifest='/fixture/model.json') as providers:
                     self.assertIs(providers.get(), providers.get())
                     raise RuntimeError('caller failed')
-        factory.assert_called_once_with('/fixture', None, manifest='/fixture/model.json')
+        factory.assert_called_once_with('/fixture', None, manifest='/fixture/model.json', backend='lfm2')
         runtime.__exit__.assert_called_once()
 
 

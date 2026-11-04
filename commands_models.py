@@ -27,7 +27,7 @@ class Needle3:
 
 class Providers:
     def __init__(self, backend, *, candidate=None, bundle=None, root=None, manifest=None):
-        if backend not in ('grammar', 'needle3', 'lfm2'):
+        if backend not in ('grammar', 'needle3', 'lfm2', 'lfm3'):
             raise ValueError('unknown command backend')
         self.backend = backend
         self.candidate, self.bundle, self.root = candidate, bundle, root
@@ -55,7 +55,7 @@ class Providers:
                 else:
                     import commands_runtime
                     self.runtime = self.resources.enter_context(commands_runtime.Runtime(
-                        self.bundle, self.root, manifest=self.manifest))
+                        self.bundle, self.root, manifest=self.manifest, backend=self.backend))
             except BaseException:
                 self.close()
                 raise

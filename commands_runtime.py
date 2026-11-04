@@ -1,4 +1,4 @@
-"""Pinned CPU LFM2 completion; proposals are returned, never executed here."""
+"""Pinned CPU LFM completion; proposals are returned, never executed here."""
 from __future__ import annotations
 
 import ast
@@ -56,7 +56,8 @@ def parse_calls(text):
 
 
 class NativeClient:
-    def __init__(self,url,key='',timeout=180):
+    def __init__(self,url,key='',timeout=180,backend='lfm2'):
+        self.backend=backend
         self.url=url.rstrip('/');self.key=key;self.timeout=timeout
         self.opener=build_opener(ProxyHandler({}))
 
@@ -77,7 +78,7 @@ class NativeClient:
         wrapped=[{'type':'function','function':tool} for tool in TOOLS]
         rendered=self.post('/apply-template',{'messages':[{'role':'system','content':SYSTEM},
                            {'role':'user','content':request}], 'tools':wrapped,
-                           'chat_template_kwargs':{'tools':TOOLS},'add_generation_prompt':True})
+                           'chat_template_kwargs':({'enable_thinking':False} if self.backend=='lfm3' else {'tools':TOOLS}),'add_generation_prompt':True})
         if not isinstance(rendered,dict) or not isinstance(rendered.get('prompt'),str):
             raise CommandModelError('model template did not return a prompt')
         tokens=self.post('/tokenize',{'content':rendered['prompt'],'add_special':True,'parse_special':True}).get('tokens')
@@ -102,14 +103,20 @@ class NativeClient:
         if not isinstance(output,list) or len(output)>512 or any(type(x) is not int for x in output):
             raise CommandModelError('invalid output token list')
         content=self.post('/detokenize',{'tokens':output}).get('content')
-        calls=parse_calls(content)
+        if self.backend=='lfm3':
+            from commands_lfm3 import parse_calls as parse_lfm3
+            calls=parse_lfm3(content)
+        else:
+            calls=parse_calls(content)
         return {'calls':calls,'content':content,'seconds':time.monotonic()-began,
                 'timings':raw.get('timings'),'tokens':output}
 
 
-def selection(manifest=None):
+def selection(manifest=None, *, backend='lfm2'):
+    if backend not in ('lfm2', 'lfm3'):
+        raise CommandModelError('unknown LFM backend')
     try:
-        path=ROOT/'commands-model.json' if manifest is None else Path(manifest)
+        path=ROOT/('commands-lfm3-model.json' if backend=='lfm3' else 'commands-model.json') if manifest is None else Path(manifest)
         if path.stat().st_size>65536:
             raise ValueError('command model manifest is too large')
         value=json.loads(path.read_text())
@@ -135,16 +142,16 @@ def require_platform():
         raise CommandModelError('the command runtime requires x86-64 Linux Python with memfd_create')
 
 
-def inspect_bundle(bundle=None,root=None,*,manifest=None):
+def inspect_bundle(bundle=None,root=None,*,manifest=None,backend='lfm2'):
     require_platform()
     if manifest is not None and bundle is None:
         raise CommandModelError('an explicit command manifest needs a local bundle')
-    chosen=selection(manifest)
+    chosen=selection(manifest,backend=backend)
     if bundle is None:
-        spec,destination=asset._installed_spec(ASSET_ID,root)
+        spec,destination=asset._installed_spec('lfm3-kilix-commands' if backend=='lfm3' else ASSET_ID,root)
         import commands_selection
         try:
-            commands_selection.verify_catalog('lfm2', spec, chosen)
+            commands_selection.verify_catalog(backend, spec, chosen)
         except ValueError as error:
             raise CommandModelError(str(error)) from error
         bundle=destination
@@ -156,10 +163,14 @@ def inspect_bundle(bundle=None,root=None,*,manifest=None):
 
 class Runtime(NativeClient):
     """One private authenticated localhost server; all files are verified first."""
-    def __init__(self,bundle=None,root=None,*,manifest=None):
+    def __init__(self,bundle=None,root=None,*,manifest=None,backend='lfm2',ubatch_size=None):
+        if ubatch_size is None:
+            ubatch_size = 256 if backend == 'lfm3' else 16
+        if type(ubatch_size) is not int or not 1 <= ubatch_size <= 256:
+            raise CommandModelError('microbatch size must be between 1 and 256')
         self.resources=ExitStack();self.process=None
         try:
-            chosen,path=inspect_bundle(bundle,root,manifest=manifest)
+            chosen,path=inspect_bundle(bundle,root,manifest=manifest,backend=backend)
             temporary=Path(self.resources.enter_context(tempfile.TemporaryDirectory(prefix='kilix-lfm2-')))
             self.log=self.resources.enter_context((temporary/'server.log').open('w+b'))
             self.images={}
@@ -177,11 +188,11 @@ class Runtime(NativeClient):
             with socket.socket() as sock:
                 sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
             key=secrets.token_hex(24)
-            super().__init__(f'http://127.0.0.1:{port}',key)
+            super().__init__(f'http://127.0.0.1:{port}',key,backend=backend)
             runtime=temporary/'runtime'
             argv=[str(runtime/'llama-server'),'-m',model.path,'--device','none','--gpu-layers','0',
                   '--no-kv-offload','--no-op-offload','--ctx-size','8192','--parallel','1',
-                  '--batch-size','256','--ubatch-size','16','--fit','off','--jinja',
+                  '--batch-size','256','--ubatch-size',str(ubatch_size),'--fit','off','--jinja',
                   '--reasoning','off','--host','127.0.0.1','--port',str(port),'--no-webui','--api-key',key]
             env=dict(os.environ,CUDA_VISIBLE_DEVICES='',HIP_VISIBLE_DEVICES='',ROCR_VISIBLE_DEVICES='',
                      LD_LIBRARY_PATH=str(runtime))

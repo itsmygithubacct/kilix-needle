@@ -7,13 +7,13 @@ import tempfile
 
 import state
 
-BACKENDS = ('lfm2', 'needle3', 'grammar')
+BACKENDS = ('lfm2', 'lfm3', 'needle3', 'grammar')
 DEFAULT = 'lfm2'
-ASSETS = {'lfm2': 'lfm2-kilix-commands', 'needle3': 'needle3-kilix-commands'}
+ASSETS = {'lfm3': 'lfm3-kilix-commands', 'lfm2': 'lfm2-kilix-commands', 'needle3': 'needle3-kilix-commands'}
 SCHEMA = 'kilix.ask.selection/v1'
 REPAIR = ('choose a model for this request with --commands-backend (kilix ask --model) '
-          'lfm2, needle3 or grammar, or save one with '
-          '`kilix-needle workflows select --model lfm2|needle3|grammar`')
+          'lfm2, lfm3, needle3 or grammar, or save one with '
+          '`kilix-needle workflows select --model lfm2|lfm3|needle3|grammar`')
 
 
 class PreferenceError(ValueError):
@@ -59,14 +59,14 @@ def resolve(explicit=None):
         except (OSError, ValueError) as error:
             raise PreferenceError(f'unusable Ask preference {path}: {error}; {REPAIR}') from error
     if value not in BACKENDS:
-        raise ValueError('Ask model must be lfm2, needle3 or grammar')
+        raise ValueError('Ask model must be lfm2, lfm3, needle3 or grammar')
     return value
 
 
 def save(backend):
     """Atomically save an explicitly selected backend after readiness checks."""
     if backend not in BACKENDS:
-        raise ValueError('Ask model must be lfm2, needle3 or grammar')
+        raise ValueError('Ask model must be lfm2, lfm3, needle3 or grammar')
     path = preference_path()
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     if path.parent.is_symlink():
@@ -85,8 +85,9 @@ def save(backend):
 
 
 def release(backend):
-    if backend == 'lfm2':
+    if backend in ('lfm2', 'lfm3'):
         from commands_runtime import selection
+        return selection(backend=backend)
     elif backend == 'needle3':
         from commands_needle3 import selection
     else:
@@ -105,7 +106,7 @@ def verify_catalog(backend, spec, chosen=None):
 
 
 def require_platform(backend):
-    if backend == 'lfm2':
+    if backend in ('lfm2', 'lfm3'):
         from commands_runtime import require_platform as check
         check()
     elif backend == 'needle3':

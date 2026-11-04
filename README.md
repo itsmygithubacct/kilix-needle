@@ -182,9 +182,9 @@ kilix-needle ask --commands-backend grammar --plan "open calculator then open no
 kilix-needle ask --commands-backend grammar --yes --operation-id open-tools "open calculator then open notepad"
 ```
 
-`grammar` loads no generative model. `needle3` and `lfm2` retain that grammar as
+`grammar` loads no generative model. `needle3`, `lfm2` and `lfm3` retain that grammar as
 the fast path and validate every model proposal against the same complete
-request. All three modes keep the other Ask jobs' deterministic parsing; their
+request. All four modes keep the other Ask jobs' deterministic parsing; their
 older generative fallbacks are disabled. The routing classifier remains in use.
 Set `KILIX_ASK_COMMANDS_BACKEND` to select a mode for the `kilix ask` launcher.
 Without an override, Ask selects LFM2. An empty setting also uses that default.
@@ -201,6 +201,15 @@ Needle 3 uses the pinned V9 epoch-1 model and cached CPU runtime on x86-64-v3
 Linux. Missing assets name the installer; Ask never downloads them or substitutes
 another model. Both installers show the applicable licence and notices before
 asking for agreement. Existing licence receipts retain their original bindings.
+
+LFM3-1.7B is an optional model for Plebian-OS 0.2.3 rc1. Install it with
+`kilix-needle install --commands lfm3`, then select it for one request with
+`kilix ask --model lfm3 "open calculator"`, or save it with
+`kilix-needle workflows select --model lfm3`. It uses unchanged upstream Q8_0
+weights and a pinned LFM3-compatible CPU runtime. It has not been fine-tuned
+for Kilix. The full model terms and runtime notices accompany the bundle under
+`notices/`; LFM2 remains the default. Adding the model does not establish
+benchmark superiority or qualify an OS release.
 
 An explicit verified manifest with `--commands-candidate` overrides the installed
 Needle 3 selection. The `kilix ask` launcher forwards this option too.
