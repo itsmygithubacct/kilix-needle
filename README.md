@@ -202,6 +202,17 @@ Linux. Missing assets name the installer; Ask never downloads them or substitute
 another model. Both installers show the applicable licence and notices before
 asking for agreement. Existing licence receipts retain their original bindings.
 
+Needle 3 prepares its fixed tool prefix once when an owned runtime starts. The
+worker must acknowledge that phase within 30 seconds; preparation then has a
+separate, absolute 90-second limit. Requests retain their 30-second limit.
+An unresponsive or cancelled runtime is closed and reaped. File and licence
+readiness alone does not prove that initialization will finish on a given CPU.
+Python callers can inspect `startup_phase` and `startup_stages` on the runtime;
+`compact_model.open_runtime(..., cancel_event=event)` also accepts a caller-owned
+`threading.Event` to cancel initialization or requests. Preparation reports a
+stage, without claiming token-level progress. Its cache belongs to that runtime;
+no prepared state is shared between bundles or saved to disk.
+
 An explicit verified manifest with `--commands-candidate` overrides the installed
 Needle 3 selection. The `kilix ask` launcher forwards this option too.
 LFM2 uses the pinned release selection and Content bundle; an explicit local

@@ -21,6 +21,7 @@ model can never be silently replaced by the base one.
 from __future__ import annotations
 
 import json
+import math
 import os
 import select
 import subprocess
@@ -45,16 +46,27 @@ class LibEngine:
     """Same surface as engine.Engine: start, complete, reset, close."""
 
     def __init__(self, library, tools: list[dict], weights=None, *, timeout: float = 120.0,
-                 generation: int = 2, backend: str = "native"):
+                 generation: int = 2, backend: str = "native",
+                 preparation_timeout: float | None = None, cancel_event=None):
         if generation not in (2, 3):
             raise ValueError("the library generation must be explicitly 2 or 3")
         if generation == 3 and weights is None:
             raise ValueError("generation 3 requires verified explicit weights")
         if backend not in ("native", "rust3") or (backend == "rust3" and generation != 3):
             raise ValueError("unsupported library backend/generation")
+        for value in (timeout, preparation_timeout):
+            if value is not None and (not math.isfinite(value) or value <= 0):
+                raise ValueError("library deadlines must be finite and positive")
+        if preparation_timeout is not None and backend != "rust3":
+            raise ValueError("only the cached runtime has a preparation phase")
         self.library, self.weights, self.tools, self.timeout = library, weights, tools, timeout
         self.generation = generation
         self.backend = backend
+        self.preparation_timeout = preparation_timeout
+        self.cancel_event = cancel_event
+        self.startup_phase = "not-started"
+        self.startup_stages = []
+        self._startup_started = None
         self._process: subprocess.Popen | None = None
         self._lock = threading.Lock()
 
@@ -68,6 +80,9 @@ class LibEngine:
     def start(self) -> None:
         if self._process is not None:
             raise LibEngineError("the Needle library worker is already started")
+        self._startup_started = time.monotonic()
+        self.startup_stages = []
+        self._stage("starting")
         fds = [self.library.fd] + ([self.weights.fd] if self.weights is not None else [])
         argv = [sys.executable, "-I", "-B", _WORKER, "--worker", str(self.library.fd),
                 str(self.weights.fd) if self.weights is not None else "-",
@@ -81,6 +96,7 @@ class LibEngine:
             reply = self._ask({"op": "init", "tools": self.tools})
             if not reply.get("ok"):
                 raise LibEngineError(reply.get("error") or "the Needle library would not start")
+            self._stage("ready")
         except BaseException:
             self.close()
             raise
@@ -94,44 +110,76 @@ class LibEngine:
         if process is None or process.poll() is not None:
             raise LibEngineError("the Needle library worker is not running")
         try:
+            if self.cancel_event is not None and self.cancel_event.is_set():
+                raise LibEngineError("the Needle library operation was cancelled")
             process.stdin.write(json.dumps(message, ensure_ascii=False) + "\n")
             process.stdin.flush()
             # Bound the entire response, including a worker that writes only
             # part of a line. A ready pipe alone does not bound readline().
             deadline = time.monotonic() + self.timeout
             chunks = bytearray()
-            while b"\n" not in chunks:
+            received = 0
+            preparing = False
+            initializing = message.get("op") == "init"
+            while True:
+                if self.cancel_event is not None and self.cancel_event.is_set():
+                    raise LibEngineError("the Needle library operation was cancelled")
                 remaining = deadline - time.monotonic()
-                ready = select.select([process.stdout], [], [], max(0, remaining))[0]
-                if remaining <= 0 or not ready:
+                if remaining <= 0:
+                    if preparing:
+                        budget = self.preparation_timeout or self.timeout
+                        raise LibEngineError(f"the Needle tool-prefix preparation exceeded {budget:g} s")
                     raise LibEngineError(f"the Needle library did not answer in {self.timeout:g} s")
+                if b"\n" in chunks:
+                    line, _, rest = chunks.partition(b"\n")
+                    chunks = bytearray(rest)
+                    text = line.decode("utf-8")
+                    try:
+                        value = json.loads(text)
+                    except ValueError as error:
+                        raise LibEngineError("the Needle library answered with malformed JSON") from error
+                    if not isinstance(value, dict):
+                        raise LibEngineError("the Needle library answered with an unexpected shape")
+                    if value.get("type") == "preparing":
+                        if (not initializing or self.backend != "rust3" or preparing
+                                or value != {"type": "preparing", "stage": "tool-prefix"}):
+                            raise LibEngineError("unexpected Needle preparation stage")
+                        preparing = True
+                        self._stage("preparing")
+                        if self.preparation_timeout is not None:
+                            # One transition only: progress never refreshes this absolute cap.
+                            deadline = time.monotonic() + self.preparation_timeout
+                        continue
+                    if initializing and self.backend == "rust3" and value.get("ok") and not preparing:
+                        raise LibEngineError("the cached runtime omitted its preparation stage")
+                    if chunks:
+                        raise LibEngineError("the Needle library sent extra response data")
+                    return value
+                wait = min(remaining, 0.25) if self.cancel_event is not None else remaining
+                ready = select.select([process.stdout], [], [], wait)[0]
+                if not ready:
+                    continue
                 chunk = os.read(process.stdout.fileno(), 65536)
                 if not chunk:
                     raise LibEngineError("the Needle library worker exited")
                 chunks.extend(chunk)
-                if len(chunks) > 1024 * 1024:
+                received += len(chunk)
+                if received > 1024 * 1024:
                     raise LibEngineError("the Needle library response is too large")
-            line = chunks.decode("utf-8")
-        except LibEngineError:
-            self.close()
-            raise
         except UnicodeError as error:
             self.close()
             raise LibEngineError("the Needle library response is not UTF-8") from error
         except OSError as error:
             self.close()
             raise LibEngineError(f"the Needle library worker failed: {error}") from error
-        if not line:
-            raise LibEngineError("the Needle library worker exited")
-        try:
-            value = json.loads(line)
-        except ValueError as error:
+        except BaseException:
             self.close()
-            raise LibEngineError("the Needle library worker answered with malformed JSON") from error
-        if not isinstance(value, dict):
-            self.close()
-            raise LibEngineError("the Needle library worker answered with an unexpected shape")
-        return value
+            raise
+
+    def _stage(self, phase):
+        self.startup_phase = phase
+        elapsed = 0.0 if self._startup_started is None else time.monotonic() - self._startup_started
+        self.startup_stages.append({"phase": phase, "seconds": elapsed})
 
     def complete(self, text: str) -> dict:
         return self._ask({"op": "complete", "input": text})
@@ -155,6 +203,7 @@ class LibEngine:
                 process.wait()
             finally:
                 process.stdout.close()
+                self._stage("closed")
 
 
 def _worker(library_fd: int, weights_fd: int | None, generation: int, parent_pid: int,
@@ -281,6 +330,9 @@ def _rust_worker(lib, weights_fd, say):
                     say({"ok": False, "error": "cached runtime requires one explicit weight initialization"})
                     return 1
                 tools = json.dumps(message["tools"], ensure_ascii=False, separators=(",", ":")).encode()
+                # This ABI loads weights AND prefills the immutable tool prefix.
+                # Announce the bounded preparation phase before the native call.
+                say({"type": "preparing", "stage": "tool-prefix"})
                 handle = lib.needle_v3_cached_load(f"/proc/self/fd/{weights_fd}".encode(), tools)
                 say({"ok": True} if handle else {"ok": False, "error":
                     (lib.needle_last_error() or b"cached model load failed").decode(errors="replace")})

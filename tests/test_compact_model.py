@@ -3,6 +3,7 @@ import hashlib
 import json
 from pathlib import Path
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -11,6 +12,27 @@ import compact_model as model
 
 
 class CandidateTests(unittest.TestCase):
+    def test_only_cached_candidate_gets_separate_preparation_budget_and_cancellation(self):
+        for backend in ('native','rust3'):
+            with self.subTest(backend=backend),tempfile.TemporaryDirectory() as directory:
+                root=Path(directory)
+                tools=(Path(model.__file__).parent/'commands-tools.json').read_bytes()
+                (root/'tools.json').write_bytes(tools)
+                manifest={'schema':'kilix-compact-candidate-v1','generation':3,'backend':backend,
+                    'cpu_isa':'x86-64-v3','library':{'path':'runtime.so',
+                    'bytes':model.RUST_LIB_BYTES if backend=='rust3' else model.LIB_BYTES,
+                    'sha256':model.RUST_LIB_SHA256 if backend=='rust3' else model.LIB_SHA256},
+                    'weights':{'path':'weights.cact','bytes':1,'sha256':'0'*64},
+                    'tools':{'path':'tools.json','bytes':len(tools),'sha256':model.TOOLS_SHA256}}
+                (root/'candidate.json').write_text(json.dumps(manifest))
+                cancel=threading.Event()
+                with patch.object(model,'require_cached_platform'),patch.object(model.asset,'load_verified'),patch.object(model.libengine,'LibEngine') as runtime:
+                    with model.open_runtime(root/'candidate.json',cancel_event=cancel):pass
+                options=runtime.call_args.kwargs
+                self.assertEqual(options['timeout'],30)
+                self.assertEqual(options['preparation_timeout'],90 if backend=='rust3' else None)
+                self.assertIs(options['cancel_event'],cancel)
+
     def test_grammar_fast_path_never_loads_a_candidate(self):
         with patch.object(model,'propose',side_effect=AssertionError('unnecessary load')):
             result=model.decide('start claude here',candidate='unused.json')
