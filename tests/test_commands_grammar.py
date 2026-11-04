@@ -240,6 +240,59 @@ class CommandGrammar(unittest.TestCase):
             with self.subTest(request=request):
                 self.assertIsNone(contract.exact_calls(request))
 
+    def test_fronted_location_scopes_one_launch_and_preserves_its_literals(self):
+        payload = 'Keep  café, [], and "quotes".'
+        request = 'In "/projects/Blue, Birch.", start Codex with task '+json.dumps(payload)+'.'
+        wanted = [call('start_codex', directory='/projects/Blue, Birch.', task=payload)]
+        self.check(request, wanted)
+        self.assertFalse(contract.admit(request, [call('start_codex',
+            directory='/projects/Blue, Birch.', task=payload[:-1])]).actions)
+        self.check('In "/a", start Codex; then start Claude in /b.', [
+            call('start_codex', directory='/a'), call('start_claude', directory='/b')])
+        for text in ('In "/a", start Codex in /b.', 'In "/a", start Codex here.',
+                     'In "/a", Codex.', 'In /Blue Birch, start Codex.',
+                     'In "/a", start Codex if tests pass.', 'In "/a", do not start Codex.'):
+            with self.subTest(text=text):self.assertIsNone(contract.exact_calls(text))
+
+    def test_complete_turn_and_current_session_app_wording(self):
+        self.check('Wait until Codex in "/projects/Blue Birch" completes its turn.',
+                   [call('wait_for_agent', agent='codex', directory='/projects/Blue Birch')])
+        for text in ('Open the calculator in this session.',
+                     'Launch the calculator for this session.', 'I want the calculator opened.',
+                     'I want the calculator opened for this session.'):
+            with self.subTest(text=text):self.check(text, [call('open_app', app='kilix-calculator')])
+        for text in ('Open calculator in another session.', 'Open calculator for the Codex session.',
+                     'Wait until Codex completes its turn tomorrow.',
+                     'I want the calculator opened if tests pass.', "I don't want calculator opened."):
+            with self.subTest(text=text):self.assertIsNone(contract.exact_calls(text))
+
+    def test_pdf_punctuation_outside_quotes_does_not_change_the_path(self):
+        path = '/projects/Blue and Birch/notes.v2.pdf'
+        wanted = [call('open_app', app='kilix-pdf', file_path=path)]
+        for form in ('Use the PDF viewer to open {}', 'Open {}', 'Launch the PDF viewer with {}',
+                     'Get the PDF viewer to display {}', 'Show {} in the PDF viewer'):
+            for mark in ('.', '!'):
+                text = form.format(json.dumps(path))+mark
+                with self.subTest(text=text):self.check(text, wanted)
+        for text in ('Use the PDF viewer to open "'+path+'.".',
+                     'Use the PDF viewer to open "'+path+'" if tests pass.',
+                     'Use the PDF viewer to open "'+path+'" and erase the logs.'):
+            with self.subTest(text=text):self.assertIsNone(contract.exact_calls(text))
+
+    def test_new_coverage_keeps_request_boundaries_and_literal_checks(self):
+        forms = ('In "/a", start Codex', 'Wait until Codex completes its turn',
+                 'Open calculator in this session', 'I want calculator opened',
+                 'Use the PDF viewer to open "/a/report.pdf"')
+        for form in forms:
+            wanted = contract.exact_calls(form)
+            self.assertTrue(wanted)
+            for text in [prefix+form for prefix in ('Do not ', 'If tests pass, ', 'The guide says: ')]+[
+                    form+tail for tail in (' if tests pass', ' tomorrow', '; reboot', ' or perhaps not')]:
+                with self.subTest(text=text):self.assertFalse(contract.admit(text, wanted).actions)
+        message = 'Tell Codex here: Preserve  two spaces.'
+        for payload in ('Preserve two spaces.', 'Preserve  two spaces'):
+            self.assertFalse(contract.admit(message, [call('message_agent', agent='codex', text=payload)]).actions)
+
 
 if __name__ == '__main__':
     unittest.main()

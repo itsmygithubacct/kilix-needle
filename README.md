@@ -273,6 +273,13 @@ Double-quote paths containing spaces or literal trailing punctuation. A final
 `start codex in "/work/project."` preserves the final dot. Quoted paths and
 message/task text keep their exact spelling.
 
+A location can precede a launch: `In "/work/project", start Codex.`
+`Wait until Codex completes its turn`, `I want the calculator opened`, and
+`Open the calculator in this session` are also supported. Sentence punctuation
+after a quoted PDF path stays outside the filename. Use an explicit placement
+such as `in a split above`; bare wording such as `right in /work/project`
+is ambiguous and is refused.
+
 At most four ordered command actions are admitted together. Host checks run
 for the complete batch before it starts, and pending readiness pauses later
 actions. Planning runs nothing; acting requires confirmation or `--yes`.

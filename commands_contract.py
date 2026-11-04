@@ -114,6 +114,12 @@ def _extended_agent_calls(request):
     # is present. Payload punctuation is preserved below.
     if polite and ':' not in text and text.endswith('?'):
         text = text[:-1].rstrip()
+    front = re.match(r'^(?:in|at|inside|within)\s+(?P<path>'+_DIRECTORY+r'),\s*', text, re.I)
+    front_directory = None
+    if front:
+        front_directory = _literal(front['path'])
+        if not front_directory:return None
+        text = text[front.end():]
     head = re.match(r'^'+_LAUNCH_VERB+r'\s+'
                     r'(?:one\s+)?(?:(?:a|an|the|new|fresh)\s+)*(?P<agent>claude|codex)\b'
                     r'(?:\s+(?:coding\s+)?(?:client|session|workspace|agent|instance|worker))?'
@@ -151,6 +157,9 @@ def _extended_agent_calls(request):
         # Requests never contain NUL: exact_calls refuses control characters.
         rest, directory = _take_location(rest, gap=' \0 ', sentence_end=sentence_end)
         if rest is None:return None
+        if front_directory is not None:
+            if directory is not None:return None
+            directory = front_directory
         args = {} if directory in (None,'here') else {'directory':directory}
         if task is not None:
             if not task or len(task.encode())>1024:return None
@@ -167,6 +176,9 @@ def _extended_agent_calls(request):
             rest=rest[:model.start()]+' '+rest[model.end():]
         if rest.replace('\0',' ').strip(' ,.!'):return None
         return [_call('start_'+head['agent'].casefold(),**args)]
+
+    # A fronted location scopes one explicit launch, never an implicit action.
+    if front:return None
 
     # Messages require a named agent; no pronoun or unnamed-session fallback.
     front = re.match(r'^(?:for|to)\s+(?:the\s+)?(?:running\s+|existing\s+)?(?P<agent>claude|codex)(?:\s+session)?\s+(?P<location>.+?),\s*send(?:\s+this\s+message)?:\s*',text,re.I)
@@ -221,7 +233,7 @@ def _extended_agent_calls(request):
         if tail not in ('','is idle','is done','is finished','becomes idle','reaches idle',
                         'finishes','finishes its turn','finishes its current turn','to finish',
                         'to finish its turn','to finish its current turn','to become idle','to be idle',
-                        'to complete its turn','completes its current turn','finish before continuing',
+                        'to complete its turn','completes its turn','completes its current turn','finish before continuing',
                         'finish before we continue','ends'):
             return None
         args={'agent':waiting['agent'].casefold()}
@@ -237,8 +249,9 @@ def _call(name, **args):
 def _app_calls(request):
     text = _without_courtesy(request.strip())
     sentence_end = text == request.strip()
-    desired = re.fullmatch(r"(?:I would like|I['’]d like|I need)\s+(?:the\s+)?("+_NOUN+
-                           r")\s+(?:opened|launched|started)(?:\s+now)?[.!]?", text, re.I)
+    session = r'(?:\s+(?:in|for)\s+this\s+session)?'
+    desired = re.fullmatch(r"(?:I would like|I['’]d like|I need|I want)\s+(?:the\s+)?("+_NOUN+
+                           r")\s+(?:opened|launched|started)(?:\s+now)?"+session+r'[.!]?', text, re.I)
     if desired:
         return [_call('open_app', app=_APP_WORDS[desired[1].casefold()])]
     preamble = _PREAMBLE.match(text)
@@ -251,16 +264,16 @@ def _app_calls(request):
     sentence_end = sentence_end and without_courtesy == text
     text = without_courtesy
     text = re.sub(r'^bring\s+(?:the\s+)?('+_NOUN+r')\s+up$',r'bring up \1',text,flags=re.I)
-    noun = re.fullmatch(r'(?:open|launch|start(?: up)?|bring up|show|get)\s+(?:the\s+)?('+_NOUN+r')(?:\s+application|\s+running|\s+open)?[.!]?', text, re.I)
+    noun = re.fullmatch(r'(?:open|launch|start(?: up)?|bring up|show|get)\s+(?:the\s+)?('+_NOUN+r')(?:\s+application|\s+running|\s+open)?'+session+r'[.!]?', text, re.I)
     if noun:
         return [_call('open_app', app=_APP_WORDS[noun[1].casefold()])]
     patterns = [
         r'(?:open|load|show|view)\s+(?P<path>'+_PATH+r')\s+(?:in|with|using)\s+(?:the\s+)?PDF (?:viewer|reader)[.!]?',
-        r'(?:use\s+)?(?:the\s+)?PDF (?:viewer|reader)\s+to\s+(?:open|load|show)\s+(?P<path>'+_PATH+r')',
-        r'open\s+(?P<path>'+_PATH+r')',
-        r'(?:launch|bring up|start)\s+(?:the\s+)?PDF (?:viewer|reader)\s+(?:with|for|and (?:load|show))\s+(?P<path>'+_PATH+r')',
-        r'(?:get\s+)?(?:the\s+)?PDF (?:viewer|reader)\s+to\s+(?:display|open|show)\s+(?P<path>'+_PATH+r')',
-        r'(?:display|show)\s+(?P<path>'+_PATH+r')\s+(?:in|with|using)\s+(?:the\s+)?PDF (?:viewer|reader)',
+        r'(?:use\s+)?(?:the\s+)?PDF (?:viewer|reader)\s+to\s+(?:open|load|show)\s+(?P<path>'+_PATH+r')[.!]?',
+        r'open\s+(?P<path>'+_PATH+r')[.!]?',
+        r'(?:launch|bring up|start)\s+(?:the\s+)?PDF (?:viewer|reader)\s+(?:with|for|and (?:load|show))\s+(?P<path>'+_PATH+r')[.!]?',
+        r'(?:get\s+)?(?:the\s+)?PDF (?:viewer|reader)\s+to\s+(?:display|open|show)\s+(?P<path>'+_PATH+r')[.!]?',
+        r'(?:display|show)\s+(?P<path>'+_PATH+r')\s+(?:in|with|using)\s+(?:the\s+)?PDF (?:viewer|reader)[.!]?',
     ]
     for pattern in patterns:
         matched = re.fullmatch(pattern,text,re.I)
