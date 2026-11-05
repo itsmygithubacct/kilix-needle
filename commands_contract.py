@@ -53,6 +53,16 @@ _PLACEMENTS = [
     ('down', r'(?:in\s+)?(?:a\s+)?split\s+(?:below(?:\s+(?:me|this pane|the current pane))?|down)|below\s+(?:me|this pane|the current pane)'),
     ('tab', r'(?:in\s+)?(?:a\s+)?(?:(?:new|fresh)\s+)?tab'),
 ]
+# Trailing idle wording on a launch that captured no task. A removed field leaves
+# a NUL gap, and these clauses do not cross it. A task plus one of them is said
+# both ways and is not a reading.
+_COMPACT_NO_TASK = re.compile(
+    r'(?:\s+with\s+no\s+task\b(?:\s+or\s+(?:initial\s+)?prompt\b)?'
+    r'|(?:[;,.]\s*|\s+)leave\s+the\s+session\s+open\b)\s*[.!]?\s*$',
+    re.I)
+_CLAUDE_CODE_NOUN = re.compile(
+    r'\s+(?:(?:kilix\s+)?pane|(?:coding\s+)?(?:client|session|workspace|agent|instance|worker))\b',
+    re.I)
 
 
 def _literal(raw, *, sentence_end=False):
@@ -64,6 +74,18 @@ def _literal(raw, *, sentence_end=False):
         return re.sub(r'(?<=[^/.!])[.!]$', '', raw) if sentence_end else raw
     except ValueError:
         return None
+
+
+def _without_idle_clause(text):
+    """Drop a trailing idle clause. The flag is true when at least one was removed."""
+    removed = False
+    for _ in range(4):
+        shorter = _COMPACT_NO_TASK.sub('', text)
+        if shorter == text:
+            return text, removed
+        text = shorter
+        removed = True
+    return text, removed
 
 
 def _without_courtesy(text):
@@ -146,6 +168,18 @@ def _extended_agent_calls(request, *, closed_payload=False):
                     r'(?:\s+(?:running|started))?', text, re.I)
     if head:
         rest = text[head.end():]
+        # "claude code" is the product name. "code" is not part of the codex name,
+        # and a following noun is still the session, not a task.
+        if head['agent'].casefold() == 'claude':
+            coded = re.match(r'\s+code\b', rest, re.I)
+            if coded:
+                rest = rest[coded.end():]
+                noun = _CLAUDE_CODE_NOUN.match(rest)
+                if noun:
+                    rest = rest[noun.end():]
+                running = re.match(r'\s+(?:running|started)\b', rest, re.I)
+                if running:
+                    rest = rest[running.end():]
         # A contract model name may follow the agent directly: "start codex gpt-6".
         named = re.match(r'\s+('+'|'.join(map(re.escape, _MODELS['start_'+head['agent'].casefold()]))+r')(?![\w.-])',
                          rest, re.I)
@@ -195,6 +229,9 @@ def _extended_agent_calls(request, *, closed_payload=False):
         if model:
             args['model']=model[1]
             rest=rest[:model.start()]+' '+rest[model.end():]
+        rest, idle = _without_idle_clause(rest)
+        if idle and task is not None:
+            return None
         if rest.replace('\0',' ').strip(' ,.!'):return None
         return [_call('start_'+head['agent'].casefold(),**args)]
 

@@ -293,6 +293,40 @@ class CommandGrammar(unittest.TestCase):
         for payload in ('Preserve two spaces.', 'Preserve  two spaces'):
             self.assertFalse(contract.admit(message, [call('message_agent', agent='codex', text=payload)]).actions)
 
+    def test_idle_launch_and_claude_code_pane_read_without_fitting_a_task(self):
+        self.check('start codex in /tmp/tmp.T9u08L7Bn5 with no task; leave the session open',
+                   [call('start_codex', directory='/tmp/tmp.T9u08L7Bn5')])
+        self.check('start codex in /tmp/w1 with no task or initial prompt',
+                   [call('start_codex', directory='/tmp/w1')])
+        self.check('start codex in /tmp/w1 with no task or prompt',
+                   [call('start_codex', directory='/tmp/w1')])
+        self.check('launch a claude code kilix pane on the right',
+                   [call('start_claude', place='right')])
+        self.check('start claude code session on the right',
+                   [call('start_claude', place='right')])
+        self.check('start codex in /tmp/w1 with no task; open calculator',
+                   [call('start_codex', directory='/tmp/w1'),
+                    call('open_app', app='kilix-calculator')])
+        # "to <words>" remains the task. Idle wording inside that payload stays there.
+        self.check('start codex in /tmp/w1 to fix the build',
+                   [call('start_codex', directory='/tmp/w1', task='fix the build')])
+        self.check('start codex in /tmp/w1 to fix the build. Do not send a prompt',
+                   [call('start_codex', directory='/tmp/w1',
+                         task='fix the build. Do not send a prompt')])
+        self.check('start codex in /tmp/w1 with task "fix with no task"',
+                   [call('start_codex', directory='/tmp/w1', task='fix with no task')])
+        for request in (
+            "don't start codex in /tmp/w1 with no task",
+            'start codex in /tmp/w1 with task "fix the build" with no task',
+            'start codex in /tmp/w1 with no task with task "fix the build"',
+            'start codex in /tmp/w1 with no task; leave the session open and delete it',
+            'start claude code the tests',
+            'start codex code in /tmp/w1',
+            'launch a claude code kilix pane on the right tomorrow',
+        ):
+            with self.subTest(request=request):
+                self.assertIsNone(contract.exact_calls(request))
+
 
 if __name__ == '__main__':
     unittest.main()
