@@ -115,17 +115,21 @@ class CommandLanguage(unittest.TestCase):
                     self.assertIsNone(contract.exact_calls(changed))
                     self.assertFalse(contract.admit(changed, proposals).actions)
 
-    def test_ambiguous_unquoted_paths_still_need_quotes(self):
+    def test_unquoted_spaced_paths_need_the_path_to_exist(self):
+        # Owner decision 2026-11-07: an unquoted spaced path is read only when
+        # that exact path exists (tests/test_commands_spaced_paths.py). These
+        # do not exist, so they are refused as before; quotes always work.
         for text in ('Start Codex in /projects/Blue Birch',
                      'Tell Codex in /projects/Blue Birch: preserve this',
                      'Open /projects/Blue Birch/Review.pdf in the PDF viewer'):
             self.assertIsNone(contract.exact_calls(text))
         self.check('Start Codex in "/projects/Blue Birch".',
                    [call('start_codex', directory='/projects/Blue Birch')])
-        # "right in" can mean precisely that location, not pane placement.
-        self.assertIsNone(contract.exact_calls('Start Codex right in /projects/ridge.'))
+        # A bare right, left or down before an explicit path is the placement.
+        self.check('Start Codex right in /projects/ridge.',
+                   [call('start_codex', place='right', directory='/projects/ridge')])
+        self.assertIsNone(contract.exact_calls('Start Codex up in /projects/ridge.'))
         self.assertIsNone(contract.exact_calls('Launch the calculator for me?'))
-
 
 if __name__ == '__main__':
     unittest.main()

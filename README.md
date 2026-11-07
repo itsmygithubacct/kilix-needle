@@ -190,7 +190,10 @@ Set `KILIX_ASK_COMMANDS_BACKEND` to select a mode for the `kilix ask` launcher.
 Without an override, Ask selects LFM2. An empty setting also uses that default.
 The grammar fast path works without loading the model. Model requests need the
 installed, licensed bundle; `install --commands` shows its full terms before
-installation. The selected CPU runtime requires x86-64 Linux.
+installation. LFM2's terms, including its commercial-use limitation, are a
+notice by the owner's 2026-11-07 determination: the install is confirmed, and
+no agreement is typed or recorded. The selected CPU runtime requires x86-64
+Linux.
 
 The pinned LFM2 delivery is `lfm2-kilix-commands-20261104-v8`, with weight
 revision `lfm2-kilix-v5e1-wse-20261104.8`. It retains the fine-tuned V5 lineage
@@ -308,18 +311,29 @@ sends `now`. A bare `now` immediately after the closed quoted argument is an uns
 not part of that payload. A valid action beside a refused clause does not admit
 a partial batch.
 
-Double-quote paths containing spaces or literal trailing punctuation. A final
-`.` or `!` on an unquoted path at the end of a request ends the sentence:
-`start codex in /work/project.` uses `/work/project`, while
-`start codex in "/work/project."` preserves the final dot. Quoted paths and
-message/task text keep their exact spelling.
+An unquoted path may contain single spaces only when that exact path exists:
+a directory for an agent, a file for the PDF viewer. `start codex in /work/my
+project` reads `/work/my project` when that directory exists, and the words
+after the longest existing path are read as before, so `start codex in
+/work/my project on the right` keeps its placement. When a shorter existing
+path also reads the whole request differently, as `start claude in ~/proj new
+tab` beside folders `~/proj` and `~/proj new`, the request is refused. Ask only
+stats such a path; it never opens or lists it. Double-quote a path with spaces
+to read it exactly whether or not it exists, and quote paths with literal
+trailing punctuation. A final `.` or `!` on an unquoted path at the end of a
+request ends the sentence: `start codex in /work/project.` uses
+`/work/project`, while `start codex in "/work/project."` preserves the final
+dot. Quoted paths and message/task text keep their exact spelling.
 
 A location can precede a launch: `In "/work/project", start Codex.`
 `Wait until Codex completes its turn`, `I want the calculator opened`, and
 `Open the calculator in this session` are also supported. Sentence punctuation
-after a quoted PDF path stays outside the filename. Use an explicit placement
-such as `in a split above`; bare wording such as `right in /work/project`
-is ambiguous and is refused.
+after a quoted PDF path stays outside the filename. A bare `right`, `left` or
+`down` directly after the agent name and before an explicit path is its
+placement: `start codex left in /work/project` opens a split to the left.
+`right now`, `right here`, a bare direction without a path, `up` (as in `start
+claude up`) and a direction after `the` or a session noun (`the Codex session
+left in ~/proj`) are not placements, and such requests are refused.
 
 At most four ordered command actions are admitted together. Host checks run
 for the complete batch before it starts, and pending readiness pauses later

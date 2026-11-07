@@ -2,10 +2,13 @@
 
 The original request supplies every argument. Model proposals must match the
 complete reading, including order, literal payloads and host-owned defaults.
-This module never executes a command or installs an application.
+This module never executes a command or installs an application. Its only
+filesystem access is a stat that tells whether an unquoted spaced path exists.
 """
+import contextvars
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
 import re
 import unicodedata
@@ -63,6 +66,39 @@ _COMPACT_NO_TASK = re.compile(
 _CLAUDE_CODE_NOUN = re.compile(
     r'\s+(?:(?:kilix\s+)?pane|(?:coding\s+)?(?:client|session|workspace|agent|instance|worker))\b',
     re.I)
+# Owner decision 2026-11-07: an unquoted path may contain single spaces. Words
+# after a path cannot be told apart from a task, a courtesy or a second sentence
+# ("in ~/proj fix the tests"), so a spaced reading is taken only when that exact
+# path exists: a directory for an agent, a file for the PDF viewer. The longest
+# existing reading wins, and the words after it are parsed as before. This is
+# the only filesystem access here: a stat, never a create, open or listing.
+_SPACED_WORD = re.compile(r' [^\s;,?:="\'\\/~\-][^\s;,?:="\\]*')
+
+
+def _path_exists(path, *, directory):
+    """Whether an absolute or home path names an existing directory or file."""
+    try:
+        target = os.path.expanduser(path) if path.startswith('~/') else path
+        if not target.startswith('/') or len(target.encode()) > 4096:
+            return False
+        return os.path.isdir(target) if directory else os.path.isfile(target)
+    except (OSError, ValueError):
+        return False
+
+
+# One reading of a request at a time: which existing path to take when two
+# readings of the same unquoted path both exist (see exact_calls).
+_PATH_CHOICE = contextvars.ContextVar('_PATH_CHOICE', default=None)
+
+
+def _spaced_words(tail):
+    """The single-spaced words directly after an unquoted path."""
+    words = []
+    match = _SPACED_WORD.match(tail)
+    while match:
+        words.append(match[0])
+        match = _SPACED_WORD.match(tail, match.end())
+    return words
 
 
 def _literal(raw, *, sentence_end=False):
@@ -105,10 +141,31 @@ def _take_location(text, gap=' ', *, sentence_end=False):
         return text, None
     match = matches[0]
     raw = match['path'] or match['working']
-    directory = _literal(raw, sentence_end=sentence_end and match.end()==len(text.rstrip())) if raw else 'here'
+    end = match.end()
+    if match['path'] and not raw.startswith('"'):
+        words = _spaced_words(text[end:])
+        found = []
+        for count in range(len(words), 0, -1):
+            extension = ''.join(words[:count])
+            stop = end + len(extension)
+            candidate = _literal(raw + extension,
+                                 sentence_end=sentence_end and stop==len(text.rstrip()))
+            if candidate and _path_exists(candidate, directory=True):
+                found.append((raw + extension, stop))
+        if found:
+            # The path as written, without the spaced words, is the other reading
+            # when it exists too ("~/proj new tab" beside a folder "~/proj new").
+            base = _literal(raw, sentence_end=sentence_end and end==len(text.rstrip()))
+            if base and _path_exists(base, directory=True):
+                found.append((raw, end))
+            choice = _PATH_CHOICE.get()
+            if choice is not None and len(found) > 1:
+                choice['ambiguous'] = True
+            raw, end = found[-1] if choice is not None and choice['shortest'] else found[0]
+    directory = _literal(raw, sentence_end=sentence_end and end==len(text.rstrip())) if raw else 'here'
     if not directory:
         return None, None
-    return text[:match.start()] + gap + text[match.end():], directory
+    return text[:match.start()] + gap + text[end:], directory
 
 
 def _quoted_payload(text):
@@ -168,6 +225,9 @@ def _extended_agent_calls(request, *, closed_payload=False):
                     r'(?:\s+(?:running|started))?', text, re.I)
     if head:
         rest = text[head.end():]
+        named_session = bool(re.search(
+            r'\bthe\b|\b(?:client|session|workspace|agent|instance|worker|running|started)\b',
+            head[0], re.I))
         # "claude code" is the product name. "code" is not part of the codex name,
         # and a following noun is still the session, not a task.
         if head['agent'].casefold() == 'claude':
@@ -180,6 +240,20 @@ def _extended_agent_calls(request, *, closed_payload=False):
                 running = re.match(r'\s+(?:running|started)\b', rest, re.I)
                 if running:
                     rest = rest[running.end():]
+                named_session = named_session or bool(noun or running)
+        # Owner decision 2026-11-07: a bare direction directly after the agent and
+        # directly before an explicit path is its placement: "start codex left in /x".
+        # "right now" and "right here" are not placements, and "start claude up"
+        # is the phrasal verb, so "up" is never a bare placement. After "the" or a
+        # session noun the word may describe that session ("the Codex session left
+        # in ~/proj"), so the request is refused.
+        bare = re.match(r'\s+(right|left|down)(?=\s+(?:in|at|inside|within)\s+(?:"|~?/))', rest, re.I)
+        bare_place = None
+        if bare:
+            if named_session:
+                return None
+            bare_place = bare[1].casefold()
+            rest = ' \0' + rest[bare.end():]
         # A contract model name may follow the agent directly: "start codex gpt-6".
         named = re.match(r'\s+('+'|'.join(map(re.escape, _MODELS['start_'+head['agent'].casefold()]))+r')(?![\w.-])',
                          rest, re.I)
@@ -225,6 +299,9 @@ def _extended_agent_calls(request, *, closed_payload=False):
                 if len(matches)!=1 or 'place' in args:return None
                 match=matches[0];args['place']=place
                 rest=rest[:match.start()]+' \0 '+rest[match.end():]
+        if bare_place:
+            if 'place' in args:return None
+            args['place']=bare_place
         model = _MODEL.search(rest)
         if model:
             args['model']=model[1]
@@ -327,24 +404,31 @@ def _app_calls(request):
     noun = re.fullmatch(r'(?:open|launch|start(?: up)?|bring up|show|get)\s+(?:the\s+)?('+_NOUN+r')(?:\s+application|\s+running|\s+open)?'+session+r'[.!]?', text, re.I)
     if noun:
         return [_call('open_app', app=_APP_WORDS[noun[1].casefold()])]
-    patterns = [
-        r'(?:open|load|show|view)\s+(?P<path>'+_PATH+r')\s+(?:in|with|using)\s+(?:the\s+)?PDF (?:viewer|reader)[.!]?',
-        r'(?:use\s+)?(?:the\s+)?PDF (?:viewer|reader)\s+to\s+(?:open|load|show)\s+(?P<path>'+_PATH+r')[.!]?',
-        r'open\s+(?P<path>'+_PATH+r')[.!]?',
-        r'(?:launch|bring up|start)\s+(?:the\s+)?PDF (?:viewer|reader)\s+(?:with|for|and (?:load|show))\s+(?P<path>'+_PATH+r')[.!]?',
-        r'(?:get\s+)?(?:the\s+)?PDF (?:viewer|reader)\s+to\s+(?:display|open|show)\s+(?P<path>'+_PATH+r')[.!]?',
-        r'(?:display|show)\s+(?P<path>'+_PATH+r')\s+(?:in|with|using)\s+(?:the\s+)?PDF (?:viewer|reader)[.!]?',
+    shapes = [
+        r'(?:open|load|show|view)\s+(?P<path>{path})\s+(?:in|with|using)\s+(?:the\s+)?PDF (?:viewer|reader)[.!]?',
+        r'(?:use\s+)?(?:the\s+)?PDF (?:viewer|reader)\s+to\s+(?:open|load|show)\s+(?P<path>{path})[.!]?',
+        r'open\s+(?P<path>{path})[.!]?',
+        r'(?:launch|bring up|start)\s+(?:the\s+)?PDF (?:viewer|reader)\s+(?:with|for|and (?:load|show))\s+(?P<path>{path})[.!]?',
+        r'(?:get\s+)?(?:the\s+)?PDF (?:viewer|reader)\s+to\s+(?:display|open|show)\s+(?P<path>{path})[.!]?',
+        r'(?:display|show)\s+(?P<path>{path})\s+(?:in|with|using)\s+(?:the\s+)?PDF (?:viewer|reader)[.!]?',
     ]
-    for pattern in patterns:
-        matched = re.fullmatch(r'(?:'+pattern+r')[.!]?',text,re.I)
-        if not matched:continue
-        raw = matched['path']
-        path = _literal(raw, sentence_end=sentence_end and matched.end('path')==len(text))
-        if (not isinstance(path,str) or not path.startswith(('/','~/'))
-                or not path.casefold().endswith('.pdf')
-                or any(unicodedata.category(ch) in ('Cc','Cf','Zl','Zp') for ch in path)):
-            return None
-        return [_call('open_app',app='kilix-pdf',file_path=path)]
+    # An unquoted PDF path may hold single spaces when that exact file exists
+    # (owner decision 2026-11-07). Single-word paths are tried first and keep
+    # their reading.
+    spaced = r'~?/[^\s;?"]+(?: [^\s;?"]+)+'
+    for path_pattern, is_spaced in ((_PATH, False), (spaced, True)):
+        for shape in shapes:
+            matched = re.fullmatch(r'(?:'+shape.format(path=path_pattern)+r')[.!]?',text,re.I)
+            if not matched:continue
+            raw = matched['path']
+            path = _literal(raw, sentence_end=sentence_end and matched.end('path')==len(text))
+            if is_spaced and not (isinstance(path,str) and _path_exists(path, directory=False)):
+                return None
+            if (not isinstance(path,str) or not path.startswith(('/','~/'))
+                    or not path.casefold().endswith('.pdf')
+                    or any(unicodedata.category(ch) in ('Cc','Cf','Zl','Zp') for ch in path)):
+                return None
+            return [_call('open_app',app='kilix-pdf',file_path=path)]
     return None
 
 
@@ -368,6 +452,28 @@ def exact_calls(request, *, _depth=0, _bare=False):
 
     _bare: a launch earlier in the whole request states no model.
     """
+    if _PATH_CHOICE.get() is not None:
+        return _read_calls(request, _depth=_depth, _bare=_bare)
+    # An unquoted spaced path takes its longest existing reading. When a shorter
+    # existing path also reads the whole request, and the two readings differ,
+    # the request is ambiguous and is refused; a reading only one of them
+    # completes is that reading.
+    choice = {'shortest': False, 'ambiguous': False}
+    token = _PATH_CHOICE.set(choice)
+    try:
+        longest = _read_calls(request, _depth=_depth, _bare=_bare)
+        if not choice['ambiguous']:
+            return longest
+        choice['shortest'] = True
+        shortest = _read_calls(request, _depth=_depth, _bare=_bare)
+    finally:
+        _PATH_CHOICE.reset(token)
+    if longest is None or shortest is None:
+        return longest or shortest
+    return longest if _canonical(longest) == _canonical(shortest) else None
+
+
+def _read_calls(request, *, _depth=0, _bare=False):
     if (not isinstance(request,str) or not request.strip() or len(request)>2048 or _depth>3
             or any(unicodedata.category(ch) in ('Cc','Cf','Zl','Zp') for ch in request)):
         return None

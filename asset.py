@@ -302,13 +302,16 @@ def _checked_screen(payload: bytes) -> bytes:
 
 def install(root: str | None = None, *, supplied: str | None = None,
             stdin=None, stdout=None, asset_id: str = ASSET_ID) -> str:
-    """First use: show the licence, take the typed agreement, install needle2.
+    """First use: show the licence, take the typed answer, install the asset.
 
     The screen, agreement, receipt and fetch are kilix-content's and its
     licence authority's; this only presents them. Consent is typed at a
-    terminal and is never assumed: there is no flag that answers it. With
-    `supplied`, the bytes are read from a directory instead of downloaded
-    and nothing touches the network.
+    terminal and is never assumed: there is no flag that answers it. A
+    notice licence (a ``record`` decision, such as LFM2 by the owner's
+    2026-11-07 determination) takes no agreement: its terms are shown, the
+    install is confirmed, and the receipt records the notice, never an
+    acceptance. With `supplied`, the bytes are read from a directory instead
+    of downloaded and nothing touches the network.
     """
     import tempfile
     stdin = stdin or sys.stdin
@@ -331,12 +334,20 @@ def install(root: str | None = None, *, supplied: str | None = None,
         stdout.flush()
         stdout.buffer.write(screen)
         stdout.buffer.flush()
-        expected = lic.typed_agreement_line(record)
-        stdout.write(f"\nTo accept, type exactly:\n  {expected}\n> ")
-        stdout.flush()
-        typed = stdin.readline(512).strip()
-        if typed != expected:
-            raise AssetError("not accepted; nothing was written or downloaded")
+        if record.expected_decision == "record":
+            stdout.write("\nThese terms are a notice and take no agreement.\n"
+                         "Install this exact model? [y/N] ")
+            stdout.flush()
+            if stdin.readline(512).strip().lower() not in ("y", "yes"):
+                raise AssetError("not installed; nothing was written or downloaded")
+            typed = None
+        else:
+            expected = lic.typed_agreement_line(record)
+            stdout.write(f"\nTo accept, type exactly:\n  {expected}\n> ")
+            stdout.flush()
+            typed = stdin.readline(512).strip()
+            if typed != expected:
+                raise AssetError("not accepted; nothing was written or downloaded")
         try:
             installer = content.Installer(content_root(root))
             first_use.install_with_agreement(
