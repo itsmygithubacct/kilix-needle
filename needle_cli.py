@@ -834,7 +834,8 @@ def _image(args, *, may_install: bool = False):
     try:
         return asset.from_installed(args.root)
     except asset.AssetError as error:
-        missing = "is not installed" in str(error) or "has not been accepted" in str(error)
+        missing = any(phrase in str(error) for phrase in (
+            "is not installed", "has not been accepted", "have not been shown"))
         if not (may_install and missing and sys.stdin.isatty() and sys.stdout.isatty()):
             raise
         print(f"kilix-needle: {error}\nFirst use: installing the Needle 2 engine.\n")
