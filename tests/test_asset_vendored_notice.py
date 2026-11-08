@@ -83,6 +83,22 @@ class VendoredNotice(unittest.TestCase):
                 catalogue_digest=_CATALOG_SHA256, release_digest=release_digest()))
             self.assertFalse(self.first_use.needs_agreement(spec, records=self.records, store=store))
 
+    def test_an_uncovered_notice_asset_is_not_called_unaccepted(self):
+        # Seat A r2: the runtime said the LFM2 licence "has not been accepted".
+        import commands_runtime
+        with tempfile.TemporaryDirectory() as root:
+            with self.assertRaises(asset.AssetError) as notice:
+                asset.installed_asset_dir('lfm2-kilix-commands', root)
+            with self.assertRaises(asset.AssetError) as runtime:
+                commands_runtime.inspect_bundle(root=root)
+            with self.assertRaises(asset.AssetError) as agreement:
+                asset.installed_asset_dir('lfm3-kilix-commands', root)
+        for error in (notice.exception, runtime.exception):
+            self.assertEqual(str(error), 'no receipt records that the lfm2-kilix-commands licence '
+                             'terms were shown; install it with: kilix-needle install --commands')
+        self.assertEqual(str(agreement.exception), 'the lfm3-kilix-commands licence has not been '
+                         'accepted; install it with: kilix-needle install --commands lfm3')
+
 
 if __name__ == '__main__':
     unittest.main()

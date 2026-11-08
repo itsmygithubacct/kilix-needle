@@ -161,6 +161,18 @@ def _install_command(asset_id: str) -> str:
         asset_id, "kilix-needle install --tuning")
 
 
+def _not_covered(asset_id: str, spec, install_hint: str) -> str:
+    """Why an asset no receipt covers will not run, in its licence's own terms.
+
+    A notice licence (decision informational) takes no agreement: its receipt
+    records that the terms were shown, so it is never "not accepted".
+    """
+    if spec.licenses[0].decision == "affirmative":
+        return f"the {asset_id} licence has not been accepted; {install_hint}"
+    return (f"no receipt records that the {asset_id} licence terms were shown; "
+            f"{install_hint}")
+
+
 def _installed_spec(asset_id: str, root: str | None):
     """The verified catalog spec and install directory of a covered asset."""
     content, first_use, lic = _content()
@@ -177,7 +189,7 @@ def _installed_spec(asset_id: str, root: str | None):
     store = lic.ReceiptStore.shared()
     try:
         if first_use.needs_agreement(spec, records=records, store=store):
-            raise AssetError(f"the {asset_id} licence has not been accepted; {install_hint}")
+            raise AssetError(_not_covered(asset_id, spec, install_hint))
     except lic.LicenseError as error:
         raise AssetError(f"the licence receipt could not be checked: {error}") from error
     destination = content.Installer(content_root(root)).asset_destination(spec)
@@ -265,7 +277,7 @@ def from_installed(root: str | None = None) -> EngineImage:
     store = lic.ReceiptStore.shared()
     try:
         if first_use.needs_agreement(spec, records=records, store=store):
-            raise AssetError(f"the {ASSET_ID} licence has not been accepted; {install_hint}")
+            raise AssetError(_not_covered(ASSET_ID, spec, install_hint))
     except lic.LicenseError as error:
         raise AssetError(f"the licence receipt could not be checked: {error}") from error
     member = next((item for item in spec.files if item.path == ENGINE_MEMBER), None)
