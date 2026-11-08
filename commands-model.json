@@ -9,7 +9,7 @@
   "files": {
     "model.gguf": {
       "bytes": 1388859040,
-      "sha256": "7815032c4bdd44fbde002ec734ef3dd8eb14a8a44214b395738dae6e55ce897d"
+      "sha256": "3fa22c105b1f80823088de21a45fd2f3dc30a4cfdc63d21037c9344585fae4dd"
     },
     "notices/LICENSE-LFM.txt": {
       "bytes": 10574,
@@ -24,8 +24,8 @@
       "sha256": "571c0295ffbb60b79627a8956e2990826448eee7678b8d9a1e37c82bbf779f4c"
     },
     "notices/NOTICE.txt": {
-      "bytes": 1638,
-      "sha256": "e03643ad3853ac201afb79ae9561b50936f82b02d77eb317daa82245cf0364a5"
+      "bytes": 1545,
+      "sha256": "65e4cd26f6f63d2ad45c64df2a6876bc33b17c4af5272c90bd44dd072b0e6601"
     },
     "runtime/libggml-base.so": {
       "bytes": 897792,
@@ -184,22 +184,18 @@
       "sha256": "3f2b53013c2eb596c8aca87e4740240a41f95bcebf72e61084d6d5ba0db761cc"
     }
   },
-  "version": "lfm2-kilix-commands-20261104-v8",
+  "version": "lfm2-kilix-commands-20261106-v9",
   "platform": "linux-x86_64",
   "role": "default Kilix Ask command model",
-  "weight_version": "lfm2-kilix-v5e1-wse-20261104.8",
+  "weight_version": "lfm2-kilix-v5e1-wse-20261106.9",
   "weight_edit": {
-    "parent_version": "lfm2-kilix-v5e1-wse-20261103.21",
-    "parent_sha256": "c6b065d617b95745bd207c4f9c9b605a8af922f5ebb5d7ff1d4c686d9d1c8f0e",
-    "intermediate_version": "lfm2-kilix-v5e1-wse-20261104.1",
-    "intermediate_sha256": "730765a08c2a857bfd77d287e02cfe72d66c5ec65a364994983b40174d4adb21",
+    "parent_version": "lfm2-kilix-v5e1-wse-20261106.8",
+    "parent_sha256": "7295787cfa801f233dbbf576fc5e71a78473d6de2c21aab3aa6948611b64b8dd",
     "method": "regularized squared-hinge output-row optimization on frozen activations using L-BFGS with analytic gradients",
     "tensor": "output.weight",
     "token_rows": [
-      523,
-      730,
-      3285,
-      8104
+      568,
+      8110
     ],
     "internal_tensors_changed": false
   }

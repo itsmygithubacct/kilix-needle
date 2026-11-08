@@ -21,6 +21,11 @@ from actions import Refusal
 
 REPO = Path(__file__).resolve().parents[1]
 EXCLUDED = {"kilix-encodec-convert-24khz", "kilix-encodec-convert-48khz", "kilix-needle"}
+# Catalog apps that arrived with the kilix-content selection vendored for the
+# LFM2 notice record (2026-11-08). Needle has never launched them by name; the
+# vendored catalog before that did not list them. Adding them is a separate
+# launch-table and command-contract change.
+NOT_YET_LAUNCHABLE = {"kilix-find", "kilix-power-controls", "playalong"}
 # Every *_AUTO_INSTALL switch in the Kilix tree (a grep, 2026-09-26), written
 # out so a test never checks a list against itself.
 ALL_INSTALL_SWITCHES = {
@@ -67,7 +72,10 @@ class Tables(unittest.TestCase):
                               "plebian.json").read_text())
         ids = {entry["id"] for entry in catalog["content"]}
         # minesweeper is built into Kilix, not a catalog entry
-        self.assertEqual(set(apps.GAMES + apps.APPS) - {"minesweeper"}, ids - EXCLUDED)
+        self.assertEqual(set(apps.GAMES + apps.APPS) - {"minesweeper"},
+                         ids - EXCLUDED - NOT_YET_LAUNCHABLE)
+        self.assertLessEqual(NOT_YET_LAUNCHABLE, ids)
+        self.assertFalse(NOT_YET_LAUNCHABLE & set(apps.GAMES + apps.APPS))
         for name in apps.LAUNCHABLE:
             self.assertIn(name, apps.LAUNCH_NAMES)
 

@@ -317,8 +317,8 @@ def install(root: str | None = None, *, supplied: str | None = None,
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
     if not (stdin.isatty() and stdout.isatty()):
-        raise AssetError(f"{asset_id} is not installed, and its licence can only be "
-                         f"accepted at a terminal: run `{_install_command(asset_id)}`")
+        raise AssetError(f"{asset_id} is not installed, and its licence terms can only be "
+                         f"shown at a terminal: run `{_install_command(asset_id)}`")
     content, first_use, lic = _content()
     try:
         spec = content.verified_packaged_catalog().require_asset(asset_id)

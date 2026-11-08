@@ -195,13 +195,14 @@ notice by the owner's 2026-11-07 determination: the install is confirmed, and
 no agreement is typed or recorded. The selected CPU runtime requires x86-64
 Linux.
 
-The pinned LFM2 delivery is `lfm2-kilix-commands-20261104-v8`, with weight
-revision `lfm2-kilix-v5e1-wse-20261104.8`. It retains the fine-tuned V5 lineage
-and repairs four output rows on top of `.21`; all internal tensors, the prompt
-and the CPU runtime remain unchanged. The repair uses regularized output-row
-optimization on frozen activations with analytic gradients. The manifest
-records the parent, intermediate version and GGUF checksum;
-`notices/NOTICE.txt` describes the modifications.
+The pinned LFM2 delivery is `lfm2-kilix-commands-20261106-v9`, with weight
+revision `lfm2-kilix-v5e1-wse-20261106.9`. It retains the fine-tuned V5 lineage
+and changes output rows 568 and 8110 of `20261106.8`; all internal tensors, the
+prompt and the CPU runtime remain unchanged. The repair uses regularized
+output-row optimization on frozen activations with analytic gradients. The
+manifest records the parent and GGUF checksum; `notices/NOTICE.txt` describes
+the modifications. The vendored kilix-content supplies the same catalog asset
+and licence record that the Plebian-OS image installs.
 
 New installations use a manifest-specific directory, preserving earlier model
 bytes and receipts for catalog rollback. `.21` remains available as the rollback
