@@ -221,6 +221,8 @@ class InstallCommands(unittest.TestCase):
         lic = mock.Mock(LicenseError=LicenseError)
         first_use = mock.Mock(needs_agreement=mock.Mock(return_value=True))
         content = mock.Mock(CatalogError=LookupError)
+        content.verified_packaged_catalog.return_value.require_asset.return_value = mock.Mock(
+            licenses=[mock.Mock(decision="affirmative")])
         for asset_id, command in (("needle2", "kilix-needle install"),
                                   ("needle2-runtime", "kilix-needle install --runtime"),
                                   ("needle2-train", "kilix-needle install --tuning"),
@@ -242,7 +244,7 @@ class EngineLicenceGate(unittest.TestCase):
 
         class LicenseError(Exception):
             pass
-        spec = mock.Mock(files=[])
+        spec = mock.Mock(files=[], licenses=[mock.Mock(decision="affirmative")])
         content = mock.Mock(CatalogError=LookupError)
         content.verified_packaged_catalog.return_value.require_asset.return_value = spec
         first_use = mock.Mock(needs_agreement=mock.Mock(return_value=True))

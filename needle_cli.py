@@ -834,7 +834,8 @@ def _image(args, *, may_install: bool = False):
     try:
         return asset.from_installed(args.root)
     except asset.AssetError as error:
-        missing = "is not installed" in str(error) or "has not been accepted" in str(error)
+        missing = any(reason in str(error) for reason in
+                      ("is not installed", "has not been accepted", "licence terms were shown"))
         if not (may_install and missing and sys.stdin.isatty() and sys.stdout.isatty()):
             raise
         print(f"kilix-needle: {error}\nFirst use: installing the Needle 2 engine.\n")
@@ -941,7 +942,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.add_argument("--runtime", action="store_true",
                             help="also install libneedle.so (needle2-runtime), which runs a "
                                  "tuned model, with its own licence screen")
-        parser.add_argument("--commands", nargs="?", const="lfm2", choices=("lfm2", "needle3"),
+        parser.add_argument("--commands", nargs="?", const="lfm2", choices=("lfm2", "lfm3", "needle3"),
                             help="install an Ask command model and CPU runtime (default: lfm2)")
         parser.add_argument("--root")
         args = parser.parse_args(argv[1:])

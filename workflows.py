@@ -156,12 +156,12 @@ def _model_status() -> tuple[list[dict], bool]:
 
 
 def _inspect_asset(spec, root: Path, first_use, records, store) -> dict:
-    destination = root / "assets" / spec.asset_id
+    destination = root / "assets" / spec.install_name
     row = {"id": spec.asset_id, "version": spec.version, "path": str(destination), "state": "ready", "error": None}
     agreement = first_use.needs_agreement(spec, records=records, store=store)
     if not os.path.lexists(destination):
         row.update(state="agreement-required" if agreement else "missing",
-                   error="current asset licence requires typed acceptance" if agreement else "asset is not installed")
+                   error="current asset licence has no covering receipt; its install shows the terms" if agreement else "asset is not installed")
         return row
     try:
         if destination.is_symlink() or destination.parent.is_symlink() or not destination.is_dir():
@@ -184,7 +184,7 @@ def _inspect_asset(spec, root: Path, first_use, records, store) -> dict:
     except (OSError, WorkflowError) as error:
         row.update(state="corrupt", error=str(error))
     if row["state"] == "ready" and agreement:
-        row.update(state="agreement-required", error="current asset licence requires typed acceptance")
+        row.update(state="agreement-required", error="current asset licence has no covering receipt; its install shows the terms")
     return row
 
 

@@ -156,8 +156,21 @@ def _install_command(asset_id: str) -> str:
     return {ASSET_ID: "kilix-needle install",
             RUNTIME_ID: "kilix-needle install --runtime",
             "needle3-kilix-commands": "kilix-needle install --commands needle3",
+            "lfm3-kilix-commands": "kilix-needle install --commands lfm3",
             "lfm2-kilix-commands": "kilix-needle install --commands"}.get(
         asset_id, "kilix-needle install --tuning")
+
+
+def _not_covered(asset_id: str, spec, install_hint: str) -> str:
+    """Why an asset no receipt covers will not run, in its licence's own terms.
+
+    A notice licence (decision informational) takes no agreement: its receipt
+    records that the terms were shown, so it is never "not accepted".
+    """
+    if spec.licenses[0].decision == "affirmative":
+        return f"the {asset_id} licence has not been accepted; {install_hint}"
+    return (f"no receipt records that the {asset_id} licence terms were shown; "
+            f"{install_hint}")
 
 
 def _installed_spec(asset_id: str, root: str | None):
@@ -176,7 +189,7 @@ def _installed_spec(asset_id: str, root: str | None):
     store = lic.ReceiptStore.shared()
     try:
         if first_use.needs_agreement(spec, records=records, store=store):
-            raise AssetError(f"the {asset_id} licence has not been accepted; {install_hint}")
+            raise AssetError(_not_covered(asset_id, spec, install_hint))
     except lic.LicenseError as error:
         raise AssetError(f"the licence receipt could not be checked: {error}") from error
     destination = content.Installer(content_root(root)).asset_destination(spec)
@@ -264,7 +277,7 @@ def from_installed(root: str | None = None) -> EngineImage:
     store = lic.ReceiptStore.shared()
     try:
         if first_use.needs_agreement(spec, records=records, store=store):
-            raise AssetError(f"the {ASSET_ID} licence has not been accepted; {install_hint}")
+            raise AssetError(_not_covered(ASSET_ID, spec, install_hint))
     except lic.LicenseError as error:
         raise AssetError(f"the licence receipt could not be checked: {error}") from error
     member = next((item for item in spec.files if item.path == ENGINE_MEMBER), None)
@@ -301,20 +314,23 @@ def _checked_screen(payload: bytes) -> bytes:
 
 def install(root: str | None = None, *, supplied: str | None = None,
             stdin=None, stdout=None, asset_id: str = ASSET_ID) -> str:
-    """First use: show the licence, take the typed agreement, install needle2.
+    """First use: show the licence, take the typed answer, install the asset.
 
     The screen, agreement, receipt and fetch are kilix-content's and its
     licence authority's; this only presents them. Consent is typed at a
-    terminal and is never assumed: there is no flag that answers it. With
-    `supplied`, the bytes are read from a directory instead of downloaded
-    and nothing touches the network.
+    terminal and is never assumed: there is no flag that answers it. A
+    notice licence (a ``record`` decision, such as LFM2 by the owner's
+    2026-11-07 determination) takes no agreement: its terms are shown, the
+    install is confirmed, and the receipt records the notice, never an
+    acceptance. With `supplied`, the bytes are read from a directory instead
+    of downloaded and nothing touches the network.
     """
     import tempfile
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
     if not (stdin.isatty() and stdout.isatty()):
-        raise AssetError(f"{asset_id} is not installed, and its licence can only be "
-                         f"accepted at a terminal: run `{_install_command(asset_id)}`")
+        raise AssetError(f"{asset_id} is not installed, and its licence terms can only be "
+                         f"shown at a terminal: run `{_install_command(asset_id)}`")
     content, first_use, lic = _content()
     try:
         spec = content.verified_packaged_catalog().require_asset(asset_id)
@@ -330,12 +346,20 @@ def install(root: str | None = None, *, supplied: str | None = None,
         stdout.flush()
         stdout.buffer.write(screen)
         stdout.buffer.flush()
-        expected = lic.typed_agreement_line(record)
-        stdout.write(f"\nTo accept, type exactly:\n  {expected}\n> ")
-        stdout.flush()
-        typed = stdin.readline(512).strip()
-        if typed != expected:
-            raise AssetError("not accepted; nothing was written or downloaded")
+        if record.expected_decision == "record":
+            stdout.write("\nThese terms are a notice and take no agreement.\n"
+                         "Install this exact model? [y/N] ")
+            stdout.flush()
+            if stdin.readline(512).strip().lower() not in ("y", "yes"):
+                raise AssetError("not installed; nothing was written or downloaded")
+            typed = None
+        else:
+            expected = lic.typed_agreement_line(record)
+            stdout.write(f"\nTo accept, type exactly:\n  {expected}\n> ")
+            stdout.flush()
+            typed = stdin.readline(512).strip()
+            if typed != expected:
+                raise AssetError("not accepted; nothing was written or downloaded")
         try:
             installer = content.Installer(content_root(root))
             first_use.install_with_agreement(

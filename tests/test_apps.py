@@ -21,6 +21,11 @@ from actions import Refusal
 
 REPO = Path(__file__).resolve().parents[1]
 EXCLUDED = {"kilix-encodec-convert-24khz", "kilix-encodec-convert-48khz", "kilix-needle"}
+# Catalog apps that arrived with the kilix-content selection vendored for the
+# LFM2 notice record (2026-11-08). Needle has never launched them by name; the
+# vendored catalog before that did not list them. Adding them is a separate
+# launch-table and command-contract change.
+NOT_YET_LAUNCHABLE = {"kilix-find", "kilix-power-controls", "playalong"}
 # Every *_AUTO_INSTALL switch in the Kilix tree (a grep, 2026-09-26), written
 # out so a test never checks a list against itself.
 ALL_INSTALL_SWITCHES = {
@@ -47,12 +52,30 @@ def _use_engine(record):
     return run
 
 class Tables(unittest.TestCase):
+    def test_claudex_is_a_named_app_not_a_coding_agent(self):
+        self.assertEqual(admitted('open Claudex', [call('launch', app='kilix-claudex')]),
+                         [['launch', {'app': 'kilix-claudex'}]])
+        self.assertEqual(admitted('open Claude', [call('launch', app='kilix-claudex')]), [])
+
+    def test_cached_name_forms_follow_table_changes_and_cannot_be_mutated(self):
+        table = {'example-app': ['first alias']}
+        names = apps._names(table, 'example-app')
+        names.append('injected name')
+        self.assertNotIn('injected name', apps._names(table, 'example-app'))
+        table['example-app'] = ['second alias']
+        self.assertIn('second alias', apps._names(table, 'example-app'))
+        self.assertNotIn('first alias', apps._names(table, 'example-app'))
+        self.assertIsNone(apps._said('second alias', 'second aliases'))
+
     def test_the_launch_table_is_the_catalog(self):
         catalog = json.loads((REPO / "third_party/kilix-content/src/kilix_content/catalog/"
                               "plebian.json").read_text())
         ids = {entry["id"] for entry in catalog["content"]}
         # minesweeper is built into Kilix, not a catalog entry
-        self.assertEqual(set(apps.GAMES + apps.APPS) - {"minesweeper"}, ids - EXCLUDED)
+        self.assertEqual(set(apps.GAMES + apps.APPS) - {"minesweeper"},
+                         ids - EXCLUDED - NOT_YET_LAUNCHABLE)
+        self.assertLessEqual(NOT_YET_LAUNCHABLE, ids)
+        self.assertFalse(NOT_YET_LAUNCHABLE & set(apps.GAMES + apps.APPS))
         for name in apps.LAUNCHABLE:
             self.assertIn(name, apps.LAUNCH_NAMES)
 

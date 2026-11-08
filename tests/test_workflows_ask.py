@@ -151,7 +151,7 @@ class AskAssetTests(PreferenceFixture):
         self.payload = b'verified synthetic model and runtime'
         member = SimpleNamespace(path='payload', bytes=len(self.payload),
                                  sha256=hashlib.sha256(self.payload).hexdigest())
-        self.specs = {name: SimpleNamespace(asset_id=name, version='fixture-v1', files=[member])
+        self.specs = {name: SimpleNamespace(asset_id=name, install_name=name, version='fixture-v1', files=[member])
                       for name in commands_selection.ASSETS.values()}
         self.patches = contextlib.ExitStack()
         self.addCleanup(self.patches.close)
@@ -163,10 +163,23 @@ class AskAssetTests(PreferenceFixture):
         self.agreement = self.patches.enter_context(patch.object(self.first_use, 'needs_agreement', return_value=False))
 
     def install(self, backend):
-        path = self.root / 'assets' / commands_selection.ASSETS[backend] / 'payload'
+        spec = self.specs[commands_selection.ASSETS[backend]]
+        path = self.root / 'assets' / spec.install_name / 'payload'
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(self.payload)
         return path
+
+    def test_versioned_status_requires_the_new_bytes_and_preserves_the_old_model(self):
+        old = self.install('lfm2')
+        spec = self.specs[commands_selection.ASSETS['lfm2']]
+        spec.install_name = spec.asset_id + '--' + hashlib.sha256(self.payload).hexdigest()
+        self.assertEqual(workflows.status()['assets'][0]['state'], 'missing')
+        self.assertFalse(old.parent.with_name(spec.install_name).exists())
+        new = self.install('lfm2')
+        result = workflows.status()
+        self.assertTrue(result['ready'])
+        self.assertEqual(result['assets'][0]['path'], str(new.parent))
+        self.assertEqual(old.read_bytes(), self.payload)
 
     def test_each_backend_checks_its_own_bytes_and_not_the_other_models(self):
         self.install('needle3')

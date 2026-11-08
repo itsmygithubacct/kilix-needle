@@ -46,7 +46,7 @@ class WorkflowFixtures(unittest.TestCase):
         self.content, self.first_use, self.lic = asset._content()
         self.bytes = {"needle2": b"synthetic engine bytes", "needle2-runtime": b"synthetic runtime bytes"}
         self.specs = {
-            aid: SimpleNamespace(asset_id=aid, version="fixture-v1", files=[
+            aid: SimpleNamespace(asset_id=aid, install_name=aid, version="fixture-v1", files=[
                 SimpleNamespace(path="payload", bytes=len(data), sha256=hashlib.sha256(data).hexdigest())])
             for aid, data in self.bytes.items()
         }

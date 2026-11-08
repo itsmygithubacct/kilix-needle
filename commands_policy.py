@@ -35,7 +35,7 @@ def decide(request, *, provider=None, backend="grammar", grammar_first=True, cwd
     started = time.monotonic()
     if not isinstance(request, str) or not request.strip() or len(request) > 2048:
         raise ValueError("a command must contain 1 to 2048 characters")
-    if backend not in ("grammar", "needle3", "lfm2"):
+    if backend not in ("grammar", "needle3", "lfm2", "lfm3"):
         raise ValueError("unknown command backend")
     exact = contract.exact_calls(request)
     if backend == "grammar" or (grammar_first and exact):
