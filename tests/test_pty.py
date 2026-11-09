@@ -1413,10 +1413,11 @@ class Guidance(unittest.TestCase):
 
     def test_documented_forms_and_agent_rules_match_the_help(self):
         repo = Path(__file__).resolve().parent.parent
-        readme = (repo / "README.md").read_text().split("## Persistent pane sessions\n", 1)[1]
+        # The pty section moved from README.md to docs/other-jobs.md.
+        readme = (repo / "docs/other-jobs.md").read_text().split("## Persistent pane sessions\n", 1)[1]
         readme = readme.split("\n## Structured actions", 1)[0]
         guide = (repo / "docs/pty.md").read_text()
-        for name, text in (("README pty section", readme), ("pty guide", guide)):
+        for name, text in (("pty section", readme), ("pty guide", guide)):
             with self.subTest(surface=name):
                 self.assert_agent_rules(text)
                 for form in self.FORMS:
