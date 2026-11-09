@@ -2,6 +2,9 @@
 
 Reference for [kilix-needle](../README.md).
 
+This table predates routing: a request with no job named is now routed (see
+[routing](routing.md)), and `kilix-needle panes REQUEST` names the panes job.
+
 Requests are grouped into these jobs:
 
 | Job | CLI | Scope |

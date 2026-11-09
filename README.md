@@ -87,8 +87,8 @@ in [docs/workflows.md](docs/workflows.md).
 
 | Job | Command | What it does |
 | --- | --- | --- |
-| routed | `kilix-needle ask REQUEST` | Chooses the job for a plain request ([routing](docs/routing.md)) |
-| `panes` | `kilix-needle REQUEST` | Kilix panes and tabs ([panes job](docs/panes.md)) |
+| routed | `kilix-needle REQUEST`, `kilix-needle ask REQUEST` | Chooses the job for a plain request ([routing](docs/routing.md)) |
+| `panes` | `kilix-needle panes REQUEST` | Kilix panes and tabs ([panes job](docs/panes.md)) |
 | `apps` | `kilix-needle apps REQUEST` | Apps, games, settings and exact audio, music, voice and text-size controls ([apps job](docs/apps.md)) |
 | `agents` | `kilix-needle agents REQUEST` | Coding-agent sessions ([below](#the-agents-job)) |
 | `files` | `kilix-needle files REQUEST` | Read-only file search and previews ([files guide](docs/files.md)) |
