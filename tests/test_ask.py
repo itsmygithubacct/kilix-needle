@@ -435,6 +435,52 @@ class Cli(unittest.TestCase):
             finally:
                 sys.stdout = saved
             self.assertEqual([c for c in fake.calls() if c[0][0] == "close-tab"], [])
+        # The panes plan admits "close tab 2", so a plan was shown: not "no job".
+        self.assertEqual(status, 1)
+
+    def test_no_job_has_its_own_status_and_every_other_failure_stays_1(self):
+        cases = (
+            ("none", route(1, "none"), ask.NO_JOB),
+            ("unsure, no plan admits it", route(2, candidates=["system", "panes"], p=0.5), ask.NO_JOB),
+            ("two jobs", router.Route("multi", None, candidates=["panes", "apps"]), 1),
+            ("router error", router.Route("error", None, note="router failed"), 1),
+        )
+        # A plan that admits the request is covered by the unsure-route test above.
+        refuse = {"status": 1, "items": []}
+        for name, chosen, wanted in cases:
+            plans = lambda job, *a, **k: refuse  # noqa: E731
+            for mode in (["--interactive"], ["--yes"]):
+                with self.subTest(name=name, mode=mode), FakeKilix(desktop()) as fake, \
+                        mock.patch.object(router, "route", return_value=chosen), \
+                        mock.patch.object(ask, "_yes", side_effect=AssertionError("asked")), \
+                        mock.patch.object(ask.Jobs, "run", side_effect=plans):
+                    saved, sys.stdout = sys.stdout, io.StringIO()
+                    try:
+                        status = ask.main([*mode, "--", "what is the capital of france"])
+                    finally:
+                        sys.stdout = saved
+                    self.assertEqual([c for c in fake.calls() if c[0][0] not in ("ls", "list")], [])
+                self.assertEqual(status, wanted, (name, mode))
+        # Plans, JSON records and agents keep their old statuses.
+        for extra in (["--plan"], ["--json"], ["--agent", "--yes"], ["--yes", "--json"]):
+            with self.subTest(extra=extra), FakeKilix(desktop()), \
+                    mock.patch.object(router, "route", return_value=route(1, "none")):
+                saved, sys.stdout = sys.stdout, io.StringIO()
+                try:
+                    status = ask.main([*extra, "what is the capital of france"])
+                finally:
+                    sys.stdout = saved
+            self.assertEqual(status, 1, extra)
+
+    def test_a_declined_plan_is_not_no_job(self):
+        with FakeKilix(desktop()), mock.patch.object(sys, "stdin") as stdin:
+            stdin.isatty.return_value = True
+            stdin.readline.return_value = "n\n"
+            saved, sys.stdout = sys.stdout, io.StringIO()
+            try:
+                status = ask.main(["--interactive", "close tab 2"])
+            finally:
+                sys.stdout = saved
         self.assertEqual(status, 1)
 
 

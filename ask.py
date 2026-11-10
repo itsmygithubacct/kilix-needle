@@ -23,7 +23,10 @@ grants no access their own entry points do not.
 
 --interactive (the `kilix ask` launcher verb, the Run dialog, voice) shows the
 route and the plan and acts only on an explicit yes, for every act. Exit status:
-0 when done or nothing to do, 1 when refused, unsure or declined, 2 on a usage error.
+0 when done or nothing to do, 3 when no job takes the request and nothing was
+offered (the route is none, or unsure with no job's plan admitting it), 1 when
+refused, declined, or otherwise not run, 2 on a usage error. --yes without
+--plan, --json, --agent or --job uses the same 3.
 """
 from __future__ import annotations
 
@@ -380,6 +383,22 @@ def cli_jobs(args, *, interactive: bool, engines: dict | None = None) -> tuple:
     return jobs, stack
 
 
+# Exit status when no job takes the request and nothing was offered: the route
+# was "none", or unsure with no job's plan admitting it. Callers such as
+# `kilix ask` use it to try their own fallbacks; any other failure stays 1.
+NO_JOB = 3
+
+
+def no_job(route: dict) -> bool:
+    """A sure "none", or an unsure route answered with a clarification.
+
+    A router failure is also answered with a clarification; its note marks it,
+    and it stays an ordinary failure.
+    """
+    stage, job = route.get("stage"), route.get("job")
+    return (stage in (0, 1, "forced") and job == "none") or (stage == "clarify" and not route.get("note"))
+
+
 def _yes(question: str) -> bool:
     if not sys.stdin.isatty():
         return False
@@ -397,7 +416,7 @@ def interactive(request: str, jobs: Jobs) -> int:
     # "forced" here is a request that names its job; --job cannot reach it.
     if route.get("stage") not in (0, 1, "forced") or route.get("job") not in runnable \
             or not admits(route["job"], plan):
-        return 1
+        return NO_JOB if no_job(route) else 1
     if not _yes("Do it? [y/N] "):
         print("not run")
         return 1
@@ -484,6 +503,9 @@ def main(argv=None) -> int:
                 record = ask(request, jobs, act=not args.plan, assume_yes=args.yes, job=args.job)
                 print(json.dumps(record, ensure_ascii=False) if args.json else render(record))
                 status = 0 if record.get("status") == 0 else 1
+                if status and args.yes and not (args.plan or args.json or args.agent or args.job) \
+                        and no_job(record.get("route") or {}):
+                    status = NO_JOB
     except KeyboardInterrupt:
         print("\nkilix-needle ask: interrupted", file=sys.stderr)
         status = 1
