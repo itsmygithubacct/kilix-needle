@@ -472,6 +472,38 @@ class Cli(unittest.TestCase):
                     sys.stdout = saved
             self.assertEqual(status, 1, extra)
 
+    def test_an_inventory_read_is_shown_without_asking(self):
+        with FakeKilix(desktop()) as fake, mock.patch.object(ask, "_yes", side_effect=AssertionError("asked")):
+            saved, sys.stdout = sys.stdout, io.StringIO()
+            try:
+                status = ask.main(["--interactive", "list my panes"])
+                out = sys.stdout.getvalue()
+            finally:
+                sys.stdout = saved
+            self.assertEqual([c for c in fake.calls() if c[0][0] not in ("ls", "list")], [])
+        self.assertEqual(status, 0)
+        self.assertIn("done: pane", out)
+        self.assertNotIn("not run", out)
+        # A plan that would act still asks, even next to a read.
+        with FakeKilix(desktop()), mock.patch.object(ask, "_yes", return_value=False) as asked:
+            saved, sys.stdout = sys.stdout, io.StringIO()
+            try:
+                self.assertEqual(ask.main(["--interactive", "close tab 2"]), 1)
+            finally:
+                sys.stdout = saved
+        asked.assert_called_once()
+        # Only the inventory's own reads count; any other "done" still asks.
+        done = {"status": 0, "items": [{"kind": "close_tab", "args": {}, "outcome": "done", "summary": "x"}]}
+        with FakeKilix(desktop()), mock.patch.object(router, "route", return_value=route(1, "panes")), \
+                mock.patch.object(ask.Jobs, "run", return_value=done), \
+                mock.patch.object(ask, "_yes", return_value=False) as asked:
+            saved, sys.stdout = sys.stdout, io.StringIO()
+            try:
+                self.assertEqual(ask.main(["--interactive", "close tab 2"]), 1)
+            finally:
+                sys.stdout = saved
+        asked.assert_called_once()
+
     def test_a_declined_plan_is_not_no_job(self):
         with FakeKilix(desktop()), mock.patch.object(sys, "stdin") as stdin:
             stdin.isatty.return_value = True

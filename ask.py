@@ -387,6 +387,8 @@ def cli_jobs(args, *, interactive: bool, engines: dict | None = None) -> tuple:
 # was "none", or unsure with no job's plan admitting it. Callers such as
 # `kilix ask` use it to try their own fallbacks; any other failure stays 1.
 NO_JOB = 3
+# Items a plan completes on its own: the pane and tab inventory reads them.
+READS = ("list_tabs", "list_panes")
 
 
 def no_job(route: dict) -> bool:
@@ -417,6 +419,10 @@ def interactive(request: str, jobs: Jobs) -> int:
     if route.get("stage") not in (0, 1, "forced") or route.get("job") not in runnable \
             or not admits(route["job"], plan):
         return NO_JOB if no_job(route) else 1
+    items = [item for item in plan.get("items") or [] if isinstance(item, dict)]
+    if plan.get("status") == 0 and items and all(
+            item.get("outcome") == "done" and item.get("kind") in READS for item in items):
+        return 0  # the plan already read the panes or tabs; nothing is left to confirm
     if not _yes("Do it? [y/N] "):
         print("not run")
         return 1

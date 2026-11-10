@@ -46,6 +46,17 @@ class Inventory(unittest.TestCase):
                         self.assertEqual({i["pane_id"] for i in items if "pane_id" in i},
                                          {w["id"] for t in expected for w in t["windows"]})
 
+    def test_inventory_has_a_plain_rendering(self):
+        # `kilix ask "list my panes"` prints this form, the one an operator reads.
+        import ask
+        with FakeKilix(desktop()):
+            server = mcp_server.Server(lambda *args: self.fail('inventory loaded the model'))
+            record = server.call_tool('kilix_ask_plan', {'request': 'list my panes'})['structuredContent']
+        text = ask.render(record)
+        for tab in desktop()[0]['tabs']:
+            for window in tab['windows']:
+                self.assertIn(f"pane {window['id']} in tab {tab['id']}", text)
+
     def test_snapshot_failure_cannot_fall_back_to_model(self):
         for request in ("list panes", "panes", "tabs"):
             with self.subTest(request=request), patch(
