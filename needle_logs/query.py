@@ -73,7 +73,7 @@ def _validate(limit: int, kind: str | None, query: str | None) -> None:
         raise QueryError("invalid_input", f"query must be 1..{MAX_QUERY} characters")
 
 
-def bounded(result: dict) -> dict:
+def bounded(result: dict, *, reserve: int = 0) -> dict:
     # Long transcripts can have hundreds of unsupported rows. Keep useful
     # evidence available while explicitly accounting for omitted diagnostics.
     result = dict(result)
@@ -89,9 +89,38 @@ def bounded(result: dict) -> dict:
     if isinstance(errors, list) and len(errors) > 32:
         result.update(errors=errors[:20], errors_total=len(errors), errors_omitted=len(errors) - 20,
                       error_counts=dict(Counter(str(e.get("code", "unknown")) for e in errors)))
-    if len(json.dumps(result, ensure_ascii=False).encode("utf-8")) > MAX_JSON_TEXT:
+    if len(json.dumps(result, ensure_ascii=False).encode("utf-8")) > MAX_JSON_TEXT - reserve:
         raise QueryError("result_too_large", "response envelope exceeds size bound; narrow the query")
     return result
+
+
+def _fitting(build, count: int, reserve: int = 0) -> dict:
+    """The bounded result holding the most of ``count`` events that fits.
+
+    ``build(n)`` returns the unbounded result for the first ``n`` events. A
+    long transcript's events can be larger than one response; returning fewer
+    of them, marked by has_more, beats refusing the whole read. Diagnostics too
+    large for any response are still refused. ``reserve`` is room the caller
+    still needs for its own fields.
+    """
+    try:
+        return bounded(build(count), reserve=reserve)
+    except QueryError as exc:
+        if exc.code != "result_too_large" or count <= 1:
+            raise
+    low, high, best = 1, count - 1, None
+    while low <= high:
+        middle = (low + high) // 2
+        try:
+            best = bounded(build(middle), reserve=reserve)
+            low = middle + 1
+        except QueryError as exc:
+            if exc.code != "result_too_large":
+                raise
+            high = middle - 1
+    if best is None:
+        raise QueryError("result_too_large", "response envelope exceeds size bound; narrow the query")
+    return best
 
 
 def _envelope(index: Index, source_id: str) -> dict:
@@ -106,7 +135,7 @@ def _envelope(index: Index, source_id: str) -> dict:
 
 @consistent_read
 def list_events(index: Index, source_id: str, *, limit: int = 20, kind: str | None = None,
-                query: str | None = None, since_cursor: str | None = None) -> dict:
+                query: str | None = None, since_cursor: str | None = None, reserve: int = 0) -> dict:
     _validate(limit, kind, query)
     snap = index.snapshot(source_id)
     if not snap:
@@ -123,15 +152,21 @@ def list_events(index: Index, source_id: str, *, limit: int = 20, kind: str | No
             raise QueryError("cursor_invalid", "invalid cursor position")
         after = cursor["sequence"], cursor["event_id"]
     found = index.events(source_id, kind=kind, query=query, after=after, limit=limit + 1)
-    more = len(found) > limit
-    events = found[:limit]
-    next_cursor = None
-    if events:
-        last = events[-1]
-        next_cursor = _token(binding | {"sequence": last["sequence"], "event_id": last["event_id"]})
-    return bounded({"events": events, "next_cursor": next_cursor, "has_more": more,
-            "source": {k: snap[k] for k in ("source_id", "session_id", "generation", "digest", "path", "provider", "size")},
-            "coverage": snap["coverage"], "pipeline": {"config": snap["config"], "schema_version": SCHEMA_VERSION}, "snapshot": {"checkpoint": snap["checkpoint"]}})
+    def build(count: int) -> dict:
+        # A page cut short to fit still pages exactly: the cursor names the
+        # last event returned and has_more says the rest remain.
+        events = found[:count]
+        next_cursor = None
+        if events:
+            last = events[-1]
+            next_cursor = _token(binding | {"sequence": last["sequence"], "event_id": last["event_id"]})
+        result = {"events": events, "next_cursor": next_cursor, "has_more": len(found) > count,
+                  "source": {k: snap[k] for k in ("source_id", "session_id", "generation", "digest", "path", "provider", "size")},
+                  "coverage": snap["coverage"], "pipeline": {"config": snap["config"], "schema_version": SCHEMA_VERSION}, "snapshot": {"checkpoint": snap["checkpoint"]}}
+        if count < min(limit, len(found)):
+            result["events_trimmed_to_fit"] = min(limit, len(found)) - count
+        return result
+    return _fitting(build, min(limit, len(found)), reserve)
 
 
 @consistent_read
@@ -182,15 +217,28 @@ def search(index: Index, source_id: str, term: str, *, limit: int = 20) -> dict:
 
 
 @consistent_read
-def brief(index: Index, source_id: str, *, limit: int = 20) -> dict:
+def brief(index: Index, source_id: str, *, limit: int = 20, reserve: int = 0) -> dict:
     _validate(limit, None, None)
-    result = _envelope(index, source_id)
-    result["events"], omitted = index.recent_events(source_id, limit)
-    result["omitted_events"] = omitted
-    result["has_more"] = omitted > 0
-    result["next_cursor"] = None
+    envelope = _envelope(index, source_id)
+    recent, omitted = index.recent_events(source_id, limit)
+    def build(count: int) -> dict:
+        # The brief keeps the newest events; any dropped to fit the response
+        # join the older ones counted in omitted_events.
+        result = dict(envelope)
+        result["events"] = recent[len(recent) - count:]
+        result["omitted_events"] = omitted + len(recent) - count
+        result["has_more"] = result["omitted_events"] > 0
+        result["next_cursor"] = None
+        if count < len(recent):
+            result["events_trimmed_to_fit"] = len(recent) - count
+        result["sections"] = _sections(result["events"])
+        return result
+    return _fitting(build, len(recent), reserve)
+
+
+def _sections(events: list[dict]) -> dict:
     sections = {key: [] for key in ("requests", "decisions", "results", "reported_issues", "other")}
-    for event in result["events"]:
+    for event in events:
         kind = event["kind"]
         section = ("requests" if kind in ("request", "question") else
                    "decisions" if kind == "decision" else
@@ -204,8 +252,7 @@ def brief(index: Index, source_id: str, *, limit: int = 20) -> dict:
         sections[section].append({"event_id": event["event_id"], "label": label, "kind": kind,
                                   "record_id": evidence["record_id"], "excerpt": excerpt[:800],
                                   "excerpt_truncated": len(excerpt) > 800})
-    result["sections"] = sections
-    return bounded(result)
+    return sections
 
 
 def render(result: dict, operation: str) -> str:

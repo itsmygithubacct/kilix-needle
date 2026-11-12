@@ -119,8 +119,12 @@ def read(arguments: dict) -> dict:
                 index.put(source_result, events, config=config)
                 source_id = source_result["source"]["source_id"]
                 limit = arguments.get("limit", 20)
+                # Room for the fields added below, so a trimmed page still fits.
+                reserve = len(json.dumps(query.bounded({
+                    "schema": SCHEMA, "status": "partial", "exit_status": 1, "operation": operation,
+                    "errors": source_result.get("errors", [])}), ensure_ascii=False).encode("utf-8"))
                 if operation == "brief":
-                    result = query.brief(index, source_id, limit=limit)
+                    result = query.brief(index, source_id, limit=limit, reserve=reserve)
                 else:
                     term = arguments.get("query") if operation == "search" else None
                     if operation == "search" and term is None:
@@ -129,7 +133,7 @@ def read(arguments: dict) -> dict:
                         result = query.search(index, source_id, term, limit=limit)
                     else:
                         result = query.list_events(index, source_id, limit=limit, kind=arguments.get("kind"),
-                                                   since_cursor=arguments.get("since_cursor"))
+                                                   since_cursor=arguments.get("since_cursor"), reserve=reserve)
                 result["errors"] = source_result.get("errors", [])
             coverage = result.get("coverage", {})
             partial = bool(result.get("errors")) or not coverage.get("complete", False)

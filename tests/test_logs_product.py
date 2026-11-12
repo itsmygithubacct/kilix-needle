@@ -212,6 +212,45 @@ class ProductTests(unittest.TestCase):
         for extra in ({"config": "model-v9"}, {"surprise": 1}, {"limit": True}, {"query": "irrelevant"}):
             self.assertEqual(cli.read(base | extra)["errors"][0]["code"], "invalid_input")
 
+    def test_oversized_pages_return_fewer_events_instead_of_refusing(self):
+        # A brief or page of a long transcript used to fail result_too_large
+        # outright; the events that fit are returned and the rest stay reachable.
+        import json
+        events = facts.extract(self.data["records"])
+        self.assertGreaterEqual(len(events), 4)
+        size = lambda result: len(json.dumps(result, ensure_ascii=False).encode("utf-8"))
+        with Index(self.cache) as index:
+            index.put(self.data, events)
+            pages = {n: query.list_events(index, "src-1", limit=n) for n in (2, 3)}
+            briefs = {n: query.brief(index, "src-1", limit=n) for n in (2, 3)}
+            budget = max(size(pages[2]), size(briefs[2])) + 40
+            self.assertLess(budget, min(size(pages[3]), size(briefs[3])))
+            with patch.object(query, "MAX_JSON_TEXT", budget):
+                page = query.list_events(index, "src-1", limit=len(events))
+                self.assertEqual(page["events"], events[:2])
+                self.assertEqual((page["has_more"], page["events_trimmed_to_fit"]), (True, len(events) - 2))
+                rest = query.list_events(index, "src-1", limit=1, since_cursor=page["next_cursor"])
+                self.assertEqual(rest["events"], events[2:3])
+                brief = query.brief(index, "src-1", limit=len(events))
+                self.assertEqual(brief["events"], events[-2:])
+                self.assertEqual((brief["omitted_events"], brief["has_more"]), (len(events) - 2, True))
+                self.assertEqual(sum(len(items) for items in brief["sections"].values()), 2)
+            with patch.object(query, "MAX_JSON_TEXT", 64):
+                with self.assertRaises(query.QueryError) as raised:
+                    query.list_events(index, "src-1", limit=len(events))
+                self.assertEqual(raised.exception.code, "result_too_large")
+        # Through the reader, the fields it adds after the query still fit.
+        fake = types.ModuleType("needle_logs.sources")
+        fake.read_source = lambda path, provider: self.data
+        arguments = {"operation": "brief", "file": str(self.source), "provider": "fake",
+                     "cache_path": str(self.cache)}
+        with patch.dict(sys.modules, {"needle_logs.sources": fake}):
+            sizes = {n: size(cli.read(arguments | {"limit": n})) for n in (2, 3)}
+            self.assertLess(sizes[2] + 40, sizes[3])
+            with patch.object(query, "MAX_JSON_TEXT", sizes[2] + 40):
+                result = cli.read(arguments | {"limit": len(events)})
+        self.assertEqual((result["status"], len(result["events"]), result["has_more"]), ("ok", 2, True))
+
     def test_envelope_bound_includes_coverage_and_errors(self):
         data = fixture(self.source)
         data["coverage"]["gaps"] = [{"reason": "x" * query.MAX_JSON_TEXT}]
