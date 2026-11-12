@@ -99,7 +99,8 @@ class ResolveTests(unittest.TestCase):
 
     def _homes(self):
         return mock.patch.dict(os.environ, {"CODEX_HOME": str(self.root / "codex"),
-                                            "CLAUDE_CONFIG_DIR": str(self.root / "other-provider")})
+                                            "CLAUDE_CONFIG_DIR": str(self.root / "other-provider"),
+                                            "GROK_HOME": str(self.root / "grok")})
 
     def _rollout(self, thread, folder="sessions/2026/11/12"):
         import json
@@ -175,6 +176,46 @@ class ResolveTests(unittest.TestCase):
             replacement.replace(path)
             with self.assertRaisesRegex(ResolveError, "changed"):
                 check_binding(binding)
+
+    def _grok_session(self, session, folder="%2Fwork"):
+        import json
+        directory = self.root / "grok" / "sessions" / folder / session
+        directory.mkdir(parents=True, exist_ok=True)
+        updates = directory / "updates.jsonl"
+        updates.write_text(json.dumps({"timestamp": 1794300000, "method": "session/update", "params": {
+            "sessionId": session, "update": {"sessionUpdate": "user_message_chunk",
+                                             "content": {"type": "text", "text": "Read this."}}}}) + "\n")
+        (directory / "events.jsonl").write_text("{}\n")
+        return updates
+
+    def test_grok_session_reads_by_id_folder_sibling_or_pane(self):
+        from needle_logs.cli import read
+        session = "01a1cf05-b66a-7992-806c-e1f87b5e5887"
+        updates = self._grok_session(session)
+        cache = str(self.root / "cache" / "index.sqlite3")
+        refused = ResolveError("caller_context_unverified", "unverified")
+        with self._homes(), mock.patch("needle_logs.resolve.snapshot", side_effect=refused) as listing:
+            binding = resolve_source(session)
+            self.assertEqual((binding["path"], binding["provider"], binding["pane_id"]),
+                             (str(updates), "grok", None))
+            result = read({"operation": "brief", "session": session, "cache_path": cache})
+            listing.assert_not_called()
+            self.assertEqual((result["status"], result["errors"]), ("ok", []))
+            self.assertEqual([event["kind"] for event in result["events"]], ["request"])
+            # The session folder and its other files name the same conversation.
+            for target in (updates.parent, updates.parent / "events.jsonl"):
+                result = read({"operation": "brief", "file": str(target), "provider": "grok",
+                               "cache_path": cache})
+                self.assertEqual((result["status"], result["source"]["path"]), ("ok", str(updates)))
+            # Kilix lists a live Grok pane by session ID, without a path.
+            self.pane["coding_session"] = {"provider": "grok", "session_id": session}
+            binding = resolve_source("23", tree=self.tree)
+            self.assertEqual((binding["provider"], binding["path"], binding["pane_id"]),
+                             ("grok", str(updates), 23))
+            self._grok_session(session, folder="%2Fother")
+            with self.assertRaises(ResolveError) as raised:
+                resolve_source(session)
+            self.assertEqual(raised.exception.code, "ambiguous_source")
 
     def test_discovered_file_swap_cannot_read_outside_root(self):
         candidate = self.root / f"{self.broker}.log"

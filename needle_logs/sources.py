@@ -174,10 +174,11 @@ def _read_source_once(path: str, provider: str, *, max_bytes: int = DEFAULT_MAX_
                       binding: dict | None = None) -> dict:
     """Read a fixed prefix and export records with replayable byte/pointer origins.
 
-    Providers: claude, codex, raw. Archives may end in .zst. Errors in a valid
-    file are returned in the result; invalid source arguments raise SourceError.
+    Providers: claude, codex, grok (a session's updates.jsonl), raw. Archives
+    may end in .zst. Errors in a valid file are returned in the result; invalid
+    source arguments raise SourceError.
     """
-    if not isinstance(provider, str) or provider not in {"claude", "codex", "raw"}:
+    if not isinstance(provider, str) or provider not in {"claude", "codex", "grok", "raw"}:
         raise SourceError("unsupported_provider", f"unsupported provider: {provider}")
     if not isinstance(max_bytes, int) or isinstance(max_bytes, bool) or max_bytes < 1:
         raise SourceError("invalid_limit", "max_bytes must be a positive integer")
@@ -344,6 +345,10 @@ def _read_source_once(path: str, provider: str, *, max_bytes: int = DEFAULT_MAX_
                     identity = row["sessionId"]
                 if provider == "codex" and row.get("type") == "session_meta" and isinstance(row.get("payload"), dict):
                     value = row["payload"].get("id")
+                    if isinstance(value, str) and value:
+                        identity = value
+                if provider == "grok" and isinstance(row.get("params"), dict):
+                    value = row["params"].get("sessionId")
                     if isinstance(value, str) and value:
                         identity = value
                 if identity and source["session_id"] and identity != source["session_id"]:

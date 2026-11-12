@@ -80,6 +80,9 @@ def read(arguments: dict) -> dict:
                 expected_session = resolved.get("expected_session_id") if resolved.get("source_kind") == "structured" else None
             if not path or not provider:
                 return _error("invalid_input", "file and provider are required", 2)
+            if provider == "grok" and not session:
+                from .resolve import grok_updates
+                path = grok_updates(path)
             from .index import default_path
             cache_path = Path(arguments.get("cache_path") or default_path())
             if Path(path).resolve() == cache_path.resolve():
