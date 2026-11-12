@@ -21,11 +21,29 @@ MAX_REQUEST = 16384
 MAX_RECEIPT = 16384
 
 
+def _field_problem(what: str, given: dict, needed: set, optional: set) -> str:
+    """Name the missing and unknown fields, so a caller can correct the request."""
+    missing = sorted(needed - given.keys())
+    unknown = sorted(str(key) for key in given.keys() - needed - optional)
+    if not missing and not unknown:
+        return ""
+    parts = ([f"missing {', '.join(missing)}"] if missing else []) + (
+        [f"unknown {', '.join(unknown)}"] if unknown else [])
+    takes = ", ".join(sorted(needed)) or "no fields"
+    extra = f"; optional {', '.join(sorted(optional))}" if optional else ""
+    return f"{what}: {'; '.join(parts)}. It takes {takes}{extra}"
+
+
 def validate(request: dict) -> dict:
     """Check the transport envelope before consent; controller checks all semantics."""
     required = {"schema", "operation_id", "operation", "source", "target", "params"}
-    if not isinstance(request, dict) or not required <= request.keys() or request.keys() - required - {"timeout", "dry_run"}:
-        raise ValueError("action requires schema, operation_id, operation, source, target, params; unknown fields refused")
+    if not isinstance(request, dict):
+        raise ValueError("action request must be an object with schema, operation_id, operation, "
+                         "source, target and params")
+    problem = _field_problem("action request", request, required, {"timeout", "dry_run"})
+    if problem:
+        raise ValueError(f"{problem}. schema is {SCHEMA}; source and target are "
+                         "{pane_id, broker} from kilix agent-control list")
     if request["schema"] != SCHEMA or request["operation"] not in OPERATIONS:
         raise ValueError("use schema kilix.actions/v1 and a supported operation")
     if not isinstance(request["operation_id"], str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", request["operation_id"]):
@@ -51,8 +69,11 @@ def validate(request: dict) -> dict:
         "operation.status": (set(), set()),
     }
     needed, optional = fields[request["operation"]]
-    if not isinstance(params, dict) or not needed <= params.keys() or params.keys() - needed - optional:
-        raise ValueError(f"{request['operation']} params have missing or unknown fields")
+    if not isinstance(params, dict):
+        raise ValueError(f"{request['operation']} params must be an object")
+    problem = _field_problem(f"{request['operation']} params", params, needed, optional)
+    if problem:
+        raise ValueError(problem)
     if request["operation"] == "operation.status" and request.get("dry_run", False):
         raise ValueError("operation.status is already read-only; omit dry_run")
     if request["operation"] == "agent.deliver" and "finish_staged_message_id" in params:
