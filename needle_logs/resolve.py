@@ -23,14 +23,17 @@ class ResolveError(ValueError):
 
 SNAPSHOT_ERRORS = {
     "caller_context_unverified": (
-        "The Kilix log reader cannot verify the calling pane. "
-        "Run codex --no-daemon from the intended Kilix pane, or read an "
-        "explicit recording with file and provider."),
+        "The Kilix log reader cannot verify the calling pane, so it cannot look "
+        "up panes by number or title. Give the full session ID instead (a Codex "
+        "thread ID or Claude session ID), read an explicit recording with file "
+        "and provider, or run codex --no-daemon from the intended Kilix pane."),
     "pane_context_unavailable": (
         "The Kilix log reader has no usable authenticated pane connection. "
-        "Run it from the intended live Kilix pane, or read an explicit "
+        "Give the full session ID instead (a Codex thread ID or Claude session "
+        "ID), run it from the intended live Kilix pane, or read an explicit "
         "recording with file and provider."),
 }
+_UUID = re.compile(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
 
 
 def snapshot() -> dict:
@@ -184,7 +187,7 @@ def _claude_session_path(session_id: str) -> str:
     Scan folder names only, never transcripts or nested subagent directories.
     Ambiguity and an incomplete search are errors, not guesses.
     """
-    if not re.fullmatch(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}", session_id):
+    if not _UUID.fullmatch(session_id):
         return ""
     root = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude") / "projects"
     found = []
@@ -210,7 +213,83 @@ def _claude_session_path(session_id: str) -> str:
     return str(found[0]) if found else ""
 
 
+def _codex_session_path(session_id: str) -> str:
+    """Find an exact Codex rollout by thread ID, from file names only.
+
+    Codex writes sessions/YYYY/MM/DD/rollout-<time>-<thread ID>.jsonl and
+    moves archived ones to archived_sessions/ under the same name. Directory
+    and file names are listed; no transcript is opened to search. Ambiguity
+    and an incomplete search are errors, not guesses.
+    """
+    if not _UUID.fullmatch(session_id):
+        return ""
+    home = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
+    suffix = "-" + session_id.lower() + ".jsonl"
+    found: list[str] = []
+    visited = 0
+    deadline = time.monotonic() + 2
+
+    def scan(directory: Path, depth: int) -> None:
+        nonlocal visited
+        try:
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    visited += 1
+                    if visited > 65536 or time.monotonic() > deadline:
+                        raise ResolveError("source_lookup_limit", "Codex session lookup exceeded its bound")
+                    if depth:
+                        if entry.is_dir(follow_symlinks=False):
+                            scan(Path(entry.path), depth - 1)
+                    elif (entry.name.startswith("rollout-") and entry.name.endswith(suffix)
+                          and entry.is_file(follow_symlinks=False)):
+                        found.append(entry.path)
+                        if len(found) > 1:
+                            raise ResolveError("ambiguous_source", "multiple rollouts claim this Codex thread ID")
+        except FileNotFoundError:
+            return
+        except OSError as error:
+            raise ResolveError("source_lookup_failed", "cannot inspect Codex session folders") from error
+
+    scan(home / "sessions", 3)
+    scan(home / "archived_sessions", 0)
+    return found[0] if found else ""
+
+
+def _session_source(selector: str) -> dict | None:
+    """Resolve a full session ID to its recording without any pane listing.
+
+    A Claude session ID or Codex thread ID names exactly one structured
+    recording, so no pane, route or credential is involved. This is the path
+    that works behind a shared Codex app-server, where the caller's pane
+    cannot be verified. The reader still checks the session identity inside
+    the file. None means the ID names no Claude or Codex recording here.
+    """
+    value = selector.strip() if isinstance(selector, str) else ""
+    if not _UUID.fullmatch(value):
+        return None
+    value = value.lower()
+    matches = [(provider, path) for provider, path in
+               (("claude", _claude_session_path(value)), ("codex", _codex_session_path(value))) if path]
+    if not matches:
+        return None
+    if len(matches) > 1:
+        raise ResolveError("ambiguous_source", "Claude and Codex recordings both claim this session ID")
+    provider, raw_path = matches[0]
+    structured = _structured_path(provider, raw_path)
+    if structured is None:
+        return None
+    path, root = structured
+    return ({"pane_id": None, "expected_broker_id": "", "expected_session_id": value}
+            | _bound(path, root) | {"provider": provider, "source_kind": "structured",
+                                   "resolution": "session_id"})
+
+
 def resolve_source(selector: str, *, tree: dict | None = None) -> dict:
+    # A full session ID is resolved from the provider's own folders first, so
+    # it needs no pane listing and no verified caller.
+    direct = _session_source(selector)
+    if direct is not None:
+        return direct
     pane = _pick(selector, snapshot() if tree is None else tree)
     coding = _session(pane)
     provider = str(coding.get("provider") or "")
@@ -240,8 +319,11 @@ def resolve_source(selector: str, *, tree: dict | None = None) -> dict:
 
 
 def check_binding(binding: dict) -> None:
-    """After a read, ensure the pane still denotes the inspected recording."""
-    current = resolve_source(str(binding["pane_id"]))
+    """After a read, ensure the selector still denotes the inspected recording."""
+    if binding.get("resolution") == "session_id":
+        current = _session_source(str(binding["expected_session_id"])) or {}
+    else:
+        current = resolve_source(str(binding["pane_id"]))
     keys = ("path", "provider", "expected_broker_id", "expected_session_id",
             "root", "root_device", "root_inode", "relative_path", "source_device", "source_inode")
     if any(current.get(key) != binding.get(key) for key in keys):

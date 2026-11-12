@@ -159,7 +159,7 @@ _LOG_PROPERTIES = {
     "file": {"type": "string", "description": "recorded-log file"},
     "provider": {"type": "string", "enum": ["claude", "codex", "raw", "grok", "omp"],
                  "description": "with file: raw, or the session's client"},
-    "session": {"type": "string", "description": "pane ID or unique session title"},
+    "session": {"type": "string", "description": "pane ID, session ID or title"},
     "event_id": {"type": "string"},
     "kind": {"type": "string"},
     "query": {"type": "string", "description": "literal text to find"},

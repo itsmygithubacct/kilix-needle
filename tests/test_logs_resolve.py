@@ -97,6 +97,85 @@ class ResolveTests(unittest.TestCase):
                     _claude_session_path("12345678-1234-1234-1234-123456789abc")
             self.assertEqual(raised.exception.code, "source_lookup_limit")
 
+    def _homes(self):
+        return mock.patch.dict(os.environ, {"CODEX_HOME": str(self.root / "codex"),
+                                            "CLAUDE_CONFIG_DIR": str(self.root / "other-provider")})
+
+    def _rollout(self, thread, folder="sessions/2026/11/12"):
+        import json
+        directory = self.root / "codex" / folder
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / f"rollout-2026-11-12T01-02-03-{thread}.jsonl"
+        path.write_text(json.dumps({"type": "session_meta", "payload": {"id": thread}}) + "\n"
+                        + json.dumps({"type": "response_item", "payload": {
+                            "type": "message", "role": "user",
+                            "content": [{"type": "input_text", "text": "Read this."}]}}) + "\n")
+        return path
+
+    def test_thread_id_reads_without_any_pane_listing(self):
+        # Behind a shared Codex app-server the pane list is refused. A full
+        # session ID names one recording, so it must not need the pane list.
+        from needle_logs.cli import read
+        thread = "01a1cf05-b66a-7992-806c-e1f87b5e5881"
+        path = self._rollout(thread)
+        refused = ResolveError("caller_context_unverified", "unverified")
+        with self._homes(), \
+                mock.patch("needle_logs.resolve.snapshot", side_effect=refused) as listing:
+            for selector in (thread, thread.upper(), f" {thread} "):
+                with self.subTest(selector=selector):
+                    binding = resolve_source(selector)
+                    self.assertEqual((binding["path"], binding["provider"], binding["pane_id"],
+                                      binding["expected_session_id"]),
+                                     (str(path), "codex", None, thread))
+            result = read({"operation": "brief", "session": thread,
+                           "cache_path": str(self.root / "cache" / "index.sqlite3")})
+            listing.assert_not_called()
+        self.assertEqual((result["status"], result["errors"]), ("ok", []))
+        self.assertEqual([event["kind"] for event in result["events"]], ["request"])
+
+    def test_thread_id_lookup_covers_archives_and_refuses_duplicates(self):
+        thread = "01a1cf05-b66a-7992-806c-e1f87b5e5882"
+        archived = self._rollout(thread, "archived_sessions")
+        with self._homes():
+            self.assertEqual(resolve_source(thread)["path"], str(archived))
+            self._rollout(thread)
+            with self.assertRaises(ResolveError) as raised:
+                resolve_source(thread)
+            self.assertEqual(raised.exception.code, "ambiguous_source")
+
+    def test_unrecorded_session_id_still_selects_a_live_pane(self):
+        session = "01a1cf05-b66a-7992-806c-e1f87b5e5883"
+        self.pane["coding_session"] = {"provider": "grok", "session_id": session}
+        with self._homes():
+            binding = resolve_source(session, tree=self.tree)
+            self.assertEqual((binding["pane_id"], binding["provider"]), (23, "raw"))
+            with self.assertRaises(ResolveError) as raised:
+                resolve_source(session.replace("5883", "5884"), tree=self.tree)
+            self.assertEqual(raised.exception.code, "not_found")
+
+    def test_session_id_claimed_by_both_providers_is_refused(self):
+        session = "01a1cf05-b66a-7992-806c-e1f87b5e5886"
+        self._rollout(session)
+        project = self.root / "other-provider" / "projects" / "synthetic-project"
+        project.mkdir(parents=True)
+        (project / (session + ".jsonl")).write_text("{}\n")
+        with self._homes():
+            with self.assertRaises(ResolveError) as raised:
+                resolve_source(session)
+        self.assertEqual(raised.exception.code, "ambiguous_source")
+
+    def test_replaced_rollout_refuses_thread_binding(self):
+        thread = "01a1cf05-b66a-7992-806c-e1f87b5e5885"
+        path = self._rollout(thread)
+        with self._homes():
+            binding = resolve_source(thread)
+            check_binding(binding)
+            replacement = path.with_suffix(".new")
+            replacement.write_bytes(path.read_bytes())
+            replacement.replace(path)
+            with self.assertRaisesRegex(ResolveError, "changed"):
+                check_binding(binding)
+
     def test_discovered_file_swap_cannot_read_outside_root(self):
         candidate = self.root / f"{self.broker}.log"
         outside = self.root.parent / f"{self.root.name}-outside-synthetic.log"
