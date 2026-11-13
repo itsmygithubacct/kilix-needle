@@ -59,6 +59,7 @@ def read(arguments: dict) -> dict:
                 return _error("invalid_input", f"invalid {key}", 2)
         if arguments.get("mode", "baseline") != "baseline":
             return _error("mode_unavailable", "only baseline mode is implemented", 2)
+        provider = "omp" if provider == "qwen" else provider
         if "limit" in arguments and (type(arguments["limit"]) is not int or not 1 <= arguments["limit"] <= query.MAX_LIMIT):
             return _error("invalid_input", "invalid limit", 2)
         if operation in ("events", "brief", "search"):

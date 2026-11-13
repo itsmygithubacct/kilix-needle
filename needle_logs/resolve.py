@@ -165,6 +165,7 @@ def _structured_path(provider: str, raw_path: str) -> tuple[Path, Path] | None:
         "codex": [Path(os.environ.get("CODEX_HOME") or home / ".codex") / x
                   for x in ("sessions", "archived_sessions")],
         "grok": [_grok_home() / "sessions"],
+        "omp": [_omp_home() / "sessions"],
     }
     # Additional providers can be admitted after their path/source adapter is
     # qualified. Until then the explicit raw recording remains available.
@@ -307,10 +308,45 @@ def _codex_session_path(session_id: str) -> str:
     return found[0] if found else ""
 
 
+def _omp_home() -> Path:
+    return Path(os.environ.get("PI_CODING_AGENT_DIR") or Path.home() / ".omp/agent").expanduser()
+
+
+def _omp_session_path(session_id: str) -> str:
+    """Find an OMP/Qwen recording by its UUID suffix, without reading logs."""
+    if not _UUID.fullmatch(session_id):
+        return ""
+    suffix = "_" + session_id.lower() + ".jsonl"
+    found = []
+    deadline = time.monotonic() + 2
+    visited = 0
+    try:
+        with os.scandir(_omp_home() / "sessions") as folders:
+            for count, folder in enumerate(folders):
+                if count >= 4096 or time.monotonic() > deadline:
+                    raise ResolveError("source_lookup_limit", "OMP session lookup exceeded its bound")
+                if not folder.is_dir(follow_symlinks=False):
+                    continue
+                with os.scandir(folder.path) as entries:
+                    for entry in entries:
+                        visited += 1
+                        if visited > 65536 or time.monotonic() > deadline:
+                            raise ResolveError("source_lookup_limit", "OMP session lookup exceeded its bound")
+                        if entry.name.endswith(suffix) and entry.is_file(follow_symlinks=False):
+                            found.append(entry.path)
+                            if len(found) > 1:
+                                raise ResolveError("ambiguous_source", "multiple recordings claim this OMP session ID")
+    except FileNotFoundError:
+        return ""
+    except OSError as error:
+        raise ResolveError("source_lookup_failed", "cannot inspect OMP session folders") from error
+    return found[0] if found else ""
+
+
 def _session_source(selector: str) -> dict | None:
     """Resolve a full session ID to its recording without any pane listing.
 
-    A Claude or Grok session ID or a Codex thread ID names exactly one
+    A Claude, Grok or OMP session ID or a Codex thread ID names exactly one
     structured recording, so no pane, route or credential is involved. This
     is the path that works behind a shared Codex app-server, where the
     caller's pane cannot be verified. The reader still checks the session
@@ -322,7 +358,7 @@ def _session_source(selector: str) -> dict | None:
     value = value.lower()
     matches = [(provider, path) for provider, path in
                (("claude", _claude_session_path(value)), ("codex", _codex_session_path(value)),
-                ("grok", _grok_session_path(value))) if path]
+                ("grok", _grok_session_path(value)), ("omp", _omp_session_path(value))) if path]
     if not matches:
         return None
     if len(matches) > 1:
@@ -346,6 +382,7 @@ def resolve_source(selector: str, *, tree: dict | None = None) -> dict:
     pane = _pick(selector, snapshot() if tree is None else tree)
     coding = _session(pane)
     provider = str(coding.get("provider") or "")
+    provider = "omp" if provider == "qwen" else provider
     session_id = str(coding.get("session_id") or "")
     raw_path = str(coding.get("path") or "")
     if provider == "claude" and not raw_path:
@@ -353,6 +390,8 @@ def resolve_source(selector: str, *, tree: dict | None = None) -> dict:
     if provider == "grok":
         # Kilix lists a Grok pane by session ID, without a file path.
         raw_path = grok_updates(raw_path) if raw_path else _grok_session_path(session_id)
+    if provider == "omp" and not raw_path:
+        raw_path = _omp_session_path(session_id)
     structured = _structured_path(provider, raw_path)
     broker = _broker(pane)
     binding = {"pane_id": pane["pane_id"], "expected_broker_id": broker,

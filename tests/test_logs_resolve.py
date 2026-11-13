@@ -100,7 +100,50 @@ class ResolveTests(unittest.TestCase):
     def _homes(self):
         return mock.patch.dict(os.environ, {"CODEX_HOME": str(self.root / "codex"),
                                             "CLAUDE_CONFIG_DIR": str(self.root / "other-provider"),
-                                            "GROK_HOME": str(self.root / "grok")})
+                                            "GROK_HOME": str(self.root / "grok"),
+                                            "PI_CODING_AGENT_DIR": str(self.root / "omp")})
+
+    def test_omp_and_qwen_use_structured_recording_by_id_or_pane(self):
+        import json
+        from needle_logs.cli import read
+        session = "12345678-1234-1234-1234-123456789abc"
+        folder = self.root / "omp" / "sessions" / "--workspace--"
+        folder.mkdir(parents=True)
+        path = folder / f"2026-11-12T00-00-00_{session}.jsonl"
+        path.write_text(json.dumps({"type": "session", "id": session}) + "\n" + json.dumps({
+            "type": "message", "message": {"role": "user", "content": "Read this."}}) + "\n")
+        cache = str(self.root / "cache" / "index.sqlite3")
+        with self._homes(), mock.patch("needle_logs.resolve.snapshot") as listing:
+            binding = resolve_source(session)
+            self.assertEqual((binding["path"], binding["provider"]), (str(path), "omp"))
+            result = read({"operation": "brief", "session": session, "cache_path": cache})
+            self.assertEqual((result["status"], result["errors"]), ("ok", []))
+            listing.assert_not_called()
+            for provider in ("omp", "qwen"):
+                result = read({"operation": "brief", "file": str(path), "provider": provider, "cache_path": cache})
+                self.assertEqual((result["status"], result["source"]["provider"]), ("ok", "omp"))
+                self.pane["coding_session"] = {"provider": provider, "session_id": session}
+                binding = resolve_source("23", tree=self.tree)
+                self.assertEqual((binding["path"], binding["provider"]), (str(path), "omp"))
+            duplicate = folder / f"2026-11-12T01-00-00_{session}.jsonl"
+            duplicate.write_bytes(path.read_bytes())
+            with self.assertRaises(ResolveError) as raised:
+                resolve_source(session)
+            self.assertEqual(raised.exception.code, "ambiguous_source")
+
+    def test_omp_lookup_is_bounded_and_rejects_links(self):
+        from needle_logs.resolve import _omp_session_path
+        session = "12345678-1234-1234-1234-123456789abc"
+        folder = self.root / "omp" / "sessions" / "--workspace--"
+        folder.mkdir(parents=True)
+        (folder / f"time_{session}.jsonl").symlink_to(self.root / f"{self.broker}.log")
+        with self._homes():
+            self.assertEqual(_omp_session_path(session), "")
+            self.assertEqual(_omp_session_path("../../escape"), "")
+            with mock.patch("needle_logs.resolve.time.monotonic", side_effect=[0, 3]):
+                with self.assertRaises(ResolveError) as raised:
+                    _omp_session_path(session)
+            self.assertEqual(raised.exception.code, "source_lookup_limit")
 
     def _rollout(self, thread, folder="sessions/2026/11/12"):
         import json

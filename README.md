@@ -619,8 +619,8 @@ than a Needle call. Needle is for requests in a person's words.
 ## Read pane logs
 
 The experimental `logs` command reads recorded evidence without loading an
-action model. It can index Claude and Codex JSONL sources or committed plain
-UTF-8 recording lines. Structured tool output retains its tool role even when
+action model. It can index Claude, Codex, Grok and OMP JSONL sources, including
+Qwen sessions run through OMP, or raw pane recordings. Structured tool output retains its tool role even when
 its text looks like a user message.
 
 ```sh
@@ -633,8 +633,12 @@ kilix-needle logs cache clear
 ```
 
 `--session` selects a pane by ID, coding-session ID, broker ID, or unique title;
-ambiguous selectors fail. `--file` requires an explicit provider: `claude`,
-`codex`, or `raw`. Zstandard archives additionally require `zstd`. The pinned
+ambiguous selectors fail. Full session UUIDs also resolve recordings without
+a live pane. `--file` requires an explicit provider: `claude`, `codex`, `grok`,
+`omp`, `qwen` (an OMP alias), or `raw`. Grok reads `updates.jsonl`; its session
+directory or sibling `events.jsonl`/`chat_history.jsonl` selects that file.
+OMP discovery uses `$PI_CODING_AGENT_DIR/sessions`, defaulting to
+`~/.omp/agent/sessions`. Zstandard archives additionally require `zstd`. The pinned
 `third_party/kilix-tui-utils` submodule supplies structured adapters.
 
 A raw pane recording that contains terminal controls is replayed on a virtual
@@ -665,7 +669,14 @@ complete read, 1 for partial coverage or read failure, and 2 for invalid input
 or an invalid cursor. Limits bound snapshots and responses. A response too large
 for the envelope is rejected explicitly; narrow the query. Events can be paged
 with `--since-cursor`, but appends or rewrites invalidate the old snapshot's
-cursor. This first implementation rebuilds each snapshot rather than indexing
+cursor. Structured sources larger than the 32 MiB snapshot limit select recent
+complete rows, preserving absolute byte offsets. A bounded header read retains
+the session identity. Coverage reports the selected window and an explicit
+`byte_limit` gap for omitted history, so a recent brief can include the latest
+reply without claiming a complete history. Compressed structured sources are
+streamed under a 1 GiB expansion limit and a 30-second deadline; raw terminal
+recordings retain prefix reads because replay needs the preceding screen state.
+This first implementation rebuilds each snapshot rather than indexing
 appends incrementally.
 
 The private local SQLite cache contains excerpts of the source logs. CLI
@@ -680,10 +691,8 @@ without a source, an unmatched session selector, or a file that cannot be
 opened returns this routing hint. The hint reads no journal entries; use
 the program tag and time window from the original request in the next call.
 
-Raw recording support is deliberately limited: terminal control sequences,
-redraws, binary data, and unfinished lines produce explicit partial coverage.
-It does not reconstruct a terminal screen or infer speakers from rendered
-labels. Grok/OMP structured adapters and full terminal replay are pending.
+Raw recordings use screen replay when available; undecodable data and unfinished
+lines produce explicit partial coverage. Rendered labels do not establish speakers.
 Semantic extraction and fine-tuning are experiments; the usable CLI currently
 supports only `--mode baseline`. No logs model has qualified for selection.
 
