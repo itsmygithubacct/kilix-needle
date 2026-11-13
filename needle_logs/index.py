@@ -350,4 +350,9 @@ class Index:
             else:
                 count = self.db.execute("SELECT count(*) FROM sources WHERE session_id=?", (session_id,)).fetchone()[0]
                 self.db.execute("DELETE FROM sources WHERE session_id=?", (session_id,))
+            if self.db.execute("SELECT 1 FROM sqlite_master WHERE name='log_inventory'").fetchone():
+                if session_id is None:
+                    self.db.execute("DELETE FROM log_inventory")
+                else:
+                    self.db.execute("DELETE FROM log_inventory WHERE session_id=?", (session_id,))
         return count

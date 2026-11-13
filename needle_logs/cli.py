@@ -12,7 +12,7 @@ from .hints import journal_hint
 
 SCHEMA = "kilix.logs.read/v1"
 ARGUMENTS = {"operation", "file", "provider", "session", "cache_path", "event_id", "session_id",
-             "since_cursor", "mode", "limit", "kind", "query"}
+             "since_cursor", "mode", "limit", "kind", "query", "indexed"}
 
 
 def _error(code: str, message: str, status: int) -> dict:
@@ -45,6 +45,8 @@ def read(arguments: dict) -> dict:
                   "search": {"file", "provider", "session", "cache_path", "mode", "limit", "query"},
                   "source": {"event_id", "cache_path"}, "cache_status": {"cache_path"},
                   "cache_clear": {"cache_path", "session_id"}}
+    if operation in ("events", "brief", "search"):
+        applicable[operation].add("indexed")
     if set(arguments) - applicable[operation] - {"operation"}:
         return _error("invalid_input", "argument does not apply to operation", 2)
     path = arguments.get("file")
@@ -60,6 +62,8 @@ def read(arguments: dict) -> dict:
         if arguments.get("mode", "baseline") != "baseline":
             return _error("mode_unavailable", "only baseline mode is implemented", 2)
         provider = "omp" if provider == "qwen" else provider
+        if "indexed" in arguments and type(arguments["indexed"]) is not bool:
+            return _error("invalid_input", "indexed must be boolean", 2)
         if "limit" in arguments and (type(arguments["limit"]) is not int or not 1 <= arguments["limit"] <= query.MAX_LIMIT):
             return _error("invalid_input", "invalid limit", 2)
         if operation in ("events", "brief", "search"):
@@ -76,7 +80,14 @@ def read(arguments: dict) -> dict:
             expected_session = None
             if session:
                 from .resolve import resolve_source, check_binding
-                resolved = resolve_source(session)
+                if session.startswith("log-"):
+                    from .library import Library
+                    with Index(arguments.get("cache_path")) as catalog:
+                        resolved = Library(catalog).binding(session)
+                    if resolved is None:
+                        return _error("not_found", "inventory ID is not known; run logs list", 1)
+                else:
+                    resolved = resolve_source(session)
                 path, provider = resolved["path"], resolved["provider"]
                 expected_session = resolved.get("expected_session_id") if resolved.get("source_kind") == "structured" else None
             if not path or not provider:
@@ -106,10 +117,26 @@ def read(arguments: dict) -> dict:
                                 arguments.get("query") if operation == "search" else None)
                 if operation == "search" and arguments.get("query") is None:
                     return _error("invalid_input", "search requires query", 2)
-                # This path is intentionally explicit; coordinator adds session resolution.
-                from .sources import read_source
-                source_result = (read_source(path, provider, binding=resolved)
-                                 if session and "root" in resolved else read_source(path, provider))
+                # CLI reads use the persistent full-history index. Older API
+                # clients also use it for large logs or an already indexed file.
+                indexed = False
+                if provider in {"claude", "codex", "grok", "omp", "raw"}:
+                    from .schema import DEFAULT_MAX_BYTES
+                    from .library import Library, has_index
+                    try:
+                        source_size = Path(path).stat().st_size
+                    except OSError as exc:
+                        return _source_error("source_open_failed", str(exc), 1, arguments)
+                    indexed = (arguments.get("indexed", False) or path.endswith(".zst") or source_size > DEFAULT_MAX_BYTES
+                               or has_index(index, path, provider))
+                if indexed:
+                    library = Library(index)
+                    item = library.inventory.describe(path, provider)
+                    source_result = library.refresh(item, binding=resolved if session and "root" in resolved else None)
+                else:
+                    from .sources import read_source
+                    source_result = (read_source(path, provider, binding=resolved)
+                                     if session and "root" in resolved else read_source(path, provider))
                 if (source_result["source"]["provider"] != provider or
                         (source_result["source"]["path"] != str(Path(path).absolute()) if session
                          else Path(source_result["source"]["path"]).resolve() != Path(path).resolve())):
@@ -118,9 +145,10 @@ def read(arguments: dict) -> dict:
                     return _error("source_mismatch", "resolved session does not match source", 1)
                 if session:
                     check_binding(resolved)
-                events = facts.extract(source_result["records"])
-                config = facts.VERSION + ":record-v1:" + str(source_result["source"].get("provider", provider))
-                index.put(source_result, events, config=config)
+                if not indexed:
+                    events = facts.extract(source_result["records"])
+                    config = facts.VERSION + ":record-v1:" + str(source_result["source"].get("provider", provider))
+                    index.put(source_result, events, config=config)
                 source_id = source_result["source"]["source_id"]
                 limit = arguments.get("limit", 20)
                 # Room for the fields added below, so a trimmed page still fits.
@@ -163,7 +191,7 @@ def _parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="operation", required=True)
     for name in ("events", "brief", "search"):
         command = sub.add_parser(name)
-        target = command.add_mutually_exclusive_group(required=True)
+        target = command.add_mutually_exclusive_group(required=name != "search")
         target.add_argument("--file")
         target.add_argument("--session")
         command.add_argument("--provider")
@@ -176,6 +204,31 @@ def _parser() -> argparse.ArgumentParser:
             command.add_argument("--since-cursor")
         if name == "search":
             command.add_argument("--query", required=True)
+            command.add_argument("--rank", choices=("bm25", "recent"), default="bm25")
+            command.add_argument("--match", choices=("all", "any"), default="all")
+            command.add_argument("--offset", type=int, default=0)
+            command.add_argument("--cached", action="store_true", help="search the index without reading log files")
+    for name in ("list", "index"):
+        command = sub.add_parser(name, help="discover sessions" if name == "list" else "update the full-history index")
+        command.add_argument("--provider")
+        command.add_argument("--cache-path")
+        command.add_argument("--json", action="store_true")
+        if name == "list":
+            command.add_argument("--query")
+            command.add_argument("--limit", type=int, default=100)
+            command.add_argument("--offset", type=int, default=0)
+            command.add_argument("--cached", action="store_true")
+        else:
+            target = command.add_mutually_exclusive_group()
+            target.add_argument("--file")
+            target.add_argument("--session")
+            command.add_argument("--rebuild", action="store_true")
+    show = sub.add_parser("show", help="read an indexed record, with character pagination")
+    show.add_argument("record_id")
+    show.add_argument("--start", type=int, default=0)
+    show.add_argument("--chars", type=int, default=8000)
+    show.add_argument("--cache-path")
+    show.add_argument("--json", action="store_true")
     source = sub.add_parser("source")
     source.add_argument("--event", dest="event_id", required=True)
     source.add_argument("--cache-path")
@@ -197,6 +250,13 @@ def main(argv: list[str] | None = None) -> int:
     if operation == "cache":
         operation = "cache_" + args.pop("cache_operation")
     as_json = args.pop("json", False)
+    if operation in ("list", "index", "search", "show"):
+        from . import library_cli
+        result = library_cli.read({"operation": operation, **args, "progress": sys.stderr.isatty()})
+        print(json.dumps(result, ensure_ascii=False) if as_json else library_cli.render(result))
+        return result["exit_status"]
+    if operation in ("events", "brief"):
+        args["indexed"] = True
     result = read({"operation": operation, **args})
     if as_json:
         print(json.dumps(result, ensure_ascii=False))

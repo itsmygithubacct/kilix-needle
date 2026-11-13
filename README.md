@@ -616,85 +616,95 @@ What an agent should know (measured in a Codex route benchmark, 2026-09-29):
 For one exact pane operation, a direct `kilix pane` verb costs an agent less
 than a Needle call. Needle is for requests in a person's words.
 
-## Read pane logs
+## Read and search logs
 
-The experimental `logs` command reads recorded evidence without loading an
-action model. It can index Claude, Codex, Grok and OMP JSONL sources, including
-Qwen sessions run through OMP, or raw pane recordings. Structured tool output retains its tool role even when
-its text looks like a user message.
+`kilix-needle logs` inventories Claude, Codex, Grok, OMP/Qwen and raw Kilix
+recordings together. It reads local files without an action model or network
+service. Session names come from saved titles, prompts, or the pane's directory
+and command. Lists sort by most recent activity, including live, recent and
+archived recordings.
 
 ```sh
-kilix-needle logs brief --session claude-needle
-kilix-needle logs events --file /path/to/rollout.jsonl --provider codex --json
-kilix-needle logs search --session claude-needle --query "parser" --limit 10
-kilix-needle logs source --event evt-ID --json
-kilix-needle logs cache status
+kilix-needle logs list --json
+kilix-needle logs list --provider codex --query parser
+kilix-needle logs index --json
+kilix-needle logs search --query "parser failure" --json
+kilix-needle logs search --provider omp --query "parser failure" --rank recent --json
+kilix-needle logs search --query "parser failure" --cached --json
+kilix-needle logs brief --session log-INVENTORY_ID --json
+kilix-needle logs events --session SESSION_UUID --limit 100 --json
+kilix-needle logs show rec-RECORD_ID --start 0 --chars 8000 --json
+kilix-needle logs source --event evt-EVENT_ID --json
+kilix-needle logs cache status --json
 kilix-needle logs cache clear
 ```
 
-`--session` selects a pane by ID, coding-session ID, broker ID, or unique title;
-ambiguous selectors fail. Full session UUIDs also resolve recordings without
-a live pane. `--file` requires an explicit provider: `claude`, `codex`, `grok`,
-`omp`, `qwen` (an OMP alias), or `raw`. Grok reads `updates.jsonl`; its session
-directory or sibling `events.jsonl`/`chat_history.jsonl` selects that file.
-OMP discovery uses `$PI_CODING_AGENT_DIR/sessions`, defaulting to
-`~/.omp/agent/sessions`. Zstandard archives additionally require `zstd`. The pinned
-`third_party/kilix-tui-utils` submodule supplies structured adapters.
+`list` refreshes only the inventory. `index` streams the complete history into
+a private SQLite cache; there is no 32 MiB file window. A first index can take
+time for a large collection. Each file commits atomically, so an interrupted
+index can be restarted: unchanged files reuse their cached records. Appends
+verify the previously indexed bytes and parse only the new rows. Rewrites,
+replacement, truncation, and parser upgrades rebuild the affected source.
+`index --file PATH --provider CLIENT` or `index --session ID` updates one source;
+`--rebuild` forces it to be parsed again.
 
-A raw pane recording that contains terminal controls is replayed on a virtual
-screen by the pinned `third_party/kilix-transcript-clean` submodule. Records
-are the lines that screen showed, in reading order, without the program's
-status lines and prompt boxes. This covers full-screen programs such as Grok,
-omp and the shell around them. A screen line cannot be traced to one byte
-range, so each replayed record spans the whole snapshot. Its `origin.replay`
-gives its line number and the program that drew it, and the source's `replay`
-says whether the recording's start was cut and whether it carried the pane
-size. Without the submodule, such a recording is reported as a
-`terminal_controls` gap, as before.
+CLI search refreshes discovery and indexing before querying. `--cached` queries
+the existing index immediately without reading source files. Searches use
+SQLite FTS5 with BM25 ranking: higher returned scores rank first. Query words
+are literal tokens, not FTS operators. All words must match by default;
+`--match any` accepts any word, and `--rank recent` sorts matching sessions by
+recency. `--provider` narrows the client; `--file` plus `--provider`, or
+`--session`, narrows a search to one recording. Unicode tokenization ignores
+Latin diacritics. Match snippets are excerpts; `show` retrieves the canonical
+record with exact character pagination and byte/JSON-pointer origins.
 
-Events cite exact Unicode spans in canonical records, which retain byte and
-JSON-pointer origins. The baseline extracts user requests/questions, assistant
-answer excerpts, and narrow test/error lines in structured tool output. An
-assistant's statement stays an assistant claim. Raw recording lines produce
-`transcript` events labelled `unattributed_text`; displayed prompt markers and
-test summaries do not establish a speaker or a verified result. These lines
-appear under `other` in a brief and retain citations into the recorded snapshot.
-`brief` shows the newest bounded
-events with citations; it does not reconcile conflicting statements. Search is
-lexical and also searches records without event labels. Source lookup retrieves
-the cached evidence snapshot, which may differ from a subsequently edited log.
+Inventory and search responses use `kilix.logs.library/v1`, with `sessions` or
+`matches`, `offset`, and `next_offset`. Continue with `--offset`; `--limit` is
+1–100. Pages may be shortened to fit the response envelope. Concurrent index
+updates can change search ordering between pages. JSON reports indexing actions,
+unindexed sources and errors instead of treating a failed source as no matches.
+`show` returns `next_start` for a long record. These response limits do not limit
+the history stored or searched. Python callers can use
+`needle_logs.library_cli.read({...})` with the same operation names and arguments.
 
-JSON reports coverage gaps and source generations. Exit codes are 0 for a
-complete read, 1 for partial coverage or read failure, and 2 for invalid input
-or an invalid cursor. Limits bound snapshots and responses. A response too large
-for the envelope is rejected explicitly; narrow the query. Events can be paged
-with `--since-cursor`, but appends or rewrites invalidate the old snapshot's
-cursor. Structured sources larger than the 32 MiB snapshot limit select recent
-complete rows, preserving absolute byte offsets. A bounded header read retains
-the session identity. Coverage reports the selected window and an explicit
-`byte_limit` gap for omitted history, so a recent brief can include the latest
-reply without claiming a complete history. Compressed structured sources are
-streamed under a 1 GiB expansion limit and a 30-second deadline; raw terminal
-recordings retain prefix reads because replay needs the preceding screen state.
-This first implementation rebuilds each snapshot rather than indexing
-appends incrementally.
+`--session` accepts an inventory ID, a full session UUID, or a live pane selector.
+An inventory ID selects one file even when session IDs are duplicated. Other
+ambiguous selectors fail. `--file` requires `claude`, `codex`, `grok`, `omp`,
+`qwen` (an OMP alias), or `raw`. Grok reads `updates.jsonl`; its session directory
+or sibling `events.jsonl`/`chat_history.jsonl` selects that file. OMP discovery
+uses `$PI_CODING_AGENT_DIR/sessions`, defaulting to `~/.omp/agent/sessions`.
+Zstandard archives require `zstd` and decompress onto the cache disk for
+streamed indexing; citations use decompressed byte offsets. Malformed rows and
+unfinished final rows create explicit coverage gaps. An individual JSONL row
+over 64 MiB is skipped with a `row_too_large` gap; later rows are still indexed.
+An unfinished row is retried when more bytes arrive.
 
-The private local SQLite cache contains excerpts of the source logs. CLI
-`--cache-path` can place it in a chosen private directory. The MCP tool
-`kilix_logs_read` exposes `events`, `brief`, `search`, and `source` with the same
-evidence rules; it has no action-engine or confirmation path. Only the CLI
-exposes cache clearing.
+`events`, `brief` and `source` retain the `kilix.logs.read/v1` evidence API.
+Events cite exact Unicode spans in records. Tool output retains its tool role,
+an assistant's statement stays an assistant claim, and reasoning, binary
+payloads and metadata are excluded categorically. `brief` returns recent cited
+events from the full index; `events --since-cursor` pages earlier history too.
+Appends or rewrites invalidate event cursors. `source` returns cached evidence,
+which can differ from a subsequently edited log. The MCP `kilix_logs_read` tool
+exposes these per-source operations. Larger files, compressed sources and
+previously indexed recordings use the persistent index there as well. The
+low-level `needle_logs.sources.read_source` remains a bounded preview helper.
 
-System-journal errors use `kilix_system_read`, for example
-`errors from the program my-worker in the last 15 minutes`. A logs search
-without a source, an unmatched session selector, or a file that cannot be
-opened returns this routing hint. The hint reads no journal entries; use
-the program tag and time window from the original request in the next call.
+Raw pane recordings with terminal controls use the pinned
+`kilix-transcript-clean` screen replayer. Replayed lines span the recorded
+snapshot and carry `origin.replay`; they do not have exact single-line byte
+origins. Their role stays unknown: rendered labels never establish a speaker.
+The Session Logs TUI (`kilix-session-log`, also in `kilix-session-center`) lists
+all three transcript tiers by recency, uses readable names, and filters by name,
+directory, command, ID or tier. Its preview retains a bounded tail in memory.
 
-Raw recordings use screen replay when available; undecodable data and unfinished
-lines produce explicit partial coverage. Rendered labels do not establish speakers.
-Semantic extraction and fine-tuning are experiments; the usable CLI currently
-supports only `--mode baseline`. No logs model has qualified for selection.
+The cache contains excerpts of private logs and requires private ownership and
+permissions. `--cache-path` selects another private location on a disk with room
+for the index and temporary archive expansion. Cache clearing removes inventory
+and search data too. Exit codes are 0 for a complete operation, 1 for partial
+coverage or read failure, and 2 for invalid input or an invalid cursor.
+System-journal errors remain available through `kilix_system_read`; the log
+library does not collect the system journal.
 
 ## The engine
 

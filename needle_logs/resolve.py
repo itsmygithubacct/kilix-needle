@@ -415,6 +415,12 @@ def resolve_source(selector: str, *, tree: dict | None = None) -> dict:
 
 def check_binding(binding: dict) -> None:
     """After a read, ensure the selector still denotes the inspected recording."""
+    if binding.get("resolution") == "inventory":
+        from .sources import _open_bound
+        fd, parent = _open_bound(binding["path"], binding)
+        os.close(fd)
+        os.close(parent)
+        return
     if binding.get("resolution") == "session_id":
         current = _session_source(str(binding["expected_session_id"])) or {}
     else:
