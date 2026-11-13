@@ -151,8 +151,26 @@ def _identity(provider: str, row: dict) -> str:
     return value if isinstance(value, str) and value else ""
 
 
-def _header_identity(provider: str, data: bytes) -> str:
-    identities = set()
+def _accept_identity(provider: str, row: dict, identities: set[str]) -> bool:
+    identity = _identity(provider, row)
+    if not identity:
+        return True
+    if identities and identity not in identities:
+        return False
+    identities.add(identity)
+    if provider == "codex":
+        # Forks copy their ancestor's rollout, including session_meta. Only an
+        # already accepted header can declare that ancestry; parent_thread_id
+        # alone describes a worker relationship, not inherited history.
+        parent = row["payload"].get("forked_from_id")
+        if isinstance(parent, str) and parent:
+            identities.add(parent)
+    return True
+
+
+def _header_identity(provider: str, data: bytes, *, lineage: set[str] | None = None) -> str:
+    identities = lineage if lineage is not None else set()
+    first = ""
     for line in data.split(b"\n")[:-1]:
         try:
             row = json.loads(line)
@@ -161,10 +179,10 @@ def _header_identity(provider: str, data: bytes) -> str:
         if isinstance(row, dict):
             value = _identity(provider, row)
             if value:
-                identities.add(value)
-    if len(identities) > 1:
-        raise SourceError("session_conflict", "conflicting session identities in source header")
-    return next(iter(identities), "")
+                if not _accept_identity(provider, row, identities):
+                    raise SourceError("session_conflict", "conflicting session identities in source header")
+                first = first or value
+    return first
 
 
 def _decompress(compressed: bytes, max_bytes: int, deadline: float, *, recent: bool = False
@@ -301,7 +319,8 @@ def _read_source_once(path: str, provider: str, *, max_bytes: int = DEFAULT_MAX_
             limited, total = start > 0, snapshot
         else:
             data, limited, total = compressed, snapshot > max_bytes, snapshot
-        identity = _header_identity(provider, header) if start else ""
+        lineage = set()
+        identity = _header_identity(provider, header, lineage=lineage) if start else ""
         digest = hashlib.sha256(compressed).hexdigest()
         source_id = stable_id("src-", os.path.abspath(path), provider, before.st_dev, before.st_ino)
         # A full-snapshot generation changes on both rewrites and appends.
@@ -426,7 +445,7 @@ def _read_source_once(path: str, provider: str, *, max_bytes: int = DEFAULT_MAX_
                     coverage["complete"] = False
                     break
                 identity = _identity(provider, row)
-                if identity and source["session_id"] and identity != source["session_id"]:
+                if not _accept_identity(provider, row, lineage):
                     coverage["gaps"].append({"code": "session_conflict", "byte_start": offset,
                                              "byte_end": start + len(data), "message": "conflicting session identity; remaining rows omitted"})
                     errors.append({"code": "session_conflict", "message": "conflicting session identity; remaining rows omitted"})

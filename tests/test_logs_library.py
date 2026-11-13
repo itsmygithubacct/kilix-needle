@@ -178,6 +178,36 @@ class LibraryTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, "session_conflict")
         self.assertEqual(self.library.search("original")["matches"], [])
 
+    def test_codex_declared_fork_ancestry_preserves_child_identity_and_citations(self):
+        from needle_logs.sources import read_source
+        meta = lambda identity, **extra: {"type": "session_meta", "payload": {"id": identity, **extra}}
+        text = lambda value: {"type": "response_item", "payload": {"type": "message", "role": "user",
+                               "content": [{"type": "input_text", "text": value}]}}
+        self.path.write_bytes(b"".join(encode(row) for row in (
+            meta("child", forked_from_id="parent"), meta("parent", forked_from_id="ancestor"),
+            meta("ancestor"), text("inherited history"), text("child request"))))
+        preview = read_source(str(self.path), "codex")
+        self.assertTrue(preview["coverage"]["complete"], preview)
+        self.assertEqual(preview["source"]["session_id"], "child")
+        item = self.library.inventory.describe(self.path, "codex")
+        result = self.library.refresh(item)
+        self.assertTrue(result["coverage"]["complete"], result)
+        self.assertEqual(result["source"]["session_id"], "child")
+        self.assertEqual(result["coverage"]["inherited_session_ids"], ["ancestor", "parent"])
+        for found in self.library.search("history request", match="any")["matches"]:
+            self.assertEqual(found["session_id"], "child")
+            origin = found["origin"]
+            row = json.loads(self.path.read_bytes()[origin["byte_start"]:origin["byte_end"]])
+            self.assertEqual(pointer_value(row, origin["json_pointer"]), self.library.record(found["record_id"])["text"])
+        with self.path.open("ab") as stream:
+            stream.write(encode(meta("unrelated")))
+        with self.assertRaises(SourceError):
+            self.library.refresh(self.library.inventory.describe(self.path, "codex"))
+        self.assertEqual(self.library.search("history")["matches"], [])
+        self.path.write_bytes(encode(meta("child", parent_thread_id="parent")) + encode(meta("parent")))
+        with self.assertRaises(SourceError):
+            self.library.refresh(self.library.inventory.describe(self.path, "codex"))
+
     def test_bm25_relevance_recency_literal_tokens_and_source_filter(self):
         first = self.write(message("parser bug fix"))
         os.utime(first, (100, 100))

@@ -22,7 +22,7 @@ import time
 from . import facts, query
 from .normalize import stable_id
 from .schema import RECORD_SCHEMA
-from .sources import SourceError, _header_identity, _identity, _open_bound, _readers, read_source
+from .sources import SourceError, _accept_identity, _header_identity, _identity, _open_bound, _readers, read_source
 
 MAX_ROW_BYTES = 64 * 1024 * 1024
 MAX_GAPS = 128
@@ -104,7 +104,7 @@ class Library:
         self.inventory = inventory_module()
         self.adapter = _readers()
         adapter = Path(__file__).resolve().parents[1] / "third_party/kilix-tui-utils/src/kilix_rollout/records.py"
-        self.parser = "library-1:" + hashlib.sha256(adapter.read_bytes()).hexdigest() + ":" + facts.VERSION
+        self.parser = "library-2:" + hashlib.sha256(adapter.read_bytes()).hexdigest() + ":" + facts.VERSION
         names = {row[0] for row in self.db.execute("SELECT name FROM sqlite_master")}
         required = {"log_inventory", "log_progress", "log_search", "log_records_insert", "log_records_delete", "log_records_update"}
         if required <= names:
@@ -146,9 +146,12 @@ class Library:
             raise
 
     def _remember(self, item: dict, *, managed: bool = False):
-        previous = self.db.execute("SELECT managed,title FROM log_inventory WHERE inventory_id=?", (item["inventory_id"],)).fetchone()
+        previous = self.db.execute("SELECT managed,title,metadata FROM log_inventory WHERE inventory_id=?", (item["inventory_id"],)).fetchone()
         if previous and previous["managed"] and not managed:
-            item = dict(item, title=previous["title"])
+            older = json.loads(previous["metadata"])
+            if (older.get("inventory_version") == item.get("inventory_version") and
+                    older["session_id"] == item["session_id"]):
+                item = dict(item, title=previous["title"])
         self.db.execute("""INSERT INTO log_inventory
             (inventory_id,path,provider,session_id,title,cwd,updated,size,tier,managed,metadata)
             VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(inventory_id) DO UPDATE SET
@@ -260,7 +263,8 @@ class Library:
                         with os.fdopen(os.dup(plain), "rb") as stream:
                             stream.seek(0)
                             header = stream.readline(min(size, MAX_ROW_BYTES + 1))
-                    identity = _header_identity(provider, header) if provider != "raw" else ""
+                    lineage = set()
+                    identity = _header_identity(provider, header, lineage=lineage) if provider != "raw" else ""
                     source_id = stable_id("src-", os.path.abspath(path), provider, before.st_dev, before.st_ino, identity)
                     append = (not rebuild and valid and not archive and provider != "raw" and
                               source_id == old["source_id"] and before.st_size > old["size"] and
@@ -277,6 +281,7 @@ class Library:
                         if snap["coverage"].get("unlisted_gaps"):
                             coverage["unlisted_gaps"] = snap["coverage"]["unlisted_gaps"]
                         coverage["excluded"] = list(snap["coverage"].get("excluded", []))
+                        lineage.update(snap["coverage"].get("inherited_session_ids", []))
                     if not append:
                         if old:
                             self.db.execute("DELETE FROM sources WHERE source_id=?", (old["source_id"],))
@@ -298,7 +303,9 @@ class Library:
                             count += 1
                         checkpoint = size
                     else:
-                        checkpoint, previous, count = self._stream(plain, start, size, source, previous, coverage)
+                        checkpoint, previous, count = self._stream(plain, start, size, source, previous, coverage, lineage)
+                    if provider == "codex" and lineage - {identity}:
+                        coverage["inherited_session_ids"] = sorted(lineage - {identity})
                     if archive and os.fstat(fd).st_size != before.st_size:
                         raise SourceError("source_changed", "archive changed during indexing")
                     after = os.fstat(fd)
@@ -349,7 +356,7 @@ class Library:
                 self.db.execute("INSERT INTO evidence VALUES(?,?,?,?,?,?,?,?,?)", (sid, gen, self.parser, event["event_id"], i,
                     evidence["record_id"], evidence["start"], evidence["end"], evidence["quote"]))
 
-    def _stream(self, fd, start, size, source, sequence, coverage):
+    def _stream(self, fd, start, size, source, sequence, coverage, lineage):
         offset, count = start, 0
 
         def gap(code, end, message):
@@ -396,8 +403,8 @@ class Library:
                         row = json.loads(line)
                         if not isinstance(row, dict):
                             raise ValueError("JSONL row is not an object")
-                        identity = _identity(source["provider"], row)
-                        if identity and identity != source["session_id"]:
+                        if ((not source["session_id"] and _identity(source["provider"], row)) or
+                                not _accept_identity(source["provider"], row, lineage)):
                             gap("session_conflict", size, "session identity differs from source header; remaining rows omitted")
                             break
                         adapted = self.adapter(source["provider"], row)

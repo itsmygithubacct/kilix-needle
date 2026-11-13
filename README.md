@@ -678,6 +678,8 @@ streamed indexing; citations use decompressed byte offsets. Malformed rows and
 unfinished final rows create explicit coverage gaps. An individual JSONL row
 over 64 MiB is skipped with a `row_too_large` gap; later rows are still indexed.
 An unfinished row is retried when more bytes arrive.
+Codex forks retain the child session's identity and accept copied ancestor
+headers only when that ancestry is explicitly declared in the recording.
 
 `events`, `brief` and `source` retain the `kilix.logs.read/v1` evidence API.
 Events cite exact Unicode spans in records. Tool output retains its tool role,
