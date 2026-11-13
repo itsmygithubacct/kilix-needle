@@ -30,8 +30,12 @@ def _source_error(code, message, status, arguments):
     return result
 
 
-def read(arguments: dict) -> dict:
-    """Return a JSON-compatible result; import source readers only when needed."""
+def read(arguments: dict, *, render: bool = False) -> dict:
+    """Return a JSON-compatible result; import source readers only when needed.
+
+    ``render`` sizes source chunks for the human renderer as well as the JSON
+    bound, so printed text is never cut between continuations.
+    """
     if not isinstance(arguments, dict):
         return _error("invalid_input", "arguments must be an object", 2)
     unknown = set(arguments) - ARGUMENTS
@@ -43,7 +47,7 @@ def read(arguments: dict) -> dict:
     applicable = {"events": {"file", "provider", "session", "cache_path", "mode", "limit", "kind", "since_cursor"},
                   "brief": {"file", "provider", "session", "cache_path", "mode", "limit"},
                   "search": {"file", "provider", "session", "cache_path", "mode", "limit", "query"},
-                  "source": {"event_id", "cache_path"}, "cache_status": {"cache_path"},
+                  "source": {"event_id", "cache_path", "since_cursor"}, "cache_status": {"cache_path"},
                   "cache_clear": {"cache_path", "session_id"}}
     if operation in ("events", "brief", "search"):
         applicable[operation].add("indexed")
@@ -111,7 +115,11 @@ def read(arguments: dict) -> dict:
                 event_id = arguments.get("event_id")
                 if not event_id:
                     return _error("invalid_input", "source requires event_id", 2)
-                result = query.source_event(index, event_id)
+                # Room for the fields added below, so a chunk still fits.
+                reserve = len(json.dumps({"schema": SCHEMA, "status": "partial", "exit_status": 1,
+                                          "operation": operation, "errors": []}).encode("utf-8"))
+                result = query.source_event(index, event_id, since_cursor=arguments.get("since_cursor"),
+                                            reserve=reserve, fits=query.source_renders if render else None)
             else:
                 query._validate(arguments.get("limit", 20), arguments.get("kind"),
                                 arguments.get("query") if operation == "search" else None)
@@ -229,8 +237,9 @@ def _parser() -> argparse.ArgumentParser:
     show.add_argument("--chars", type=int, default=8000)
     show.add_argument("--cache-path")
     show.add_argument("--json", action="store_true")
-    source = sub.add_parser("source")
+    source = sub.add_parser("source", help="the records an event cites; long ones arrive in exact chunks")
     source.add_argument("--event", dest="event_id", required=True)
+    source.add_argument("--since-cursor", help="continue from the previous response's next_cursor")
     source.add_argument("--cache-path")
     source.add_argument("--json", action="store_true")
     cache = sub.add_parser("cache")
@@ -257,7 +266,7 @@ def main(argv: list[str] | None = None) -> int:
         return result["exit_status"]
     if operation in ("events", "brief"):
         args["indexed"] = True
-    result = read({"operation": operation, **args})
+    result = read({"operation": operation, **args}, render=not as_json)
     if as_json:
         print(json.dumps(result, ensure_ascii=False))
     elif result["status"] == "error":

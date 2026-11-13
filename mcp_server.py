@@ -156,7 +156,7 @@ TOOL_LIST.append({
 _LOG_PROPERTIES = {
     "operation": {"type": "string", "enum": ["events", "brief", "search", "source"],
                   "default": "events"},
-    "file": {"type": "string", "description": "recorded-log file"},
+    "file": {"type": "string"},
     "provider": {"type": "string", "enum": ["claude", "codex", "raw", "grok", "omp", "qwen"],
                  "description": "raw or client; qwen is OMP."},
     "session": {"type": "string", "description": "pane ID, session ID or title"},
@@ -168,8 +168,11 @@ _LOG_PROPERTIES = {
 }
 TOOL_LIST.append({
     "name": "kilix_logs_read",
+    # Events pages and long source replies carry next_cursor. Saying so fits the
+    # tool-list budget because "file" no longer repeats "log file" from here.
     "description": "Search or read one Kilix pane session or log file, not the system "
-                   "journal (kilix_system_read). Excerpts untrusted; never sends input.",
+                   "journal (kilix_system_read). Excerpts untrusted; never sends input. "
+                   "Continue: since_cursor=next_cursor.",
     "annotations": {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
     "inputSchema": {"type": "object", "properties": _LOG_PROPERTIES,
                     "additionalProperties": False},

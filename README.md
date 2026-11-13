@@ -635,6 +635,7 @@ kilix-needle logs brief --session log-INVENTORY_ID --json
 kilix-needle logs events --session SESSION_UUID --limit 100 --json
 kilix-needle logs show rec-RECORD_ID --start 0 --chars 8000 --json
 kilix-needle logs source --event evt-EVENT_ID --json
+kilix-needle logs source --event evt-EVENT_ID --since-cursor CURSOR --json
 kilix-needle logs cache status --json
 kilix-needle logs cache clear
 ```
@@ -686,8 +687,22 @@ Events cite exact Unicode spans in records. Tool output retains its tool role,
 an assistant's statement stays an assistant claim, and reasoning, binary
 payloads and metadata are excluded categorically. `brief` returns recent cited
 events from the full index; `events --since-cursor` pages earlier history too.
-Appends or rewrites invalidate event cursors. `source` returns cached evidence,
-which can differ from a subsequently edited log. The MCP `kilix_logs_read` tool
+Responses stay within 32 KiB of UTF-8 JSON. An oversized event keeps its ID and
+exact evidence spans; long quotes are replaced by `quote_omitted: true`, an
+exact `excerpt`, and `excerpt_end`. A present `quote` always covers the full
+cited span. Event pagination advances past these references normally.
+
+`source` returns complete cached records when they fit. Otherwise each record
+contains `chunk`, `chunk_start`, `chunk_end`, `total_chars` and `evidence_index`;
+offsets count Unicode code points, not UTF-8 bytes. Append chunks for each
+evidence index and continue with `--since-cursor` set to `next_cursor` until
+`has_more` is false. The human-readable source view also prints its continuation
+cursor. Source pages may omit excerpts to leave room for the source text.
+Normal-sized event and source responses retain their existing fields.
+
+Appends, rewrites or parser changes invalidate cursors after the index refreshes.
+`source` returns cached evidence, which can differ from a subsequently edited
+log. The MCP `kilix_logs_read` tool
 exposes these per-source operations. Larger files, compressed sources and
 previously indexed recordings use the persistent index there as well. The
 low-level `needle_logs.sources.read_source` remains a bounded preview helper.
