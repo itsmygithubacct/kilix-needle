@@ -457,7 +457,8 @@ def main(argv=None) -> int:
     parser.add_argument("--root", help=argparse.SUPPRESS)
     import commands_selection
     parser.add_argument('--commands-backend', choices=commands_selection.BACKENDS,
-                        help='command interpreter (saved preference, otherwise lfm2); grammar skips model loading')
+                        help='command interpreter (saved preference; otherwise lfm2 when it is '
+                             'installed, else grammar); grammar skips model loading')
     parser.add_argument('--commands-candidate', help='override the installed Needle3 model with a verified local candidate manifest')
     parser.add_argument('--commands-bundle', help='local LFM2 bundle matching the selected release pins')
     parser.add_argument('--commands-manifest', help='explicit LFM2 artifact manifest for a local bundle')
@@ -466,7 +467,7 @@ def main(argv=None) -> int:
     parser.add_argument('--operation-id', help='reuse an incomplete command operation without replaying actions')
     args = parser.parse_args(argv)
     try:
-        args.commands_backend = commands_selection.resolve(args.commands_backend)
+        args.commands_backend, chosen_by = commands_selection.choice(args.commands_backend, args.root)
     except (OSError, ValueError) as error:
         parser.error(str(error))
     request = " ".join(args.request).strip()
@@ -518,6 +519,12 @@ def main(argv=None) -> int:
     except Exception as error:      # noqa: BLE001 - engines and assets fail with a message
         print(f"kilix-needle ask: {error}", file=sys.stderr)
         status = 2 if not args.interactive else 1
+    if status == NO_JOB and chosen_by == 'not-installed' and not (args.agent or args.json):
+        # Nothing was chosen and the release model is absent, so only the grammar
+        # read this. Say so once; a saved or explicit grammar choice says nothing.
+        print("kilix-needle ask: the LFM2 command model is not installed, so only the grammar "
+              "read this request. `kilix ask` at a terminal offers the download; "
+              "`kilix-needle workflows setup --model lfm2` installs it.", file=sys.stderr)
     if args.interactive and args.hold and sys.stdin.isatty():
         try:
             input("Press Enter to close.")

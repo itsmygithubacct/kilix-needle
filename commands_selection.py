@@ -8,7 +8,12 @@ import tempfile
 import state
 
 BACKENDS = ('lfm2', 'lfm3', 'needle3', 'grammar')
+# The release command model. It is the default only on a machine that has it:
+# nothing here downloads it, and without it Ask reads requests with the grammar.
 DEFAULT = 'lfm2'
+FALLBACK = 'grammar'
+# Where a choice came from, most specific first.
+SOURCES = ('option', 'environment', 'saved', 'installed', 'not-installed')
 ASSETS = {'lfm3': 'lfm3-kilix-commands', 'lfm2': 'lfm2-kilix-commands', 'needle3': 'needle3-kilix-commands'}
 SCHEMA = 'kilix.ask.selection/v1'
 REPAIR = ('choose a model for this request with --commands-backend (kilix ask --model) '
@@ -42,25 +47,65 @@ def _saved(path):
         os.close(fd)
 
 
-def resolve(explicit=None):
-    """Explicit option, environment, saved preference, then the release default.
+def installed(backend=DEFAULT, root=None):
+    """Whether this release's model for ``backend`` is installed and covered.
 
-    Reading a preference never creates state or loads a model. An explicit
-    choice can also repair an invalid saved preference, which is refused
-    with that guidance rather than rewritten.
+    Read-only and cheap: the pinned catalog asset, a platform its runtime
+    supports, its install directory with every member present at its manifest
+    size, and a covering receipt. No file
+    is hashed here (loading the model verifies every byte), nothing is created,
+    and any doubt is "no", so an unreadable install never selects a model.
     """
+    if backend not in ASSETS:
+        return False
+    try:
+        import asset
+        import workflows
+        content, first_use, lic = asset._content()
+        spec = content.verified_packaged_catalog().require_asset(ASSETS[backend])
+        verify_catalog(backend, spec)
+        require_platform(backend)
+        destination = workflows._content_root(root) / 'assets' / spec.install_name
+        if destination.is_symlink() or not destination.is_dir():
+            return False
+        for item in spec.files:
+            info = os.lstat(destination / item.path)
+            if not stat.S_ISREG(info.st_mode) or info.st_size != item.bytes:
+                return False
+        return not first_use.needs_agreement(
+            spec, records=lic.load_determined_records(), store=workflows._readonly_store(lic))
+    except Exception:       # noqa: BLE001 - every failure means "not installed"
+        return False
+
+
+def choice(explicit=None, root=None):
+    """The backend and where it came from: one of ``SOURCES``.
+
+    Explicit option, environment, saved preference, then the release model when
+    it is installed, otherwise the grammar. Reading never creates state, loads
+    a model or downloads one. An explicit choice can also repair an invalid
+    saved preference, which is refused with that guidance rather than rewritten.
+    """
+    source = 'option' if explicit else 'environment'
     value = explicit or os.environ.get('KILIX_ASK_COMMANDS_BACKEND')
     if not value:
         path = preference_path()
         try:
-            return _saved(path)
+            return _saved(path), 'saved'
         except FileNotFoundError:
-            return DEFAULT
+            if installed(DEFAULT, root):
+                return DEFAULT, 'installed'
+            return FALLBACK, 'not-installed'
         except (OSError, ValueError) as error:
             raise PreferenceError(f'unusable Ask preference {path}: {error}; {REPAIR}') from error
     if value not in BACKENDS:
         raise ValueError('Ask model must be lfm2, lfm3, needle3 or grammar')
-    return value
+    return value, source
+
+
+def resolve(explicit=None, root=None):
+    """The backend ``choice`` selects."""
+    return choice(explicit, root)[0]
 
 
 def save(backend):

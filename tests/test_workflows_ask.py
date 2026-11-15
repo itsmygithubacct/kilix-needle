@@ -34,7 +34,12 @@ class PreferenceFixture(unittest.TestCase):
 
 class AskSelectionTests(PreferenceFixture):
     def test_reading_default_or_grammar_does_not_create_or_load_anything(self):
-        self.assertEqual(commands_selection.resolve(), 'lfm2')
+        # Nothing chosen and no model on this machine: the grammar, read from
+        # the real catalog and receipt store without creating either.
+        self.assertEqual(commands_selection.choice(), ('grammar', 'not-installed'))
+        self.assertEqual(commands_selection.resolve(), 'grammar')
+        self.assertFalse(commands_selection.installed())
+        self.assertEqual(list(self.base.iterdir()), [])
         with patch.object(asset, '_content', side_effect=AssertionError('no assets')):
             result = workflows.status(model='grammar')
         self.assertTrue(result['ready'])
@@ -44,10 +49,10 @@ class AskSelectionTests(PreferenceFixture):
 
     def test_explicit_environment_saved_default_precedence(self):
         commands_selection.save('needle3')
-        self.assertEqual(commands_selection.resolve(), 'needle3')
+        self.assertEqual(commands_selection.choice(), ('needle3', 'saved'))
         with patch.dict(os.environ, {'KILIX_ASK_COMMANDS_BACKEND': 'lfm2'}):
-            self.assertEqual(commands_selection.resolve(), 'lfm2')
-            self.assertEqual(commands_selection.resolve('grammar'), 'grammar')
+            self.assertEqual(commands_selection.choice(), ('lfm2', 'environment'))
+            self.assertEqual(commands_selection.choice('grammar'), ('grammar', 'option'))
         self.assertEqual(commands_selection.preference_path().stat().st_mode & 0o777, 0o600)
 
     def test_invalid_preference_refuses_but_explicit_choice_can_repair_it(self):
@@ -133,6 +138,62 @@ class AskSelectionTests(PreferenceFixture):
             self.assertEqual(workflows.setup(stdin=io.StringIO(), stdout=io.StringIO())['backend'], 'grammar')
             self.assertEqual((path.read_bytes(), path.stat().st_ino), saved)
 
+    def test_a_missing_model_is_never_chosen_by_default_and_an_explicit_one_still_is(self):
+        with patch.object(asset, '_content', side_effect=AssertionError('unreadable catalog')):
+            self.assertEqual(commands_selection.choice(), ('grammar', 'not-installed'))
+            self.assertEqual(commands_selection.choice('lfm2'), ('lfm2', 'option'))
+        commands_selection.save('lfm2')
+        with patch.object(commands_selection, 'installed', side_effect=AssertionError('not consulted')):
+            self.assertEqual(commands_selection.choice(), ('lfm2', 'saved'))
+        result = workflows.status()
+        self.assertEqual((result['backend'], result['selection'], result['offer']), ('lfm2', 'saved', None))
+        self.assertFalse(result['ready'])
+
+    def test_status_and_choice_name_the_stand_in_grammar_and_the_offer(self):
+        result = workflows.status()
+        self.assertEqual((result['ready'], result['backend'], result['selection'], result['offer']),
+                         (True, 'grammar', 'not-installed', 'lfm2'))
+        self.assertEqual(result['required_assets'], [])
+        self.assertIn('not installed', result['detail'])
+        self.assertIn('workflows setup --model lfm2', result['detail'])
+        chosen = workflows.status(model='grammar')
+        self.assertEqual((chosen['selection'], chosen['offer']), ('option', None))
+        self.assertNotIn('not installed', chosen['detail'])
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(workflows.main(['choice']), 0)
+        self.assertEqual(output.getvalue(), 'grammar not-installed\n')
+        commands_selection.save('grammar')
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(workflows.main(['choice']), 0)
+        self.assertEqual(output.getvalue(), 'grammar saved\n')
+        commands_selection.preference_path().write_text('{}')
+        with contextlib.redirect_stdout(io.StringIO()) as output, \
+                contextlib.redirect_stderr(io.StringIO()) as error:
+            self.assertEqual(workflows.main(['choice']), 1)
+        self.assertEqual(output.getvalue(), '')
+        self.assertIn('workflows select --model', error.getvalue())
+        self.assertEqual(sorted(path.name for path in self.base.iterdir()), ['state'])
+
+    def test_ask_without_a_choice_or_model_reads_with_the_grammar_and_says_so_on_a_miss(self):
+        plan = {'status': 0, 'items': [{'outcome': 'would', 'step': {'kind': 'app'}}]}
+        with patch('commands_models.Providers.get', side_effect=AssertionError('no model')), \
+                patch('compact_runner.run', return_value=plan), \
+                contextlib.redirect_stdout(io.StringIO()) as output, \
+                contextlib.redirect_stderr(io.StringIO()) as error:
+            self.assertEqual(ask.main(['--plan', '--json', 'open calculator']), 0)
+        self.assertEqual(json.loads(output.getvalue().splitlines()[-1])['interpretation'], 'grammar')
+        self.assertEqual(error.getvalue(), '')
+        self.assertFalse((self.base / 'content').exists())
+        self.assertFalse((self.base / 'receipts').exists())
+        for options, hinted in (([], True), (['--commands-backend', 'grammar'], False)):
+            with patch.object(ask, 'cli_jobs', return_value=(None, contextlib.ExitStack())), \
+                    patch.object(ask, 'ask', return_value={'status': 1, 'route': {'stage': 0, 'job': 'none'}}), \
+                    patch.object(ask, 'render', return_value=''), \
+                    contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(io.StringIO()) as error:
+                self.assertEqual(ask.main([*options, '--yes', 'paint the fence']), ask.NO_JOB)
+            self.assertEqual('LFM2 command model is not installed' in error.getvalue(), hinted)
+
     def test_real_catalog_missing_models_need_their_own_agreement_without_writes(self):
         for backend, asset_id in commands_selection.ASSETS.items():
             with self.subTest(backend=backend):
@@ -173,24 +234,57 @@ class AskAssetTests(PreferenceFixture):
         old = self.install('lfm2')
         spec = self.specs[commands_selection.ASSETS['lfm2']]
         spec.install_name = spec.asset_id + '--' + hashlib.sha256(self.payload).hexdigest()
-        self.assertEqual(workflows.status()['assets'][0]['state'], 'missing')
+        self.assertEqual(workflows.status(model='lfm2')['assets'][0]['state'], 'missing')
+        # Nothing chosen: an earlier delivery's bytes do not select the model.
+        fallback = workflows.status()
+        self.assertEqual((fallback['ready'], fallback['backend'], fallback['selection'], fallback['offer']),
+                         (True, 'grammar', 'not-installed', 'lfm2'))
         self.assertFalse(old.parent.with_name(spec.install_name).exists())
         new = self.install('lfm2')
         result = workflows.status()
         self.assertTrue(result['ready'])
+        self.assertEqual((result['backend'], result['selection'], result['offer']), ('lfm2', 'installed', None))
         self.assertEqual(result['assets'][0]['path'], str(new.parent))
         self.assertEqual(old.read_bytes(), self.payload)
 
     def test_each_backend_checks_its_own_bytes_and_not_the_other_models(self):
         self.install('needle3')
-        self.assertFalse(workflows.status()['ready'])
+        self.assertFalse(workflows.status(model='lfm2')['ready'])
+        # Another model's bytes never make LFM2 the default.
+        self.assertEqual(commands_selection.choice(), ('grammar', 'not-installed'))
         self.assertTrue(workflows.status(model='needle3')['ready'])
         path = self.install('lfm2')
         with patch.object(workflows, '_model_status', side_effect=AssertionError('legacy is separate')):
             self.assertTrue(workflows.status()['ready'])
-        path.write_bytes(b'corrupt')
+        self.assertEqual(commands_selection.choice(), ('lfm2', 'installed'))
+        # Same size, other bytes: still the default, and reported corrupt, never run.
+        path.write_bytes(bytes(len(self.payload)))
         self.assertEqual(workflows.status()['assets'][0]['state'], 'corrupt')
+        # A member of the wrong size is not an installed model at all.
+        path.write_bytes(b'corrupt')
+        self.assertEqual(commands_selection.choice(), ('grammar', 'not-installed'))
+        self.assertEqual(workflows.status(model='lfm2')['assets'][0]['state'], 'corrupt')
         self.assertTrue(workflows.status(model='needle3')['ready'])
+
+    def test_the_installed_default_needs_a_receipt_a_real_directory_and_a_supported_platform(self):
+        path = self.install('lfm2')
+        self.assertTrue(commands_selection.installed())
+        self.agreement.return_value = True
+        self.assertEqual(commands_selection.choice(), ('grammar', 'not-installed'))
+        self.agreement.return_value = False
+        with patch.object(commands_selection, 'require_platform', side_effect=ValueError('unsupported CPU')):
+            self.assertEqual(commands_selection.choice(), ('grammar', 'not-installed'))
+        moved = path.parent.with_name('elsewhere')
+        path.parent.rename(moved)
+        path.parent.symlink_to(moved)
+        self.assertEqual(commands_selection.choice(), ('grammar', 'not-installed'))
+        path.parent.unlink()
+        moved.rename(path.parent)
+        path.unlink()
+        path.symlink_to(moved.with_name('payload-elsewhere'))
+        self.assertEqual(commands_selection.choice(), ('grammar', 'not-installed'))
+        self.assertFalse(commands_selection.installed('grammar'))
+        self.assertFalse(commands_selection.preference_path().exists())
 
     def test_ready_bytes_never_substitute_for_consent(self):
         for backend in commands_selection.ASSETS:
@@ -215,9 +309,10 @@ class AskAssetTests(PreferenceFixture):
     def test_release_pin_or_platform_mismatch_cannot_be_selected(self):
         self.install('lfm2')
         self.specs[commands_selection.ASSETS['lfm2']].version = 'wrong'
-        self.assertIn('pins differ', workflows.status()['errors'][0])
+        self.assertIn('pins differ', workflows.status(model='lfm2')['errors'][0])
+        self.assertEqual(commands_selection.choice(), ('grammar', 'not-installed'))
         with patch.object(commands_selection, 'require_platform', side_effect=ValueError('unsupported CPU')):
-            self.assertIn('unsupported CPU', workflows.status()['errors'])
+            self.assertIn('unsupported CPU', workflows.status(model='lfm2')['errors'])
         self.assertFalse(commands_selection.preference_path().exists())
 
     def test_setup_installs_only_selected_asset_then_saves_it(self):
@@ -248,9 +343,22 @@ class AskAssetTests(PreferenceFixture):
         with patch.object(asset, 'install', side_effect=acquire):
             return workflows.setup(model=model, stdin=Terminal(), stdout=Terminal())
 
-    def test_implicit_default_setup_prepares_lfm2_without_saving(self):
-        result = self.setup_acquiring('lfm2')
-        self.assertEqual((result['ready'], result['backend']), (True, 'lfm2'))
+    def test_implicit_setup_without_the_model_stays_on_grammar_and_acquires_nothing(self):
+        from test_workflows import Terminal
+        with patch.object(asset, 'install', side_effect=AssertionError('no acquisition')):
+            result = workflows.setup(stdin=Terminal(), stdout=Terminal())
+        self.assertEqual((result['ready'], result['backend'], result['selection']),
+                         (True, 'grammar', 'not-installed'))
+        self.assertFalse(commands_selection.preference_path().exists())
+        self.assertFalse(self.root.exists())
+
+    def test_implicit_setup_with_the_model_installed_verifies_lfm2_without_saving(self):
+        from test_workflows import Terminal
+        self.install('lfm2')
+        with patch.object(asset, 'install', side_effect=AssertionError('no acquisition')):
+            result = workflows.setup(stdin=Terminal(), stdout=Terminal())
+        self.assertEqual((result['ready'], result['backend'], result['selection']),
+                         (True, 'lfm2', 'installed'))
         self.assertFalse(commands_selection.preference_path().exists())
 
     def test_environment_only_setup_never_creates_or_changes_the_preference(self):

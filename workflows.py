@@ -21,6 +21,11 @@ MAX_JSON = 16_384
 _SHA = re.compile(r"[0-9a-f]{64}\Z")
 
 
+# Said when nothing was chosen and the release model is not on this machine.
+NOT_INSTALLED = ("Ask grammar is ready. The LFM2 command model is not installed; "
+                 "`kilix-needle workflows setup --model lfm2` shows its terms and downloads it.")
+
+
 class WorkflowError(RuntimeError):
     pass
 
@@ -188,11 +193,15 @@ def _inspect_asset(spec, root: Path, first_use, records, store) -> dict:
     return row
 
 
-def status(root: str | None = None, *, model=None, legacy=False) -> dict:
-    """No engine, acquisition, receipt writes, directory creation or migration."""
+def status(root: str | None = None, *, model=None, legacy=False, selection=None) -> dict:
+    """No engine, acquisition, receipt writes, directory creation or migration.
+
+    ``selection`` is where a caller that already resolved ``model`` got it from,
+    so a resolved default is not reported as an explicit option.
+    """
     models, required = [], []
     assets, errors = [], []
-    backend = None
+    backend = source = None
     try:
         if legacy:
             if model is not None:
@@ -200,7 +209,8 @@ def status(root: str | None = None, *, model=None, legacy=False) -> dict:
             models, runtime = _model_status()
             required = [asset.ASSET_ID] + ([asset.RUNTIME_ID] if runtime else [])
         else:
-            backend = commands_selection.resolve(model)
+            backend, source = commands_selection.choice(model, root)
+            source = selection or source
             required = [commands_selection.ASSETS[backend]] if backend != 'grammar' else []
             commands_selection.require_platform(backend)
         if required:
@@ -226,9 +236,15 @@ def status(root: str | None = None, *, model=None, legacy=False) -> dict:
     result = {"schema": SCHEMA, "ready": ready, "status": "ready" if ready else "not-ready",
               "scope": "legacy" if legacy else "ask", "backend": backend, "grammar_ready": True,
               "detail": ("Legacy Needle workflow assets are verified." if legacy else
+                         NOT_INSTALLED if source == 'not-installed' else
                          "Ask grammar is ready; no model download is needed." if backend == 'grammar' else
                          f"Ask {backend} model files and licence are verified.") if ready else "Workflow model setup needs attention.",
               "required_assets": required, "assets": assets, "models": models, "errors": errors}
+    if not legacy:
+        # Where the backend came from. "not-installed" is the grammar standing in
+        # for the release model, which is the one case a caller may offer it.
+        result["selection"] = source
+        result["offer"] = commands_selection.DEFAULT if source == 'not-installed' else None
     if len(json.dumps(result, ensure_ascii=True).encode()) > MAX_JSON:
         result.update(ready=False, status="not-ready", detail="Workflow status exceeds its output limit.", assets=[], models=[], errors=["status output exceeded 16 KiB"])
     return result
@@ -240,10 +256,11 @@ def setup(root: str | None = None, *, model=None, legacy=False, stdin=None, stdo
     # prepares whatever the environment, saved preference or default resolves
     # and leaves the saved preference exactly as it was.
     explicit = bool(model)
+    selection = None
     if not legacy:
-        model = commands_selection.resolve(model)
+        model, selection = commands_selection.choice(model, root)
         if model == 'grammar':
-            result = select(model, root) if explicit else _ready(model, root)
+            result = select(model, root) if explicit else _ready(model, root, selection)
             print(result['detail'], file=stdout)
             return result
     if not (stdin.isatty() and stdout.isatty()):
@@ -262,7 +279,8 @@ def setup(root: str | None = None, *, model=None, legacy=False, stdin=None, stdo
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as error:
             raise WorkflowError("workflow setup is already running for this Content root; finish or close that terminal before retrying") from error
-        result = _setup_locked(str(directory), model=model, legacy=legacy, stdin=stdin, stdout=stdout)
+        result = _setup_locked(str(directory), model=model, legacy=legacy, selection=selection,
+                               stdin=stdin, stdout=stdout)
         if not legacy and explicit:
             commands_selection.save(model)
         return result
@@ -270,8 +288,8 @@ def setup(root: str | None = None, *, model=None, legacy=False, stdin=None, stdo
         os.close(fd)
 
 
-def _setup_locked(root: str, *, model=None, legacy=False, stdin, stdout) -> dict:
-    before = status(root, model=model, legacy=legacy)
+def _setup_locked(root: str, *, model=None, legacy=False, selection=None, stdin, stdout) -> dict:
+    before = status(root, model=model, legacy=legacy, selection=selection)
     invalid = [row["error"] for row in before["models"] if row["state"] != "ready"]
     invalid.extend(row["error"] for row in before["assets"] if row["state"] in ("corrupt", "unavailable"))
     if invalid or not before["assets"] or (legacy and os.environ.get("KILIX_NEEDLE_ENGINE")):
@@ -292,15 +310,15 @@ def _setup_locked(root: str, *, model=None, legacy=False, stdin, stdout) -> dict
                 content.Installer(asset.content_root(root)).ensure_upstream_asset(
                     spec, store=store, records=records, notices=notices,
                     report=lambda message: print(message, file=stdout))
-    after = status(root, model=model, legacy=legacy)
+    after = status(root, model=model, legacy=legacy, selection=selection)
     if not after["ready"]:
         raise WorkflowError("; ".join(after["errors"]) or after["detail"])
     print(after["detail"], file=stdout)
     return after
 
 
-def _ready(model, root=None):
-    result = status(root, model=model)
+def _ready(model, root=None, selection=None):
+    result = status(root, model=model, selection=selection)
     if not result['ready']:
         raise WorkflowError('; '.join(result['errors']) or result['detail'])
     return result
@@ -327,11 +345,23 @@ def main(argv: list[str] | None = None) -> int:
                           help='Ask model; defaults to the current Ask choice. '
                                'Setup saves only an explicit --model')
         mode.add_argument('--legacy', action='store_true', help='check or set up the older Needle2 job models')
+    which = commands.add_parser('choice', help='print the Ask backend and where it came from; '
+                                               'no writes, downloads or file hashing')
+    which.add_argument('--root', help='absolute Content root (normally supplied by Kilix)')
     choose = commands.add_parser('select', help='save a ready Ask backend without downloads')
     choose.add_argument('--model', required=True, choices=commands_selection.BACKENDS)
     choose.add_argument('--root')
     choose.add_argument('--json', action='store_true')
     args = parser.parse_args(argv)
+    if args.command == 'choice':
+        # One line, "BACKEND SOURCE", for callers that decide whether to offer
+        # the release model. An unusable saved preference is exit 1.
+        try:
+            print(' '.join(commands_selection.choice(None, args.root)))
+        except (OSError, ValueError) as error:
+            print(f"Workflow setup failed: {str(error)[:4096]}", file=sys.stderr)
+            return 1
+        return 0
     if args.command == "status":
         result = status(args.root, model=args.model, legacy=args.legacy)
         print(json.dumps(result, ensure_ascii=True, sort_keys=True) if args.json else result["detail"] + ("\n" + "\n".join(result["errors"]) if result["errors"] else ""))

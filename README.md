@@ -60,7 +60,9 @@ selection, release pins and Content installer:
 
 ```sh
 kilix-needle workflows status --json   # read-only; exit 0 ready, 1 needs attention
+kilix-needle workflows choice         # "BACKEND SOURCE": the Ask backend and why
 kilix-needle workflows setup          # set up the current choice; saves nothing
+kilix-needle workflows setup --model lfm2     # show LFM2's terms, download, select
 kilix-needle workflows setup --model needle3  # install and select the alternate
 kilix-needle workflows setup --model grammar  # select grammar; no download
 kilix-needle workflows select --model lfm2    # select an already installed model
@@ -68,21 +70,30 @@ kilix-needle workflows status --legacy --json # older Needle2 jobs, separately
 ```
 
 Only an explicit `--model` is saved, and only after that model is ready.
-Setup without it prepares the model chosen by `KILIX_ASK_COMMANDS_BACKEND`,
-the saved preference or the default, and leaves the saved preference unchanged.
+Setup without it prepares the model chosen by `KILIX_ASK_COMMANDS_BACKEND` or
+the saved preference, and leaves the saved preference unchanged. With neither,
+the choice is LFM2 on a machine that has it installed and the grammar on one
+that does not, so setup without `--model` never downloads LFM2 unasked.
+`workflows choice` prints that backend and its source (`option`,
+`environment`, `saved`, `installed` or `not-installed`) on one line. It writes
+nothing and hashes no file.
 An unreadable or invalid saved preference is refused and left as it is; the
 error names the explicit model option and the `workflows select` repair.
 
 Kilix supplies `KILIX_CONTENT_ROOT`; a standalone call may pass `--root` with
 an absolute Content root. Status emits at most 16 KiB of JSON with schema
 `kilix.workflows/v1`, `ready`, `status` (`ready` or `not-ready`), `detail`,
-`scope`, `backend`, `grammar_ready`, `required_assets`, `assets`, `models`, and `errors`. Each asset reports `id`,
+`scope`, `backend`, `grammar_ready`, `required_assets`, `assets`, `models`, and `errors`. An Ask status also has
+`selection`, the source `workflows choice` prints, and `offer`, which is `lfm2`
+when the grammar is standing in for the model that is not installed and null
+otherwise. Each asset reports `id`,
 `version`, `path`, `state` (`ready`, `missing`, `corrupt`, `agreement-required`,
 or `unavailable`), and `error`. Model rows report `kind`, `job`, `state`, and
 `error`. Readiness verifies the current catalog, shared licence receipts and
 all installed member bytes; it starts no engine and writes nothing.
 
-LFM2 is the default Ask backend. An explicit model option overrides
+LFM2 is the default Ask backend where it is installed, and the grammar is
+the default where it is not. An explicit model option overrides
 `KILIX_ASK_COMMANDS_BACKEND`, which overrides the saved Workflows preference.
 Setup saves that preference only after its assets pass verification; `select`
 checks and saves without installing. Grammar needs no model, licence or Content
@@ -187,16 +198,24 @@ the fast path and validate every model proposal against the same complete
 request. All four modes keep the other Ask jobs' deterministic parsing; their
 older generative fallbacks are disabled. The routing classifier remains in use.
 Set `KILIX_ASK_COMMANDS_BACKEND` to select a mode for the `kilix ask` launcher.
-Without an override, Ask selects LFM2. An empty setting also uses that default.
-The grammar fast path works without loading the model. Model requests need the
-installed, licensed bundle; `install --commands` shows its full terms before
-installation. LFM2's terms, including its commercial-use limitation, are a
+Without an override or a saved selection, Ask uses LFM2 when this release's
+bundle is installed with its receipt, and the grammar when it is not. An empty
+setting means the same. Ask never downloads the model on its own: `kilix ask`
+at a terminal offers it once, and the Kilix model wizard's Kilix Ask page
+offers it too. Declining either saves the grammar as the selection, so the
+question is not repeated. A request the stand-in grammar cannot read says that
+the model is not installed. The grammar fast path works without loading the
+model. Model requests need the installed bundle; `install --commands` and
+`workflows setup --model lfm2` show its full terms before installation. LFM2's terms, including its commercial-use limitation, are a
 notice by the owner's 2026-11-07 determination: the install is confirmed, and
 no agreement is typed or recorded. The selected CPU runtime requires x86-64
 Linux.
 
-The pinned LFM2 delivery is `lfm2-kilix-commands-20261106-v9`, with weight
-revision `lfm2-kilix-v5e1-wse-20261106.9`. It retains the fine-tuned V5 lineage
+The pinned LFM2 delivery is `lfm2-kilix-commands-20261115-v10`, with weight
+revision `lfm2-kilix-v5e1-wse-20261106.9`. Its model file and runtime build are
+those of `lfm2-kilix-commands-20261106-v9`, byte for byte; v10 ships each
+versioned runtime library once, under the name the other runtime files load,
+instead of three times. It retains the fine-tuned V5 lineage
 and changes output rows 568 and 8110 of `20261106.8`; all internal tensors, the
 prompt and the CPU runtime remain unchanged. The repair uses regularized
 output-row optimization on frozen activations with analytic gradients. The
@@ -207,8 +226,9 @@ and licence record that the Plebian-OS image installs.
 New installations use a manifest-specific directory, preserving earlier model
 bytes and receipts for catalog rollback. `.21` remains available as the rollback
 release. A previous receipt does not silently authorize a new manifest.
-Plebian-OS 0.2.3 rc1 stages the verified archive during installation or upgrade;
-first selection still follows the model's own licence terms.
+Plebian-OS 0.2.3 does not carry the archive on its installation media and
+does not download it during an upgrade. The model arrives only when the user
+asks for it, and installation still shows the model's own licence terms.
 
 ### LFM2 benchmark: upstream, V5, .21 and .8
 
@@ -236,7 +256,8 @@ The [earlier stage-by-stage benchmark](docs/lfm2-output-format-benchmark.md) and
 application revisions and results; they do not describe the current default.
 
 Install the Needle 3 alternate with `kilix-needle install --commands needle3`,
-then use `kilix ask --model needle3 "open calculator"`. LFM2 remains the default.
+then use `kilix ask --model needle3 "open calculator"`. LFM2 remains the default
+on a machine that has it installed.
 For subsequent requests, set `export KILIX_ASK_COMMANDS_BACKEND=needle3` in your
 shell (or its startup file to keep the preference). `--model lfm2` selects LFM2
 for one request without changing that preference; `--model grammar` uses no model.
@@ -251,7 +272,7 @@ LFM3-1.7B is an optional model for Plebian-OS 0.2.3 rc1. Install it with
 `kilix-needle workflows select --model lfm3`. It uses unchanged upstream Q8_0
 weights and a pinned LFM3-compatible CPU runtime. It has not been fine-tuned
 for Kilix. The full model terms and runtime notices accompany the bundle under
-`notices/`; LFM2 remains the default. Adding the model does not establish
+`notices/`; LFM2 remains the default where it is installed. Adding the model does not establish
 benchmark superiority or qualify an OS release.
 
 Needle 3 prepares its fixed tool prefix once when an owned runtime starts. The

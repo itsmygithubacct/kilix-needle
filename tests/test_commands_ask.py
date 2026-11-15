@@ -3,6 +3,7 @@ import argparse
 from contextlib import redirect_stderr, redirect_stdout
 import io
 import os
+from pathlib import Path
 import unittest
 from unittest.mock import Mock, patch
 
@@ -23,6 +24,8 @@ class AskCommands(unittest.TestCase):
         plan = {'status': 0, 'items': [{'outcome': 'would', 'step': {'kind': 'app'}}]}
         for setting in (None, ''):
             with self.subTest(setting=setting), patch.dict(os.environ), \
+                    patch('commands_selection.installed', return_value=True), \
+                    patch('commands_selection.preference_path', return_value=Path('/nonexistent/kilix-ask/ask.json')), \
                     patch('commands_runtime.Runtime', return_value=runtime) as factory, \
                     patch.object(compact_runner, 'run', return_value=plan), \
                     redirect_stdout(io.StringIO()):
@@ -32,6 +35,22 @@ class AskCommands(unittest.TestCase):
                     os.environ['KILIX_ASK_COMMANDS_BACKEND'] = setting
                 self.assertEqual(ask.main(['--commands-model-only', '--plan', 'open calculator']), 0)
                 factory.assert_called_once_with(None, None, manifest=None, backend='lfm2')
+
+    def test_default_cli_without_the_installed_model_loads_none(self):
+        plan = {'status': 0, 'items': [{'outcome': 'would', 'step': {'kind': 'app'}}]}
+        with patch.dict(os.environ, {'KILIX_ASK_COMMANDS_BACKEND': ''}), \
+                patch('commands_selection.installed', return_value=False), \
+                patch('commands_selection.preference_path', return_value=Path('/nonexistent/kilix-ask/ask.json')), \
+                patch('commands_runtime.Runtime') as factory, \
+                patch.object(compact_runner, 'run', return_value=plan), \
+                redirect_stdout(io.StringIO()):
+            self.assertEqual(ask.main(['--plan', 'open calculator']), 0)
+            # Measuring model proposals needs a model; the stand-in grammar has none.
+            with redirect_stderr(io.StringIO()) as error, self.assertRaises(SystemExit) as refused:
+                ask.main(['--commands-model-only', '--plan', 'open calculator'])
+            self.assertEqual(refused.exception.code, 2)
+            self.assertIn('--commands-model-only needs', error.getvalue())
+            factory.assert_not_called()
 
     def test_grammar_override_keeps_model_loading_disabled(self):
         plan = {'status': 0, 'items': [{'outcome': 'would', 'step': {'kind': 'app'}}]}
