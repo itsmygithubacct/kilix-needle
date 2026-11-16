@@ -489,6 +489,15 @@ def _read_calls(request, *, _depth=0, _bare=False):
     return [call for call, _meta in parts] if parts else None
 
 
+# A separator that ends a sentence or a step (";", "then") rather than joining
+# a list ("," or "and"). A verbless launch after it is its own request.
+def _sequence(separator):
+    return ';' in separator or separator.strip(' ,').casefold() == 'then'
+
+
+# A right side that opens a new clause of its own: a request preamble
+# ("please", "can you", "I'd like to") or "I need a new ...".
+_OWN_CLAUSE = re.compile(r'(?:please|(?:can|could|would|will)\s+you|I\s+(?:want|need|would\s+like)|I[\'’]d\s+like)\b', re.I)
 _GROUP_FIELDS = frozenset({'directory', 'place'})
 _AGENT_CALLS = ('start_claude', 'start_codex', 'wait_for_agent', 'message_agent')
 
@@ -549,6 +558,7 @@ def _read_parts(request, *, _depth=0, _bare=False):
         launches = all(c['name'].startswith('start_') for c in first)
         left_bare = any(x['name'].startswith('start_') and 'model' not in x['arguments'] for x in first)
         bare = _bare or left_bare
+        sequence = _sequence(separator[0])
         rest=_read_parts(right,_depth=_depth+1,_bare=bare)
         shared_verb = (word in ('and', 'and then') and launches
                        and re.match(r'^(?:(?:a|an|the|new|fresh)\s+)*(?:claude|codex)\b',right,re.I))
@@ -606,8 +616,9 @@ def _read_parts(request, *, _depth=0, _bare=False):
         first = [_call(first[0]['name'], **lead)] + first[1:]
         # Retain the integration base's model-scope guard across nested splits.
         head_call, head_meta = rest[0]
-        own_verb = re.match(_LAUNCH_VERB+r'\s',right[_PREAMBLE.match(right).end():],re.I)
-        if (bare and not own_verb and 'model' in head_call['arguments']
+        own_clause = (sequence or re.match(_LAUNCH_VERB+r'\s',right[_PREAMBLE.match(right).end():],re.I)
+                      or _OWN_CLAUSE.match(right))
+        if (bare and not own_clause and 'model' in head_call['arguments']
                 and not head_meta.get('inside')):
             return None
         if left_meta.get('front') and group:

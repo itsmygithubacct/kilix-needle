@@ -217,6 +217,28 @@ class CommandGrammar(unittest.TestCase):
             with self.subTest(request=request):
                 self.assertIsNone(contract.exact_calls(request))
 
+    def test_a_verbless_launch_in_a_clause_of_its_own_keeps_its_model(self):
+        # Gap 4 (0.2.3): after ";" or "then", or opening with "please" or
+        # "I need", a launch is a request of its own, so its model is its own.
+        second = [call('start_codex', directory='/a'), call('start_codex', directory='/b', model='gpt-6')]
+        for request in ('start codex in /a; a new codex session in /b using gpt-6',
+                        'start codex in /a then a new codex session in /b using gpt-6',
+                        'start codex in /a, then a new codex session in /b using gpt-6',
+                        'start codex in /a and please a new codex session in /b using gpt-6',
+                        'start codex in /a and I need a new codex in /b using gpt-6',
+                        'start codex in /a; I need a new codex in /b using gpt-6'):
+            with self.subTest(request=request):
+                self.check(request, second)
+        self.check('start codex in /a and open the calculator; a new codex session, model gpt-6', [
+            call('start_codex', directory='/a'), call('open_app', app='kilix-calculator'),
+            call('start_codex', model='gpt-6')])
+        # After "and" (or "and then") a verbless launch still shares the verb.
+        for request in ('start codex in /a and a new codex session in /b using gpt-6',
+                        'start codex in /a and then a new codex session in /b using gpt-6',
+                        'start codex in /a; open the calculator and a new codex session using gpt-6'):
+            with self.subTest(request=request):
+                self.assertIsNone(contract.exact_calls(request))
+
     def test_a_model_is_not_read_across_a_removed_location_or_placement(self):
         for request in ('start codex model in /w gpt-6', 'start codex --model on the right gpt-6',
                         'start codex model here gpt-6', 'start codex using in /w gpt-6',
