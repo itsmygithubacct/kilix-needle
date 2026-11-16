@@ -53,8 +53,10 @@ def installed(backend=DEFAULT, root=None):
     Read-only and cheap: the pinned catalog asset, a platform its runtime
     supports, its install directory with every member present at its manifest
     size, and a covering receipt. No file
-    is hashed here (loading the model verifies every byte), nothing is created,
-    and any doubt is "no", so an unreadable install never selects a model.
+    is hashed here, and nothing is created. A missing, short or uncovered
+    install is "no" and Ask uses the grammar. An install whose files have the
+    right sizes and the wrong bytes is "yes": loading verifies every byte, so
+    such a model is refused there with an error and is never run.
     """
     if backend not in ASSETS:
         return False

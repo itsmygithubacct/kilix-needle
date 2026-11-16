@@ -201,9 +201,12 @@ Set `KILIX_ASK_COMMANDS_BACKEND` to select a mode for the `kilix ask` launcher.
 Without an override or a saved selection, Ask uses LFM2 when this release's
 bundle is installed with its receipt, and the grammar when it is not. An empty
 setting means the same. Ask never downloads the model on its own: `kilix ask`
-at a terminal offers it once, and the Kilix model wizard's Kilix Ask page
-offers it too. Declining either saves the grammar as the selection, so the
-question is not repeated. A request the stand-in grammar cannot read says that
+at a terminal asks whether to install it, and the Kilix model wizard's Kilix
+Ask page offers it too. Declining at `kilix ask` saves the grammar as the
+selection. Declining on the wizard page is recorded by the wizard, and the
+next `kilix ask` at a terminal saves the grammar without asking. Either way
+the question is not repeated; an unanswered or failed offer is made again on a
+later run. A request the stand-in grammar cannot read says that
 the model is not installed. The grammar fast path works without loading the
 model. Model requests need the installed bundle; `install --commands` and
 `workflows setup --model lfm2` show its full terms before installation. LFM2's terms, including its commercial-use limitation, are a
@@ -227,8 +230,14 @@ New installations use a manifest-specific directory, preserving earlier model
 bytes and receipts for catalog rollback. `.21` remains available as the rollback
 release. A previous receipt does not silently authorize a new manifest.
 Plebian-OS 0.2.3 does not carry the archive on its installation media and
-does not download it during an upgrade. The model arrives only when the user
-asks for it, and installation still shows the model's own licence terms.
+does not download it during an upgrade. A download happens only when the user
+asks for the model, and that installation shows the model's own licence terms.
+Installing a delivery reuses the files of an earlier delivery already on the
+machine when they verify against the new manifest, so moving from
+`lfm2-kilix-commands-20261106-v9` needs no download. The earlier copy is kept.
+`tools/build_delivery.py` is the program that built the v10 archive from the
+extracted v9 delivery; it is deterministic and checks every kept file against
+its source.
 
 ### LFM2 benchmark: upstream, V5, .21 and .8
 

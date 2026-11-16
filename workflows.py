@@ -22,8 +22,10 @@ _SHA = re.compile(r"[0-9a-f]{64}\Z")
 
 
 # Said when nothing was chosen and the release model is not on this machine.
-NOT_INSTALLED = ("Ask grammar is ready. The LFM2 command model is not installed; "
-                 "`kilix-needle workflows setup --model lfm2` shows its terms and downloads it.")
+NOT_INSTALLED = ("Ask grammar is ready. This release's LFM2 command model is not installed; "
+                 "`kilix-needle workflows setup --model lfm2` shows its terms and installs it, "
+                 "from an earlier delivery on this computer when its files verify and "
+                 "otherwise by download.")
 
 
 class WorkflowError(RuntimeError):

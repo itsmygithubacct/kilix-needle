@@ -522,9 +522,10 @@ def main(argv=None) -> int:
     if status == NO_JOB and chosen_by == 'not-installed' and not (args.agent or args.json):
         # Nothing was chosen and the release model is absent, so only the grammar
         # read this. Say so once; a saved or explicit grammar choice says nothing.
-        print("kilix-needle ask: the LFM2 command model is not installed, so only the grammar "
-              "read this request. `kilix ask` at a terminal offers the download; "
-              "`kilix-needle workflows setup --model lfm2` installs it.", file=sys.stderr)
+        print("kilix-needle ask: this release's LFM2 command model is not installed, so only "
+              "the grammar read this request. `kilix ask` at a terminal asks whether to "
+              "install it; `kilix-needle workflows setup --model lfm2` installs it.",
+              file=sys.stderr)
     if args.interactive and args.hold and sys.stdin.isatty():
         try:
             input("Press Enter to close.")
