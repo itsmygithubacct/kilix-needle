@@ -136,6 +136,60 @@ class CommandGrammar(unittest.TestCase):
             call('start_codex', model='gpt-6'), call('open_app', app='kilix-calculator'),
             call('start_codex', model='gpt-6.1-sol')])
 
+    def test_one_directory_or_placement_for_launches_that_share_a_verb(self):
+        # Gap 2 (0.2.3): stated once after launches that share one verb and state
+        # nothing else, a directory or placement is each launch's.
+        both = lambda **args: [call('start_codex', **args), call('start_claude', **args)]
+        self.check('start codex and claude in /w', both(directory='/w'))
+        self.check('start codex and claude to the right', both(place='right'))
+        self.check('start codex and claude in /w to the right', both(directory='/w', place='right'))
+        self.check('start codex and a new claude session in /w', both(directory='/w'))
+        self.check('start codex and claude and codex in /w',
+                   both(directory='/w') + [call('start_codex', directory='/w')])
+        self.check('start codex and claude in /w and open the calculator',
+                   both(directory='/w') + [call('open_app', app='kilix-calculator')])
+        self.check('open the calculator and start codex and claude in /w',
+                   [call('open_app', app='kilix-calculator')] + both(directory='/w'))
+        # A fronted directory scopes the launches that share its verb.
+        self.check('in /w, start codex and claude', both(directory='/w'))
+        self.check('in /w, start codex and open the calculator', [
+            call('start_codex', directory='/w'), call('open_app', app='kilix-calculator')])
+        self.check('in /w, start codex; start claude in /v', [
+            call('start_codex', directory='/w'), call('start_claude', directory='/v')])
+        # Only launches that share the verb are compared; a later action with
+        # its own verb keeps its own reading.
+        self.check('start codex in /a and claude in /b; open the calculator', [
+            call('start_codex', directory='/a'), call('start_claude', directory='/b'),
+            call('open_app', app='kilix-calculator')])
+        self.check('start codex and claude; start codex in /c', both() + [call('start_codex', directory='/c')])
+        self.check('start codex in /a and claude in /b; start codex using gpt-6', [
+            call('start_codex', directory='/a'), call('start_claude', directory='/b'),
+            call('start_codex', model='gpt-6')])
+        # Unchanged per-launch readings.
+        self.check('start codex here and claude in /w', [call('start_codex'), call('start_claude', directory='/w')])
+        self.check('start codex in /a and claude', [call('start_codex', directory='/a'), call('start_claude')])
+        for request in (
+                # A launch states its own field beside one that does not.
+                'start codex in /a and claude to the right',
+                'start codex to the right and claude in /w',
+                'start codex and claude in /w and codex',
+                'start codex and claude in /w and codex in /v',
+                # A sequence, a singular "its", a task or a model are not shared.
+                'start codex and then claude in /w',
+                'start codex and claude with /w as its working directory',
+                'start codex and claude with task "x"',
+                'start codex and claude gpt-6',
+                # A fronted directory, then an agent action that states none.
+                'in /w, start codex and then claude',
+                'in /w, start codex and then start claude',
+                'in /w, start codex; start claude',
+                'in /w, start codex and claude in /v',
+                'in /w, start codex and claude to the right',
+                'in /w, start codex and wait for codex',
+                'in /w, start codex; tell claude: hi'):
+            with self.subTest(request=request):
+                self.assertIsNone(contract.exact_calls(request))
+
     def test_a_model_is_not_read_across_a_removed_location_or_placement(self):
         for request in ('start codex model in /w gpt-6', 'start codex --model on the right gpt-6',
                         'start codex model here gpt-6', 'start codex using in /w gpt-6',

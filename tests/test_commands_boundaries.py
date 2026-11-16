@@ -128,10 +128,15 @@ class CommandBoundaries(unittest.TestCase):
         self.check('Start Claude and Codex.', [call('start_claude'), call('start_codex')])
         self.check('Start Claude here and Codex in /projects/a.', [
             call('start_claude'), call('start_codex', directory='/projects/a')])
-        for text in ('Start Claude and Codex in /projects/a',
-                     'Start a new Claude session and a new Codex session in /projects/a.',
-                     'Start Claude on the left and Codex in /projects/a',
-                     'Start Claude and Codex on the right',
+        # One directory or placement after launches that share a verb and
+        # state nothing else is every launch's (0.2.3).
+        self.check('Start Claude and Codex in /projects/a', [
+            call('start_claude', directory='/projects/a'), call('start_codex', directory='/projects/a')])
+        self.check('Start a new Claude session and a new Codex session in /projects/a.', [
+            call('start_claude', directory='/projects/a'), call('start_codex', directory='/projects/a')])
+        self.check('Start Claude and Codex on the right', [
+            call('start_claude', place='right'), call('start_codex', place='right')])
+        for text in ('Start Claude on the left and Codex in /projects/a',
                      'Start Claude and Codex with task "inspect"'):
             self.refuse(text)
 

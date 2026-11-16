@@ -199,8 +199,12 @@ def _payload(text, *, closed=False):
     return text
 
 
-def _extended_agent_calls(request, *, closed_payload=False):
-    """Parse explicit fields without normalizing the literal task or message."""
+def _extended_agent_calls(request, *, closed_payload=False, _meta=None):
+    """Parse explicit fields without normalizing the literal task or message.
+
+    _meta, when given, receives how a launch was said, for the scope rules
+    in _read_parts: whether its directory was fronted ("in /w, start ...").
+    """
     text = request.strip()
     preamble = _PREAMBLE.match(text)
     polite = bool(re.search(r'\b(?:can|could|would|will)\s+you\b', preamble[0], re.I))
@@ -310,6 +314,8 @@ def _extended_agent_calls(request, *, closed_payload=False):
         if idle and task is not None:
             return None
         if rest.replace('\0',' ').strip(' ,.!'):return None
+        if _meta is not None:
+            _meta.update(front=front_directory is not None)
         return [_call('start_'+head['agent'].casefold(),**args)]
 
     # A fronted location scopes one explicit launch, never an implicit action.
@@ -474,25 +480,49 @@ def exact_calls(request, *, _depth=0, _bare=False):
 
 
 def _read_calls(request, *, _depth=0, _bare=False):
+    parts = _read_parts(request, _depth=_depth, _bare=_bare)
+    return [call for call, _meta in parts] if parts else None
+
+
+_GROUP_FIELDS = frozenset({'directory', 'place'})
+_AGENT_CALLS = ('start_claude', 'start_codex', 'wait_for_agent', 'message_agent')
+
+
+def _leaf(calls, meta=None):
+    meta = meta or {}
+    return [(call, {'shares': False, **meta}) for call in calls]
+
+
+def _read_parts(request, *, _depth=0, _bare=False):
+    """The reading as (call, meta) parts. meta['shares']: the call shares the
+    verb of the call before it ("start codex and claude"); the other keys come
+    from _extended_agent_calls.
+
+    _bare: a launch earlier in the whole request states no model.
+    """
     if (not isinstance(request,str) or not request.strip() or len(request)>2048 or _depth>3
             or any(unicodedata.category(ch) in ('Cc','Cf','Zl','Zp') for ch in request)):
         return None
-    found = _extended_agent_calls(request) or _app_calls(request)
+    meta = {}
+    found = _extended_agent_calls(request, _meta=meta) or _app_calls(request)
     # Fully matched actions without an open payload cannot swallow a clause.
     if found and (not any('task' in c['arguments'] or 'text' in c['arguments'] for c in found)
                   or _extended_agent_calls(request, closed_payload=True)):
-        return found
+        return _leaf(found, meta if len(found) == 1 else None)
     pair=re.fullmatch(r'give me\s+(claude|codex)\s+in\s+('+_DIRECTORY+r')\s+plus\s+(claude|codex)\s+in\s+('+_DIRECTORY+r')',request,re.I)
     if pair:
         first,second=_literal(pair[2]),_literal(pair[4], sentence_end=True)
         if first and second:
-            return [_call('start_'+pair[1].casefold(),directory=first),_call('start_'+pair[3].casefold(),directory=second)]
+            return [(_call('start_'+pair[1].casefold(),directory=first), {'shares': False}),
+                    (_call('start_'+pair[3].casefold(),directory=second), {'shares': True})]
     for separator in _SEPARATOR.finditer(request):
         if not _outside_quotes(request,separator.start()):continue
         left,right=request[:separator.start()].strip(),request[separator.end():].strip()
-        first=_extended_agent_calls(left) or _app_calls(left)
+        left_meta = {}
+        first=_extended_agent_calls(left, _meta=left_meta) or _app_calls(left)
         if not first:continue
-        if (separator[0].strip().casefold()=='and'
+        word = separator[0].strip(' ,').casefold()
+        if (word=='and'
                 and all(c['name'].startswith('start_') for c in first)
                 and re.match(r'^(?:ask it to|give it this task:)\s+',right,re.I)):
             continue  # A task delimiter belonging to this launch, not a second action.
@@ -511,29 +541,68 @@ def _read_calls(request, *, _depth=0, _bare=False):
                             r'do not|don[\x27’]t|if|unless)\b',right,re.I):
                     return None
                 continue
-        bare=_bare or any(x['name'].startswith('start_') and 'model' not in x['arguments'] for x in first)
-        rest=exact_calls(right,_depth=_depth+1,_bare=bare)
-        shared_verb = (separator[0].strip(' ,').casefold() in ('and', 'and then')
-                       and all(c['name'].startswith('start_') for c in first)
+        launches = all(c['name'].startswith('start_') for c in first)
+        left_bare = any(x['name'].startswith('start_') and 'model' not in x['arguments'] for x in first)
+        bare = _bare or left_bare
+        rest=_read_parts(right,_depth=_depth+1,_bare=bare)
+        shared_verb = (word in ('and', 'and then') and launches
                        and re.match(r'^(?:(?:a|an|the|new|fresh)\s+)*(?:claude|codex)\b',right,re.I))
-        if (not rest and separator[0].strip(' ,').casefold() in ('and', 'and then')
-                and all(x['name'].startswith('start_') for x in first)
+        if (not rest and word in ('and', 'and then') and launches
                 and re.match(r'^(?:claude|codex)\b', right, re.I)):
-            rest=exact_calls('start '+right,_depth=_depth+1,_bare=bare)
-        # A trailing field on a shared verb might apply to both agents.
-        # Require explicit fields on both sides instead of guessing scope.
-        explicit_fields = set(first[0]['arguments'])
-        if any(_outside_quotes(left, m.start()) for m in _LOCATION.finditer(left)):
-            explicit_fields.add('directory')  # An explicit "here" omits the call's default.
-        if shared_verb and rest and any(set(c['arguments'])-explicit_fields for c in rest):
+            rest=_read_parts('start '+right,_depth=_depth+1,_bare=bare)
+        if not rest or len(first)+len(rest)>4:
             return None
-        if rest and len(first+rest)<=4:
-            # Retain the integration base's model-scope guard across nested splits.
-            own_verb=re.match(_LAUNCH_VERB+r'\s',right[_PREAMBLE.match(right).end():],re.I)
-            if bare and not own_verb and 'model' in rest[0]['arguments']:return None
-            return first+rest
-        return None
-    return found
+        rest = [(rest[0][0], {**rest[0][1], 'shares': bool(shared_verb)})] + rest[1:]
+        lead = dict(first[0]['arguments'])
+        group = 0       # how many calls of rest share the left launch's verb
+        if shared_verb:
+            group = 1
+            while group < len(rest) and rest[group][1]['shares']:
+                group += 1
+            # A field the left launch does not state may be meant for every
+            # launch that shares the verb. Fields stated on both sides are
+            # each launch's own.
+            explicit_fields = set(lead)
+            if any(_outside_quotes(left, m.start()) for m in _LOCATION.finditer(left)):
+                explicit_fields.add('directory')  # An explicit "here" omits the call's default.
+            members = [call['arguments'] for call, _meta in rest[:group]]
+            extra = set().union(*(set(args) - explicit_fields for args in members))
+            if not extra:
+                pass
+            elif (not explicit_fields and word == 'and' and members[0]
+                    and set(members[0]) <= _GROUP_FIELDS
+                    and all(args == members[0] for args in members)
+                    and not re.search(r'\bas\s+its\s+working\s+directory\b', right, re.I)):
+                # One directory or placement after a list of launches that share
+                # a verb and state nothing else applies to all of them:
+                # "start codex and claude in /w".
+                lead = dict(members[0])
+            else:
+                return None
+        if left_meta.get('front'):
+            # "in /w, start codex and claude": a fronted directory scopes the
+            # launches that share its verb when they state nothing themselves.
+            # Any other agent action after it must state its own directory,
+            # since the fronted one may be meant for it too.
+            for index, (call, _meta) in enumerate(rest):
+                if call['name'] not in _AGENT_CALLS:
+                    continue
+                if index < group:
+                    if word != 'and' or call['arguments']:
+                        return None
+                elif 'directory' not in call['arguments']:
+                    return None
+        first = [_call(first[0]['name'], **lead)] + first[1:]
+        # Retain the integration base's model-scope guard across nested splits.
+        head_call = rest[0][0]
+        own_verb = re.match(_LAUNCH_VERB+r'\s',right[_PREAMBLE.match(right).end():],re.I)
+        if bare and not own_verb and 'model' in head_call['arguments']:
+            return None
+        if left_meta.get('front') and group:
+            rest = [(_call(call['name'], **{**call['arguments'], 'directory': lead['directory']}), m)
+                    if index < group else (call, m) for index, (call, m) in enumerate(rest)]
+        return _leaf(first, left_meta) + rest
+    return _leaf(found, meta if len(found) == 1 else None) if found else None
 
 
 def _canonical(calls, cwd=None):
