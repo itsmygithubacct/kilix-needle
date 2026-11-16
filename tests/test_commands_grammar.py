@@ -190,6 +190,33 @@ class CommandGrammar(unittest.TestCase):
             with self.subTest(request=request):
                 self.assertIsNone(contract.exact_calls(request))
 
+    def test_a_model_before_a_verb_sharing_launchs_own_field_is_its_own(self):
+        # Gap 3 (0.2.3): a model followed by the launch's own directory or
+        # placement, of a kind the left launch also states, is that launch's.
+        self.check('start codex in /a and codex using gpt-6 in /b', [
+            call('start_codex', directory='/a'), call('start_codex', directory='/b', model='gpt-6')])
+        self.check('start codex in /a and codex gpt-6 in /b', [
+            call('start_codex', directory='/a'), call('start_codex', directory='/b', model='gpt-6')])
+        self.check('start codex to the right and codex using gpt-6 to the left', [
+            call('start_codex', place='right'), call('start_codex', place='left', model='gpt-6')])
+        self.check('start codex in /a and a new codex session using gpt-6 in /b', [
+            call('start_codex', directory='/a'), call('start_codex', directory='/b', model='gpt-6')])
+        self.check('start codex in /a and codex using gpt-6 in /b and claude in /c', [
+            call('start_codex', directory='/a'), call('start_codex', directory='/b', model='gpt-6'),
+            call('start_claude', directory='/c')])
+        for request in (
+                # The left launch states no directory, so "in /a" may be shared.
+                'start codex and codex using gpt-6 in /a',
+                # The placement is of a kind the left launch does not state.
+                'start codex in /a and codex with model gpt-6 to the right',
+                # The model trails its launch.
+                'start codex in /a and codex in /b using gpt-6',
+                'start codex in /a and then a new codex session in /b using gpt-6',
+                # "in /c" after a launch with only a model may be shared.
+                'start codex in /a and codex using gpt-6 and claude in /c'):
+            with self.subTest(request=request):
+                self.assertIsNone(contract.exact_calls(request))
+
     def test_a_model_is_not_read_across_a_removed_location_or_placement(self):
         for request in ('start codex model in /w gpt-6', 'start codex --model on the right gpt-6',
                         'start codex model here gpt-6', 'start codex using in /w gpt-6',

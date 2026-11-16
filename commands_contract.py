@@ -203,7 +203,9 @@ def _extended_agent_calls(request, *, closed_payload=False, _meta=None):
     """Parse explicit fields without normalizing the literal task or message.
 
     _meta, when given, receives how a launch was said, for the scope rules
-    in _read_parts: whether its directory was fronted ("in /w, start ...").
+    in _read_parts: whether its directory was fronted ("in /w, start ...")
+    and whether its own directory or placement follows its model (the model
+    is inside the launch).
     """
     text = request.strip()
     preamble = _PREAMBLE.match(text)
@@ -307,15 +309,18 @@ def _extended_agent_calls(request, *, closed_payload=False, _meta=None):
             if 'place' in args:return None
             args['place']=bare_place
         model = _MODEL.search(rest)
+        inside = False
         if model:
             args['model']=model[1]
+            # A removed directory or placement after the model is the launch's own.
+            inside = '\0' in rest[model.end():]
             rest=rest[:model.start()]+' '+rest[model.end():]
         rest, idle = _without_idle_clause(rest)
         if idle and task is not None:
             return None
         if rest.replace('\0',' ').strip(' ,.!'):return None
         if _meta is not None:
-            _meta.update(front=front_directory is not None)
+            _meta.update(front=front_directory is not None, inside=inside)
         return [_call('start_'+head['agent'].casefold(),**args)]
 
     # A fronted location scopes one explicit launch, never an implicit action.
@@ -577,6 +582,12 @@ def _read_parts(request, *, _depth=0, _bare=False):
                 # a verb and state nothing else applies to all of them:
                 # "start codex and claude in /w".
                 lead = dict(members[0])
+            elif extra == {'model'} and all(
+                    m.get('inside') for call, m in rest[:group] if 'model' in call['arguments']):
+                # A model followed by the launch's own directory or placement,
+                # of a kind the left launch also states, is that launch's own:
+                # "start codex in /a and codex using gpt-6 in /b".
+                pass
             else:
                 return None
         if left_meta.get('front'):
@@ -594,9 +605,10 @@ def _read_parts(request, *, _depth=0, _bare=False):
                     return None
         first = [_call(first[0]['name'], **lead)] + first[1:]
         # Retain the integration base's model-scope guard across nested splits.
-        head_call = rest[0][0]
+        head_call, head_meta = rest[0]
         own_verb = re.match(_LAUNCH_VERB+r'\s',right[_PREAMBLE.match(right).end():],re.I)
-        if bare and not own_verb and 'model' in head_call['arguments']:
+        if (bare and not own_verb and 'model' in head_call['arguments']
+                and not head_meta.get('inside')):
             return None
         if left_meta.get('front') and group:
             rest = [(_call(call['name'], **{**call['arguments'], 'directory': lead['directory']}), m)
