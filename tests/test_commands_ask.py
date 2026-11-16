@@ -2,8 +2,11 @@ import support
 import argparse
 from contextlib import redirect_stderr, redirect_stdout
 import io
+import json
 import os
 from pathlib import Path
+import shutil
+import stat
 import unittest
 from unittest.mock import Mock, patch
 
@@ -12,6 +15,7 @@ import commands_ask
 import commands_contract
 import commands_policy
 import compact_runner
+import history
 import needle_cli
 
 
@@ -113,6 +117,57 @@ class AskCommands(unittest.TestCase):
             self.assertEqual(record['calls'], wanted)
             self.assertEqual(record['route']['job'], 'agents')
             self.assertEqual(run.call_args.args[0], 'start codex in /w with model gpt-6.1-sol')
+
+    def test_labelled_and_job_requests_are_recorded_like_unlabelled_ones(self):
+        # Every form below is answered by the command session, which writes no
+        # history itself; ask records each once, as it records the unlabelled one.
+        shutil.rmtree(history.directory(), ignore_errors=True)
+        self.addCleanup(shutil.rmtree, history.directory(), True)
+        planned = {'status': 0, 'items': [{'outcome': 'would', 'step': {'kind': 'agent'}}]}
+        path = history.directory() / 'requests.jsonl'
+
+        def entries():
+            return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+        forms = (('start codex in /w', None), ('agents: start codex in /w', None),
+                 ('start codex in /w', 'agents'), ('agents: start codex in /w', 'agents'))
+        with patch.dict(os.environ), patch.object(compact_runner, 'run', return_value=planned):
+            os.environ.pop('KILIX_NEEDLE_HISTORY', None)
+            for text, job in forms:
+                ask.ask(text, self.jobs(commands_ask.Session()), act=False, job=job)
+            ask.ask('agents: start codex in /w', self.jobs(commands_ask.Session()), act=True,
+                    assume_yes=True, route=ask.router.Route('forced', 'agents'))
+            recorded = entries()
+            os.environ['KILIX_NEEDLE_HISTORY'] = '0'
+            ask.ask('agents: start codex in /w', self.jobs(commands_ask.Session()), act=False)
+        self.assertEqual(entries(), recorded)       # the same switch turns it off
+        self.assertEqual([e['request'] for e in recorded],
+                         [text for text, _job in forms] + ['agents: start codex in /w'])
+        self.assertEqual([e.get('checked') for e in recorded],
+                         [None, 'start codex in /w', None, 'start codex in /w', 'start codex in /w'])
+        self.assertEqual([e['route'] for e in recorded], [
+            {'stage': 0, 'job': 'commands'},
+            {'stage': 'forced', 'job': 'agents', 'note': 'the request names the agents job'},
+            {'stage': 'forced', 'job': 'agents'},
+            {'stage': 'forced', 'job': 'agents', 'note': 'the request names the agents job'},
+            {'stage': 'forced', 'job': 'agents'}])
+        self.assertEqual([e['dry_run'] for e in recorded], [True] * 4 + [False])
+        # Nothing the unlabelled entry does not hold: the same fields and values.
+        keep = lambda e: {k: v for k, v in e.items() if k not in ('time', 'request', 'request_chars', 'checked', 'route', 'dry_run', 'ms')}
+        self.assertEqual([keep(e) for e in recorded], [keep(recorded[0])] * 5)
+        self.assertEqual((recorded[0]['job'], recorded[0]['engine'], recorded[0]['calls']),
+                         ('ask', 'router', None))
+        self.assertEqual(stat.S_IMODE(history.directory().stat().st_mode), 0o700)
+        self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+
+    def test_a_forced_job_the_command_session_does_not_answer_is_not_recorded_twice(self):
+        # The legacy job's engine records its own request; ask adds nothing.
+        jobs = self.jobs(commands_ask.Session())
+        with patch.object(needle_cli, 'run_request', return_value={'status': 1, 'items': []}), \
+                patch.object(history, 'record') as record:
+            jobs.engine = Mock(return_value=commands_ask.NoProposal())
+            ask.ask('close the left pane', jobs, act=False, job='panes')
+        record.assert_not_called()
 
     def test_wrong_model_proposal_never_substitutes_grammar_or_reaches_host(self):
         provider = Mock()

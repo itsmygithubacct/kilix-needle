@@ -187,6 +187,7 @@ def ask(request: str, jobs: Jobs, *, act: bool, assume_yes: bool = False,
     and consent. A clarification or a router error never acts."""
     if not isinstance(request, str) or not request.strip():
         raise ValueError("ask needs a request")
+    given = request
     named, request = labelled(request)
     if named is not None:
         chosen = route.job if route is not None else job
@@ -225,8 +226,14 @@ def ask(request: str, jobs: Jobs, *, act: bool, assume_yes: bool = False,
         elif route.job in router.NAMED:
             record = _named(route.job, request)
         else:
+            # A labelled or --job request that the command session answers is
+            # recorded as the unlabelled one is (the job's own engines record
+            # the rest), with the label kept as given.
+            recorded = commands is not None and commands.recognizes(request)
             with history.routed(route.record()):
                 record = jobs.run(route.job, request, dry_run=not act, assume_yes=assume_yes)
+                if recorded:
+                    _record_unsure(given, record, act, checked=request)
         record["route"] = route.record()
         return record
     if route.stage == "multi":
@@ -281,12 +288,13 @@ def ask(request: str, jobs: Jobs, *, act: bool, assume_yes: bool = False,
     return record
 
 
-def _record_unsure(request: str, record: dict, act: bool) -> None:
-    """A stage-2 or clarified request is recorded once, under the job `ask`."""
+def _record_unsure(request: str, record: dict, act: bool, checked: str | None = None) -> None:
+    """A stage-2, clarified or command-session request is recorded once, under
+    the job `ask`. `checked` is the text the job saw, when a label was removed."""
     try:
         options = type("Options", (), {"agent": True, "dry_run": not act, "assume_yes": False})()
         engine = type("Engine", (), {"label": "router"})()
-        history.record("ask", request, None, engine, None, options, record, 0.0)
+        history.record("ask", request, checked, engine, None, options, record, 0.0)
     except Exception:       # noqa: BLE001
         pass
 
