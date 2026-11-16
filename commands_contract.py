@@ -204,7 +204,8 @@ def _extended_agent_calls(request, *, closed_payload=False, _meta=None):
 
     _meta, when given, receives how a launch was said, for the scope rules
     in _read_parts: whether its directory was fronted ("in /w, start ..."),
-    whether its own directory or placement follows its model (the model is
+    whether it states a location of its own ("here" too, which the call
+    omits), whether its own directory or placement follows its model (the model is
     inside the launch), and whether a comma sets the model off.
     """
     text = request.strip()
@@ -292,6 +293,7 @@ def _extended_agent_calls(request, *, closed_payload=False, _meta=None):
         # Requests never contain NUL: exact_calls refuses control characters.
         rest, directory = _take_location(rest, gap=' \0 ', sentence_end=sentence_end)
         if rest is None:return None
+        located = directory is not None
         if front_directory is not None:
             if directory is not None:return None
             directory = front_directory
@@ -321,7 +323,7 @@ def _extended_agent_calls(request, *, closed_payload=False, _meta=None):
             return None
         if rest.replace('\0',' ').strip(' ,.!'):return None
         if _meta is not None:
-            _meta.update(front=front_directory is not None, inside=inside,
+            _meta.update(front=front_directory is not None, located=located, inside=inside,
                          comma_model=comma and not inside)
         return [_call('start_'+head['agent'].casefold(),**args)]
 
@@ -575,6 +577,7 @@ def _read_parts(request, *, _depth=0, _bare=False, _list_bare=False):
         rest = [(rest[0][0], {**rest[0][1], 'shares': bool(shared_verb)})] + rest[1:]
         lead = dict(first[0]['arguments'])
         group = 0       # how many calls of rest share the left launch's verb
+        shared = False  # a directory reached the group by sharing
         if shared_verb:
             group = 1
             while group < len(rest) and rest[group][1]['shares']:
@@ -597,6 +600,7 @@ def _read_parts(request, *, _depth=0, _bare=False, _list_bare=False):
                 # a verb and state nothing else applies to all of them:
                 # "start codex and claude in /w".
                 lead = dict(members[0])
+                shared = 'directory' in lead
             elif extra == {'model'} and all(
                     m.get('inside') for call, m in rest[:group] if 'model' in call['arguments']):
                 # A model followed by the launch's own directory or placement,
@@ -607,17 +611,22 @@ def _read_parts(request, *, _depth=0, _bare=False, _list_bare=False):
                 return None
         if left_meta.get('front'):
             # "in /w, start codex and claude": a fronted directory scopes the
-            # launches that share its verb when they state nothing themselves.
-            # Any other agent action after it must state its own directory,
-            # since the fronted one may be meant for it too.
-            for index, (call, _meta) in enumerate(rest):
+            # launches that share its verb when they state nothing themselves,
+            # not even "here". Any other agent action after it must state its
+            # own directory, since the fronted one may be meant for it too.
+            for index, (call, m) in enumerate(rest):
                 if call['name'] not in _AGENT_CALLS:
                     continue
                 if index < group:
-                    if word != 'and' or call['arguments']:
+                    if word != 'and' or call['arguments'] or m.get('located'):
                         return None
                 elif 'directory' not in call['arguments']:
                     return None
+        if shared and any(call['name'] in ('wait_for_agent', 'message_agent')
+                          and 'directory' not in call['arguments'] for call, _m in rest[group:]):
+            # "start codex and claude in /w and wait for codex": the wait may be
+            # meant for the codex just started in /w, as after a fronted one.
+            return None
         first = [_call(first[0]['name'], **lead)] + first[1:]
         # Retain the integration base's model-scope guard across nested splits.
         head_call, head_meta = rest[0]

@@ -186,9 +186,28 @@ class CommandGrammar(unittest.TestCase):
                 'in /w, start codex and claude in /v',
                 'in /w, start codex and claude to the right',
                 'in /w, start codex and wait for codex',
-                'in /w, start codex; tell claude: hi'):
+                'in /w, start codex; tell claude: hi',
+                # A member's own "here" is never replaced by the fronted directory.
+                'in /w, start codex and claude here',
+                'in /w, start codex and claude in the current directory',
+                'in ~/w, start claude and codex in this folder',
+                'in /w, start codex and a new claude session here',
+                # After a shared directory, a wait or message that states none
+                # may be meant for an agent just started there.
+                'start codex and claude in /w and wait for codex',
+                'start codex and claude in /w, then tell codex to fix the tests',
+                'start codex and claude in /w; wait for claude',
+                'start codex and claude in /w; send codex: hi',
+                'start codex and claude in /w and open the calculator and wait for codex',
+                'open the calculator and start codex and claude in /w and wait for codex',
+                'start codex and claude and codex in /w and wait for codex'):
             with self.subTest(request=request):
                 self.assertIsNone(contract.exact_calls(request))
+        # A wait that states its directory, or a shared placement only, still reads.
+        self.check('start codex and claude in /w and wait for codex in /w',
+                   both(directory='/w') + [call('wait_for_agent', agent='codex', directory='/w')])
+        self.check('start codex and claude to the right and wait for codex',
+                   both(place='right') + [call('wait_for_agent', agent='codex')])
 
     def test_a_model_before_a_verb_sharing_launchs_own_field_is_its_own(self):
         # Gap 3 (0.2.3): a model followed by the launch's own directory or
@@ -267,6 +286,9 @@ class CommandGrammar(unittest.TestCase):
         self.check('start codex in /a; open the calculator, start codex in /b, model gpt-6', [
             two[0], call('open_app', app='kilix-calculator'), two[1]])
         self.check('start codex in /b, model gpt-6', [two[1]])
+        # A comma-set model followed by the launch's own field is inside it,
+        # as at base: the comma does not set off a trailing model.
+        self.check('start codex in /a, start codex, using gpt-6 in /b', two)
 
     def test_a_model_is_not_read_across_a_removed_location_or_placement(self):
         for request in ('start codex model in /w gpt-6', 'start codex --model on the right gpt-6',
