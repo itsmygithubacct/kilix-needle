@@ -239,6 +239,35 @@ class CommandGrammar(unittest.TestCase):
             with self.subTest(request=request):
                 self.assertIsNone(contract.exact_calls(request))
 
+    def test_a_comma_model_after_a_list_of_launches_refuses(self):
+        # Gap 5 (0.2.3): ", model X" after a comma or "and" list of complete
+        # launches may be meant for each of them when an earlier one states none.
+        for request in ('start codex in /a, start codex in /b, model gpt-6',
+                        'start codex in /a and start codex in /b, model gpt-6',
+                        # "and then" joins a list here, as it does for a shared verb.
+                        'start codex in /a and then start codex in /b, model gpt-6',
+                        'start codex in /a, start codex in /b, --model gpt-6',
+                        'start codex in /a, start codex in /b, using gpt-6',
+                        'start codex in /a, open the calculator, start codex in /b, model gpt-6',
+                        'start codex in /a, start codex in /b, model gpt-6, then open the calculator'):
+            with self.subTest(request=request):
+                self.assertIsNone(contract.exact_calls(request))
+        two = [call('start_codex', directory='/a'), call('start_codex', directory='/b', model='gpt-6')]
+        # Without the comma, after ";" or "then", the model is the last launch's.
+        for request in ('start codex in /a, start codex in /b with model gpt-6',
+                        'start codex in /a; start codex in /b, model gpt-6',
+                        'start codex in /a then start codex in /b, model gpt-6'):
+            with self.subTest(request=request):
+                self.check(request, two)
+        # No earlier launch in the list lacks a model.
+        self.check('start codex gpt-6.1-sol in /a, start codex in /b, model gpt-6', [
+            call('start_codex', directory='/a', model='gpt-6.1-sol'), two[1]])
+        self.check('open the calculator, start codex in /b, model gpt-6', [
+            call('open_app', app='kilix-calculator'), two[1]])
+        self.check('start codex in /a; open the calculator, start codex in /b, model gpt-6', [
+            two[0], call('open_app', app='kilix-calculator'), two[1]])
+        self.check('start codex in /b, model gpt-6', [two[1]])
+
     def test_a_model_is_not_read_across_a_removed_location_or_placement(self):
         for request in ('start codex model in /w gpt-6', 'start codex --model on the right gpt-6',
                         'start codex model here gpt-6', 'start codex using in /w gpt-6',

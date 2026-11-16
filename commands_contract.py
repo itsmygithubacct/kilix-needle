@@ -203,9 +203,9 @@ def _extended_agent_calls(request, *, closed_payload=False, _meta=None):
     """Parse explicit fields without normalizing the literal task or message.
 
     _meta, when given, receives how a launch was said, for the scope rules
-    in _read_parts: whether its directory was fronted ("in /w, start ...")
-    and whether its own directory or placement follows its model (the model
-    is inside the launch).
+    in _read_parts: whether its directory was fronted ("in /w, start ..."),
+    whether its own directory or placement follows its model (the model is
+    inside the launch), and whether a comma sets the model off.
     """
     text = request.strip()
     preamble = _PREAMBLE.match(text)
@@ -309,18 +309,20 @@ def _extended_agent_calls(request, *, closed_payload=False, _meta=None):
             if 'place' in args:return None
             args['place']=bare_place
         model = _MODEL.search(rest)
-        inside = False
+        inside = comma = False
         if model:
             args['model']=model[1]
             # A removed directory or placement after the model is the launch's own.
             inside = '\0' in rest[model.end():]
+            comma = rest[:model.start()].replace('\0',' ').rstrip().endswith(',')
             rest=rest[:model.start()]+' '+rest[model.end():]
         rest, idle = _without_idle_clause(rest)
         if idle and task is not None:
             return None
         if rest.replace('\0',' ').strip(' ,.!'):return None
         if _meta is not None:
-            _meta.update(front=front_directory is not None, inside=inside)
+            _meta.update(front=front_directory is not None, inside=inside,
+                         comma_model=comma and not inside)
         return [_call('start_'+head['agent'].casefold(),**args)]
 
     # A fronted location scopes one explicit launch, never an implicit action.
@@ -490,7 +492,8 @@ def _read_calls(request, *, _depth=0, _bare=False):
 
 
 # A separator that ends a sentence or a step (";", "then") rather than joining
-# a list ("," or "and"). A verbless launch after it is its own request.
+# a list ("," or "and"). A verbless launch after it is its own request, and a
+# model set off by a comma after it cannot be shared with launches before it.
 def _sequence(separator):
     return ';' in separator or separator.strip(' ,').casefold() == 'then'
 
@@ -507,12 +510,13 @@ def _leaf(calls, meta=None):
     return [(call, {'shares': False, **meta}) for call in calls]
 
 
-def _read_parts(request, *, _depth=0, _bare=False):
+def _read_parts(request, *, _depth=0, _bare=False, _list_bare=False):
     """The reading as (call, meta) parts. meta['shares']: the call shares the
     verb of the call before it ("start codex and claude"); the other keys come
     from _extended_agent_calls.
 
     _bare: a launch earlier in the whole request states no model.
+    _list_bare: a launch earlier in the same comma or "and" list states no model.
     """
     if (not isinstance(request,str) or not request.strip() or len(request)>2048 or _depth>3
             or any(unicodedata.category(ch) in ('Cc','Cf','Zl','Zp') for ch in request)):
@@ -559,12 +563,13 @@ def _read_parts(request, *, _depth=0, _bare=False):
         left_bare = any(x['name'].startswith('start_') and 'model' not in x['arguments'] for x in first)
         bare = _bare or left_bare
         sequence = _sequence(separator[0])
-        rest=_read_parts(right,_depth=_depth+1,_bare=bare)
+        list_bare = False if sequence else (_list_bare or left_bare)
+        rest=_read_parts(right,_depth=_depth+1,_bare=bare,_list_bare=list_bare)
         shared_verb = (word in ('and', 'and then') and launches
                        and re.match(r'^(?:(?:a|an|the|new|fresh)\s+)*(?:claude|codex)\b',right,re.I))
         if (not rest and word in ('and', 'and then') and launches
                 and re.match(r'^(?:claude|codex)\b', right, re.I)):
-            rest=_read_parts('start '+right,_depth=_depth+1,_bare=bare)
+            rest=_read_parts('start '+right,_depth=_depth+1,_bare=bare,_list_bare=list_bare)
         if not rest or len(first)+len(rest)>4:
             return None
         rest = [(rest[0][0], {**rest[0][1], 'shares': bool(shared_verb)})] + rest[1:]
@@ -620,6 +625,10 @@ def _read_parts(request, *, _depth=0, _bare=False):
                       or _OWN_CLAUSE.match(right))
         if (bare and not own_clause and 'model' in head_call['arguments']
                 and not head_meta.get('inside')):
+            return None
+        # "start codex in /a, start codex in /b, model gpt-6": a model set off by
+        # a comma at the end of a list may be meant for every launch in it.
+        if list_bare and head_meta.get('comma_model') and 'model' in head_call['arguments']:
             return None
         if left_meta.get('front') and group:
             rest = [(_call(call['name'], **{**call['arguments'], 'directory': lead['directory']}), m)
