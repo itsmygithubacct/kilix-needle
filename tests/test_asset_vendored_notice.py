@@ -94,8 +94,9 @@ class VendoredNotice(unittest.TestCase):
             with self.assertRaises(asset.AssetError) as agreement:
                 asset.installed_asset_dir('lfm3-kilix-commands', root)
         for error in (notice.exception, runtime.exception):
-            self.assertEqual(str(error), 'no receipt records that the lfm2-kilix-commands licence '
-                             'terms were shown; install it with: kilix-needle install --commands')
+            self.assertEqual(str(error), 'no receipt records that the licence terms of this delivery '
+                             'of lfm2-kilix-commands were shown; install it with: '
+                             'kilix-needle install --commands')
         self.assertEqual(str(agreement.exception), 'the lfm3-kilix-commands licence has not been '
                          'accepted; install it with: kilix-needle install --commands lfm3')
 

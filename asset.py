@@ -169,8 +169,10 @@ def _not_covered(asset_id: str, spec, install_hint: str) -> str:
     """
     if spec.licenses[0].decision == "affirmative":
         return f"the {asset_id} licence has not been accepted; {install_hint}"
-    return (f"no receipt records that the {asset_id} licence terms were shown; "
-            f"{install_hint}")
+    # "This delivery": a machine may hold a receipt for an earlier delivery of
+    # the same model, whose terms were shown. Each delivery has its own notice.
+    return (f"no receipt records that the licence terms of this delivery of {asset_id} "
+            f"were shown; {install_hint}")
 
 
 def _installed_spec(asset_id: str, root: str | None):
