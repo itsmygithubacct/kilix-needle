@@ -1,9 +1,9 @@
 {
  "answers_when": "every member proposes the same calls and the checks admit every one of them",
- "bytes": 3182334,
+ "bytes": 3224446,
  "code": {
-  "panes_bundle.py": "dce88d077bf035c52ab67e3598e01f0383de60cc127654d5486b2acfd4f12078",
-  "panes_bundle_train.py": "61ae4bb05087395e73c5a6e9f0945e6cdeea1c3844b34e6243866fab2f2b4b81"
+  "panes_bundle.py": "b110aa5734d59275c1f02f910c21a287d78c971d98521978b6f3c755751e7a0d",
+  "panes_bundle_train.py": "a53049732a9d731a9ab227d0d3f239d5f10380a1d433e96f74c701bfa69460e6"
  },
  "file": "bundle.bin",
  "free_text": [
@@ -34,9 +34,60 @@
    "weights": 598263
   }
  ],
- "name": "v1",
+ "name": "v2",
+ "reads_its_rows": {
+  "answered": 6396,
+  "as_labelled": 6391,
+  "proposed_and_dropped": 15,
+  "risky_and_not_labelled": 0,
+  "rows": 7318
+ },
  "rows": {
   "capped": {},
+  "clauses_max": 2,
+  "closed_words": 27,
+  "copy_max": {
+   "close_pane": {
+    "pane": 1
+   },
+   "close_tab": {
+    "tab": 1
+   },
+   "go_to_pane": {
+    "pane": 1
+   },
+   "go_to_tab": {
+    "tab": 1
+   },
+   "maximize_pane": {
+    "pane": 1
+   },
+   "move_tab": {
+    "position": 1
+   },
+   "open_pane": {
+    "name": 1,
+    "program": 3
+   },
+   "open_tab": {
+    "name": 1,
+    "program": 1
+   },
+   "rename_pane": {
+    "name": 2,
+    "pane": 1
+   },
+   "rename_tab": {
+    "name": 2
+   },
+   "resize_pane": {
+    "amount": 1
+   },
+   "run_in_pane": {
+    "command": 4,
+    "pane": 1
+   }
+  },
   "eval_matches_dropped": 147,
   "exclude": [
    "evals/agents/dev.jsonl",
@@ -94,6 +145,22 @@
    "evals/system/test.jsonl",
    "evals/test.jsonl"
   ],
+  "frames": {
+   "arrange_panes": 676,
+   "close_pane": 193,
+   "close_tab": 168,
+   "go_to_pane": 329,
+   "go_to_tab": 190,
+   "maximize_pane": 226,
+   "move_tab": 53,
+   "open_pane": 563,
+   "open_tab": 263,
+   "rename_pane": 142,
+   "rename_tab": 306,
+   "resize_pane": 365,
+   "run_in_pane": 164,
+   "swap_panes": 373
+  },
   "generated": 6442,
   "inconsistent_dropped": 773,
   "kept": 5669,
@@ -104,6 +171,11 @@
   "rows_skipped": 15,
   "rows_used": 7303,
   "seed": 0,
+  "separators": [
+   ",",
+   "and",
+   "then"
+  ],
   "sha256": "850a87e4c42654e9a7b591c1d674481fe598b034e54510e6511f2e1f022c9a4b",
   "spent": {
    "cases": 2126,
@@ -214,10 +286,11 @@
    "swap_panes_supp.json"
   ],
   "unsupported_dropped": 0,
-  "value_words": 187
+  "value_and_closed_words": 199,
+  "value_words": 188
  },
- "schema": "kilix-needle.panes-bundle-manifest/v2",
- "sha256": "124c491aba1bc041ab3b361254143bbf4de9224c35fccc2b217d90b198b0e5d6",
+ "schema": "kilix-needle.panes-bundle-manifest/v3",
+ "sha256": "6dc46328ab4a536053b25363dda44f546fc8b82d0836a5afac0d9240e508476a",
  "trainer": {
   "dim": 8,
   "epochs": 40,

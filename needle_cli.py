@@ -183,20 +183,58 @@ def bundle_enabled() -> bool:
     return value.strip().lower() in _BUNDLE_ON
 
 
+def _admitted(sentence: str, calls: list):
+    """[(kind, arguments)] if the checks admit every call for this sentence, else None."""
+    results = interpret(sentence, calls)
+    if len(results) != len(calls) or not all(isinstance(result, Action) for result in results):
+        return None
+    return [(result.kind, dict(result.args)) for result in results]
+
+
+def checks_agree(request: str, calls: list, texts: list) -> bool:
+    """Whether a proposal of the panes bundle can be used as it was read.
+
+    The checks must admit every call. And where the bundle read two clauses
+    (`texts`: the clause each call was read from), the checks must admit for
+    each call, shown its clause alone, what they admit shown the whole
+    request. The checks read the whole request and bind what they find in
+    it: a "tab 2" anywhere becomes the tab of a rename, so "rename this tab
+    to api and go to tab 2" would rename tab 2. The bundle read that "tab 2"
+    for the other call. Where the two readings differ, the bundle stands
+    aside."""
+    whole = _admitted(request, calls)
+    if whole is None:
+        return False
+    if len(calls) == 1:
+        return True
+    if len(texts) != len(calls):
+        return False
+    apart = []
+    for call, text in zip(calls, texts):
+        alone = _admitted(text, [call])
+        if alone is None:
+            return False
+        apart += alone
+    return apart == whole
+
+
 def bundle_proposal(request: str):
     """(calls, the bundle's label) when the panes bundle answers, else None.
 
     The bundle answers when it is switched on, knows the request
-    (panes_bundle.read) and the checks admit every call it proposes. In every
-    other case it stands aside and the model reads the request as before."""
+    (panes_bundle.read) and the checks admit every call it proposes, the
+    same for each clause alone as for the whole request (checks_agree). In
+    every other case it stands aside and the model reads the request as
+    before."""
     if not bundle_enabled():
         return None
     import panes_bundle
-    proposed = panes_bundle.read(request)
+    texts: list = []
+    proposed = panes_bundle.read(request, texts)
     if not proposed:
         return None
     calls, label = proposed
-    if not all(isinstance(result, Action) for result in interpret(request, calls)):
+    if not checks_agree(request, calls, texts):
         return None
     return calls, label
 

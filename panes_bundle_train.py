@@ -12,9 +12,13 @@ is what the nets for copied text learn from.
 
 `--spent` adds the cases of the job's spent eval sets (SPENT: dev, test and
 the held-out sets that have gated), as the router is trained on them
-(router-model/README.md). A current gate set (jobs.py) is refused before it
-is opened. A bundle trained this way must not be scored on those sets: the
-manifest lists them under rows.spent.
+(router-model/README.md). A bundle trained this way must not be scored on
+those sets: the manifest lists them under rows.spent.
+
+A current gate set (jobs.py) is never trained on. `--spent` and `--rows`
+refuse one before it is opened. The generator does read every eval file,
+the current gate set among them, as the tuner does: only to keep each of
+their requests out of the rows it makes.
 
 `--per-template N` asks the generator for more examples of each template than
 the tuned model gets. Measured on four held-out sets: it does not help.
@@ -256,12 +260,12 @@ def prepare(row: dict, tools: dict):
     out = []
     for c, (lo, hi) in enumerate(clauses):
         if n == 0:
-            out.append({"range": (lo, hi), "tool": PB.NONE, "labels": {}, "spans": {}})
+            out.append({"range": (lo, hi), "tool": PB.NONE, "labels": {}, "spans": {}, "numbers": set()})
             continue
         tool, args = row["actions"][c]
         if tool not in tools:
             return None
-        labels, spans = {}, {}
+        labels, spans, numbers = {}, {}, set()
         for key, kind, _, _ in tools[tool]["args"]:
             if key not in args:
                 labels[key] = PB.ABSENT
@@ -274,13 +278,43 @@ def prepare(row: dict, tools: dict):
                     continue
                 labels[key] = PB.COPY
                 spans[key] = (place[0] - lo, place[1] - lo)
+                # The copied words stand for a number: "tab two" for tab 2,
+                # where "the tab named two" would be a title.
+                if kind == "int" or (kind == "ref" and str(value).isdigit()):
+                    numbers.add(key)
             elif kind == "flag":
                 labels[key] = "true" if value else PB.ABSENT
             else:
                 labels[key] = str(value)
-        out.append({"range": (lo, hi), "tool": tool, "labels": labels, "spans": spans})
+        out.append({"range": (lo, hi), "tool": tool, "labels": labels, "spans": spans, "numbers": numbers})
     separators = {i for a, b in bounds for i in range(a, b + 1)}
     return {"words": words, "clauses": out, "separators": separators}
+
+
+def ground(prepared: list[dict]) -> dict:
+    """What the reader holds a request to, beside words and pairs: for each
+    tool the frames of its training clauses (PB.frame_of: the clause with
+    each copied text replaced by a mark for its argument), the words that
+    joined two clauses, the largest number of clauses in a row, and for each
+    argument the most words copied for it. A clause with an argument that
+    could not be placed in the request has no frame: its copied words would
+    stand in it as plain words."""
+    frames, separators, most = collections.defaultdict(set), set(), 1
+    longest = collections.defaultdict(dict)
+    for p in prepared:
+        most = max(most, len(p["clauses"]))
+        separators.update(p["words"][i] for i in p["separators"])
+        for clause in p["clauses"]:
+            for key, (a, b) in clause["spans"].items():
+                longest[clause["tool"]][key] = max(longest[clause["tool"]].get(key, 0), b - a + 1)
+            if clause["tool"] == PB.NONE or any(label is None for label in clause["labels"].values()):
+                continue
+            lo, hi = clause["range"]
+            spans = {key: (a, b, key in clause["numbers"]) for key, (a, b) in clause["spans"].items()}
+            frames[clause["tool"]].update(PB.frame_pairs(PB.frame_of(p["words"][lo:hi], spans)))
+    return {"frames": {tool: sorted(pairs) for tool, pairs in frames.items()},
+            "separators": sorted(separators), "clauses_max": most,
+            "copy_max": {tool: dict(sorted(keys.items())) for tool, keys in sorted(longest.items())}}
 
 
 def examples(rows: list[dict], tools: dict) -> tuple[dict, set, set, dict]:
@@ -326,7 +360,8 @@ def examples(rows: list[dict], tools: dict) -> tuple[dict, set, set, dict]:
                     a, b = clause["spans"][key]
                     data.setdefault(f"span {clause['tool']} {key}", []).append(
                         ([PB.word_features(mine, i) for i in range(len(mine))], a, b))
-    return data, known, pairs, {"rows": len(rows), "rows_used": len(prepared), "rows_skipped": skipped}
+    return data, known, pairs, {"rows": len(rows), "rows_used": len(prepared), "rows_skipped": skipped,
+                                "ground": ground(prepared)}
 
 
 def value_words(rows: list[dict]) -> dict:
@@ -351,6 +386,42 @@ def value_words(rows: list[dict]) -> dict:
             seen[word] += 1
             named[word] += PB.stands_for(word, values, canon.get(word, ()))
     return {word: sorted(canon.get(word, ())) for word in sorted(seen) if named[word] == seen[word]}
+
+
+def closed_values() -> set:
+    """Every value of a closed list: the tools' enumerated values (sides,
+    layouts, directions) and the words of place, but not "current", which
+    names the caller's own pane or tab and is as often left out."""
+    from actions import TOOLS
+    values = {value for value in PB.CANON if value != "current"}
+    for tool in TOOLS:
+        for spec in tool["parameters"]["properties"].values():
+            values.update(str(value) for value in spec.get("enum", ()))
+    return values
+
+
+def closed_words(rows: list[dict]) -> dict:
+    """{word: the values it is another word for}, for every word that alone
+    named a value of a closed list in some training row ("top" for above),
+    and for each such value itself. value_words holds the words that named a
+    value every time; these did not ("make the left pane bigger" is labelled
+    as a resize of the caller's pane), and where one names nothing in the
+    answer the reader leaves the request to the model. The values listed for
+    a word are those of every phrase that held it, so "above" in "one above
+    another" is in an answer that arranges the panes in rows."""
+    def words(text):
+        return [t[0].lower() for t in PB.tokenize(str(text))]
+
+    closed = closed_values()
+    canon, alone = collections.defaultdict(set), set(closed)
+    for row in rows:
+        for surface, bound in row["spans"]:
+            held = words(surface)
+            for word in held:
+                canon[word].add(str(bound))
+            if len(held) == 1 and str(bound) in closed:
+                alone.add(held[0])
+    return {word: sorted(canon.get(word, ())) for word in sorted(alone)}
 
 
 def train_member(data: dict, seed: int, log=print) -> dict:
@@ -462,8 +533,36 @@ def same_as_trained(raw: bytes, checks: list[dict]) -> list[dict]:
     return out
 
 
+def reads_its_rows(raw: bytes, rows: list[dict]) -> dict:
+    """The file read as a request meets it (Bundle.read, then the checks as
+    needle_cli.checks_agree holds a proposal to them), on every row it was
+    trained on: how many it answers, how many of those as the row is
+    labelled, and how many with a risky action the row does not hold. The
+    nets are checked one by one in same_as_trained; this checks the reader
+    that stands on them."""
+    from actions import Action, interpret
+    from evaluate import _norm, expected
+    from needle_cli import checks_agree
+    bundle, out = PB.Bundle(raw), collections.Counter(rows=len(rows))
+    for row in rows:
+        texts: list = []
+        calls, _ = bundle.read(row["query"], texts)
+        if not calls:
+            continue
+        if not checks_agree(row["query"], calls, texts):
+            out["proposed_and_dropped"] += 1
+            continue
+        results = interpret(row["query"], calls)
+        got, want = [_norm(r.kind, r.args) for r in results], expected(row["actions"])
+        out["answered"] += 1
+        out["as_labelled"] += got == want
+        out["risky_and_not_labelled"] += any(Action(kind, args).risky and [kind, args] not in want for kind, args in got)
+    return {key: out[key] for key in ("rows", "answered", "as_labelled", "proposed_and_dropped", "risky_and_not_labelled")}
+
+
 def pack(members: list[tuple[int, dict]], known: set, pairs: set, tools: dict, free_text: list[str],
-         dim: int = DIM, hidden: int = HIDDEN, value_words: dict | None = None) -> bytes:
+         dim: int = DIM, hidden: int = HIDDEN, value_words: dict | None = None,
+         ground: dict | None = None) -> bytes:
     """The bundle as one file (the layout is described in panes_bundle).
 
     members: [(seed, {net: (feature names, outputs, flat weights)})]. All
@@ -476,8 +575,11 @@ def pack(members: list[tuple[int, dict]], known: set, pairs: set, tools: dict, f
             raise ValueError("the members do not have the same nets over the same features")
     names = sorted({name for feature_names, _, _ in first.values() for name in feature_names})
     number = {name: n for n, name in enumerate(names)}
+    ground = ground or {"frames": {}, "separators": sorted(SEPARATORS), "clauses_max": 2, "copy_max": {}}
     head = {"schema": PB.SCHEMA, "dim": dim, "hidden": hidden, "known": sorted(known), "tools": tools,
-            "free_text": sorted(free_text), "value_words": value_words or {}, "nets": {}, "members": []}
+            "free_text": sorted(free_text), "value_words": value_words or {}, "nets": {}, "members": [],
+            "separators": sorted(ground["separators"]), "clauses_max": int(ground["clauses_max"]),
+            "copy_max": ground["copy_max"], "frames": {}}
     body = bytearray()
 
     def add(blob: bytes) -> int:
@@ -506,6 +608,10 @@ def pack(members: list[tuple[int, dict]], known: set, pairs: set, tools: dict, f
             values.extend(flat[rows:])
             entry["weights"][key] = add(struct.pack(f"<{len(values)}e", *values))
         head["members"].append(entry)
+    # Each tool's frames, after the weights: one pair a line.
+    for tool in sorted(tools):
+        blob = "\n".join(sorted(ground["frames"].get(tool, ()))).encode("utf-8")
+        head["frames"][tool] = [add(blob), len(blob)]
     encoded = json.dumps(head, ensure_ascii=False, sort_keys=True).encode("utf-8")
     return PB.MAGIC + len(encoded).to_bytes(4, "little") + encoded + bytes(body)
 
@@ -524,11 +630,16 @@ def write(out: Path, rows: list[dict], row_stats: dict, seeds: list[int], free_t
         nets, sampled = train_member(data, seed, log)
         trained.append((seed, nets))
         checks.append(sampled)
-    always = value_words(rows)
-    raw = pack(trained, known, pairs, tools, free_text, value_words=always)
+    always, closed = value_words(rows), closed_words(rows)
+    ground_ = used.pop("ground")
+    raw = pack(trained, known, pairs, tools, free_text, value_words={**closed, **always}, ground=ground_)
     same = same_as_trained(raw, checks)
     if any(member["another_output"] for member in same):
         raise SystemExit(f"the file does not read as it was trained ({same})")
+    on_rows = reads_its_rows(raw, rows)
+    log(f"on its own rows: {on_rows}")
+    if on_rows["risky_and_not_labelled"]:
+        raise SystemExit(f"the file answers a training row with a risky action the row does not hold ({on_rows})")
     out.mkdir(parents=True, exist_ok=True)
     (out / PB.FILE).write_bytes(raw)
     import torch
@@ -543,10 +654,15 @@ def write(out: Path, rows: list[dict], row_stats: dict, seeds: list[int], free_t
         "trainer": {"dim": DIM, "hidden": HIDDEN, "epochs": EPOCHS, "learning_rate": RATE,
                     "torch": torch.__version__, "threads": 1},
         "rows": {**row_stats, **used, "known_words": len(known), "known_pairs": len(pairs),
-                 "value_words": len(always),
+                 "value_words": len(always), "closed_words": len(closed),
+                 "value_and_closed_words": len({**closed, **always}),
+                 "frames": {tool: len(pairs_) for tool, pairs_ in sorted(ground_["frames"].items())},
+                 "separators": ground_["separators"], "clauses_max": ground_["clauses_max"],
+                 "copy_max": ground_["copy_max"],
                  "sha256": hashlib.sha256("".join(json.dumps(r, sort_keys=True, ensure_ascii=False) + "\n"
                                                   for r in rows).encode("utf-8")).hexdigest()},
         "free_text": sorted(free_text),
+        "reads_its_rows": on_rows,
         "code": {"panes_bundle.py": sha256_file(REPO / "panes_bundle.py"),
                  "panes_bundle_train.py": sha256_file(REPO / "panes_bundle_train.py")},
     }
@@ -568,9 +684,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--name", default="")
     args = parser.parse_args(argv)
     if args.rows:
-        with open(args.rows, encoding="utf-8") as handle:
-            rows = [json.loads(line) for line in handle if line.strip()]
-        stats = {"source": args.rows}
+        refuse_gates([os.path.abspath(args.rows)])
+        raw_rows = Path(args.rows).read_bytes()
+        rows = [json.loads(line) for line in raw_rows.decode("utf-8").splitlines() if line.strip()]
+        stats = {"source": args.rows, "source_sha256": hashlib.sha256(raw_rows).hexdigest()}
     else:
         rows, stats = build_rows(args.per_template)
     if args.spent:
