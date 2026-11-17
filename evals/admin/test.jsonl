@@ -1,0 +1,40 @@
+{"request": "restart ssh", "expect": [["service", {"operation": "restart", "unit": "ssh"}]], "tag": "service"}
+{"request": "could you restart NetworkManager", "expect": [["service", {"operation": "restart", "unit": "NetworkManager"}]], "tag": "service"}
+{"request": "start the mariadb service now", "expect": [["service", {"operation": "start", "unit": "mariadb"}]], "tag": "service"}
+{"request": "reload nginx.service", "expect": [["service", {"operation": "reload", "unit": "nginx"}]], "tag": "service"}
+{"request": "disable bluetooth please", "expect": [["service", {"operation": "disable", "unit": "bluetooth"}]], "tag": "service"}
+{"request": "systemctl stop apache2", "expect": [["service", {"operation": "stop", "unit": "apache2"}]], "tag": "service"}
+{"request": "restart my user service pipewire-pulse", "expect": [["service", {"operation": "restart", "unit": "pipewire-pulse", "scope": "user"}]], "tag": "user"}
+{"request": "stop the gpg-agent user service", "expect": [["service", {"operation": "stop", "unit": "gpg-agent", "scope": "user"}]], "tag": "user"}
+{"request": "kill pid 777", "expect": [["process", {"pid": 777}]], "tag": "process"}
+{"request": "close slack", "expect": [["process", {"name": "slack"}]], "tag": "process"}
+{"request": "hard kill node", "expect": [["process", {"signal": "kill", "name": "node"}]], "tag": "process"}
+{"request": "send SIGHUP to 4410", "expect": [["process", {"signal": "hup", "pid": 4410}]], "tag": "process"}
+{"request": "stop process 5521", "expect": [["process", {"pid": 5521}]], "tag": "process"}
+{"request": "killall python3", "expect": [["process", {"name": "python3"}]], "tag": "process"}
+{"request": "install build-essential", "expect": [["packages", {"operation": "install", "package": "build-essential"}]], "tag": "packages"}
+{"request": "apt-get install python3-venv", "expect": [["packages", {"operation": "install", "package": "python3-venv"}]], "tag": "packages"}
+{"request": "remove the tmux package", "expect": [["packages", {"operation": "remove", "package": "tmux"}]], "tag": "packages"}
+{"request": "completely remove snapd", "expect": [["packages", {"operation": "purge", "package": "snapd"}]], "tag": "packages"}
+{"request": "refresh the apt cache", "expect": [["updates", {"operation": "refresh"}]], "tag": "updates"}
+{"request": "check for updates", "expect": [["updates", {"operation": "refresh"}]], "tag": "updates"}
+{"request": "update the system", "expect": [["updates", {"operation": "upgrade"}]], "tag": "updates"}
+{"request": "sudo apt-get upgrade", "expect": [["updates", {"operation": "upgrade"}]], "tag": "updates"}
+{"request": "disable and stop cups", "expect": [["service", {"operation": "disable", "unit": "cups"}], ["service", {"operation": "stop", "unit": "cups"}]], "tag": "compound"}
+{"request": "sudo apt install git tmux", "expect": [["packages", {"operation": "install", "package": "git"}], ["packages", {"operation": "install", "package": "tmux"}]], "tag": "compound"}
+{"request": "stop nginx, then start apache2", "expect": [["service", {"operation": "stop", "unit": "nginx"}], ["service", {"operation": "start", "unit": "apache2"}]], "tag": "compound"}
+{"request": "refresh the package lists, install jq and then upgrade packages", "expect": [["updates", {"operation": "refresh"}], ["packages", {"operation": "install", "package": "jq"}], ["updates", {"operation": "upgrade"}]], "tag": "compound"}
+{"request": "kill 1201 and 1202", "expect": [["process", {"pid": 1201}], ["process", {"pid": 1202}]], "tag": "compound"}
+{"request": "never mind, restart nginx", "expect": [], "tag": "refusal"}
+{"request": "restart nginx at midnight", "expect": [], "tag": "refusal"}
+{"request": "should I restart docker?", "expect": [], "tag": "refusal"}
+{"request": "my boss wants redis restarted", "expect": [], "tag": "refusal"}
+{"request": "restart nginx and show me its logs", "expect": [], "tag": "refusal"}
+{"request": "restart every failed service", "expect": [], "tag": "refusal"}
+{"request": "remove all python packages", "expect": [], "tag": "refusal"}
+{"request": "kill that process", "expect": [], "tag": "refusal"}
+{"request": "dist-upgrade the box", "expect": [], "tag": "refusal"}
+{"request": "install curl from https://example.com/curl.deb", "expect": [], "tag": "refusal"}
+{"request": "run make install", "expect": [], "tag": "refusal"}
+{"request": "restart nginx apache2", "expect": [], "tag": "refusal"}
+{"request": "restart ngin*", "expect": [], "tag": "refusal"}

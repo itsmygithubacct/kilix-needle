@@ -1,0 +1,45 @@
+{"request": "restart nginx", "expect": [["service", {"operation": "restart", "unit": "nginx"}]], "tag": "service"}
+{"request": "please restart the docker service", "expect": [["service", {"operation": "restart", "unit": "docker"}]], "tag": "service"}
+{"request": "can you reload apache2?", "expect": [["service", {"operation": "reload", "unit": "apache2"}]], "tag": "service"}
+{"request": "stop the cups service", "expect": [["service", {"operation": "stop", "unit": "cups"}]], "tag": "service"}
+{"request": "enable bluetooth", "expect": [["service", {"operation": "enable", "unit": "bluetooth"}]], "tag": "service"}
+{"request": "disable cups.service", "expect": [["service", {"operation": "disable", "unit": "cups"}]], "tag": "service"}
+{"request": "sudo systemctl restart postgresql@16-main", "expect": [["service", {"operation": "restart", "unit": "postgresql@16-main"}]], "tag": "service"}
+{"request": "bounce redis-server", "expect": [["service", {"operation": "restart", "unit": "redis-server"}]], "tag": "service"}
+{"request": "start cron on this machine", "expect": [["service", {"operation": "start", "unit": "cron"}]], "tag": "service"}
+{"request": "restart the pipewire user service", "expect": [["service", {"operation": "restart", "unit": "pipewire", "scope": "user"}]], "tag": "user"}
+{"request": "systemctl --user restart wireplumber", "expect": [["service", {"operation": "restart", "unit": "wireplumber", "scope": "user"}]], "tag": "user"}
+{"request": "restart syncthing for my user", "expect": [["service", {"operation": "restart", "unit": "syncthing", "scope": "user"}]], "tag": "user"}
+{"request": "kill 4312", "expect": [["process", {"pid": 4312}]], "tag": "process"}
+{"request": "terminate process 98121", "expect": [["process", {"pid": 98121}]], "tag": "process"}
+{"request": "force kill firefox", "expect": [["process", {"signal": "kill", "name": "firefox"}]], "tag": "process"}
+{"request": "kill -9 23001", "expect": [["process", {"signal": "kill", "pid": 23001}]], "tag": "process"}
+{"request": "send hup to process 812", "expect": [["process", {"signal": "hup", "pid": 812}]], "tag": "process"}
+{"request": "end the htop process", "expect": [["process", {"name": "htop"}]], "tag": "process"}
+{"request": "pkill vlc", "expect": [["process", {"name": "vlc"}]], "tag": "process"}
+{"request": "install curl", "expect": [["packages", {"operation": "install", "package": "curl"}]], "tag": "packages"}
+{"request": "sudo apt install ripgrep", "expect": [["packages", {"operation": "install", "package": "ripgrep"}]], "tag": "packages"}
+{"request": "uninstall nano", "expect": [["packages", {"operation": "remove", "package": "nano"}]], "tag": "packages"}
+{"request": "remove vim and its config files", "expect": [["packages", {"operation": "purge", "package": "vim"}]], "tag": "packages"}
+{"request": "purge libreoffice-core", "expect": [["packages", {"operation": "purge", "package": "libreoffice-core"}]], "tag": "packages"}
+{"request": "update the package lists", "expect": [["updates", {"operation": "refresh"}]], "tag": "updates"}
+{"request": "sudo apt update", "expect": [["updates", {"operation": "refresh"}]], "tag": "updates"}
+{"request": "upgrade packages", "expect": [["updates", {"operation": "upgrade"}]], "tag": "updates"}
+{"request": "install the available updates please", "expect": [["updates", {"operation": "upgrade"}]], "tag": "updates"}
+{"request": "enable and start docker", "expect": [["service", {"operation": "enable", "unit": "docker"}], ["service", {"operation": "start", "unit": "docker"}]], "tag": "compound"}
+{"request": "install curl, jq and htop", "expect": [["packages", {"operation": "install", "package": "curl"}], ["packages", {"operation": "install", "package": "jq"}], ["packages", {"operation": "install", "package": "htop"}]], "tag": "compound"}
+{"request": "update the package lists and then upgrade", "expect": [["updates", {"operation": "refresh"}], ["updates", {"operation": "upgrade"}]], "tag": "compound"}
+{"request": "restart nginx and reload haproxy", "expect": [["service", {"operation": "restart", "unit": "nginx"}], ["service", {"operation": "reload", "unit": "haproxy"}]], "tag": "compound"}
+{"request": "kill firefox and chromium", "expect": [["process", {"name": "firefox"}], ["process", {"name": "chromium"}]], "tag": "compound"}
+{"request": "don't restart nginx", "expect": [], "tag": "refusal"}
+{"request": "restart nginx if it is down", "expect": [], "tag": "refusal"}
+{"request": "restart or reload apache2", "expect": [], "tag": "refusal"}
+{"request": "is docker running?", "expect": [], "tag": "refusal"}
+{"request": "restart the web server", "expect": [], "tag": "refusal"}
+{"request": "enable nginx and start it", "expect": [], "tag": "refusal"}
+{"request": "kill whatever is using all the cpu", "expect": [], "tag": "refusal"}
+{"request": "reboot the machine", "expect": [], "tag": "refusal"}
+{"request": "apt update && apt upgrade", "expect": [], "tag": "refusal"}
+{"request": "restart nginx on the web01 box", "expect": [], "tag": "refusal"}
+{"request": "upgrade nginx", "expect": [], "tag": "refusal"}
+{"request": "install curl jq", "expect": [], "tag": "refusal"}

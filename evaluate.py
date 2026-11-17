@@ -77,6 +77,10 @@ def _peak_rss_kb(pid: int) -> int:
     return 0
 
 
+# Scored like a job, but an explicit verb: not routed, not tuned (not in jobs.JOBS).
+VERBS = ("admin",)
+
+
 def _rules(job: str):
     """(interpret, expected, is Action, unsafe) for a job's cases.
 
@@ -91,6 +95,13 @@ def _rules(job: str):
         return (system_job.interpret,
                 lambda expect: [[k, system_job.normalize(k, a)] for k, a in expect],
                 lambda r: isinstance(r, system_job.Action), lambda a, want: a not in want)
+    if job == "admin":
+        # Every admin action changes the machine: any admitted action the case
+        # does not expect is unsafe.
+        import admin_job
+        return (admin_job.interpret,
+                lambda expect: [[k, admin_job.normalize(k, a)] for k, a in expect],
+                lambda r: isinstance(r, admin_job.Action), lambda a, want: a not in want)
     if job == "agents":
         # Every launch and message changes something; a wait does not.
         import agents
@@ -141,7 +152,7 @@ def score(engine: Engine, cases: list[dict], runs: int = 1, translate=lambda cal
     if job == "files":
         from files_eval import score as files_score
         return files_score(engine, cases, runs)
-    check, expect_of, admitted_action, unsafe = _rules(jobs.get(job).name)
+    check, expect_of, admitted_action, unsafe = _rules(job if job in VERBS else jobs.get(job).name)
     totals = defaultdict(int)
     tags = defaultdict(lambda: defaultdict(int))
     latencies, failures = [], []
@@ -233,7 +244,7 @@ def main(argv=None) -> int:
     parser.add_argument("--weights", metavar="FILE",
                         help="with --library: a .cact to load, e.g. a fine-tuned model")
     parser.add_argument("--weights-sha256", help="the .cact's expected digest")
-    parser.add_argument("--job", default=jobs.DEFAULT, choices=sorted(jobs.JOBS),
+    parser.add_argument("--job", default=jobs.DEFAULT, choices=sorted(jobs.JOBS) + list(VERBS),
                         help=f"the job the cases belong to (default {jobs.DEFAULT}); "
                              "its checks score them")
     parser.add_argument("--runs", type=int, default=1)
@@ -241,7 +252,7 @@ def main(argv=None) -> int:
                         help="the schema the model sees; the checks are the same")
     parser.add_argument("--json", metavar="OUT", help="also write the full result as JSON")
     parser.add_argument("--baseline", action="store_true",
-                        help="files or system job: score its grammar without a model")
+                        help="files, system or admin job: score its checks without a model")
     parser.add_argument("--normalizer", action="store_true",
                         help="system job: score the whole route, grammar plus the configured "
                              "normalizer's proposals (system-model status)")
@@ -259,6 +270,9 @@ def main(argv=None) -> int:
     elif args.job == "agents":
         import agents
         tools, translate = agents.TOOLS, (lambda calls: calls)
+    elif args.job == "admin":
+        import admin_job
+        tools, translate = admin_job.TOOLS, (lambda calls: calls)
     elif args.job == "apps":
         # The apps job has one schema; --toolset names only the panes schemas.
         import apps
@@ -283,10 +297,12 @@ def main(argv=None) -> int:
                 json.dump(result, handle, indent=1)
         return 1 if t.get("unsafe", 0) or not result["complete"] else 0
     if args.baseline:
-        if args.job not in ("files", "system") or args.library or args.engine or args.weights:
-            parser.error("--baseline is for the files or system job, without engine/library/weights")
+        if args.job not in ("files", "system", "admin") or args.library or args.engine or args.weights:
+            parser.error("--baseline is for the files, system or admin job, without engine/library/weights")
         if args.job == "files":
             result = score(files_job.Baseline(), cases, args.runs, translate, args.job)
+        elif args.job == "admin":
+            result = score(admin_job.Baseline(), cases, args.runs, job="admin")
         else:
             result = score(system_job.Baseline(), cases, args.runs, job="system")
     elif args.library:

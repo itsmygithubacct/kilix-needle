@@ -765,6 +765,7 @@ Requests are grouped into these jobs:
 | `agents` | `kilix-needle agents REQUEST` | Launch, resume, wait for and message coding-agent sessions |
 | `files` | `kilix-needle files REQUEST` | Read-only file search, listings and previews in a named scope |
 | `system` | `kilix-needle system REQUEST` | Read resources, processes, services, journal entries and installed package information |
+| `admin` | `kilix-needle admin REQUEST` | Change this machine: control a service, signal a process, install or remove packages, refresh or apply updates. An explicit verb: never routed to, no tuned model |
 | logs | `kilix-needle logs …` | Read and search local pane logs, with citations |
 | `tmux` | `kilix-needle tmux --socket PATH REQUEST` | Exact tmux session and pane control on an explicit socket |
 | `pty` | `kilix-needle pty REQUEST` | Persistent pane sessions: list, show, read the tail, archived journals, end one by its exact ID |
@@ -784,6 +785,7 @@ The checks decide; a proposer that invents a call gets it refused.
 | `agents` | the tuned model agents-qat-1; the checks' clause reading must equal the calls | The request is the consent to launch, so the reading must be exact |
 | `files` | the grammar; a trained research model was not promoted | Scopes and filters must be exact; the model refused too rarely (4/40) |
 | `system` | the grammar first, then a tuned normalizer that only *proposes* for unfamiliar wording | The grammar is exact but narrow; model proposals never collect on their own |
+| `admin` | the checks read the whole request; for wording they do not read, the base Needle model only *proposes* | Every action changes the machine: a proposal runs only when a person at a terminal confirms it |
 | logs | a baseline reader, no model | It reads, it doesn't act |
 | `tmux` | a whole-request grammar, no model | One explicit operation with exact targets and literal input |
 | `pty` | a whole-request grammar, no model | One operation, IDs read as opaque literals, the only mutation is an exact-ID kill with consent |
@@ -1184,6 +1186,62 @@ python3 evaluate.py evals/system/test.jsonl --job system --engine FILE
 
 See [evaluation scope](evals/system/README.md). Baseline grammar agreement is
 not model accuracy or evidence of general language coverage.
+
+## The admin job
+
+`kilix-needle admin "…"` changes this machine. Four tools: `service` (start,
+stop, restart, reload, enable, disable one systemd service, system or user
+scope), `process` (TERM, KILL or HUP to one PID or one exact program name),
+`packages` (install, remove or purge Debian packages) and `updates` (`apt-get
+update` or `apt-get upgrade`). Nothing else: no reboot, no files, users,
+firewall, cron, repositories, dist-upgrade or autoremove.
+
+```sh
+kilix-needle admin "restart the nginx service"
+kilix-needle admin "enable and start docker"
+kilix-needle admin "restart the pipewire user service"
+kilix-needle admin "kill process 4312"               # TERM; "force kill" is KILL
+kilix-needle admin "install curl, jq and htop"
+kilix-needle admin "update the package lists and upgrade"
+kilix-needle admin --dry-run "purge vim"            # look and show; run nothing
+```
+
+**Reading.** The checks (`admin_job.py`) read the whole request into actions or
+into nothing; every word must be a verb, a filler or the target they know. A
+target is a name the request spells out. Negated, cancelled, conditional,
+scheduled, reported or hypothetical requests, alternatives ("or"), questions,
+other machines, shell syntax, "it" or "that", and targets chosen by a property
+("whatever uses the memory") run nothing. The rules are in
+`evals/admin/SPEC.md`. Wording the checks do not read, and that none of those
+rules refuses, goes to the base Needle model over the four tools. Its proposal
+must name every target as the request writes it, and it is only offered: a
+person at a terminal may confirm it, and the reply carries the accepted form,
+which the checks read.
+
+**Looking first.** Before asking, kilix-needle checks that the service exists
+and is not masked, which process a PID or a program name is and who owns it,
+and what `apt-get -s` would install or remove. It refuses: removing an
+Essential or required package; a removal that takes more than ten other
+packages along; an install or upgrade that removes anything; a program name
+matching more than five processes; the request's own shell or caller;
+stopping or disabling `ssh`, the network services or anything that keeps the
+session (D-Bus, logind, display managers, getty, user managers).
+
+**Consent.** A person types `y` once for the whole plan, which shows each
+command exactly. `--yes` answers in advance for an agent, but only for start,
+restart, reload or enable of a service, TERM or HUP to a PID, an install and a
+refresh. Stop, disable, a forced kill, a program by name, a removal, an upgrade
+and every model proposal wait for a person.
+
+**Running.** Fixed executables, argv only, no shell, a minimal environment,
+bounded time and output. A system-scope change runs through `sudo`: with its
+own password prompt for a person at a terminal, `sudo -n` otherwise, which
+works only where sudo allows it. kilix-needle never reads or stores a
+password. Steps run in order and stop at the first failure. The request history
+records the request, the actions and their outcomes, never command output.
+
+`evaluate.py --job admin --baseline` scores the checks on a set;
+`evals/admin/dev.jsonl` and `test.jsonl` are authored fixtures, not evidence.
 
 ## Fine-tuning
 

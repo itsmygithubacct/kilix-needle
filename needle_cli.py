@@ -115,6 +115,12 @@ def open_runtime(args, *, may_install: bool = False, job: str = jobs.DEFAULT) ->
         import system_model
         return system_model.open_runtime(args)
     explicit = getattr(args, "engine", None) or os.environ.get("KILIX_NEEDLE_ENGINE")
+    if job == "admin":
+        # The admin verb is not a routed or tuned job (jobs.JOBS): the base
+        # model over its four tools, and it only proposes (admin_cli._proposal).
+        import admin_job
+        image = asset.from_file(explicit) if explicit else _image(args, may_install=may_install)
+        return Runtime(Engine(image, admin_job.TOOLS), [image])
     if job == "apps" and not explicit:
         # The apps checks propose as well as admit (apps.propose): measured,
         # no model reaches what they read, and none is loaded. An explicit
@@ -894,6 +900,9 @@ def main(argv: list[str] | None = None) -> int:
     if argv[:1] == ["files"]:
         from files_cli import main as files_main
         return files_main(argv[1:])
+    if argv[:1] == ["admin"]:
+        from admin_cli import main as admin_main
+        return admin_main(argv[1:])
     if argv[:1] == ["desktop"]:
         from desktop_cli import main as desktop_main
         return desktop_main(argv[1:])
