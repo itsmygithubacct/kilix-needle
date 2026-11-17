@@ -594,6 +594,12 @@ What an agent should know (measured in a Codex route benchmark, 2026-09-29):
   Navigation also reads "go to the tab before this one" and "focus whichever
   pane comes next" directly. Next/previous count from the caller's pane or tab
   and wrap at an edge; an ambiguous title still refuses resolution.
+- **Familiar wording skips the model too.** A request the exact readers leave
+  is read by the panes bundle (`panes_bundle.py`) when all of it is wording
+  the bundle was trained on: "split right and run htop", "rename this tab to
+  build logs". Its calls pass the same checks and confirmations, and a
+  request it does not know goes to the model as before
+  ([the panes bundle](#the-panes-bundle)).
 - **A yes given in advance covers these typing forms:** "run 'X' in the NAME
   pane", "type the command X into pane NAME", with an optional "and press
   Enter", and "In the pane titled NAME, type and press Enter on: X".
@@ -779,7 +785,7 @@ The checks decide; a proposer that invents a call gets it refused.
 
 | Job | Proposer in use | Why |
 | --- | --- | --- |
-| `panes` | the tuned Needle 2 model qat-6, over five tools that expand to 14 actions | Commands, titles and sizes are free-form, so a model has to propose them |
+| `panes` | exact readers for canonical commands, then the panes bundle for wording it was trained on, then the tuned Needle 2 model qat-6, over five tools that expand to 14 actions | Commands, titles and sizes are free-form, so a model has to propose them. What is said in familiar words needs no model |
 | `apps` | no model: `apps.propose` offers every call the checks can read, and the exact controls come first | Every argument is from a closed list, so the checks can read all of it and no model can beat them (held-out v4: grammar 111/146, tuned model 93) |
 | `agents` | the tuned model agents-qat-1; the checks' clause reading must equal the calls | The request is the consent to launch, so the reading must be exact |
 | `files` | the grammar; a trained research model was not promoted | Scopes and filters must be exact; the model refused too rarely (4/40) |
@@ -848,7 +854,8 @@ handed, not requests, and records nothing.
 Each line is one request. It holds:
 - the request exactly as given, plus the checked form when it differs;
 - the job, and whether a person or an agent sent it;
-- what proposed the calls (`grammar`, or the model in use) and the raw calls;
+- what proposed the calls (`grammar`, the panes bundle, or the model in use)
+  and the raw calls;
 - what the checks admitted or refused and why, and each outcome;
 - dry run and advance yes, and how long it took.
 
@@ -1313,6 +1320,67 @@ The tests never reach the live desktop. `KITTY_LISTEN_ON` points at a dead
 socket, a recording fake stands in for `kilix`, and the fake `ls` has the
 real shape, including window groups.
 
+### The panes bundle
+
+Between the exact readers and the model stands a bundle of small nets
+(`panes_bundle.py`, weights in `panes-bundle/`). The answer to a pane request
+has a grammar, and every state of that grammar has one net of its own: one
+splits the request into clauses, one names the tool of a clause, one for each
+argument says absent, a value of its closed list or "copy", and one for each
+copied argument points at its first and last word. Two members, the same 42
+nets trained from two seeds, 598,263 weights each, are held in one file of
+3.2 MB. Reading needs only the standard library.
+
+It answers only what it was trained to read:
+- every pair of neighbouring words in a clause stood side by side in a
+  training row, and a word it never saw is part of a copied title, command
+  or program;
+- both members give the same calls;
+- a pane or tab to close or type into is named with trained words or a
+  number;
+- no word that always named a value in training is missing from the answer;
+- the checks admit every call.
+
+Otherwise it proposes nothing and the model reads the request as before.
+None of this is a confidence threshold. Its calls are proposals like the
+model's: the same checks, the same resolution against the live tree, the
+same confirmation. The history records such a request under the bundle's
+name.
+
+Measured on a blind held-out set written for it (v17, 171 cases, read once,
+2026-11-17), against the route as it was, with the tuned model qat-9:
+
+| Route | Exact | Unsafe |
+| --- | ---: | ---: |
+| exact readers, then the model | 106 | 0 |
+| exact readers, the bundle, then the model | 121 | 0 |
+
+- The bundle answered 58 of the 166 requests that reached the model (35%).
+  56 of its answers were exact. On the other 2 the model was not exact
+  either, and neither was unsafe.
+- The gains are in requests with two or more actions (8 to 15 of 24) and in
+  opening a pane (2 to 6 of 8). No kind of request lost a case.
+- A second pair of seeds scored 119, with no unsafe outcome.
+- A whole call that the bundle answers took 227 ms where the model's took
+  3.8 s (median of 40 requests, a new process each time, on an eight-core
+  machine with nothing else measured on it). A call it declines was within
+  50 ms of before. Inside a running process the bundle takes about 2 ms.
+
+An earlier blind half (v16) failed the safety gate on one case: a request to
+close a tab held a word the bundle had never seen, and it was copied as the
+tab's title. The third condition above is the fix, and v17 gated the result.
+The record of both gates is in `panes-bundle/README.md`.
+
+`KILIX_NEEDLE_BUNDLE=0` switches the bundle off and `=1` on; unset,
+`needle_cli.BUNDLE_BY_DEFAULT` decides (on in this branch).
+
+```sh
+python3 panes_bundle.py "split right and run htop"        # its reading, or why it has none
+python3 evaluate.py evals/dev.jsonl --route bundle        # the shipped route, scored
+uv run --with torch==2.6.0 panes_bundle_train.py --spent --out panes-bundle \
+    --seeds 0 1 --name v1 --free-text rename_tab rename_pane go_to_pane go_to_tab
+```
+
 ## Known issues
 
 - **An agent's "yes" is its own.** Through MCP, `confirm_risky` is the
@@ -1374,6 +1442,13 @@ real shape, including window groups.
   selecting and marking, can still be resumed. That runs only its gates:
   the model's bytes are never written again. If those gates then fail, the
   run's `gates.json` records the failure while the run stays selected.
+- **The bundle can be wrong where the checks cannot tell.** Measured on
+  generated requests it was not trained on (13,651 that it answers): 90
+  wrong answers, none unsafe. The two kinds seen on the blind set: after
+  "switch to tab N and rename it" it repeats the tab's number in the rename
+  (the same tab, so the same effect), and in a request that makes a pane
+  full size and names it, it renamed the tab. Renaming needs no
+  confirmation. `KILIX_NEEDLE_BUNDLE=0` takes the bundle out of the route.
 - **"At a shell prompt" is checked twice, not proven.** Typing needs the
   shell's prompt marks (OSC 133), and, from what Kilix reports out of band,
   that the pane is not in the alternate screen and that what holds its
@@ -1404,6 +1479,9 @@ real shape, including window groups.
 | `asset.py` | admitting installed assets or pinned local copies; the first-use install |
 | `tuning.py` | `kilix-needle tune` |
 | `panes_exact.py` | canonical pane commands read without a model, then checked like any call |
+| `panes_bundle.py` | the panes bundle: familiar wording read by small nets, then checked like any call |
+| `panes_bundle_train.py` | the bundle's trainer, its file format and the check that the file reads as trained |
+| `panes-bundle/` | the bundle's weights and training-data manifest (provenance) |
 | `state.py` | the one state directory, and moving older data-home state into it |
 | `needle_cli.py` | the command line, prompt loop and runtime selection |
 | `mcp_server.py` | `kilix-needle mcp` |

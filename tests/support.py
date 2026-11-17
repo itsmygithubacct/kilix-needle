@@ -21,6 +21,10 @@ for _name in ("GPU_TERMINAL_HOME", "KILIX_DATA_HOME", "KILIX_CONFIG_HOME", "KILI
     os.environ[_name] = os.path.join(_SANDBOX.name, _name.lower())
 for _name in ("KILIX_NEEDLE_LIBRARY", "KILIX_NEEDLE_ENGINE", "KILIX_ML_HOME"):
     os.environ.pop(_name, None)
+# Tests script the model's reply. The panes bundle stands before the model
+# and would answer familiar requests itself, so it is off here; its own tests
+# (test_panes_bundle.py) turn it on around a bundle made by hand.
+os.environ["KILIX_NEEDLE_BUNDLE"] = "0"
 
 # Controls must not discover the user's live audio/player/voice sockets either.
 os.environ["PULSE_SERVER"] = "unix:" + os.path.join(_SANDBOX.name, "no-pulse.sock")

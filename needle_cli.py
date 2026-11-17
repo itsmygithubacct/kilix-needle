@@ -156,6 +156,43 @@ def open_runtime(args, *, may_install: bool = False, job: str = jobs.DEFAULT) ->
     return Runtime(Engine(image, base_tools), [image])
 
 
+# "help" sent as a request to the panes job.
+HELP_REQUEST = re.compile(r"\s*(?:(?:show|print|get)\s+(?:me\s+)?(?:the\s+)?)?(?:help|usage|--help|-h)"
+                          r"(?:\s+(?:please|text|page))?[\s.!?]*", re.I)
+
+
+# Whether the panes bundle is asked before the model when KILIX_NEEDLE_BUNDLE
+# is not set. A default changes only by a gate on a blind held-out set and an
+# independent review (README, "The panes bundle"). On since the gate on the
+# blind set v17 (2026-11-17; panes-bundle/README.md).
+BUNDLE_BY_DEFAULT = True
+
+
+def bundle_enabled() -> bool:
+    """KILIX_NEEDLE_BUNDLE=1 asks the bundle before the model and =0 never
+    does; unset, BUNDLE_BY_DEFAULT decides."""
+    value = os.environ.get("KILIX_NEEDLE_BUNDLE")
+    return value == "1" if value in ("0", "1") else BUNDLE_BY_DEFAULT
+
+
+def bundle_proposal(request: str):
+    """(calls, the bundle's label) when the panes bundle answers, else None.
+
+    The bundle answers when it is switched on, knows the request
+    (panes_bundle.read) and the checks admit every call it proposes. In every
+    other case it stands aside and the model reads the request as before."""
+    if not bundle_enabled():
+        return None
+    import panes_bundle
+    proposed = panes_bundle.read(request)
+    if not proposed:
+        return None
+    calls, label = proposed
+    if not all(isinstance(result, Action) for result in interpret(request, calls)):
+        return None
+    return calls, label
+
+
 @dataclass(frozen=True)
 class Options:
     dry_run: bool = False
@@ -209,8 +246,7 @@ def run_request(engine: Engine, request: str, options: Options,
                                                  f"{pane.get('title', '')}"})
             return {"request": request, "status": 0, "note": "", "items": items}
         # "help" sent as a request answers with the jobs, not a refused open_tab.
-        if re.fullmatch(r"\s*(?:(?:show|print|get)\s+(?:me\s+)?(?:the\s+)?)?(?:help|usage|--help|-h)"
-                        r"(?:\s+(?:please|text|page))?[\s.!?]*", request, re.I):
+        if HELP_REQUEST.fullmatch(request):
             return {"request": request, "status": 0, "items": [],
                     "note": "kilix-needle --help lists the jobs; this command is the panes job",
                     "hint": "accepted forms: close the pane titled NAME | run 'CMD' in pane N | "
@@ -247,8 +283,19 @@ def run_request(engine: Engine, request: str, options: Options,
             record["read_as"] = canonical       # only when it differs: no echo
         return record
 
+    def front(request):
+        # A request on ground the bundle of small nets was trained on needs no
+        # model either (bundle_proposal). Its calls are proposals like the
+        # model's: the same checks, resolution and confirmation.
+        proposed = bundle_proposal(request)
+        if proposed is None:
+            return None
+        calls, label = proposed
+        return run_calls(request, calls, options, confirm), label, calls
+
     return _recorded("panes", engine, request, options, lambda request, calls: run_calls(
-        request, getattr(engine, "translate", lambda c: c)(calls), options, confirm), exact=exact)
+        request, getattr(engine, "translate", lambda c: c)(calls), options, confirm), exact=exact,
+        front=front)
 
 
 # One accepted phrasing per refused kind, so an agent can restate the request
@@ -384,9 +431,14 @@ def _hint(job: str, request: str, result: dict) -> str | None:
     return f"accepted forms: {examples}" if examples else None
 
 
-def _recorded(job: str, engine, request: str, options: Options, run, exact=None) -> dict:
+def _recorded(job: str, engine, request: str, options: Options, run, exact=None, front=None) -> dict:
     """Check the prompt, ask the engine, run its calls, and record the request
-    in the local history (history.py) whatever happens."""
+    in the local history (history.py) whatever happens.
+
+    `exact` reads a request without a model, or returns None. `front` is a
+    proposer that stands before the model: it returns None, or the record of
+    its calls already run, its label and those calls. The engine is asked only
+    when both step aside."""
     started = time.monotonic()
     given, checked, calls, result, private = request, None, None, None, None
     try:
@@ -397,6 +449,13 @@ def _recorded(job: str, engine, request: str, options: Options, run, exact=None)
             return result
         if exact is not None and (result := exact(request)) is not None:
             engine = type("Exact", (), {"label": "control"})()   # recorded as the exact route
+            return result
+        if front is not None and (proposed := front(request)) is not None:
+            result, label, calls = proposed
+            engine = type("Front", (), {"label": label})()       # recorded as that proposer, not the model
+            hint = _hint(job, request, result)
+            if hint:
+                result["hint"] = hint
             return result
         engine.reset()
         calls, unusable = reply_calls(engine.complete(request))

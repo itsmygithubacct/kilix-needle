@@ -1,0 +1,230 @@
+{
+ "answers_when": "every member proposes the same calls and the checks admit every one of them",
+ "bytes": 3182334,
+ "code": {
+  "panes_bundle.py": "dce88d077bf035c52ab67e3598e01f0383de60cc127654d5486b2acfd4f12078",
+  "panes_bundle_train.py": "61ae4bb05087395e73c5a6e9f0945e6cdeea1c3844b34e6243866fab2f2b4b81"
+ },
+ "file": "bundle.bin",
+ "free_text": [
+  "go_to_pane",
+  "go_to_tab",
+  "rename_pane",
+  "rename_tab"
+ ],
+ "members": [
+  {
+   "nets": 42,
+   "read_as_trained": {
+    "another_output": 0,
+    "examples": 21525,
+    "largest_score_difference": 6.736921498884385e-06
+   },
+   "seed": 0,
+   "weights": 598263
+  },
+  {
+   "nets": 42,
+   "read_as_trained": {
+    "another_output": 0,
+    "examples": 21525,
+    "largest_score_difference": 1.0730022438565356e-05
+   },
+   "seed": 1,
+   "weights": 598263
+  }
+ ],
+ "name": "v1",
+ "rows": {
+  "capped": {},
+  "eval_matches_dropped": 147,
+  "exclude": [
+   "evals/agents/dev.jsonl",
+   "evals/agents/heldout-v1.jsonl",
+   "evals/agents/heldout-v2.jsonl",
+   "evals/agents/test.jsonl",
+   "evals/apps/dev.jsonl",
+   "evals/apps/heldout-v1.jsonl",
+   "evals/apps/heldout-v2.jsonl",
+   "evals/apps/heldout-v3.jsonl",
+   "evals/apps/heldout-v4.jsonl",
+   "evals/apps/heldout-v5.jsonl",
+   "evals/apps/test.jsonl",
+   "evals/dev.jsonl",
+   "evals/files/dev.jsonl",
+   "evals/files/heldout-v1.jsonl",
+   "evals/files/heldout-v2.jsonl",
+   "evals/files/test.jsonl",
+   "evals/heldout-v10.jsonl",
+   "evals/heldout-v11.jsonl",
+   "evals/heldout-v12.jsonl",
+   "evals/heldout-v13.jsonl",
+   "evals/heldout-v14.jsonl",
+   "evals/heldout-v15.jsonl",
+   "evals/heldout-v2.jsonl",
+   "evals/heldout-v3.jsonl",
+   "evals/heldout-v4.jsonl",
+   "evals/heldout-v5.jsonl",
+   "evals/heldout-v6.jsonl",
+   "evals/heldout-v7.jsonl",
+   "evals/heldout-v8.jsonl",
+   "evals/heldout-v9.jsonl",
+   "evals/router/agents-message-wait.jsonl",
+   "evals/router/agents.jsonl",
+   "evals/router/apps-controls.jsonl",
+   "evals/router/apps-launch.jsonl",
+   "evals/router/confusables.jsonl",
+   "evals/router/desktop-v3.jsonl",
+   "evals/router/desktop.jsonl",
+   "evals/router/files.jsonl",
+   "evals/router/logs.jsonl",
+   "evals/router/none-about-tools.jsonl",
+   "evals/router/none.jsonl",
+   "evals/router/probe.jsonl",
+   "evals/router/pty.jsonl",
+   "evals/router/relabels.jsonl",
+   "evals/router/spent-heldout-v1.jsonl",
+   "evals/router/spent-voice-v1.jsonl",
+   "evals/router/system.jsonl",
+   "evals/router/tmux.jsonl",
+   "evals/router/window-words.jsonl",
+   "evals/system/dev.jsonl",
+   "evals/system/heldout-v1.jsonl",
+   "evals/system/heldout-v2.jsonl",
+   "evals/system/test.jsonl",
+   "evals/test.jsonl"
+  ],
+  "generated": 6442,
+  "inconsistent_dropped": 773,
+  "kept": 5669,
+  "known_pairs": 5497,
+  "known_words": 975,
+  "per_template": 12,
+  "rows": 7318,
+  "rows_skipped": 15,
+  "rows_used": 7303,
+  "seed": 0,
+  "sha256": "850a87e4c42654e9a7b591c1d674481fe598b034e54510e6511f2e1f022c9a4b",
+  "spent": {
+   "cases": 2126,
+   "files": [
+    {
+     "kept": 40,
+     "path": "evals/dev.jsonl",
+     "sha256": "faf5dca9d3143ee294a46f62eaecff6018915ba47539f1bd4a8926d78e7394c3"
+    },
+    {
+     "kept": 86,
+     "path": "evals/test.jsonl",
+     "sha256": "e0d8e8389802bbdefb49307cf9b6271c3273fe6bcd5046015050c04709740bfa"
+    },
+    {
+     "kept": 90,
+     "path": "evals/heldout-v2.jsonl",
+     "sha256": "53d811c648ce865040990cd80088b31bc94d182010e22f75f557d3758d50a474"
+    },
+    {
+     "kept": 98,
+     "path": "evals/heldout-v3.jsonl",
+     "sha256": "23fa13d4cf6b14b2fe96e60ec2f1aa50569173ecd258e69fed62ae8628033978"
+    },
+    {
+     "kept": 93,
+     "path": "evals/heldout-v4.jsonl",
+     "sha256": "2f5fd488767bd3d902e9cae69d7c15db1fb61f45562125e61843aaefa73468aa"
+    },
+    {
+     "kept": 104,
+     "path": "evals/heldout-v5.jsonl",
+     "sha256": "5186c61a2d1f99f6e41c1fefb9123e7840d9d81bcc7b5ecaf74d083d98d5a7e3"
+    },
+    {
+     "kept": 105,
+     "path": "evals/heldout-v6.jsonl",
+     "sha256": "39c9c55a8636e7c3d1993c432e909126bf92ff652bba12b3f23b8b1b4ef35b69"
+    },
+    {
+     "kept": 88,
+     "path": "evals/heldout-v7.jsonl",
+     "sha256": "7df8337398ebf9bd94dc071b1a575743c2f2a280b126369c49b125d16f8546f9"
+    },
+    {
+     "kept": 88,
+     "path": "evals/heldout-v8.jsonl",
+     "sha256": "e948839ea16263843978c6e2dac8797f0b5b2cc42ec19f7ba318f26a46ef056d"
+    },
+    {
+     "kept": 133,
+     "path": "evals/heldout-v9.jsonl",
+     "sha256": "b5325d30a2302b0a4e261a6037fa031c77dacf3a78cf6f70853593fe82b50321"
+    },
+    {
+     "kept": 156,
+     "path": "evals/heldout-v10.jsonl",
+     "sha256": "f9a387a2559abccf90defe4fb8609e8404175a0f2cae0178c58616e4d508c867"
+    },
+    {
+     "kept": 142,
+     "path": "evals/heldout-v11.jsonl",
+     "sha256": "e3b93e560cb025698e30286042e3c5d256fa33fcf685bc8ee911db3d0a75a154"
+    },
+    {
+     "kept": 157,
+     "path": "evals/heldout-v12.jsonl",
+     "sha256": "907855c55b27067003ebb387f663e0ca0caeb88643f20897c37475ed04b792e9"
+    },
+    {
+     "kept": 145,
+     "path": "evals/heldout-v13.jsonl",
+     "sha256": "8b5dc424fe8fe9a2ec75472ef79f25e4c786d061512a33857992c1c3a1f84c27"
+    },
+    {
+     "kept": 124,
+     "path": "evals/heldout-v14.jsonl",
+     "sha256": "44cba7e9f9717a89d8fea844664dd4fafc69bf16c193dfaaeaeec87538796ce2"
+    }
+   ],
+   "inconsistent_dropped": 270,
+   "kept": 1649,
+   "repeated": 207
+  },
+  "supplement_files": [
+   "arrange_panes_contrast.json",
+   "arrange_panes_supp.json",
+   "close_pane_supp.json",
+   "close_tab_supp.json",
+   "compound_supp.json",
+   "go_to_pane_supp.json",
+   "go_to_tab_supp.json",
+   "layout_contrast_supp2.json",
+   "maximize_pane_supp.json",
+   "move_tab_supp.json",
+   "open_pane_supp.json",
+   "open_pane_supp3.json",
+   "open_tab_supp.json",
+   "refuse_supp.json",
+   "rename_pane_contrast.json",
+   "rename_pane_supp.json",
+   "rename_tab_contrast.json",
+   "rename_tab_supp.json",
+   "resize_pane_supp.json",
+   "resize_supp2.json",
+   "run_in_pane_supp.json",
+   "swap_panes_contrast.json",
+   "swap_panes_supp.json"
+  ],
+  "unsupported_dropped": 0,
+  "value_words": 187
+ },
+ "schema": "kilix-needle.panes-bundle-manifest/v2",
+ "sha256": "124c491aba1bc041ab3b361254143bbf4de9224c35fccc2b217d90b198b0e5d6",
+ "trainer": {
+  "dim": 8,
+  "epochs": 40,
+  "hidden": 32,
+  "learning_rate": 0.01,
+  "threads": 1,
+  "torch": "2.6.0+cu124"
+ },
+ "weights_as": "little-endian half floats; each net was rounded to them before it was checked"
+}

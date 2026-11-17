@@ -135,6 +135,53 @@ def _rules(job: str):
             lambda a, want: Action(a[0], a[1]).risky and a not in want)
 
 
+class PanesRoute:
+    """The whole panes route as one proposer, in the order of
+    needle_cli.run_request: the exact routes, the panes bundle when `bundle`
+    is true, then the model. Its replies are in the actions' own vocabulary,
+    so it is scored with no translation. `asked` counts who answered."""
+
+    def __init__(self, engine, translate, bundle: bool):
+        self.engine, self.translate, self.bundle = engine, translate, bundle
+        self.asked = {"exact": 0, "bundle": 0, "model": 0}
+
+    def __getattr__(self, name):            # start, close, _process: the model's
+        return getattr(self.engine, name)
+
+    def reset(self) -> None:
+        pass                                # the model is reset only when it is asked
+
+    def complete(self, request: str) -> dict:
+        import agents
+        import needle_cli
+        import panes_exact
+        from actions import inventory_unit
+        from engine import check_prompt
+        try:
+            request = check_prompt(request)
+        except ValueError:
+            return {"function_calls": []}   # refused before any proposer: nothing runs
+        found = None
+        if not (inventory_unit(request) is not None or needle_cli.HELP_REQUEST.fullmatch(request)
+                or panes_exact.missing_command(request)):
+            found = panes_exact.admitted(request)
+            if not found and not agents.exact_calls(request):
+                proposed = needle_cli.bundle_proposal(request) if self.bundle else None
+                if proposed is not None:
+                    self.asked["bundle"] += 1
+                    return {"function_calls": proposed[0]}
+                self.asked["model"] += 1
+                self.engine.reset()
+                reply = self.engine.complete(request)
+                raw, error = reply_calls(reply)
+                return reply if error is not None else {"function_calls": self.translate(raw)}
+        self.asked["exact"] += 1
+        # A listing, the help, a typing request with no command and an agents
+        # launch run no pane action; an exact command is checked as the
+        # sentence it was read as.
+        return {"function_calls": found[0], "read_as": found[1]} if found else {"function_calls": []}
+
+
 def score(engine: Engine, cases: list[dict], runs: int = 1, translate=lambda calls: calls,
           job: str = jobs.DEFAULT) -> dict:
     """Run every case `runs` times; return totals, per-tag counts and failures."""
@@ -177,7 +224,9 @@ def score(engine: Engine, cases: list[dict], runs: int = 1, translate=lambda cal
                     and not isinstance(reply.get("function_calls"), list):
                 error = error or "the system engine reply lacks a function_calls list"
             calls = translate(raw) if error is None else []
-            results = check(case["request"], calls) if error is None else []
+            # an exact route's calls are checked as the sentence they were read as
+            sentence = reply.get("read_as", case["request"]) if isinstance(reply, dict) else case["request"]
+            results = check(sentence, calls) if error is None else []
             admitted = [_norm(r.kind, r.args) for r in results if admitted_action(r)]
             refused = [r for r in results if isinstance(r, Refusal)]
             want = expect_of(case["expect"])
@@ -245,8 +294,15 @@ def main(argv=None) -> int:
     parser.add_argument("--normalizer", action="store_true",
                         help="system job: score the whole route, grammar plus the configured "
                              "normalizer's proposals (system-model status)")
+    parser.add_argument("--route", choices=("model", "exact", "bundle"), default="model",
+                        help="panes job: what answers. model: the model for every request (the "
+                             "default, and what a model's gates measure). exact: the exact routes, "
+                             "then the model, as a request meets them. bundle: the same with the "
+                             "panes bundle asked before the model")
     parser.add_argument("--quiet", action="store_true", help="totals only")
     args = parser.parse_args(argv)
+    if args.route != "model" and (args.job != jobs.DEFAULT or args.baseline or args.normalizer):
+        parser.error("--route is for the panes job with a model")
     with open(args.cases, encoding="utf-8") as handle:
         cases = [json.loads(line) for line in handle if line.strip()]
     tools, translate = TOOLSETS[args.toolset]
@@ -282,6 +338,17 @@ def main(argv=None) -> int:
             with open(args.json, "w", encoding="utf-8") as handle:
                 json.dump(result, handle, indent=1)
         return 1 if t.get("unsafe", 0) or not result["complete"] else 0
+    route = None
+
+    def routed(engine):
+        nonlocal route
+        if args.route == "model":
+            return engine, cases, args.runs, translate
+        import os
+        os.environ["KILIX_NEEDLE_BUNDLE"] = "1" if args.route == "bundle" else "0"
+        route = PanesRoute(engine, translate, args.route == "bundle")
+        return route, cases, args.runs, (lambda calls: calls)
+
     if args.baseline:
         if args.job not in ("files", "system") or args.library or args.engine or args.weights:
             parser.error("--baseline is for the files or system job, without engine/library/weights")
@@ -299,13 +366,13 @@ def main(argv=None) -> int:
             weights = asset.load_verified(args.weights, args.weights_sha256,
                                           os.path.getsize(args.weights))
         with library, LibEngine(library, tools, weights) as engine:
-            result = score(engine, cases, args.runs, translate, args.job)
+            result = score(*routed(engine), args.job)
         if weights is not None:
             weights.close()
     else:
         image = asset.from_file(args.engine) if args.engine else asset.from_installed(args.root)
         with image, Engine(image, tools) as engine:
-            result = score(engine, cases, args.runs, translate, args.job)
+            result = score(*routed(engine), args.job)
     if not args.quiet:
         for failure in result["failures"]:
             label = "UNSAFE" if failure["unsafe"] else ("held  " if failure["refused"] else "miss  ")
@@ -325,6 +392,9 @@ def main(argv=None) -> int:
           f"errors {t.get('errors', 0)}/{t['cases']}   held {t.get('held', 0)}/{t['cases']}   tools {t.get('tools', 0)}/{t['cases']}   "
           f"latency median {result['latency_ms']['median']} ms p95 {result['latency_ms']['p95']} ms   "
           f"engine peak RSS {result['engine_peak_rss_mb']} MB")
+    if route is not None:
+        result["route"] = {"name": args.route, "answered_by": dict(route.asked)}
+        print(f"route {args.route}: " + "   ".join(f"{who} {n}" for who, n in route.asked.items()))
     if args.json:
         with open(args.json, "w", encoding="utf-8") as handle:
             json.dump(result, handle, indent=1)
