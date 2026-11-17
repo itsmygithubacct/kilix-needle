@@ -165,11 +165,11 @@ HELP_REQUEST = re.compile(r"\s*(?:(?:show|print|get)\s+(?:me\s+)?(?:the\s+)?)?(?
 # is not set. A default changes only by a gate on a blind held-out set and an
 # independent review (README, "The panes bundle"). The gate on the blind set
 # v17 passed (2026-11-17). The review after it found requests the bundle
-# misread, and so did a second review of the reader that answered the first
-# (panes-bundle/README.md, "What the reviews found"). The gate compares calls
-# with labels and cannot see a misreading of that kind. Off until the reader
-# as it now is has been through a review that finds none and a gate of its
-# own.
+# misread, and so did a second review of the reader that answered the first,
+# and a third of the reader that answered the second (panes-bundle/README.md,
+# "What the reviews found"). The gate compares calls with labels and cannot
+# see a misreading of that kind. Off until the reader as it now is has been
+# through a review that finds none and a gate of its own.
 BUNDLE_BY_DEFAULT = False
 
 _BUNDLE_ON = ("1", "on", "true", "yes")

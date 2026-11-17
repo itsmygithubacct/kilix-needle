@@ -27,7 +27,8 @@ TOOLS = {"close_pane": {"args": [["pane", "ref", None, None]], "required": ["pan
          "go_to_tab": {"args": [["tab", "ref", None, None]], "required": ["tab"]},
          "move_tab": {"args": [["direction", "enum", None, None], ["position", "int", 1, 9]], "required": []},
          "rename_tab": {"args": [["name", "text", None, None], ["tab", "ref", None, None]], "required": ["name"]}}
-KNOWN = {"move", "to", "the", "next", "tab", "this", "position", "rename", "shut", "pane", "left", "and", "htop"}
+KNOWN = {"move", "to", "the", "next", "tab", "this", "position", "rename", "shut", "pane", "left", "and", "htop",
+         "build", "logs"}
 PAIRS = {"<s>_move", "move_to", "to_the", "the_next", "next_tab", "tab_</s>",          # move to the next tab
          "move_this", "this_tab", "tab_to", "to_position", "position_<num>", "<num>_</s>",
          "<s>_rename", "rename_this", "to_<x>", "<x>_</s>",                            # rename this tab to X
@@ -48,8 +49,11 @@ READINGS = {"go_to_tab": [reading("move to the next tab", tab="next")],
             "close_pane": [reading("shut the left pane", pane="left"), reading("shut the <pane> pane")]}
 GROUND = {"readings": READINGS, "separators": ["and"], "clauses_max": 2,
           "copy_max": {"move_tab": {"position": 1}, "rename_tab": {"name": 2}, "close_pane": {"pane": 1}},
-          "copied": {"pane": ["htop"]}}
+          "copied": {"pane": ["htop"], "name": ["build", "logs"]}}
 RIGHT, UP, LEFT, DOWN = [4.0, 0.0], [0.0, 4.0], [-4.0, 0.0], [0.0, -4.0]   # one hidden unit each
+
+
+LIFT = [0.0]        # added to every output of the nets being made: another member, the same answers
 
 
 def net(outputs, features, rows, biases=None):
@@ -62,11 +66,22 @@ def net(outputs, features, rows, biases=None):
     flat += [0.0] * 4
     for output in outputs:
         flat += rows.get(output, [0.0] * 4)
-    flat += [(biases or {}).get(output, 0.0) for output in outputs]
+    flat += [(biases or {}).get(output, 0.0) + LIFT[0] for output in outputs]
     return names, list(outputs), flat
 
 
-def nets(tool_says_none=False) -> dict:
+def nets(tool_says_none=False, lift=0.0) -> dict:
+    """One member's nets. `lift` makes another member of them: every output
+    of every net is that much higher, so each net answers as before and no
+    net is the same."""
+    LIFT[0] = lift
+    try:
+        return _nets(tool_says_none)
+    finally:
+        LIFT[0] = 0.0
+
+
+def _nets(tool_says_none) -> dict:
     first = [1.0, 0.0, 0.0, 0.0]
     return {
         "seg": net(["sep", "word"], {"w+0=and": RIGHT}, {"sep": first}, {"word": 1.0}),
@@ -79,10 +94,13 @@ def nets(tool_says_none=False) -> dict:
         "arg go_to_tab tab": net([PB.ABSENT, "next", PB.COPY], {"u=next": RIGHT}, {"next": first}, {PB.ABSENT: 1.0}),
         "arg move_tab position": net([PB.ABSENT, PB.COPY], {"u=<num>": RIGHT}, {PB.COPY: first}, {PB.ABSENT: 1.0}),
         "span move_tab position": net(["first", "last"], {"w+0=<num>": RIGHT}, {"first": first, "last": first}),
-        # a name is any word the nets do not know, or "left"
-        "arg rename_tab name": net([PB.ABSENT, PB.COPY], {"u=<x>": RIGHT, "u=left": RIGHT}, {PB.COPY: first},
-                                   {PB.ABSENT: 1.0}),
-        "span rename_tab name": net(["first", "last"], {"w+0=<x>": RIGHT, "w+0=left": RIGHT, "w+1=</s>": UP},
+        # a name is any word the nets do not know, or "left", "build" or "logs"
+        "arg rename_tab name": net([PB.ABSENT, PB.COPY],
+                                   {"u=<x>": RIGHT, "u=left": RIGHT, "u=build": RIGHT, "u=logs": RIGHT},
+                                   {PB.COPY: first}, {PB.ABSENT: 1.0}),
+        "span rename_tab name": net(["first", "last"],
+                                    {"w+0=<x>": RIGHT, "w+0=left": RIGHT, "w+0=build": RIGHT, "w+0=logs": RIGHT,
+                                     "w+1=</s>": UP},
                                     {"first": first, "last": [1.0, 1.0, 0.0, 0.0]}),
         "arg close_pane pane": net([PB.ABSENT, "left", PB.COPY], {"u=left": RIGHT, "u=<x>": UP, "u=htop": UP},
                                    {"left": first, PB.COPY: [0.0, 1.0, 0.0, 0.0]}, {PB.ABSENT: 1.0}),
@@ -94,7 +112,7 @@ def nets(tool_says_none=False) -> dict:
 def packed(*, pairs=PAIRS, free_text=(), members=2, split=False, value_words=None, ground=GROUND,
            made=None) -> bytes:
     """The bundle file. `split`: the second member finds no tool where the first does."""
-    made = made or [(seed, nets(tool_says_none=split and seed == 1)) for seed in range(members)]
+    made = made or [(seed, nets(tool_says_none=split and seed == 1, lift=seed / 4)) for seed in range(members)]
     return PBT.pack(made, KNOWN, set(pairs), TOOLS, list(free_text), dim=2, hidden=4, value_words=value_words,
                     ground=ground)
 
@@ -295,33 +313,55 @@ class Reads(unittest.TestCase):
         self.assertEqual(self.member.read("rename this tab to api and move to the next tab")[1], "ok")
         # what a call changes ...
         for changed, calls in (
-                ({"pane", "tab"}, [call("go_to_tab", tab="2"), call("go_to_pane", pane="logs")]),
-                ({"pane"}, [call("go_to_pane", pane="left"), call("resize_pane", pane="left", direction="wider")]),
-                ({"pane", "sides"}, [call("open_pane", side="right"), call("close_pane", pane="left"),
-                                     call("maximize_pane", pane="left")]),
-                ({"pane", "sides", "tab"}, [call("close_pane", pane="current"), call("maximize_pane", pane="70")]),
-                ({"pane", "tab", "order"}, [call("open_tab"), call("close_tab", tab="2"), call("close_tab", tab="current")]),
-                ({"sides"}, [call("arrange_panes", layout="grid"), call("swap_panes", side="left"), call("maximize_pane")]),
+                ({"pane", "tab", "focus"}, [call("go_to_tab", tab="2"), call("go_to_pane", pane="logs")]),
+                ({"pane", "focus"}, [call("go_to_pane", pane="left")]),
+                ({"pane"}, [call("resize_pane", pane="left", direction="wider")]),
+                ({"pane", "sides", "focus"}, [call("open_pane", side="right")]),
+                # a pane on a side of the caller's is in the caller's tab, and is not the caller's
+                ({"pane", "sides"}, [call("close_pane", pane="left"), call("close_pane", pane="next")]),
+                # any other may be the last of its tab, and may be the one the request is made from (the third
+                # review: "close the notes pane and move this tab to position 1")
+                ({"pane", "sides", "order", "caller"}, [call("close_pane", pane="notes"), call("close_pane", pane="70")]),
+                ({"pane", "sides", "tab", "order", "caller"}, [call("close_pane", pane="current")]),
+                ({"pane", "tab", "order", "caller"}, [call("close_tab", tab="2"), call("close_tab", tab="current"),
+                                                      call("close_tab", tab="last"), call("close_tab", tab="logs")]),
+                ({"pane", "tab", "order"}, [call("close_tab", tab="next"), call("close_tab", tab="previous")]),
+                ({"pane", "tab", "order", "focus"}, [call("open_tab")]),
+                # whether a tab shows one pane at full size (the third review: "maximize this pane and restore
+                # the layout" restored nothing)
+                ({"sides", "layout"}, [call("arrange_panes", layout="grid"), call("maximize_pane"),
+                                       call("maximize_pane", restore=True)]),
+                ({"pane", "sides", "layout", "focus"}, [call("maximize_pane", pane="left")]),
+                ({"pane", "sides", "tab", "layout", "focus"}, [call("maximize_pane", pane="70")]),
+                ({"sides"}, [call("swap_panes", side="left")]),
                 ({"order"}, [call("move_tab", direction="left")]),
                 ({"title api"}, [call("rename_tab", name="API"), call("rename_pane", name="api")]),
                 ({"title build", "title logs"}, [call("rename_tab", name="Build  logs")]),
-                ({"pane", "tab", "order", "title logs"}, [call("open_tab", name="logs")]),
+                ({"pane", "tab", "order", "focus", "title logs"}, [call("open_tab", name="logs")]),
                 # a program that is started and a command that is typed are what the pane is called then
-                ({"pane", "sides", "title htop"}, [call("open_pane", side="right", program="htop")]),
+                ({"pane", "sides", "focus", "title htop"}, [call("open_pane", side="right", program="htop")]),
                 ({"title make", "title test"}, [call("run_in_pane", pane="current", command="make test")]),
+                # a pane that is renamed or typed into is no longer called what it was found by (the third
+                # review's sweep: "call the build pane api and close the build pane")
+                ({"pane", "title api", "title build"}, [call("rename_pane", pane="build", name="api")]),
+                ({"pane", "title ls", "title my", "title notes"}, [call("run_in_pane", pane="my notes", command="ls")]),
+                ({"pane", "title api"}, [call("rename_pane", pane="left", name="api"),
+                                         call("rename_pane", pane="70", name="api")]),
                 (set(), [call("resize_pane", direction="wider")])):
             for one in calls:
                 self.assertEqual(PB.changes(one), changed, one)
-        # ... and what a call is resolved by
+        # ... and what a call is resolved by. Every call goes by the caller: it is sent from the caller's pane.
         for needed, refs, calls in (
                 ({"tab"}, ["tab"], [call("rename_tab", name="api"), call("close_tab", tab="current")]),
-                ({"pane"}, ["pane"], [call("resize_pane", direction="wider"), call("maximize_pane"),
-                                      call("rename_pane", name="api"), call("close_pane", pane="current")]),
+                ({"pane"}, ["pane"], [call("resize_pane", direction="wider"), call("rename_pane", name="api"),
+                                      call("close_pane", pane="current")]),
+                ({"pane", "layout"}, ["pane"], [call("maximize_pane"), call("maximize_pane", restore=True)]),
                 ({"pane"}, [], [call("open_pane", side="right")]),
                 ({"pane", "sides"}, ["pane"], [call("go_to_pane", pane="left"), call("go_to_pane", pane="next")]),
-                ({"pane", "sides"}, [], [call("swap_panes", side="left")]),
+                # a swap and a move of a tab are made through the caller's pane and leave the focus there
+                ({"pane", "sides", "focus"}, [], [call("swap_panes", side="left")]),
+                ({"tab", "order", "focus"}, [], [call("move_tab", direction="left")]),
                 ({"tab", "order"}, ["tab"], [call("go_to_tab", tab="next"), call("go_to_tab", tab="last")]),
-                ({"tab", "order"}, [], [call("move_tab", direction="left")]),
                 ({"tab"}, [], [call("arrange_panes", layout="grid")]),
                 ({"order"}, ["tab"], [call("go_to_tab", tab="2")]),
                 ({"title logs"}, ["tab"], [call("go_to_tab", tab="Logs")]),
@@ -330,7 +370,12 @@ class Reads(unittest.TestCase):
                 (set(), ["pane"], [call("close_pane", pane="70")]),
                 (set(), [], [call("open_tab")])):
             for one in calls:
-                self.assertEqual(PB.goes_by(one, refs), needed, one)
+                self.assertEqual(PB.goes_by(one, refs), needed | {"caller"}, one)
+        # After a close of a pane that may be the caller's own, nothing: the second call may never be sent.
+        self.assertEqual(self.member.read("shut the htop pane and move to the next tab"), ([], PB.LEANS))
+        # A pane to the left of the caller's is not the caller's, and its tab stays.
+        self.assertEqual(self.member.read("shut the left pane and move to the next tab"),
+                         ([call("close_pane", pane="left"), call("go_to_tab", tab="next")], "ok"))
 
     def test_the_trainer_finds_each_tool_s_readings(self):
         tools = {"go_to_tab": {"args": [["tab", "ref", None, None]], "required": ["tab"]},
@@ -373,12 +418,30 @@ class Reads(unittest.TestCase):
         self.assertEqual(free.read("rename this tab to Build left"), ([], PB.PLAIN))
         copied = PB.Bundle(packed(free_text=["rename_tab"], ground={**GROUND, "copied": {"name": ["left"]}}))
         self.assertEqual(copied.read("rename this tab to left")[0], [call("rename_tab", name="left")])
-        # a word new to the bundle is what a name is made of
+        # a word new to the bundle is a name where it stands alone
         self.assertEqual(free.read("rename this tab to Q3")[0], [call("rename_tab", name="Q3")])
         # copied as a pane's title is not copied as a name
         self.assertEqual(self.member.read("shut the htop pane")[0], [call("close_pane", pane="htop")])
         self.assertEqual(PB.Bundle(packed(ground={**GROUND, "copied": {"name": ["htop"]}})).read("shut the htop pane"),
                          ([], PB.PLAIN))
+
+    def test_a_new_word_is_a_name_only_alone(self):
+        # The third review: "rename this tab to api thx" named the tab "api
+        # thx", and "uh api" and "api pronto" were names too. A word the
+        # bundle has never seen may be a name or wording it does not know;
+        # beside another word it is not taken for part of a name.
+        free = PB.Bundle(packed(free_text=["rename_tab"]))
+        for name in ("api thx", "uh api", "build thx", "thx build", "Build  thx"):
+            self.assertEqual(free.read("rename this tab to " + name), ([], PB.MIXED), name)
+        # words that were copied as names in training make a name of two
+        self.assertEqual(free.read("rename this tab to build logs")[0], [call("rename_tab", name="build logs")])
+        # one token is one word, whatever marks it holds
+        for name in ("api-server", "v1.2", "a/b", "my_project"):
+            self.assertEqual(free.read("rename this tab to " + name)[0], [call("rename_tab", name=name)], name)
+        # What is left: a new word standing alone where a name stands is the
+        # name. "thx" names the tab here, and no rule of this reader can tell
+        # it from "api".
+        self.assertEqual(free.read("rename this tab to thx")[0], [call("rename_tab", name="thx")])
 
     def test_a_copied_text_does_not_end_in_the_mark_that_ended_the_sentence(self):
         free = PB.Bundle(packed(free_text=["rename_tab"]))
@@ -500,10 +563,16 @@ class Artifact(unittest.TestCase):
         for size in (0, -1, PB.MAX_BYTES + 1, "12", None, True, 1.5):
             with self.assertRaisesRegex(PB.BundleError, "no size a bundle can have", msg=repr(size)):
                 PB.Bundle.load(directory(self, raw, bytes=size))
-        # another size than the manifest states: refused by its size, before a byte is read
-        with mock.patch.object(PB.os, "read", side_effect=AssertionError("the file was read")), \
+        # another size than the manifest states: refused by its size, before a byte of it is read
+        really, sizes = os.read, []
+
+        def watched(handle, most):
+            sizes.append(os.fstat(handle).st_size)
+            return really(handle, most)
+        with mock.patch.object(PB.os, "read", side_effect=watched), \
                 self.assertRaisesRegex(PB.BundleError, "does not have the size"):
             PB.Bundle.load(directory(self, raw, bytes=len(raw) + 1))
+        self.assertTrue(sizes and len(raw) not in sizes)        # the manifest was read, the file was not
         # a directory, and a pipe nobody writes to: refused at once, not waited on
         folder = directory(self, raw, file="inner")
         (folder / "inner").mkdir()
@@ -518,6 +587,54 @@ class Artifact(unittest.TestCase):
         folder = directory(self, raw, file="link")
         os.symlink(folder / PB.FILE, folder / "link")
         self.assertEqual(len(PB.Bundle.load(folder).members), 2)
+
+    def test_the_manifest_is_read_as_carefully_as_the_file(self):
+        # The third review: the manifest itself was read with no look at what
+        # kind of file it is, and a pipe in its place held the request up.
+        raw = packed()
+        if hasattr(os, "mkfifo"):
+            folder = directory(self, raw)
+            (folder / "manifest.json").unlink()
+            os.mkfifo(folder / "manifest.json")
+            with self.assertRaisesRegex(PB.BundleError, "manifest is not a regular file"):
+                PB.Bundle.load(folder)
+        if os.path.exists("/dev/zero"):
+            folder = directory(self, raw)
+            (folder / "manifest.json").unlink()
+            os.symlink("/dev/zero", folder / "manifest.json")
+            with self.assertRaisesRegex(PB.BundleError, "manifest is not a regular file"):
+                PB.Bundle.load(folder)
+        # larger than a manifest can be: refused by its size, before a byte is read
+        folder = directory(self, raw)
+        (folder / "manifest.json").write_bytes(b" " * (PB.MANIFEST_MAX + 1))
+        with mock.patch.object(PB.os, "read", side_effect=AssertionError("it was read")), \
+                self.assertRaisesRegex(PB.BundleError, "manifest is larger than one can be"):
+            PB.Bundle.load(folder)
+        # not text, and nesting no parser follows: a manifest that cannot be read, not a crash
+        for content in (b"\xff\xfe{}", b"[" * 100000):
+            folder = directory(self, raw)
+            (folder / "manifest.json").write_bytes(content)
+            with self.assertRaisesRegex(PB.BundleError, "manifest is unreadable"):
+                PB.Bundle.load(folder)
+
+    def test_members_that_are_the_same_nets_are_one_member(self):
+        # The third review: the same member twice loaded and answered, and
+        # two that are the same agree about anything.
+        with self.assertRaisesRegex(PB.BundleError, "the same nets"):
+            PB.Bundle(packed(made=[(0, nets()), (1, nets())]))
+        with self.assertRaisesRegex(PB.BundleError, "the same nets"):
+            PB.Bundle(packed(made=[(0, nets()), (1, nets(lift=0.25)), (2, nets())]))
+        self.assertEqual(len(PB.Bundle(packed(made=[(0, nets()), (1, nets(lift=0.25))])).members), 2)
+
+    def test_nets_without_a_size_are_refused(self):
+        raw = packed()
+        start = len(PB.MAGIC) + 4
+        size = int.from_bytes(raw[len(PB.MAGIC):start], "little")
+        head = json.loads(raw[start:start + size])
+        for key in ("dim", "hidden"):
+            encoded = json.dumps({**head, key: 0}).encode()
+            with self.assertRaisesRegex(PB.BundleError, "have no size", msg=key):
+                PB.Bundle(PB.MAGIC + len(encoded).to_bytes(4, "little") + encoded + raw[start + size:])
 
     def test_nothing_wrong_with_the_file_stops_a_request(self):
         # A fault that shows only while a request is read: the bundle is
@@ -564,7 +681,7 @@ class Artifact(unittest.TestCase):
                 self.assertEqual(said.getvalue().count("the panes bundle is not used"), 1, folder)
                 # and asked directly it says why and ends, with no traceback
                 self.assertEqual(PB.main(["move to the next tab"]), 1)
-                self.assertIn("panes_bundle: the bundle manifest is unreadable", said.getvalue())
+                self.assertRegex(said.getvalue(), "panes_bundle: the bundle manifest is (unreadable|not a regular file)")
 
     def test_members_must_agree(self):
         agree = PB.Bundle.load(directory(self, packed(members=3)))
@@ -758,13 +875,39 @@ class WhatTheReviewsFound(unittest.TestCase):
         "rename this tab to api and go to the api tab", "open a new tab and go to the next tab",
         "arrange the panes in a grid and go to the pane above", "maximize this pane and rename it to logs",
     )
+    # The third review: held to whole training clauses, it read these.
+    THIRD = (
+        # 1 a word it has never seen, beside the name, was part of the name
+        "rename this tab to api thx", "rename this pane to api quickly", "rename this tab to uh api",
+        "title this tab api pronto", "name this tab api asap", "set the tab title to api thx",
+        # 2 a pane that is closed may be the last of its tab: the tabs after it are counted anew
+        "close the notes pane and shift this tab to position 1", "close the notes pane and go to tab 2",
+        "kill the notes pane and close tab 2", "close the notes pane, then move this tab to position 1",
+        # 3 whether the tab shows one pane at full size was read before the first call ran
+        "maximize the current pane and restore layout", "layout stacked and restore layout",
+        "panes grid and full-screen this pane please", "restore layout and zoom this pane",
+        # a move of a tab is made through the caller's pane: the focus went back where it came from
+        "go to the left pane and move this tab to the left", "maximize left pane and move current tab left",
+        # the pane the request is made from may be closed first, and the second call never sent
+        "close tab 3 and new tab", "close this pane and go to tab 1", "close the build pane and arrange the rest in a grid",
+        # a pane that was renamed or typed into, named again by the title it had
+        "call the build pane api and close the build pane", "call the build pane api and select the build pane",
+        "in the notes pane, run ls and close the notes pane",
+    )
+    # What is left of its first finding: one word the bundle has never seen,
+    # standing alone where a name stands, is the name. The reader cannot
+    # tell "asap" from "api" (panes-bundle/README.md, "What it still gets
+    # wrong"). Held here so that nobody takes it for fixed.
+    A_NEW_WORD_ALONE = {
+        "rename the tab asap": [call("rename_tab", name="asap")],
+        "call this pane asap": [call("rename_pane", name="asap")],
+    }
     STILL_READ = {
         "go to tab two": [call("go_to_tab", tab="2")],
         "rename this tab to api": [call("rename_tab", name="api")],
         "go to the logs tab": [call("go_to_tab", tab="logs")],
         "move to the next tab": [call("go_to_tab", tab="next")],
         "take me to the pane to the left": [call("go_to_pane", pane="left")],
-        "arrange the panes one above another": [call("arrange_panes", layout="horizontal")],
         "rename this tab to build logs": [call("rename_tab", name="build logs")],
         "make this pane wider": [call("resize_pane", direction="wider")],
         "close the build pane": [call("close_pane", pane="build")],
@@ -777,8 +920,14 @@ class WhatTheReviewsFound(unittest.TestCase):
         "split right and go to tab 2": [call("open_pane", side="right"), call("go_to_tab", tab="2")],
         "split right and rename the tab to api": [call("open_pane", side="right"), call("rename_tab", name="api")],
         "go to tab 2 and close tab 1": [call("go_to_tab", tab="2"), call("close_tab", tab="1")],
-        "close the build pane and arrange the rest in a grid": [call("close_pane", pane="build"),
-                                                                call("arrange_panes", layout="grid")],
+        # a pane on a side of the caller's is not the caller's own, and its tab stays
+        "close the left pane and arrange the rest in a grid": [call("close_pane", pane="left"),
+                                                               call("arrange_panes", layout="grid")],
+        "close the left pane and go to tab 2": [call("close_pane", pane="left"), call("go_to_tab", tab="2")],
+        "close the next tab and open a new tab": [call("close_tab", tab="next"), call("open_tab")],
+        # names written as one word, whatever marks they hold
+        "rename this tab to api-server": [call("rename_tab", name="api-server")],
+        "rename this tab to v1.2": [call("rename_tab", name="v1.2")],
         # a rename that says what it renames, after a clause about the other kind
         "maximize this pane and rename this tab to logs": [call("maximize_pane"), call("rename_tab", name="logs")],
         "go to the left pane and rename the tab logs": [call("go_to_pane", pane="left"), call("rename_tab", name="logs")],
@@ -809,6 +958,31 @@ class WhatTheReviewsFound(unittest.TestCase):
         # make it tab 2, and the wiring does not use what the checks changed
         self.assertEqual(self.bundle.read("call this tab 2")[0], [call("rename_tab", name="2")])
 
+    def test_no_request_the_third_review_found_is_answered(self):
+        for request in self.THIRD:
+            self.assertIsNone(self.used(request), request)
+        for request in self.THIRD[:6]:
+            self.assertEqual(self.bundle.read(request), ([], PB.MIXED), request)
+        for request in self.THIRD[6:]:
+            self.assertEqual(self.bundle.read(request), ([], PB.LEANS), request)
+
+    def test_a_new_word_alone_where_a_name_stands_is_still_the_name(self):
+        for request, calls in self.A_NEW_WORD_ALONE.items():
+            self.assertEqual(self.used(request), calls, request)
+
+    def test_a_layout_kitty_shows_the_other_way_round_is_not_answered(self):
+        # The third review, finding 5, checked in kitty's own source: its
+        # vertical layout shows the panes one below another, and its
+        # horizontal layout side by side. The tool's labels say the opposite.
+        for request in ("arrange the panes one above another", "arrange the panes side by side"):
+            self.assertEqual(self.bundle.read(request), ([], PB.TURNED), request)
+        self.assertEqual(PB.CROSSED, {("arrange_panes", "layout"): ("vertical", "horizontal")})
+        # while the tool's description still says so; once it is put right, so is this rule
+        import actions
+        self.assertIn("vertical is side by side", json.dumps(actions.TOOLS))
+        # the other layouts are answered
+        self.assertEqual(self.used("stack everything"), [call("arrange_panes", layout="stack")])
+
     def test_ordinary_requests_are_still_read(self):
         for request, calls in self.STILL_READ.items():
             self.assertEqual(self.bundle.read(request), (calls, "ok"), request)
@@ -832,6 +1006,11 @@ class WhatTheReviewsFound(unittest.TestCase):
         # call is resolved by but a title or the pane they name (changes)
         self.assertEqual(set(self.bundle.tools), set(PB._CHANGES) | {"rename_tab", "rename_pane", "resize_pane", "run_in_pane"})
         self.assertTrue(set(PB._GOES_BY) <= set(self.bundle.tools))
+        self.assertTrue(set(PB.NOT_THE_CALLERS) <= set(self.bundle.tools))
+        # every argument that names something by a copied text is held to one new word, but a program and a
+        # command, which are made of new words and wait for a yes
+        copied = {key for tool in self.bundle.tools.values() for key, kind, _, _ in tool["args"] if kind in ("ref", "text")}
+        self.assertEqual(copied - set(PB.ONE_NEW), {"program", "command"})
         # "go to it" only ever followed a clause that opens a pane: it is a reading there and nowhere else
         go_to_it = "go to it".split()
         self.assertIn(PB.reading_line("open_pane", go_to_it, {"pane": "below"}), self.bundle.readings("go_to_pane"))
@@ -993,6 +1172,17 @@ class BeforeTheModel(Route):
             status, calls, model = self.ask(request, call("go_to_tab", tab="next"))
         self.assertEqual((status, model.prompts, len(calls)), (0, [request], 1))
         self.assertIn("the panes bundle is not used (RuntimeError: anything at all)", said.getvalue())
+        # The third review: a pipe where the manifest should be held the request up.
+        if hasattr(os, "mkfifo"):
+            folder = directory(self, packed())
+            (folder / "manifest.json").unlink()
+            os.mkfifo(folder / "manifest.json")
+            PB._LOADED.clear()
+            with mock.patch.object(PB, "DIRECTORY", folder), mock.patch("sys.stderr", new_callable=io.StringIO) as said:
+                status, calls, model = self.ask(request, call("go_to_tab", tab="next"))
+            self.assertEqual((status, model.prompts, len(calls)), (0, [request], 1))
+            self.assertIn("the panes bundle is not used (BundleError: the bundle manifest is not a regular file)",
+                          said.getvalue())
 
     def test_more_than_one_line_is_never_read(self):
         self.assertIsNone(PB.read("move to the next tab\nshut the left pane"))
@@ -1133,6 +1323,11 @@ class TheCheckedInBundleBeforeTheModel(Route):
 
     def test_what_the_second_review_found_goes_to_the_model_and_nothing_runs(self):
         for request in WhatTheReviewsFound.SECOND:
+            _, ran, model = self.ask(request)
+            self.assertEqual((ran, model.prompts), ([], [request]), request)
+
+    def test_what_the_third_review_found_goes_to_the_model_and_nothing_runs(self):
+        for request in WhatTheReviewsFound.THIRD:
             _, ran, model = self.ask(request)
             self.assertEqual((ran, model.prompts), ([], [request]), request)
 

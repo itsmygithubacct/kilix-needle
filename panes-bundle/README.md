@@ -19,7 +19,7 @@ provenance. It records:
 
 `panes_bundle.py` refuses a file whose digest does not match the manifest,
 a file whose header points outside it or lacks a table, and a file with
-fewer than two members.
+fewer than two members or with two members that are the same nets.
 
 ## What a member is
 
@@ -89,6 +89,16 @@ the model reads the request as before, unless all of these hold:
    tab). A word the bundle knows only as wording is wording: "rename this
    tab please" does not name it "please". And no copy ends in the mark that
    ended the sentence ("api!").
+
+   **A word new to the bundle is a name only where it stands alone.** A
+   name, or a title a pane or tab is found by, of more than one word is
+   made of words that were copied as such in training ("build logs"). Beside
+   another word, a new word may as well be wording the bundle does not
+   know: "rename this tab to api thx" is not answered, where the reader
+   before this one named the tab "api thx". One word is one token, whatever
+   marks it holds ("api-server", "v1.2"). A command and a program are not
+   held to this: they are made of new words, and they wait for a yes that
+   shows them.
 7. The pane or tab that `close_pane`, `close_tab` or `run_in_pane` acts on is
    named with trained words or a number. A word it has never seen may be a
    title, but it may as well be a misspelt "right" or a "3rd".
@@ -101,19 +111,28 @@ the model reads the request as before, unless all of these hold:
    "one above another" belongs to the layout in rows. The other clause's
    call does not count.
 9. **No clause goes by what the clause before it changes.** The route
-   resolves every call of a request against the desktop as it was before the
-   first call ran. After "go to the logs tab", "rename it to api" means the
-   logs tab, and the route would rename the tab the request came from. So
-   the reader works out what each call changes for the calls after it, and
-   what each call is resolved by (`panes_bundle.changes`, `goes_by`):
+   resolves every call of a request against the desktop as it was when the
+   request was made, and it does so on purpose: "close tab 2 and close tab
+   3" means the tabs as the person saw them (`needle_cli.py`, "One snapshot
+   per request"). That suits "tab 3" and "this tab". It does not suit "it"
+   or "there" after a move: after "go to the logs tab", "rename it to api"
+   means the logs tab, and the route would rename the tab the request came
+   from. A call does not say which of the two its clause meant. And every
+   call is sent from the pane the request was made in. So the reader works
+   out what each call changes for the calls after it, and what each call is
+   resolved by (`panes_bundle.changes`, `goes_by`), and stands aside
+   wherever the two readings could differ:
 
    | A call changes | when it |
    | --- | --- |
    | which pane is "this pane", "it", "here" | goes to a pane or a tab, opens or closes a pane or a tab, or names a pane |
    | which tab is "this tab" | goes to a tab, opens or closes one, goes to or maximizes a pane named by a title or a number (it may be in another tab), closes the caller's own pane, or names a tab |
    | which pane is to the left, right, above or below, or the next | opens or closes a pane, maximizes one, arranges or swaps panes |
-   | which tab is tab 2, the next or the last | opens, closes or moves a tab |
-   | what a pane or tab is called | gives a name, starts a program or types a command: each word of it |
+   | which tab is tab 2, the next or the last | opens, closes or moves a tab; closes a pane that is not named by its place beside the caller's (it may be the last of its tab, and the tab goes with it) |
+   | whether a tab shows one pane at full size | maximizes a pane, restores the layout, or arranges the panes |
+   | where the focus is | goes to a pane or a tab, opens one, or maximizes another pane than the caller's |
+   | whether the caller's own pane is still there | closes a pane that is not named by its place beside the caller's, or a tab other than the next or the previous one |
+   | what a pane or tab is called | gives a name, starts a program or types a command: each word of it, and each word of the title it was found by |
 
    | A call is resolved by | when it |
    | --- | --- |
@@ -121,13 +140,18 @@ the model reads the request as before, unless all of these hold:
    | the caller's tab | names no tab, or "this" one, or the next, previous or last; arranges panes; moves a tab; names a pane by a title (looked for in the caller's tab first) |
    | the sides | names a pane by its side, or the next or previous one; swaps panes |
    | the order of the tabs | names a tab by its number, or the next, previous or last; moves a tab |
+   | whether the tab shows one pane at full size | maximizes a pane or restores the layout (the route reads it from the desktop as it was) |
+   | the focus | moves a tab or swaps panes: both are made through the caller's pane and leave the focus on it |
+   | the caller's own pane | always: every call is sent from it |
    | a title | names a pane or a tab by it: each word of it |
 
    A request whose second call is resolved by something its first call
    changes is not answered: "go to tab 2 and make it wider", "split right
    and make it wider", "close tab 1 and go to tab 2", "rename this tab to
-   api and go to the api tab". "rename this tab to api and split right" and
-   "split right and go to tab 2" are.
+   api and go to the api tab", "maximize this pane and restore the layout",
+   "go to the left pane and move this tab left", "close this pane and go to
+   tab 1". "rename this tab to api and split right", "split right and go to
+   tab 2" and "close the left pane and go to tab 2" are.
 10. A rename in the second clause that does not say whether it renames a tab
     or a pane follows a clause about the same kind of thing. Read alone,
     "rename it to api" is a tab's rename, and every training row with such a
@@ -153,12 +177,16 @@ words and word pairs, agreement, and the checks.
 
 Nothing in front of the model stops a request. With the bundle switched on,
 each of these leaves one line on stderr and the model reads the request: no
-bundle directory or no manifest; a file that does not match its manifest; a
-manifest that names a file outside its own directory, a pipe or a device, or
-a size no bundle has (the size is asked of the open file before a byte is
-read, and no more than 64 MiB is ever read); a header that lacks a table or
-points outside the file; a reader that cannot be imported; any error while
-a request is read.
+bundle directory or no manifest; a manifest that is a pipe, a device or a
+directory, is larger than 1 MiB or cannot be parsed; a file that does not
+match its manifest; a manifest that names a file outside its own directory,
+a pipe or a device, or a size no bundle has (what kind of file each of the
+two is and how large is asked of the open file before a byte is read, and
+no more than 64 MiB is ever read); a header that lacks a table or points
+outside the file; members that are the same nets; a reader that cannot be
+imported; any error while a request is read. A file whose manifest matches
+is taken at its word: one whose weights are nonsense declines every request
+and says nothing.
 
 ## Where the rows come from
 
@@ -213,13 +241,14 @@ nothing unless all of this holds:
   has (21,399 examples a member here), and no example may come out
   differently.
 - The whole reader with the checks, as a request meets them, answers every
-  training row it answers as that row is labelled. For 6,080 of its 7,318
+  training row it answers as that row is labelled. For 5,841 of its 7,318
   rows this file proposes calls. 10 proposals are dropped by condition 12:
   in 5 the checks add the pane that a resize names, and in 5 they admit for
-  a clause alone something else than for the whole request. The other 6,070
-  are admitted exactly as labelled. Of the rows it does not answer, 315 are
-  declined by condition 9: training rows with two actions whose second is
-  resolved by something the first changes.
+  a clause alone something else than for the whole request. The other 5,831
+  are admitted exactly as labelled. Of the rows it does not answer, 342 are
+  declined by condition 9 (training rows with two actions whose second is
+  resolved by something the first changes) and 209 because they arrange the
+  panes "vertical" or "horizontal" (below, "What it still gets wrong").
 
 Run again on the same machine, with the same PyTorch, it wrote this file
 byte for byte.
@@ -270,10 +299,11 @@ the bundle does with a sentence nobody labelled.
 
 ## What the reviews found
 
-kilix-needle's rule asks for an independent review beside the gate. Two were
-made on 2026-11-17, each by a fresh session of the same assistant that was
-given the code and a brief and none of the results. Each ran its findings
-through the whole route on the tests' fake desktop.
+kilix-needle's rule asks for an independent review beside the gate. Three
+were made on 2026-11-17, each by a fresh session of the same assistant that
+was given the code and a brief and none of the results. Each ran its
+findings through the whole route on the tests' fake desktop; the third also
+on a fake desktop of its own that changes when a call runs.
 
 **The first** (of the gated reader) found requests made of known words and
 pairs that the bundle answered and misread. None is answered now:
@@ -353,6 +383,51 @@ Found sound by both: the switch; that the bundle's calls go through the same
 checks, resolution, confirmation and own-pane guard as the model's (2,490
 paired runs in six modes); that no close, typed command or program start ran
 without its question.
+
+The answer to the second review (format v4, `bd860c4`) held each clause to
+whole training clauses. **The third review** found that this did not hold
+either. Its verdict: with the switch on, the bundle still answered requests
+with calls that do something other than was asked. What it found, and what
+stops it now:
+
+| Kind | A request of that kind | What the reviewed reader did | What stops it now |
+| --- | --- | --- | --- |
+| A word it never saw, beside a name, taken into the name | "rename this tab to api thx", "rename this tab to uh api", "title this tab api pronto" | named the tab "api thx", "uh api", "api pronto" (264 of 265 such answers, 33 words in all 8 wordings) | 6: a new word is a name only alone |
+| | "rename the tab asap", "title this pane asap" | named it "asap" | **nothing: still answered** (below) |
+| A closed pane may be the last of its tab | "close the notes pane and shift this tab to position 1" | closed it, and the tab, then moved this tab once more, to the end | 9: a close of a pane not named by its side changes the order of the tabs |
+| | "close the notes pane and go to tab 2" | went to the tab that had been tab 2 | 9 |
+| Whether a tab shows one pane at full size | "maximize the current pane and restore layout" | maximized it and said "done" for a restore it did not do | 9: maximizing, restoring and arranging change it; a maximize and a restore go by it |
+| | "panes grid and full-screen this pane please" (tab already maximized) | arranged a grid and did not maximize | 9 |
+| A move of a tab or a swap puts the focus back on the caller's pane | "go to the left pane and move this tab to the left" | went left, then back | 9: the focus changes, and these go by it |
+| The caller's own pane or tab closed first | "close this pane and go to tab 1", "close tab 3 and new tab" | sent the second call from a pane that was gone | 9: every call goes by the caller's pane, and a close that may be the caller's changes it |
+| A pane renamed or typed into, named again by its old title | "call the build pane api and close the build pane" (found by a second run of the reviewer's sweep) | closed the pane that had been called build | 9: the title it was found by changes |
+| "vertical" and "horizontal" | "arrange the panes side by side", "panes in rows" | answered as labelled, and kitty shows those layouts the other way round | a new hold: the bundle does not answer these two layouts |
+
+It also found:
+
+- `manifest.json` itself was read with no look at what kind of file it is:
+  a named pipe in its place held the request up. Now the manifest is read
+  like the file, a regular file of at most 1 MiB, asked of the open file
+  before a byte is read.
+- Two members that are the same nets loaded and answered, and condition 11
+  was then void; a header with nets of no size loaded. Both are refused.
+- Four statements of these documents were not true of the code. They are
+  put right here and in `README.md`.
+- The tests could not see the first four kinds, and two of them pinned the
+  rules behind the first two. Both are changed; the requests of this review
+  are run against the checked-in file and through the route, as those of the
+  first two are. The tests' fake desktop still does not change when a call
+  runs; the reviewer's own, which does, is with the experiment's records,
+  and its sweep was run again on this reader (below).
+
+Found sound by it: 31 of the 32 requests the two earlier reviews found are
+declined (the other is read, and dropped by the checks); 40 negations,
+conditions and questions near what it knows, none answered; 22 names with
+marks or in other scripts copied character for character; 52 damaged
+directories, all but the manifest as a pipe and the same member twice
+standing aside at once; the switch (22 values); the bundle's calls held as
+the model's are (126 paired runs in six modes); the trainer's counts and
+digests.
 
 ## The reader now (format v4, this file)
 
@@ -445,8 +520,10 @@ lifted as well it answers 3, 1 and 1 more on v16, v17 and v18, all as
 labelled. What it does not answer on these sets is wording no template of
 ours has.
 
-**This reader has been neither gated nor reviewed.** The blind half v19 is
-kept for it and nothing has read it. `needle_cli.BUNDLE_BY_DEFAULT` is off.
+**The reader as it now is has been neither reviewed nor gated.** The third
+review was of the reader before its last change (`bd860c4`). The blind half
+v19 is kept and nothing has read it: it is to gate a reader that a review
+has left unchanged, and none has yet. `needle_cli.BUNDLE_BY_DEFAULT` is off.
 
 ## What it still gets wrong, and what is not its to fix
 
@@ -466,16 +543,42 @@ kept for it and nothing has read it. `needle_cli.BUNDLE_BY_DEFAULT` is off.
     pane ("call this tab 2", "make this pane 3 rows taller"). The bundle
     stands aside for such a request (12). A model's call is still bound
     that way.
-  - Every call is resolved before the first one runs. The bundle stands
-    aside (9). A model that answers "go to the logs tab and rename it to
-    api" with a switch and a rename renames the caller's tab, and the tuned
-    model is trained on the same labels.
+  - Every call is resolved against the desktop as it was when the request
+    was made. That is deliberate, and right for "close tab 2 and close tab
+    3"; it is not what "it" means after a move. The bundle stands aside
+    (9). A model that answers "go to the logs tab and rename it to api"
+    with a switch and a rename renames the caller's tab, and the tuned model
+    is trained on rows labelled that way ("go to the left pane and run
+    make": go left, then run in the current pane).
   - When a risky call is answered "no", the other calls of the request
-    still run: "close the build pane and arrange the rest in a grid"
+    still run: "close the left pane and arrange the rest in a grid"
     arranges the panes whatever the answer.
+  - "vertical" and "horizontal" are the other way round from kitty. The
+    tool's description says "vertical is side by side; horizontal is one
+    above another" (`actions.py`), and the rows and the eval cases are
+    labelled by it; kitty's own source lays out its Vertical layout along
+    the height, one pane below another, and its Horizontal layout along the
+    width (`kitty/layout/vertical.py`). Kilix's configuration enables
+    neither, so such a call ends in "not enabled here". The bundle does not
+    answer either layout. A model's call is sent as labelled.
+  - A tab's new name is sent without `--` (`kilix.py`, `set-tab-title`), so
+    a name that begins with a dash is read by kitty as an option.
+- **A word it never saw, standing alone where a name stands, is the
+  name.** "rename the tab asap" names the tab "asap", and "call this pane
+  thx" names the pane "thx". The reader cannot tell such a word from a
+  name it has not seen ("rename the tab q3"), and a list of words that are
+  not names is always one word short. Beside another word such a word is not
+  taken (6). Of the reviewer's 67 words in 8 wordings (536 requests) the
+  route uses the bundle's reading for 67, and in 66 the word is the name:
+  33 words, each in the two wordings where the name follows the noun with
+  no word between ("rename the tab W", "title this pane W"). The reviewed
+  reader did that for 264 requests.
 - **It knows only the wording of its training rows.** Of the requests that
   reach the model it answers about one in ten on the sets written for this
   change and one in thirty on the job's own held-out set.
+- **A file whose manifest matches is taken at its word.** One whose
+  weights are nonsense (all NaN) loads, declines every request and says
+  nothing.
 
 ## What is not in this directory
 

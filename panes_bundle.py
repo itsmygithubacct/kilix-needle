@@ -98,6 +98,7 @@ MANIFEST_SCHEMA = "kilix-needle.panes-bundle-manifest/v4"
 MAGIC = b"KNPB4\n"
 FILE = "bundle.bin"
 MAX_BYTES = 64 << 20        # no bundle is near this size; a manifest that states more is refused
+MANIFEST_MAX = 1 << 20      # and no manifest is near this one
 MEMBERS_MIN = 2             # one member agrees with itself about anything
 NONE, ABSENT, COPY = "<none>", "<absent>", "<copy>"
 # Words that name a pane or tab by place; any other pane or tab is copied.
@@ -112,29 +113,58 @@ KNOWN_TARGET = {"close_pane": "pane", "close_tab": "tab", "run_in_pane": "pane"}
 # it was about (Member.read).
 RENAMES = {"rename_tab": "tab", "rename_pane": "pane"}
 # Every call of a request is resolved against the desktop as it was before
-# the first one ran (kilix.resolve). So a call that goes by something an
-# earlier call changes would act on the wrong pane or tab: after "go to the
-# logs tab", "rename it to api" is resolved in the tab the request came from.
+# the first one ran (kilix.resolve), and every call is sent from the pane the
+# request was made in. So a call that goes by something an earlier call
+# changes would act on the wrong pane or tab: after "go to the logs tab",
+# "rename it to api" is resolved in the tab the request came from.
 # What a call changes for the calls after it, beside the pane or tab it names:
 #   pane, tab   which pane and which tab "this", "it" and "here" are
 #   sides       which pane is to the left, right, above or below, or the next
 #   order       which tab is tab 2, the next one or the last
+#   layout      whether a tab shows one pane at full size (kilix.resolve
+#               reads that from the snapshot for a maximize and a restore)
+#   focus       where the keyboard is, after a call that is made to put it
+#               somewhere or that opens something. A move of a tab and a
+#               swap are made through the caller's pane and put it back there
+#   caller      whether the pane the request was made in is still there
 #   a title     the name it gives, the program it starts or the command it
-#               types is what that pane or tab is called from then on
+#               types is what that pane or tab is called from then on, and
+#               the title it was found by is what it is called no more
 # A close is taken to change the pane, and a close of a tab the tab, whichever
 # one it closes: the reader does not know whether it is the caller's own. A
 # pane named by its side is in the caller's tab; one named by a title or a
-# number may be in another (changes).
-_CHANGES = {"go_to_pane": ("pane",), "go_to_tab": ("pane", "tab"),
-            "open_pane": ("pane", "sides"), "open_tab": ("pane", "tab", "order"),
+# number may be in another, may be the last of its tab, so that the tab goes
+# with it, and may be the caller's own (changes).
+_CHANGES = {"go_to_pane": ("pane", "focus"), "go_to_tab": ("pane", "tab", "focus"),
+            "open_pane": ("pane", "sides", "focus"), "open_tab": ("pane", "tab", "order", "focus"),
             "close_pane": ("pane", "sides"), "close_tab": ("pane", "tab", "order"),
-            "maximize_pane": ("sides",), "arrange_panes": ("sides",), "swap_panes": ("sides",),
-            "move_tab": ("order",)}
+            "maximize_pane": ("sides", "layout"), "arrange_panes": ("sides", "layout"),
+            "swap_panes": ("sides",), "move_tab": ("order",)}
 # What a call goes by without an argument that says so: the caller's own pane
-# or tab. (A new tab takes only its directory from the caller's pane.)
-_GOES_BY = {"open_pane": ("pane",), "arrange_panes": ("tab",), "swap_panes": ("pane", "sides"),
-            "move_tab": ("tab", "order")}
+# or tab. (A new tab takes only its directory from the caller's pane.) Every
+# call goes by the caller (goes_by).
+_GOES_BY = {"open_pane": ("pane",), "arrange_panes": ("tab",), "swap_panes": ("pane", "sides", "focus"),
+            "move_tab": ("tab", "order", "focus"), "maximize_pane": ("layout",)}
 SIDES = ("left", "right", "above", "below")
+# A pane or tab named this way is never the one the request was made in: a
+# pane on a side of the caller's, and the one after or before it (a close
+# does not wrap round to the caller's own). Such a pane is in the caller's
+# tab, which is still there when it is closed.
+NOT_THE_CALLERS = {"close_pane": (*SIDES, "next", "previous"), "close_tab": ("next", "previous")}
+# Values the tool's labels give the other way round from kitty. kitty's
+# "vertical" layout shows the panes one below another and its "horizontal"
+# layout side by side (kitty/layout/vertical.py: Vertical lays its windows
+# out along y, Horizontal along x). The tool's own description says
+# "vertical is side by side; horizontal is one above another" (actions.py),
+# and the training rows are labelled by it. The bundle would repeat those
+# labels; where these layouts are enabled the panes would be arranged the
+# other way round from what was asked. The model is trained on the same
+# labels: this is the tool's to fix, not the bundle's.
+CROSSED = {("arrange_panes", "layout"): ("vertical", "horizontal")}
+# A name, or a title a pane or tab is found by, of more than one word is
+# made of words that were copied for such an argument in training. One that
+# holds a word the bundle has never seen is that one word (Member.read).
+ONE_NEW = ("name", "pane", "tab")
 # A mark that ended the sentence or a part of it, split from the word before.
 _CLOSING = frozenset(",;?!:.")
 _MARK = re.compile(r"<[a-z_]+#?>")
@@ -264,9 +294,9 @@ def _titles(text) -> set:
 
 def changes(call: dict) -> set:
     """What a call changes for the calls after it (_CHANGES). A pane or tab
-    it names is what "it" means from there on, and a name it gives, a
-    program it starts or a command it types is a title that was not there
-    before."""
+    it names is what "it" means from there on, a name it gives, a program it
+    starts or a command it types is a title that was not there before, and
+    the title it found that pane or tab by is one that is there no more."""
     given = call["arguments"]
     out = set(_CHANGES.get(call["name"], ()))
     out.update(key for key in ("pane", "tab") if given.get(key) not in (None, "current"))
@@ -274,9 +304,25 @@ def changes(call: dict) -> set:
         out.add("tab")      # the caller's own pane is gone, and its tab may be
     if call["name"] in ("go_to_pane", "maximize_pane") and given.get("pane") not in (None, *CANON):
         out.add("tab")      # the focus goes to a pane that may be in another tab
+    if call["name"] == "maximize_pane" and given.get("pane") not in (None, "current"):
+        out.add("focus")    # the pane shown at full size is the one in focus
+    for tool, key in (("close_pane", "pane"), ("close_tab", "tab")):
+        if call["name"] == tool and given.get(key) not in NOT_THE_CALLERS[tool]:
+            # It may close the pane the request was made in, and then nothing
+            # after it is sent. And a pane may be the last of its tab.
+            out.update(("caller", "order"))
     for key in ("name", "program", "command"):
         if isinstance(given.get(key), str):
             out |= _titles(given[key])
+    # A pane or tab that gets a new name, or a command typed into it, is no
+    # longer called what this call found it by: after "call the build pane
+    # api", "the build pane" names nothing, and the route would still act on
+    # the pane that was called so.
+    if call["name"] in RENAMES or call["name"] == "run_in_pane":
+        for key in ("pane", "tab"):
+            ref = given.get(key)
+            if isinstance(ref, str) and ref not in CANON and not (ref.isascii() and ref.isdigit()):
+                out |= _titles(ref)
     return out
 
 
@@ -287,7 +333,7 @@ def goes_by(call: dict, refs) -> set:
     tab's number is its place in the row of tabs, and a pane with a title is
     looked for in the caller's tab first."""
     given = call["arguments"]
-    out = set(_GOES_BY.get(call["name"], ()))
+    out = {"caller", *_GOES_BY.get(call["name"], ())}
     for key in refs:
         ref = given.get(key)
         if ref in (None, "current"):
@@ -392,9 +438,11 @@ UNSHOWN = "wording this tool was not trained on"
 CARRIED = "a rename that does not say what it renames, after a clause about the other kind"
 UNNAMED = "a word that names a value is not in its clause's call"
 PLAIN = "a copied text holds a word the bundle knows only as wording"
+MIXED = "a copied name or title of several words holds one the bundle has never seen"
 CLOSED = "a copied text ends in a mark that ended the sentence"
 LEANS = "a clause that goes by what the clause before it changes"
-_HOLDS = (LONG, UNSHOWN, CARRIED, UNNAMED, PLAIN, CLOSED, LEANS)
+TURNED = "a layout kitty shows the other way round from the tool's labels"
+_HOLDS = (LONG, UNSHOWN, CARRIED, UNNAMED, PLAIN, MIXED, CLOSED, LEANS, TURNED)
 
 
 class Member:
@@ -473,6 +521,8 @@ class Member:
                 if label != COPY:
                     arguments[key] = True if kind == "flag" else label
                     closed[key] = label
+                    if label in CROSSED.get((tool, key), ()):
+                        failed.add(TURNED)
                     continue
                 pointer = self.net(f"span {tool} {key}")
                 if pointer is None:
@@ -509,6 +559,15 @@ class Member:
                     held = bundle.copied.get(key, ())
                     if any(word in self.known and word not in held for word in words[lo + first:lo + last + 1]):
                         failed.add(PLAIN)
+                    # A word the bundle has never seen is a name only when it
+                    # stands alone where a name stands. Beside another word it
+                    # may as well be wording the bundle does not know: "api
+                    # thx", "uh api" and "api pronto" are not names of two
+                    # words. A command or a program is not held to this: it
+                    # is made of new words, and it waits for a yes that shows
+                    # it.
+                    if key in ONE_NEW and "<x>" in mine[first:last + 1] and len(text.split()) > 1:
+                        failed.add(MIXED)
                     end = toks[lo + last]
                     if set(end[0]) <= _CLOSING and (last == first or end[1] == toks[lo + last - 1][2]):
                         failed.add(CLOSED)
@@ -644,6 +703,9 @@ class Bundle:
         missing part."""
         room, head = len(self.raw) - self.body, self.head
         dim, hidden = int(head["dim"]), int(head["hidden"])
+        if dim < 1 or hidden < 1:
+            raise BundleError("the nets of the bundle have no size")
+        weights: list = [[] for _ in head["members"]]
         blocks = [head["names"], head["pairs"]] + [head["readings"][tool] for tool in self.tools]
         for at, size in blocks:
             if not 0 <= at <= at + size <= room:
@@ -653,10 +715,18 @@ class Bundle:
             if not 0 <= at <= at + 4 * count <= room:
                 raise BundleError("a net's features lie outside the file")
             floats = (count + 1) * dim + dim * hidden + hidden + hidden * len(spec["outputs"]) + len(spec["outputs"])
-            for member in head["members"]:
+            for mine, member in zip(weights, head["members"]):
                 at = member["weights"][key]
                 if not 0 <= at <= at + 2 * floats <= room:
                     raise BundleError("a net's weights lie outside the file")
+                mine.append((self.body + at, self.body + at + 2 * floats))
+        # Members that are the same nets agree about anything, as one member
+        # does with itself.
+        view = memoryview(self.raw)
+        for n, mine in enumerate(weights):
+            for other in weights[:n]:
+                if all(view[a:b] == view[c:d] for (a, b), (c, d) in zip(mine, other)):
+                    raise BundleError("two members of the bundle are the same nets: their agreement says nothing")
 
     def _text(self, place) -> list[str]:
         at, size = place
@@ -701,10 +771,14 @@ class Bundle:
     @classmethod
     def load(cls, directory: Path | None = None) -> "Bundle":
         directory = Path(directory) if directory else DIRECTORY
+        # Neither file is read before it is known to be a regular file of a
+        # size it can have: a pipe, a device or a file without end in either
+        # place would hold the request up, and the model would never be asked.
         try:
-            manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
-        except (OSError, ValueError) as error:
-            raise BundleError(f"the bundle manifest is unreadable: {error}") from None
+            manifest = json.loads(_regular_file(directory / "manifest.json", "the bundle manifest",
+                                                at_most=MANIFEST_MAX).decode("utf-8"))
+        except (ValueError, RecursionError) as error:
+            raise BundleError(f"the bundle manifest is unreadable: {type(error).__name__}") from None
         if not isinstance(manifest, dict) or manifest.get("schema") != MANIFEST_SCHEMA:
             raise BundleError("unknown bundle manifest schema")
         # The manifest names a file of its own directory, and how large it
@@ -716,7 +790,7 @@ class Bundle:
             raise BundleError("manifest.json does not name a file of its own directory")
         if type(size) is not int or not 0 < size <= MAX_BYTES:
             raise BundleError("manifest.json states no size a bundle can have")
-        raw = _file_of_size(directory / name, size)
+        raw = _regular_file(directory / name, "the bundle file", size=size)
         if hashlib.sha256(raw).hexdigest() != manifest.get("sha256"):
             raise BundleError("the bundle file does not match the digest in manifest.json")
         return cls(raw, manifest)
@@ -737,30 +811,35 @@ class Bundle:
         return calls, "ok"
 
 
-def _file_of_size(path: Path, size: int) -> bytes:
-    """The bytes of a regular file of exactly this size. What kind of file
-    it is and how large is asked of the open file before anything is read,
-    and no more than the size is read."""
+def _regular_file(path: Path, what: str, *, size: int | None = None, at_most: int | None = None) -> bytes:
+    """The bytes of a regular file: of exactly `size` bytes, or of no more
+    than `at_most`. What kind of file it is and how large is asked of the
+    open file before anything is read, the open does not wait for a pipe's
+    other end, and no more than the size is read."""
     try:
         handle = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0))
     except OSError as error:
-        raise BundleError(f"the bundle file is unreadable: {error}") from None
+        raise BundleError(f"{what} is unreadable: {error}") from None
     try:
         info = os.fstat(handle)
         if not stat.S_ISREG(info.st_mode):
-            raise BundleError("the bundle file is not a regular file")
-        if info.st_size != size:
-            raise BundleError("the bundle file does not have the size in manifest.json")
+            raise BundleError(f"{what} is not a regular file")
+        if size is None:
+            size = info.st_size
+            if size > at_most:
+                raise BundleError(f"{what} is larger than one can be")
+        elif info.st_size != size:
+            raise BundleError(f"{what} does not have the size in manifest.json")
         parts, left = [], size
         while left:
             part = os.read(handle, left)
             if not part:
-                raise BundleError("the bundle file ended before the size in manifest.json")
+                raise BundleError(f"{what} ended before its size")
             parts.append(part)
             left -= len(part)
         return b"".join(parts)
     except OSError as error:
-        raise BundleError(f"the bundle file is unreadable: {error}") from None
+        raise BundleError(f"{what} is unreadable: {error}") from None
     finally:
         os.close(handle)
 

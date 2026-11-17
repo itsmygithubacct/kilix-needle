@@ -1330,7 +1330,7 @@ splits the request into clauses, one names the tool of a clause, one for each
 argument says absent, a value of its closed list or "copy", and one for each
 copied argument points at its first and last word. Two members, the same 42
 nets trained from two seeds, 598,263 weights each, are held in one file of
-3.2 MB. Reading needs only the standard library.
+3.3 MB. Reading needs only the standard library.
 
 It answers only what it was trained on, said with other names:
 - every clause is a training clause of its tool, read as that clause was
@@ -1344,14 +1344,24 @@ It answers only what it was trained on, said with other names:
   two, and no copied text is longer than any copied for that argument in
   training;
 - a copied name is made of new words or of words that were copied as names
-  in training ("rename this tab please" names nothing), and a pane or tab to
-  close or type into is named with trained words or a number;
+  in training ("rename this tab please" names nothing), and a word it never
+  saw is a name only where it stands alone ("rename this tab to api thx"
+  names nothing); a pane or tab to close or type into is named with trained
+  words or a number;
 - every word of a clause that names a value is in that clause's call: one
   that always named a value in training, or that alone named a side, a
   place, a layout or a direction;
 - no clause is resolved by what the clause before it changes. The route
-  resolves every call before the first one runs, so "go to the logs tab and
-  rename it to api" would rename the tab the request came from;
+  resolves every call against the desktop as it was when the request was
+  made, and sends every call from the pane the request was made in, so "go
+  to the logs tab and rename it to api" would rename the tab the request
+  came from, and "maximize this pane and restore the layout" would restore
+  nothing. What a call changes includes the order of the tabs after a pane
+  that may be the last of its tab is closed, whether a tab shows one pane at
+  full size, the focus, and whether the caller's own pane is still there;
+- it never arranges the panes "vertical" or "horizontal": kitty shows
+  those the other way round from the tool's description (below, "Known
+  issues");
 - a rename in the second clause that does not say "tab" or "pane" follows a
   clause about the kind of thing it renames;
 - both members give the same calls;
@@ -1386,17 +1396,24 @@ call that it answers took 227 ms where the model's took 3.8 s (median of 40
 requests, a new process each time, on an eight-core machine with nothing
 else measured on it), and a call it declines was within 50 ms of before.
 
-Two independent reviews then found what the gate could not see. The scorer
-compares calls with labels and calls only closing, typing and starting a
-program unsafe, and no blind set held such a request. The first review found
-that the gated reader renamed or resized the caller's own tab or pane where
-the request names another, took any word between two clauses for "and",
-and read a tab named "two" as tab 2. The reader that answered it held each
+Three reviews then found what the gate could not see. The scorer compares
+calls with labels and calls only closing, typing and starting a program
+unsafe, and no blind set held such a request. The first review found that
+the gated reader renamed or resized the caller's own tab or pane where the
+request names another, took any word between two clauses for "and", and
+read a tab named "two" as tab 2. The reader that answered it held each
 clause to pairs of neighbouring words of its own tool, and the second
 review found eleven more kinds: "call this tab 2" renamed tab 2, "go to the
 logs tab and rename it to api" renamed the caller's tab, "not a tab" opened
-a tab, "rearrange the panes" stacked them. The conditions above are the
-answer to both, and none of the requests of either review is answered now.
+a tab, "rearrange the panes" stacked them. The reader that answered that
+was held to whole training clauses, and the third review found that a word
+it never saw went into a name ("rename this tab to api thx"), that a pane
+closed first could change the order of the tabs, that a maximize and a
+restore in one request did not see each other, and that kitty's vertical
+and horizontal layouts are the other way round from the tool's labels. The
+conditions above are the answer to all three, and none of their requests is
+answered now, but for one kind: a word it never saw, standing alone where a
+name stands, is still taken for the name ("rename the tab asap").
 
 The price is reach. On the three blind sets written for this change, which
 shaped the rules and gate nothing now, the gated reader answered about a
@@ -1405,9 +1422,10 @@ about three in ten, and this one 17 of 170, 14 of 166 and 16 of 156, every
 answer exact (6 of 180 on the job's own held-out set). The route is exact
 on 102, 109 and 95 cases there, against 96, 106 and 92 without the bundle.
 
-**This reader has been neither gated nor reviewed**, so the default stays
-off. What was measured, what the reviews found and what the bundle still
-gets wrong are in `panes-bundle/README.md`.
+**The reader that answered the second review was reviewed and changed
+after it; the reader as it now is has been neither reviewed nor gated**, so
+the default stays off. What was measured, what the reviews found and what
+the bundle still gets wrong are in `panes-bundle/README.md`.
 
 ```sh
 python3 panes_bundle.py "new right pane with htop"        # its reading, or why it has none
@@ -1478,22 +1496,39 @@ uv run --with torch==2.6.0 panes_bundle_train.py --spent --out panes-bundle \
   the model's bytes are never written again. If those gates then fail, the
   run's `gates.json` records the failure while the run stays selected.
 - **The bundle can be wrong where the checks cannot tell.** It is off by
-  default. Two reviews each found about ten kinds of request it answered
-  and misread, and a gate on a blind set saw none of them. Switched on, it
-  repeats what its training rows are labelled with, and renaming, resizing,
-  focusing and arranging need no confirmation (`panes-bundle/README.md`,
-  "What it still gets wrong, and what is not its to fix").
+  default. Three reviews each found kinds of request it answered and
+  misread, and a gate on a blind set saw none of them. Switched on, it
+  repeats what its training rows are labelled with, takes a word it never
+  saw for a name where that word stands alone ("rename the tab asap"), and
+  renaming, resizing, focusing and arranging need no confirmation
+  (`panes-bundle/README.md`, "What it still gets wrong, and what is not its
+  to fix").
+- **"vertical" and "horizontal" are the other way round from kitty.** The
+  tool's description says "vertical is side by side; horizontal is one above
+  another" (`actions.py`, `toolset.py`), and rows and eval cases are
+  labelled by it. kitty's own source lays its Vertical layout out along the
+  height, one pane below another, and its Horizontal layout along the width
+  (`kitty/layout/vertical.py`). Kilix's shipped configuration does not
+  enable either, so such a call ends in "not enabled here"; where they are
+  enabled, "arrange the panes side by side" stacks them. The bundle stands
+  aside for both layouts; a model's call is still sent as labelled.
+- **A tab's new name is not ended with `--`.** `kilix.py` sends
+  `set-tab-title --match=id:N NAME` (a pane's rename has `--`), so a name
+  that begins with a dash ("--help") is read by kitty as an option.
 - **The checks bind a number in the request to a rename's tab or a resize's
   pane.** For "call this tab 2" the checks make the rename a rename of tab
   2, for "make this pane 3 rows taller" a resize of pane 3, and for "rename
   this tab to api and go to tab 1" a rename of tab 1, whoever proposed the
   calls. The bundle stands aside for such a request; the model's proposal
   is still bound that way.
-- **Every call of a request is resolved before the first one runs.** A
-  proposal of a switch and a rename for "go to the logs tab and rename it to
-  api" renames the tab the request came from. The bundle stands aside; the
-  tuned model is trained on rows labelled that way. And when a risky call is
-  answered "no", the other calls of the request still run.
+- **Every call of a request is resolved against the desktop as it was when
+  the request was made.** That is deliberate ("close tab 2 and close tab 3"
+  means the tabs as the person saw them), and it is not what "it" means
+  after a move: a proposal of a switch and a rename for "go to the logs tab
+  and rename it to api" renames the tab the request came from. The bundle
+  stands aside; the tuned model is trained on rows labelled that way. And
+  when a risky call is answered "no", the other calls of the request still
+  run.
 - **"At a shell prompt" is checked twice, not proven.** Typing needs the
   shell's prompt marks (OSC 133), and, from what Kilix reports out of band,
   that the pane is not in the alternate screen and that what holds its
