@@ -28,6 +28,10 @@ _READ = re.compile(
     r"\b(?:show|check|read|list|look|inspect|status|usage|space|load|"
     r"memory|ram|swap|cpu|disk|resources?|process|service|journal|logs?|errors?|"
     r"warnings?|package|installed|owns?|provides?|failed|what|which|why|how)\b", re.I)
+_ELSEWHERE = re.compile(
+    r"\b(?:other|another|remote|different|second)\s+(?:server|host|box|machine|computer|vm|node|laptop|pc)\b|"
+    r"\bon\s+(?:the\s+|my\s+|our\s+)?(?:server|vps|cluster|prod|production|staging)\b|"
+    r"\bssh\s+(?:into|to|onto)\b|\b(?:web|db|app|srv|node)\d+\b|\bremotely\b", re.I)
 _NUMBER = re.compile(r"\b\d+\b")
 _PATH = re.compile(job.PATH)
 _WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
@@ -81,6 +85,8 @@ def _preflight(request):
     active = _active_text(request)
     if _WRITE.search(active):
         return "decline", "request includes a state change"
+    if _ELSEWHERE.search(request):
+        return "decline", "only this machine is read"
     if _UNSUPPORTED.search(request):
         return "decline", "observation is outside the five read tools"
     if re.search(r"\b(?:but\s+not|except|excluding)\b", request, re.I):
@@ -263,12 +269,38 @@ def _ground(request, kind, args):
     return None
 
 
-def plan(request, classify):
+def _admit(request, calls):
+    """Normalized, distinct, grounded ``[kind, args]`` pairs, or raise ValueError/TypeError
+    (a protocol problem) or return a string (a grounding refusal)."""
+    if len(calls) > 3:
+        raise ValueError("more than three calls")
+    actions, seen = [], set()
+    for call in calls:
+        if not isinstance(call, dict) or set(call) != {"name", "arguments"}:
+            raise ValueError("malformed call object")
+        kind = call["name"]
+        args = job.normalize(kind, call["arguments"])
+        signature = (kind, tuple(sorted(args.items())))
+        if signature in seen:
+            raise ValueError("duplicate call")
+        seen.add(signature)
+        actions.append([kind, args])
+    for kind, args in actions:
+        reason = _ground(request, kind, args)
+        if reason:
+            return reason
+    return actions
+
+
+def plan(request, classify, *, bundle=None):
     """Return a validated plan. ``classify(request)`` returns a library reply.
 
     ``actions`` are ``[kind, normalized_args]`` pairs.  Callers must decide
     separately whether collection is authorized; model plans carry explicit
-    ``model_proposal`` trust.
+    ``model_proposal`` trust. A ``bundle`` (system_bundle.Bundle) reads familiar
+    requests the grammar does not, after the same preflight; its read carries
+    ``bundle`` trust only when the schema and grounding checks admit it, and
+    otherwise the request goes on to ``classify``. ``classify=None`` stops there.
     """
     preflight = _bounds(request)
     if preflight:
@@ -280,6 +312,18 @@ def plan(request, classify):
     preflight = _preflight(request)
     if preflight:
         return _result("refused", preflight[0], reasons=(preflight[1],))
+    if bundle is not None:
+        try:
+            calls = bundle.read(request)
+            admitted = _admit(request, [{"name": k, "arguments": a} for k, a in calls]) if calls else None
+        except Exception:       # noqa: BLE001 - a bundle problem is an abstention, never a read
+            admitted = None
+        if isinstance(admitted, list) and admitted:
+            return _result("bundle", "read", admitted,
+                           reasons=("bundle read admitted by bounds, preflight, schema and grounding",),
+                           trust="bundle")
+    if classify is None:
+        return _result("refused", "clarify", reasons=("no model on this route",))
     try:
         reply = classify(request)
     except Exception as exc:
@@ -298,26 +342,14 @@ def plan(request, classify):
     if len(calls) > 3:
         return _result("refused", "decline", raw_reply=reply,
                        reasons=("more than three calls",), protocol_error=True)
-    actions, seen = [], set()
     try:
-        for call in calls:
-            if not isinstance(call, dict) or set(call) != {"name", "arguments"}:
-                raise ValueError("malformed call object")
-            kind = call["name"]
-            args = job.normalize(kind, call["arguments"])
-            signature = (kind, tuple(sorted(args.items())))
-            if signature in seen:
-                raise ValueError("duplicate call")
-            seen.add(signature)
-            actions.append([kind, args])
+        actions = _admit(request, calls)
     except (ValueError, TypeError) as exc:
         return _result("refused", "clarify", raw_reply=reply, reasons=(str(exc),),
                        protocol_error=True)
-    for kind, args in actions:
-        reason = _ground(request, kind, args)
-        if reason:
-            return _result("refused", "clarify", raw_reply=reply,
-                           reasons=(reason,), validation_error=True)
+    if isinstance(actions, str):
+        return _result("refused", "clarify", raw_reply=reply,
+                       reasons=(actions,), validation_error=True)
     return _result("model", "read", actions, raw_reply=reply,
                    reasons=("bounded, request-grounded model proposal; semantic completeness unproven",),
                    trust="model_proposal")

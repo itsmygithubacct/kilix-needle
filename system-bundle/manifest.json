@@ -1,0 +1,11 @@
+{
+ "bytes": 1493773,
+ "epochs": 12,
+ "members": 3,
+ "sample": 0.85,
+ "schema": "kilix-needle.system-bundle-manifest/v1",
+ "seed": 20261117,
+ "sha256": "f78b3599ff813ecc110a801fea754e9f9f023764d4f6d29582fd42e13197a303",
+ "trainer": "system_bundle_train.py",
+ "training_sha256": "bb4fc292b265f59c872be575e0aca929ea096304fe9c954c16080da1dfeaedd7"
+}

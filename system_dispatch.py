@@ -56,12 +56,22 @@ def _dispatch(request, classify, options, *, baseline=False, collector=None,
     if baseline:
         plan = None
     else:
-        plan = system_normalize.plan(request, classify)
+        import system_bundle
+        plan = system_normalize.plan(request, classify, bundle=system_bundle.default())
 
     if baseline or plan["path"] == "grammar":
         record = system_collect.run_request(system_job.Baseline(), request, options,
                                             collector=collector)
         record["query_source"] = "system grammar baseline"
+        record["collection_performed"] = any(
+            item.get("outcome") in ("done", "failed") for item in record["items"])
+        return record
+
+    if plan["path"] == "bundle" and plan["trust"] == "bundle":
+        # Admitted by the same checks as any proposal; on only when switched on
+        # (system_bundle.ENV), never in the --baseline route.
+        record = system_collect.run_admitted(plan["actions"], request, options,
+                                             source="system bundle", collector=collector)
         record["collection_performed"] = any(
             item.get("outcome") in ("done", "failed") for item in record["items"])
         return record

@@ -256,6 +256,8 @@ def main(argv=None) -> int:
     parser.add_argument("--normalizer", action="store_true",
                         help="system job: score the whole route, grammar plus the configured "
                              "normalizer's proposals (system-model status)")
+    parser.add_argument("--bundle", metavar="DIR",
+                        help="system job: score grammar plus the bundle in DIR (no model): the bundle gate")
     parser.add_argument("--quiet", action="store_true", help="totals only")
     args = parser.parse_args(argv)
     with open(args.cases, encoding="utf-8") as handle:
@@ -277,6 +279,28 @@ def main(argv=None) -> int:
         # The apps job has one schema; --toolset names only the panes schemas.
         import apps
         tools, translate = apps.TOOLS, (lambda calls: calls)
+    if args.bundle:
+        if args.job != "system" or args.baseline or args.normalizer or args.library or args.engine or args.weights:
+            parser.error("--bundle is for the system job alone")
+        import system_bundle
+        import system_eval
+        from pathlib import Path
+        result = system_eval.score_bundle(system_bundle.load(Path(args.bundle)), cases)
+        t = result["totals"]
+        if not args.quiet:
+            for f in result["failures"]:
+                print(f"DIFFERS [{f['tag']}] {f['request']!r} {f['path']} {json.dumps(f['actions'])}")
+            print(f"{'tag':12} {'cases':>5} {'exact':>5} {'gram':>5} {'bndl':>5} {'differs':>7}")
+            for tag, row in sorted(result["tags"].items()):
+                print(f"{tag:12} {row['cases']:5} {row.get('exact', 0):5} {row.get('grammar_exact', 0):5} "
+                      f"{row.get('bundle_exact', 0):5} {row.get('bundle_differs', 0):7}")
+        print(f"exact {t.get('exact', 0)}/{t['cases']}   grammar {t.get('grammar_exact', 0)}   "
+              f"bundle reads {t.get('bundle_reads', 0)} (exact {t.get('bundle_exact', 0)}, "
+              f"differs {t.get('bundle_differs', 0)})   unsafe {t.get('unsafe', 0)}")
+        if args.json:
+            with open(args.json, "w", encoding="utf-8") as handle:
+                json.dump(result, handle, indent=1)
+        return 1 if t.get("unsafe", 0) or t.get("bundle_differs", 0) or not result["complete"] else 0
     if args.normalizer:
         if args.job != "system" or args.baseline or args.library or args.engine or args.weights:
             parser.error("--normalizer is for the system job alone")

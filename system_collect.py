@@ -321,6 +321,19 @@ def run_request(engine, request, options, _confirm=None, *, collector=None):
         record["items"] = [{"outcome": "refused", "kind": r.kind, "reason": r.reason}
                            for r in results if isinstance(r, system_job.Refusal)]
         return record
+    return _collect(record, results, options, collector)
+
+
+def run_admitted(actions, request, options, *, source, collector=None):
+    """Collect reads that a route other than the grammar admitted (system_normalize.plan
+    with "bundle" trust): ``actions`` are its normalized ``[kind, args]`` pairs."""
+    record = {"request": request, "status": 0, "query_source": source,
+              "note": "Read-only observations; no inferred cause or repair.", "items": []}
+    queries = [system_job.Action(kind, system_job.normalize(kind, args)) for kind, args in actions]
+    return _collect(record, queries, options, collector)
+
+
+def _collect(record, results, options, collector):
     collector = collector or Collector()
     for query in results:
         item = {"kind": query.kind, "args": query.args,

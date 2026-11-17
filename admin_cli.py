@@ -122,7 +122,7 @@ def run(request: str, *, args, host=None, ask=_ask, interactive=None, propose=_p
             return record
     else:
         why = ("; ".join(persons) + ": a person must confirm at a terminal") if persons else \
-              "needs --yes (MCP: confirm=true) for an action the user asked for"
+              "needs --yes, given only for an action the user asked for"
         record.update(note=why, items=[{**p, "outcome": "skipped", "reason": why} for p in planned])
         return record
     record["items"] = admin_exec.execute(steps, host, interactive=interactive)

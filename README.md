@@ -1106,6 +1106,19 @@ never collects observations.
 | Eligible unfamiliar wording, configured normalizer | Yes | Validated proposal for review; no collection |
 | Unfamiliar wording with `--baseline` | No | Refusal |
 | Fallback needs a missing or invalid profile | Load attempted | Explicit error; no collection |
+| Familiar wording, bundle switched on (`KILIX_NEEDLE_SYSTEM_BUNDLE=1`) | No | Collect, if the proposal checks admit the bundle's read |
+
+**The system bundle** (`system_bundle.py`, `system-bundle/`) is off by default.
+When it is switched on, it reads requests the grammar does not, between the
+grammar and the model. It is a set of small nets trained on spent system sets
+(`system-bundle/README.md`). It answers only when every word is one it knows
+or the copied name, every pair of neighbouring words stood together in a
+training read of the same tool, code reads every number, path and time, and
+all its members agree. Otherwise it abstains and the request goes on to the
+model. A read it gives must pass the same bounds, preflight, schema and
+grounding checks as a model proposal before anything is collected; `query_source`
+is then `system bundle`. `--baseline` never uses it. Score it with
+`evaluate.py CASES --job system --bundle system-bundle`.
 
 JSON output distinguishes the two successful paths. Grammar results identify
 `query_source` as `system grammar baseline`. Model proposals identify the tuned
