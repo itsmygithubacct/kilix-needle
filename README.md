@@ -594,13 +594,13 @@ What an agent should know (measured in a Codex route benchmark, 2026-09-29):
   Navigation also reads "go to the tab before this one" and "focus whichever
   pane comes next" directly. Next/previous count from the caller's pane or tab
   and wrap at an edge; an ambiguous title still refuses resolution.
-- **Familiar wording skips the model too.** A request the exact readers leave
-  is read by the panes bundle (`panes_bundle.py`) when all of it is wording
-  the bundle was trained on: "put a pane underneath with htop", "rename this
-  tab to build logs". Its calls pass the same checks and confirmations, and
-  a request it does not know goes to the model as before. It is switched
-  off unless `KILIX_NEEDLE_BUNDLE=1` is set
-  ([the panes bundle](#the-panes-bundle)).
+- **Trained wording can skip the model too.** A request the exact readers
+  leave is read by the panes bundle (`panes_bundle.py`) when each clause of
+  it is a clause the bundle was trained on, said with other names: "new
+  right pane with htop", "rename this tab to build logs". Its calls pass
+  the same checks and confirmations, and a request it does not know goes to
+  the model as before. It is switched off unless `KILIX_NEEDLE_BUNDLE=1` is
+  set ([the panes bundle](#the-panes-bundle)).
 - **A yes given in advance covers these typing forms:** "run 'X' in the NAME
   pane", "type the command X into pane NAME", with an optional "and press
   Enter", and "In the pane titled NAME, type and press Enter on: X".
@@ -1332,70 +1332,88 @@ copied argument points at its first and last word. Two members, the same 42
 nets trained from two seeds, 598,263 weights each, are held in one file of
 3.2 MB. Reading needs only the standard library.
 
-It answers only what it was trained to read:
-- every pair of neighbouring words in a clause stood side by side in a
-  training row, and a word it never saw is part of a copied title, command
-  or program;
-- each clause is wording of its own tool: with every copied text replaced by
-  a mark for its argument, each pair of neighbours stood side by side in a
-  training clause of that tool;
+It answers only what it was trained on, said with other names:
+- every clause is a training clause of its tool, read as that clause was
+  labelled: with every copied text replaced by a mark for its argument, the
+  same words in the same order and the same values from the closed lists
+  (3,237 such readings). A clause that only ever followed another in
+  training is read only after a clause of the same tool;
+- every pair of neighbouring words stood side by side in a training row, and
+  a word it never saw is part of a copied title, command or program;
 - two clauses are joined only by ",", "and" or "then", there are at most
   two, and no copied text is longer than any copied for that argument in
   training;
+- a copied name is made of new words or of words that were copied as names
+  in training ("rename this tab please" names nothing), and a pane or tab to
+  close or type into is named with trained words or a number;
+- every word of a clause that names a value is in that clause's call: one
+  that always named a value in training, or that alone named a side, a
+  place, a layout or a direction;
+- no clause is resolved by what the clause before it changes. The route
+  resolves every call before the first one runs, so "go to the logs tab and
+  rename it to api" would rename the tab the request came from;
+- a rename in the second clause that does not say "tab" or "pane" follows a
+  clause about the kind of thing it renames;
 - both members give the same calls;
-- a pane or tab to close or type into is named with trained words or a
-  number;
-- no word that names a value is missing from the answer: one that always
-  named a value in training, or that alone named a side, a place, a layout
-  or a direction;
-- the checks admit every call, and for each of two clauses alone what they
-  admit for the whole request.
+- the checks admit every call as the bundle read it. They add what they
+  find in the request, a "tab 2" as the tab of a rename; where they admit
+  something else than the bundle read, it stands aside.
 
 Otherwise it proposes nothing and the model reads the request as before.
 None of this is a confidence threshold. Its calls are proposals like the
 model's: the same checks, the same resolution against the live tree, the
 same confirmation. The history records such a request under the bundle's
-name. Nothing that goes wrong in the bundle stops a request: the model reads
-it.
+name. Nothing in front of the model stops a request: a bundle that is
+missing, damaged or cannot be imported is said on stderr, and the model
+reads the request.
 
 `KILIX_NEEDLE_BUNDLE=1` (or `on`, `true`, `yes`) switches the bundle on. Any
 other value switches it off. Unset, `needle_cli.BUNDLE_BY_DEFAULT` decides,
 and that is **off**.
 
-Its first reader passed a gate on a blind held-out set written for it (v17,
-171 cases, read once, 2026-11-17), with the tuned model qat-9, the one
-selected on the machine that measured it (the job table above names qat-6):
+Its first reader, held only to known words and word pairs, passed a gate on
+a blind held-out set written for it (v17, 171 cases, read once, 2026-11-17),
+with the tuned model qat-9, the one selected on the machine that measured it
+(the job table above names qat-6):
 
 | Route | Exact | Unsafe |
 | --- | ---: | ---: |
 | exact readers, then the model | 106 | 0 |
 | exact readers, the bundle, then the model | 121 | 0 |
 
-The bundle answered 58 of the 166 requests that reached the model. A whole
+That bundle answered 58 of the 166 requests that reached the model. A whole
 call that it answers took 227 ms where the model's took 3.8 s (median of 40
 requests, a new process each time, on an eight-core machine with nothing
 else measured on it), and a call it declines was within 50 ms of before.
 
-The independent review after that gate found requests the bundle answered
-and misread: it renamed or resized the caller's own tab or pane where the
-request names another, took any word between two clauses for "and", dropped
-clauses of a three-clause request, and read a tab named "two" as tab 2. No
-blind set held such a request, and the scorer calls only closing, typing and
-starting a program unsafe. The conditions above about a tool's own wording,
-the joining words, the length of a copy, the words of place and the checks
-clause by clause are the answer. Each only makes the bundle decline more:
-it answers nothing the gated reader declined. On the same blind set the
-route is still exact on 121 cases, with 53 answers from the bundle.
+Two independent reviews then found what the gate could not see. The scorer
+compares calls with labels and calls only closing, typing and starting a
+program unsafe, and no blind set held such a request. The first review found
+that the gated reader renamed or resized the caller's own tab or pane where
+the request names another, took any word between two clauses for "and",
+and read a tab named "two" as tab 2. The reader that answered it held each
+clause to pairs of neighbouring words of its own tool, and the second
+review found eleven more kinds: "call this tab 2" renamed tab 2, "go to the
+logs tab and rename it to api" renamed the caller's tab, "not a tab" opened
+a tab, "rearrange the panes" stacked them. The conditions above are the
+answer to both, and none of the requests of either review is answered now.
 
-**The fixed reader has not passed a gate of its own yet**, so the default
-stays off. What was measured, what the review found and what the bundle
-still gets wrong are in `panes-bundle/README.md`.
+The price is reach. On the three blind sets written for this change, which
+shaped the rules and gate nothing now, the gated reader answered about a
+third of the requests that reach the model, the reader of the second review
+about three in ten, and this one 17 of 170, 14 of 166 and 16 of 156, every
+answer exact (6 of 180 on the job's own held-out set). The route is exact
+on 102, 109 and 95 cases there, against 96, 106 and 92 without the bundle.
+
+**This reader has been neither gated nor reviewed**, so the default stays
+off. What was measured, what the reviews found and what the bundle still
+gets wrong are in `panes-bundle/README.md`.
 
 ```sh
-python3 panes_bundle.py "put a pane underneath with htop"  # its reading, or why it has none
+python3 panes_bundle.py "new right pane with htop"        # its reading, or why it has none
 python3 evaluate.py evals/dev.jsonl --route bundle        # the shipped route; dev is among the bundle's rows, so no score
 uv run --with torch==2.6.0 panes_bundle_train.py --spent --out panes-bundle \
-    --seeds 0 1 --name v2 --free-text rename_tab rename_pane go_to_pane go_to_tab
+    --seeds 0 1 --name v4 --free-text rename_tab rename_pane go_to_pane go_to_tab
 ```
 
 ## Known issues
@@ -1460,16 +1478,22 @@ uv run --with torch==2.6.0 panes_bundle_train.py --spent --out panes-bundle \
   the model's bytes are never written again. If those gates then fail, the
   run's `gates.json` records the failure while the run stays selected.
 - **The bundle can be wrong where the checks cannot tell.** It is off by
-  default. Switched on, the kinds known: in a request that makes a pane full
-  size and names it, it renames the tab; a resize that names another pane by
-  a title in wording it was trained on resizes the caller's pane; two
-  requests of the same kind joined by a comma can be read as one. Renaming
-  and resizing need no confirmation (`panes-bundle/README.md`, "What it
-  still gets wrong").
-- **The checks bind a tab's number across clauses.** For "rename this tab to
-  api and go to tab 1" the checks give the rename tab 1, whoever proposed
-  the calls. The bundle stands aside for such a request; the model's
-  proposal is still bound that way.
+  default. Two reviews each found about ten kinds of request it answered
+  and misread, and a gate on a blind set saw none of them. Switched on, it
+  repeats what its training rows are labelled with, and renaming, resizing,
+  focusing and arranging need no confirmation (`panes-bundle/README.md`,
+  "What it still gets wrong, and what is not its to fix").
+- **The checks bind a number in the request to a rename's tab or a resize's
+  pane.** For "call this tab 2" the checks make the rename a rename of tab
+  2, for "make this pane 3 rows taller" a resize of pane 3, and for "rename
+  this tab to api and go to tab 1" a rename of tab 1, whoever proposed the
+  calls. The bundle stands aside for such a request; the model's proposal
+  is still bound that way.
+- **Every call of a request is resolved before the first one runs.** A
+  proposal of a switch and a rename for "go to the logs tab and rename it to
+  api" renames the tab the request came from. The bundle stands aside; the
+  tuned model is trained on rows labelled that way. And when a risky call is
+  answered "no", the other calls of the request still run.
 - **"At a shell prompt" is checked twice, not proven.** Typing needs the
   shell's prompt marks (OSC 133), and, from what Kilix reports out of band,
   that the pane is not in the alternate screen and that what holds its

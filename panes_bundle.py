@@ -15,36 +15,56 @@ own, and the state picks the net exactly; nothing is routed by a score:
 What is systematic is code, not learned: splitting words, reading a number
 word as a number, copying text character for character.
 
-The bundle answers only on ground it was trained on. It proposes nothing, and
-the model reads the request as before, when
-- two neighbouring words of a clause never stood side by side in its training
-  rows (the pair mark), or a word it never saw is not part of a copied text;
-- the clause, read as its answer reads it, is not wording of that tool: with
-  each copied text replaced by a mark for its argument, two neighbouring
-  words never stood side by side in a training clause of the same tool (the
-  frame). "rename the logs tab to api" is made of words and pairs the bundle
-  knows, but no rename it was trained on passes over a tab's name;
-- two clauses are joined by a word that never joined two in training, or
-  there are more clauses than any training row had, or a copied text is
-  longer than any text copied for that argument in training;
-- a word that names a value is not in the answer: one that always named a
-  value in training, or that alone named a side, a place, a layout or a
-  direction ("the top pane to the left" read as the pane to the left);
-- no tool fits a clause, a required argument is missing, a number is not
-  one the tool takes, or it is written in digits the reader does not read;
-- its members (the same nets trained from different seeds) do not all give
-  the same calls.
-So what decides whether it answers is a lookup of words and word pairs it has
-seen, and agreement, never a confidence.
+The bundle answers only what it was trained on, said with other names. It
+proposes nothing, and the model reads the request as before, unless all of
+this holds:
+- every clause is the wording of a training clause of its tool, read as that
+  clause was labelled: with each copied text replaced by a mark for its
+  argument (the frame), the words are the same words in the same order and
+  every value from a closed list is the one that clause had (a reading). A
+  clause that stood first or alone in training says all it means by itself
+  and may stand anywhere. One that only ever followed another ("go to it")
+  leans on that one, and is read only after a clause of the same tool.
+  The nets say where the clauses are, which tool each one is and which
+  words are copied; the table of readings says whether that is something
+  the bundle was shown. Two reviews found what looser holds let through:
+  held to known words and pairs of neighbours it renamed the caller's tab
+  for "rename the logs tab to api", and held to pairs of neighbours of its
+  own tool's clauses it opened a tab for "not a tab";
+- every word and pair of neighbouring words stood in its training rows, or
+  is part of a copied text of a tool whose text may be new;
+- two clauses are joined by a word that joined two in training, there are
+  no more clauses than a training row had, and no copied text is longer
+  than any copied for that argument in training;
+- a copied name, title or command holds no word the bundle knows only as
+  wording ("rename this tab please" does not name it "please"), and ends
+  in no mark that ended the sentence ("api!");
+- every word of a clause that names a value is in that clause's call: one
+  that always named a value in training, or that alone named a side, a
+  place, a layout or a direction ("the top pane to the left" is not the
+  pane to the left);
+- no clause goes by what the clause before it changes. Every call is
+  resolved before the first one runs, so "go to the logs tab and rename it
+  to api" would rename the tab the request came from, and "close tab 1 and
+  go to tab 2" would go to what is tab 1 by then (_CHANGES);
+- a rename that does not say whether it renames a tab or a pane does not
+  follow a clause about the other one ("maximize the left pane and call it
+  api": read alone, "call it api" is a tab's rename);
+- a tool fits every clause, no required argument is missing, every number
+  is one the tool takes and is written in digits the reader reads;
+- its members (the same nets trained from different seeds) all give the
+  same calls.
+So what decides whether it answers is a lookup of wordings it has seen, and
+agreement, never a confidence.
 
 Its calls are proposals like the model's: they pass every check
 (actions.interpret), resolution against the live tree and the same
-confirmation. The checks read the whole request, and where the bundle read
-two clauses they must admit for each call what they admit shown its clause
-alone (needle_cli.checks_agree). The artifact is panes-bundle/, checked in
-with its manifest and reproduced by panes_bundle_train.py; a file whose
-digest does not match the manifest is refused. This module needs only the
-standard library.
+confirmation. The checks read the whole request and add what they find in
+it, a "tab 2" as the tab of a rename; a proposal is used only when what they
+admit is what the bundle read (needle_cli.checks_agree). The artifact is
+panes-bundle/, checked in with its manifest and reproduced by
+panes_bundle_train.py; a file whose digest does not match the manifest is
+refused. This module needs only the standard library.
 
 The file (bundle.bin): a magic line, the length of a JSON header, the header,
 then what all members share (every feature name once, the word pairs, and for
@@ -53,8 +73,9 @@ little-endian half floats. A request decodes only the table rows it touches.
 The header also holds the words the reader goes by: the known words, the
 tools' arguments, the tools whose copied text may be new, the words that
 name a value, the words that joined two clauses, the largest number of
-clauses in a training row, the most words copied for each argument, and for
-each tool where its frames are.
+clauses in a training row, the most words copied for each argument, the
+words that were copied for each argument, and for each tool where its
+readings are.
 """
 from __future__ import annotations
 
@@ -67,14 +88,17 @@ from operator import mul
 import os
 from pathlib import Path
 import re
+import stat
 import struct
 import sys
 
 DIRECTORY = Path(__file__).resolve().parent / "panes-bundle"
-SCHEMA = "kilix-needle.panes-bundle/v3"
-MANIFEST_SCHEMA = "kilix-needle.panes-bundle-manifest/v3"
-MAGIC = b"KNPB3\n"
+SCHEMA = "kilix-needle.panes-bundle/v4"
+MANIFEST_SCHEMA = "kilix-needle.panes-bundle-manifest/v4"
+MAGIC = b"KNPB4\n"
 FILE = "bundle.bin"
+MAX_BYTES = 64 << 20        # no bundle is near this size; a manifest that states more is refused
+MEMBERS_MIN = 2             # one member agrees with itself about anything
 NONE, ABSENT, COPY = "<none>", "<absent>", "<copy>"
 # Words that name a pane or tab by place; any other pane or tab is copied.
 CANON = ("current", "left", "right", "above", "below", "next", "previous", "last")
@@ -83,6 +107,37 @@ CANON = ("current", "left", "right", "above", "below", "next", "previous", "last
 # never seen may be a title, but it may as well be a misspelt "right" or a
 # "3rd", and the bundle cannot tell. Such a request is left to the model.
 KNOWN_TARGET = {"close_pane": "pane", "close_tab": "tab", "run_in_pane": "pane"}
+# The tools that rename, and the word for what each renames. A rename that
+# does not say that word ("then call it api") renames what the clause before
+# it was about (Member.read).
+RENAMES = {"rename_tab": "tab", "rename_pane": "pane"}
+# Every call of a request is resolved against the desktop as it was before
+# the first one ran (kilix.resolve). So a call that goes by something an
+# earlier call changes would act on the wrong pane or tab: after "go to the
+# logs tab", "rename it to api" is resolved in the tab the request came from.
+# What a call changes for the calls after it, beside the pane or tab it names:
+#   pane, tab   which pane and which tab "this", "it" and "here" are
+#   sides       which pane is to the left, right, above or below, or the next
+#   order       which tab is tab 2, the next one or the last
+#   a title     the name it gives, the program it starts or the command it
+#               types is what that pane or tab is called from then on
+# A close is taken to change the pane, and a close of a tab the tab, whichever
+# one it closes: the reader does not know whether it is the caller's own. A
+# pane named by its side is in the caller's tab; one named by a title or a
+# number may be in another (changes).
+_CHANGES = {"go_to_pane": ("pane",), "go_to_tab": ("pane", "tab"),
+            "open_pane": ("pane", "sides"), "open_tab": ("pane", "tab", "order"),
+            "close_pane": ("pane", "sides"), "close_tab": ("pane", "tab", "order"),
+            "maximize_pane": ("sides",), "arrange_panes": ("sides",), "swap_panes": ("sides",),
+            "move_tab": ("order",)}
+# What a call goes by without an argument that says so: the caller's own pane
+# or tab. (A new tab takes only its directory from the caller's pane.)
+_GOES_BY = {"open_pane": ("pane",), "arrange_panes": ("tab",), "swap_panes": ("pane", "sides"),
+            "move_tab": ("tab", "order")}
+SIDES = ("left", "right", "above", "below")
+# A mark that ended the sentence or a part of it, split from the word before.
+_CLOSING = frozenset(",;?!:.")
+_MARK = re.compile(r"<[a-z_]+#?>")
 
 _UNITS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
           "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen",
@@ -187,10 +242,65 @@ def frame_of(words: list[str], spans: dict) -> list[str]:
     return out
 
 
-def frame_pairs(frame: list[str]) -> list[str]:
-    """Neighbouring words of a frame, each pair as one line of the file."""
-    padded = ["<s>"] + frame + ["</s>"]
-    return [a + " " + b for a, b in zip(padded, padded[1:])]
+def acts_on(tool: str) -> str:
+    """"tab" or "pane": what a tool acts on, by its name."""
+    return "tab" if tool.endswith("_tab") else "pane"
+
+
+def reading_line(before: str, frame: list[str], closed: dict) -> str:
+    """One reading as a line of the file: the tool of the clause before it
+    ("" for a clause that stands first or alone), the frame, then every
+    argument that was read from a closed list with its value (a flag that
+    is set has the value "true"). Copied texts are in the frame as their
+    marks."""
+    return before + "\t" + " ".join(frame) + "".join(f"\t{key}={closed[key]}" for key in sorted(closed))
+
+
+def _titles(text) -> set:
+    """Each word of a title, as changes() and goes_by() name it: a pane or
+    tab is found by its whole title or by a whole word of it."""
+    return {"title " + word for word in str(text).casefold().split()}
+
+
+def changes(call: dict) -> set:
+    """What a call changes for the calls after it (_CHANGES). A pane or tab
+    it names is what "it" means from there on, and a name it gives, a
+    program it starts or a command it types is a title that was not there
+    before."""
+    given = call["arguments"]
+    out = set(_CHANGES.get(call["name"], ()))
+    out.update(key for key in ("pane", "tab") if given.get(key) not in (None, "current"))
+    if call["name"] == "close_pane" and given.get("pane") == "current":
+        out.add("tab")      # the caller's own pane is gone, and its tab may be
+    if call["name"] in ("go_to_pane", "maximize_pane") and given.get("pane") not in (None, *CANON):
+        out.add("tab")      # the focus goes to a pane that may be in another tab
+    for key in ("name", "program", "command"):
+        if isinstance(given.get(key), str):
+            out |= _titles(given[key])
+    return out
+
+
+def goes_by(call: dict, refs) -> set:
+    """What a call is resolved by (_GOES_BY and its pane or tab). `refs` are
+    the tool's arguments that hold a pane or a tab; one that is left out is
+    the caller's own. A pane's number names it wherever the focus is, a
+    tab's number is its place in the row of tabs, and a pane with a title is
+    looked for in the caller's tab first."""
+    given = call["arguments"]
+    out = set(_GOES_BY.get(call["name"], ()))
+    for key in refs:
+        ref = given.get(key)
+        if ref in (None, "current"):
+            out.add(key)
+        elif ref in SIDES:
+            out.update(("pane", "sides"))
+        elif ref in ("next", "previous", "last"):
+            out.update(("tab", "order") if key == "tab" else ("pane", "sides"))
+        elif str(ref).isascii() and str(ref).isdigit():
+            out.update(("order",) if key == "tab" else ())
+        else:
+            out |= _titles(ref) | ({"tab"} if key == "pane" else set())
+    return out
 
 
 def forms_of(words: list[str], known) -> list[str]:
@@ -272,6 +382,21 @@ class Net:
         return self.outputs[max(range(len(got)), key=got.__getitem__)]
 
 
+# Why a request the nets could read is not answered. A request can fail
+# several holds; the one reported is the first of these it fails, so each
+# count says what that hold alone turned away of what the earlier ones let by.
+PAIR = "an untrained word pair"
+WORD = "an untrained word"
+LONG = "a copied text longer than any in training"
+UNSHOWN = "wording this tool was not trained on"
+CARRIED = "a rename that does not say what it renames, after a clause about the other kind"
+UNNAMED = "a word that names a value is not in its clause's call"
+PLAIN = "a copied text holds a word the bundle knows only as wording"
+CLOSED = "a copied text ends in a mark that ended the sentence"
+LEANS = "a clause that goes by what the clause before it changes"
+_HOLDS = (LONG, UNSHOWN, CARRIED, UNNAMED, PLAIN, CLOSED, LEANS)
+
+
 class Member:
     """One trained set of nets: its own weights over what the bundle shares.
     Nets are set up when first asked."""
@@ -308,6 +433,10 @@ class Member:
         # is not ground it was trained on.
         if any(word.isdigit() and not word.isascii() for word in words):
             return [], "digits the reader does not read"
+        # A word spelt like a mark of the frame would stand in a frame as one.
+        if any(_MARK.fullmatch(word) for word in words):
+            return [], "a word spelt like one of the reader's marks"
+        bundle, failed = self.bundle, set()
         forms = forms_of(words, self.known)
         seg = self.net("seg")
         is_sep = [seg.best(word_features(forms, i)) == "sep" for i in range(len(forms))]
@@ -321,8 +450,7 @@ class Member:
         if len(clauses) > self.bundle.clauses_max:
             return [], "more clauses than any training row had"
         tool_net = self.net("tool")
-        calls, accounted = [], {i for i, sep in enumerate(is_sep) if sep}
-        unknown_pairs, unframed, too_long, places = [], [], [], []
+        calls, accounted, places = [], {i for i, sep in enumerate(is_sep) if sep}, []
         for index, (lo, hi) in enumerate(clauses):
             mine = forms[lo:hi]
             context = [w for j, w in enumerate(forms) if not lo <= j < hi and not is_sep[j]]
@@ -334,7 +462,7 @@ class Member:
             if tool == NONE:
                 return [], "no tool fits" if not unknown else "an untrained word pair"
             spec = self.tools[tool]
-            arguments, copied, spans = {}, set(), {}
+            arguments, closed, copied, spans = {}, {}, set(), {}
             for key, kind, low, high in spec["args"]:
                 net = self.net(f"arg {tool} {key}")
                 if net is None:
@@ -344,6 +472,7 @@ class Member:
                     continue
                 if label != COPY:
                     arguments[key] = True if kind == "flag" else label
+                    closed[key] = label
                     continue
                 pointer = self.net(f"span {tool} {key}")
                 if pointer is None:
@@ -367,42 +496,95 @@ class Member:
                 # No copy is longer than the longest text copied for this
                 # argument in training: a title of nine words is the rest of
                 # the sentence, not a title.
-                if last - first + 1 > self.bundle.copy_max.get(tool, {}).get(key, 0):
-                    too_long.append(index)
+                if last - first + 1 > bundle.copy_max.get(tool, {}).get(key, 0):
+                    failed.add(LONG)
+                if number is None:
+                    # A name, a title or a command is made of words new to
+                    # the bundle or of words that were copied for such an
+                    # argument in training. A word it knows only as wording
+                    # is wording here too: "rename this tab please" gives no
+                    # name. And no copy ends in the mark that ended the
+                    # sentence ("api!"): a mark split from the word before
+                    # it, or standing alone as the whole text.
+                    held = bundle.copied.get(key, ())
+                    if any(word in self.known and word not in held for word in words[lo + first:lo + last + 1]):
+                        failed.add(PLAIN)
+                    end = toks[lo + last]
+                    if set(end[0]) <= _CLOSING and (last == first or end[1] == toks[lo + last - 1][2]):
+                        failed.add(CLOSED)
                 arguments[key] = text
                 spans[key] = (first, last, number is not None)
                 copied.update(range(first, last + 1))
             if any(key not in arguments for key in spec["required"]):
                 return [], "a required argument is missing"
-            # The clause as this answer reads it must be wording of this
-            # tool. Words and pairs known from other tools' rows do not count:
-            # a rename that passes over a tab's name or a title where a
-            # number stood is not ground the nets of this tool were trained
-            # on. It is reported last, where every older rule would answer.
-            frames = self.bundle.frames(tool)
-            if any(pair not in frames for pair in frame_pairs(frame_of(words[lo:hi], spans))):
-                unframed.append(index)
+            # The clause as this answer reads it must be a training clause
+            # of this tool, read as that clause was labelled: the same words
+            # in the same order around the copied texts and the same values
+            # from the closed lists. Words and pairs the bundle knows are not
+            # enough, and neither are pairs of neighbours of this tool's own
+            # clauses: a walk over those pairs gives "not a tab" and "i need
+            # one", and both opened something. The reading must have stood
+            # first or alone in training, or after a clause of the tool that
+            # stands before it here: one that only ever followed another
+            # leans on it ("go to it" alone names no pane).
+            frame, shown = frame_of(words[lo:hi], spans), bundle.readings(tool)
+            if reading_line("", frame, closed) not in shown and not (
+                    calls and reading_line(calls[-1]["name"], frame, closed) in shown):
+                failed.add(UNSHOWN)
+            # Nothing the clause says may be dropped: a word that in training
+            # always named a value ("lower", a program, a number), or that
+            # alone named a side, a place, a layout or a direction ("left",
+            # "top", "grid"), has to be in this clause's call: as that value,
+            # or as part of a phrase that named it ("one above another"). The
+            # other clause's call does not count: "make the left pane wider
+            # and go to the left pane" still widens the caller's pane.
+            values = list(arguments.values())
+            for word in words[lo:hi]:
+                canon = bundle.value_words.get(word)
+                if canon is not None and not stands_for(word, values, canon):
+                    failed.add(UNNAMED)
+            # A call must not go by anything a call before it changes: the
+            # route resolves it as if that call had not run (_CHANGES). After
+            # "go to the logs tab", "it", "here", "this tab" and "the next
+            # one" mean the place the first call went to, and the route would
+            # act where the request came from. After "rename this tab to
+            # api", "the api tab" is this one, and the route would look for
+            # another.
+            changed = set().union(*map(changes, calls))
+            if changed & goes_by({"name": tool, "arguments": arguments},
+                                 [key for key, kind, _, _ in spec["args"] if kind == "ref"]):
+                failed.add(LEANS)
+            # "then call it api" does not say what it renames: it is what the
+            # clause before was about. The nets read a clause's tool from its
+            # own words and take such a clause for the same rename wherever it
+            # stands, and every training row that has one has it after a
+            # clause about a tab. After a clause about the other kind of
+            # thing ("go to the left pane and rename it to api") that reading
+            # renames the wrong one.
+            kind = RENAMES.get(tool)
+            if kind and calls and acts_on(calls[-1]["name"]) != kind \
+                    and not any(word in (kind, kind + "s", kind + "'s") for word in frame):
+                failed.add(CARRIED)
             if unknown:
                 # A pair inside or beside copied text is still a pair the nets
                 # never saw. It is let through only for a tool listed as one
                 # whose text may be new, and only when copied text accounts
                 # for every such pair.
                 if not (tool in self.free_text and all(n - 1 in copied or n in copied for n in unknown)):
-                    unknown_pairs.append(index)
+                    failed.add(PAIR)
             accounted.update(lo + i for i in copied)
             calls.append({"name": tool, "arguments": arguments})
             places.append((toks[lo][1], toks[hi - 1][2]))
-        if unknown_pairs:
-            return [], "an untrained word pair"
+        if PAIR in failed:
+            return [], PAIR
         # A word the bundle was never trained on must have been copied as an
         # argument; otherwise this request is not ground it knows.
         for i, form in enumerate(forms):
             if form in ("<x>", "<num>") and i not in accounted:
-                return [], "an untrained word"
-        if too_long:
-            return [], "a copied text longer than any in training"
-        if unframed:
-            return [], "wording this tool was not trained on"
+                return [], WORD
+        for reason in _HOLDS:
+            if reason in failed:
+                return [], reason
         if texts is not None:
             texts[:] = [request[start:end] for start, end in places]
         return calls, "ok"
@@ -432,7 +614,11 @@ class Bundle:
             # value of the answer in every training row that asked for an
             # action, and the words that alone named a value of a closed list
             # (a side, a place, a layout, a direction) in some row.
-            self.value_words = head.get("value_words", {})
+            self.value_words = dict(head["value_words"])
+            # {argument: the words that were copied for an argument of that
+            # name in training}: what a name, a title or a command may be
+            # made of beside words new to the bundle.
+            self.copied = {key: frozenset(words) for key, words in head["copied"].items()}
             # The words that joined two clauses in training, and the largest
             # number of clauses in a training row.
             self.separators = frozenset(head["separators"])
@@ -442,13 +628,14 @@ class Bundle:
                              for tool, most in head["copy_max"].items()}
             self._names = self._pairs = None
             self._ids: dict = {}
-            self._frames: dict = {}
+            self._readings: dict = {}
             self.members = [Member(self, entry) for entry in head["members"]]
             self._check_places()
         except (KeyError, TypeError, ValueError, AttributeError) as error:
             raise BundleError(f"the bundle header is not as the reader expects ({type(error).__name__}: {error})") from None
-        if not self.members:
-            raise BundleError("the bundle holds no member")
+        if len(self.members) < MEMBERS_MIN:
+            raise BundleError(f"the bundle holds {len(self.members)} member(s): it answers when its members "
+                              f"agree, and that takes {MEMBERS_MIN}")
         self.label = f"bundle {self.manifest.get('name', '')}".strip()
 
     def _check_places(self) -> None:
@@ -457,7 +644,7 @@ class Bundle:
         missing part."""
         room, head = len(self.raw) - self.body, self.head
         dim, hidden = int(head["dim"]), int(head["hidden"])
-        blocks = [head["names"], head["pairs"]] + [head["frames"][tool] for tool in self.tools]
+        blocks = [head["names"], head["pairs"]] + [head["readings"][tool] for tool in self.tools]
         for at, size in blocks:
             if not 0 <= at <= at + size <= room:
                 raise BundleError("a table of the bundle lies outside the file")
@@ -488,12 +675,12 @@ class Bundle:
             self._pairs = frozenset(self._text(self.head["pairs"]))
         return self._pairs
 
-    def frames(self, tool: str) -> frozenset:
-        """Every pair of neighbouring words in the training clauses of one
-        tool, each clause read as its answer (frame_of)."""
-        if tool not in self._frames:
-            self._frames[tool] = frozenset(self._text(self.head["frames"][tool]))
-        return self._frames[tool]
+    def readings(self, tool: str) -> frozenset:
+        """Every training clause of one tool as it was labelled, each a line
+        (reading_line): its frame and its values from the closed lists."""
+        if tool not in self._readings:
+            self._readings[tool] = frozenset(self._text(self.head["readings"][tool]))
+        return self._readings[tool]
 
     def ids(self, key: str):
         """The numbers of one net's features, in rising order."""
@@ -518,13 +705,19 @@ class Bundle:
             manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
         except (OSError, ValueError) as error:
             raise BundleError(f"the bundle manifest is unreadable: {error}") from None
-        if manifest.get("schema") != MANIFEST_SCHEMA:
+        if not isinstance(manifest, dict) or manifest.get("schema") != MANIFEST_SCHEMA:
             raise BundleError("unknown bundle manifest schema")
-        try:
-            raw = (directory / str(manifest.get("file", FILE))).read_bytes()
-        except OSError as error:
-            raise BundleError(f"the bundle file is unreadable: {error}") from None
-        if len(raw) != manifest.get("bytes") or hashlib.sha256(raw).hexdigest() != manifest.get("sha256"):
+        # The manifest names a file of its own directory, and how large it
+        # is. A path is not followed out of the directory, and nothing is
+        # read from a pipe, a device or a file of another size.
+        name, size = manifest.get("file", FILE), manifest.get("bytes")
+        if not isinstance(name, str) or name in ("", ".", "..") or "\0" in name \
+                or any(mark and mark in name for mark in ("/", os.sep, os.altsep)):
+            raise BundleError("manifest.json does not name a file of its own directory")
+        if type(size) is not int or not 0 < size <= MAX_BYTES:
+            raise BundleError("manifest.json states no size a bundle can have")
+        raw = _file_of_size(directory / name, size)
+        if hashlib.sha256(raw).hexdigest() != manifest.get("sha256"):
             raise BundleError("the bundle file does not match the digest in manifest.json")
         return cls(raw, manifest)
 
@@ -539,22 +732,37 @@ class Bundle:
             other, _ = member.read(request)
             if other != calls:
                 return [], "the members do not agree"
-        # Nothing the request says may be dropped: a word that in training
-        # always named a value ("lower", a program, a number), or that alone
-        # named a side, a place, a layout or a direction ("left", "top",
-        # "grid"), has to be in the answer: as that value, or as part of a
-        # phrase that named a value of the answer ("one above another"). If
-        # it is not, the nets read a sentence of a kind they were not trained
-        # on, and the model reads it.
-        values = [value for call in calls for value in call["arguments"].values()]
-        for token in tokenize(request) if self.value_words else ():
-            word = token[0].lower()
-            canon = self.value_words.get(word)
-            if canon is not None and not stands_for(word, values, canon):
-                return [], "a word that names a value is not in the answer"
         if texts is not None:
             texts[:] = clauses
         return calls, "ok"
+
+
+def _file_of_size(path: Path, size: int) -> bytes:
+    """The bytes of a regular file of exactly this size. What kind of file
+    it is and how large is asked of the open file before anything is read,
+    and no more than the size is read."""
+    try:
+        handle = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0))
+    except OSError as error:
+        raise BundleError(f"the bundle file is unreadable: {error}") from None
+    try:
+        info = os.fstat(handle)
+        if not stat.S_ISREG(info.st_mode):
+            raise BundleError("the bundle file is not a regular file")
+        if info.st_size != size:
+            raise BundleError("the bundle file does not have the size in manifest.json")
+        parts, left = [], size
+        while left:
+            part = os.read(handle, left)
+            if not part:
+                raise BundleError("the bundle file ended before the size in manifest.json")
+            parts.append(part)
+            left -= len(part)
+        return b"".join(parts)
+    except OSError as error:
+        raise BundleError(f"the bundle file is unreadable: {error}") from None
+    finally:
+        os.close(handle)
 
 
 _LOADED: dict = {}
@@ -566,10 +774,12 @@ def _not_used(error: Exception) -> None:
 
 
 def default() -> Bundle | None:
-    """The checked-in bundle, loaded once; None when there is none to use."""
+    """The checked-in bundle, loaded once; None when there is none to use.
+    Whoever asks has switched the bundle on, so a bundle that is missing is
+    said on stderr like one that is damaged."""
     if "bundle" not in _LOADED:
         try:
-            _LOADED["bundle"] = Bundle.load() if (DIRECTORY / "manifest.json").is_file() else None
+            _LOADED["bundle"] = Bundle.load()
         except Exception as error:      # whatever is wrong with the file, the model reads the request
             _not_used(error)
     return _LOADED["bundle"]
@@ -598,7 +808,11 @@ def main(argv: list[str]) -> int:
     if not argv:
         print('usage: python3 panes_bundle.py "split right and run htop"', file=sys.stderr)
         return 2
-    bundle = Bundle.load()
+    try:
+        bundle = Bundle.load()
+    except BundleError as error:
+        print(f"panes_bundle: {error}", file=sys.stderr)
+        return 1
     for request in argv:
         calls, reason = bundle.read(request)
         print(json.dumps({"request": request, "calls": calls, "reason": reason}, ensure_ascii=False))

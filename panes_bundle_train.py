@@ -16,9 +16,15 @@ the held-out sets that have gated), as the router is trained on them
 those sets: the manifest lists them under rows.spent.
 
 A current gate set (jobs.py) is never trained on. `--spent` and `--rows`
-refuse one before it is opened. The generator does read every eval file,
-the current gate set among them, as the tuner does: only to keep each of
-their requests out of the rows it makes.
+refuse one under any path before it is opened, and a copy of one under
+another name by its digest, before a line of it is taken. The generator does
+read every eval file, the current gate set among them, as the tuner does:
+only to keep each of their requests out of the rows it makes.
+
+Nothing is written unless the file, read as a request meets it, answers
+every training row it answers as that row is labelled, and its nets score a
+spread sample of their examples as PyTorch did. A bundle has at least two
+members: it answers when they agree.
 
 `--per-template N` asks the generator for more examples of each template than
 the tuned model gets. Measured on four held-out sets: it does not help.
@@ -44,7 +50,9 @@ import panes_bundle as PB
 REPO = Path(__file__).resolve().parent
 SEPARATORS = {"and", "then", ",", ";"}      # used only to label training rows
 DIM, HIDDEN, EPOCHS, RATE = 8, 32, 40, 0.01
-CHECKED = 200       # examples of each net scored by PyTorch and again by the reader
+CHECKED = 200       # examples of each net, spread over all it has, scored by PyTorch and again by the reader
+# What decides the rows, beside the generator's library: recorded in the manifest.
+ROW_CODE = ("actions.py", "tuning.py", "toolset.py")
 # The job's eval sets that have gated and are no longer a gate: what --spent adds.
 SPENT = ("evals/dev.jsonl", "evals/test.jsonl") + tuple(f"evals/heldout-v{n}.jsonl" for n in range(2, 15))
 
@@ -84,6 +92,7 @@ def build_rows(per_template: int | None = None, seed: int | None = None) -> tupl
     with tempfile.TemporaryDirectory(prefix="kn-bundle-") as scratch:
         staged = Path(scratch) / "library"
         added = tuning.stage_library(tuning.LIBRARY, data.get("supplements", []), staged)
+        library = tree_digest(staged)
         corpus = tuning.load_generator(staged)
         exclude = set()
         for rel in data["exclude"]:
@@ -108,16 +117,40 @@ def build_rows(per_template: int | None = None, seed: int | None = None) -> tupl
     stats = {"generated": len(rows), "eval_matches_dropped": dropped,
              "inconsistent_dropped": inconsistent, "unsupported_dropped": unsupported,
              "supplement_files": added, "seed": data["seed"], "per_template": data["per_template"],
-             "exclude": sorted(data["exclude"])}
+             "exclude": sorted(data["exclude"]),
+             # the generator's library as it was staged, supplements and all, and where it came from
+             "library_sha256": library, "library_commit": library_commit(tuning.LIBRARY)}
     if data.get("cap_share"):
         examples, stats["capped"] = tuning.cap_share(examples, data["cap_share"], data["seed"])
     stats["kept"] = len(examples)
     return [{key: example[key] for key in ("query", "actions", "spans")} for example in examples], stats
 
 
+def tree_digest(folder: Path) -> str:
+    """One digest for every file under a folder: each one's path and bytes, in order."""
+    digest = hashlib.sha256()
+    for path in sorted(p for p in Path(folder).rglob("*") if p.is_file()):
+        digest.update(path.relative_to(folder).as_posix().encode("utf-8") + b"\0")
+        digest.update(hashlib.sha256(path.read_bytes()).digest())
+    return digest.hexdigest()
+
+
+def library_commit(library: Path) -> str | None:
+    """The commit of the checkout the generator's library lies in, if it lies in one."""
+    import subprocess
+    try:
+        done = subprocess.run(["git", "-C", str(library), "rev-parse", "HEAD"], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return done.stdout.strip() if done.returncode == 0 and done.stdout.strip() else None
+
+
 def refuse_gates(paths) -> None:
-    """A current gate set of any job is never read, under any spelling (a
-    relative or absolute path, a symlink or a hard link): refused unopened."""
+    """A current gate set of any job is never read as rows. Under any
+    spelling (a relative or absolute path, a symlink or a hard link) it is
+    refused unopened. A copy under another name is known by its digest: the
+    file and the gate sets are hashed, and it is refused before a line of it
+    is taken."""
     import jobs
 
     def identity(path):
@@ -127,6 +160,12 @@ def refuse_gates(paths) -> None:
             return real, (info.st_dev, info.st_ino)
         except OSError:
             return real, None
+
+    def digest(path):
+        try:
+            return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+        except OSError:
+            return None
     gates = [identity(REPO / job.heldout) for job in jobs.JOBS.values()]
     names = {real for real, _ in gates}
     inodes = {inode for _, inode in gates if inode}
@@ -134,6 +173,10 @@ def refuse_gates(paths) -> None:
         real, inode = identity(REPO / path)
         if real in names or inode in inodes:
             raise SystemExit(f"panes_bundle_train: {path} is a current gate set and is never read")
+    contents = {digest(real) for real in names} - {None}
+    for path in paths:
+        if digest(REPO / path) in contents:
+            raise SystemExit(f"panes_bundle_train: {path} is a copy of a current gate set and is never read")
 
 
 def spent_rows(paths=SPENT) -> tuple[list[dict], dict]:
@@ -293,28 +336,35 @@ def prepare(row: dict, tools: dict):
 
 def ground(prepared: list[dict]) -> dict:
     """What the reader holds a request to, beside words and pairs: for each
-    tool the frames of its training clauses (PB.frame_of: the clause with
-    each copied text replaced by a mark for its argument), the words that
-    joined two clauses, the largest number of clauses in a row, and for each
-    argument the most words copied for it. A clause with an argument that
-    could not be placed in the request has no frame: its copied words would
-    stand in it as plain words."""
-    frames, separators, most = collections.defaultdict(set), set(), 1
-    longest = collections.defaultdict(dict)
+    tool the readings of its training clauses (PB.reading_line: the tool of
+    the clause before it, the clause with each copied text replaced by a
+    mark for its argument, and its values from the closed lists), the words
+    that joined two clauses, the largest number of clauses in a row, for each
+    argument the most words copied for it, and for each argument name the
+    words that were copied for it as text. A clause with an argument that
+    could not be placed in the request has no reading: its copied words
+    would stand in it as plain words."""
+    readings, separators, most = collections.defaultdict(set), set(), 1
+    longest, copied = collections.defaultdict(dict), collections.defaultdict(set)
     for p in prepared:
         most = max(most, len(p["clauses"]))
         separators.update(p["words"][i] for i in p["separators"])
-        for clause in p["clauses"]:
+        for index, clause in enumerate(p["clauses"]):
+            lo, hi = clause["range"]
             for key, (a, b) in clause["spans"].items():
                 longest[clause["tool"]][key] = max(longest[clause["tool"]].get(key, 0), b - a + 1)
+                if key not in clause["numbers"]:
+                    copied[key].update(p["words"][lo + a:lo + b + 1])
             if clause["tool"] == PB.NONE or any(label is None for label in clause["labels"].values()):
                 continue
-            lo, hi = clause["range"]
             spans = {key: (a, b, key in clause["numbers"]) for key, (a, b) in clause["spans"].items()}
-            frames[clause["tool"]].update(PB.frame_pairs(PB.frame_of(p["words"][lo:hi], spans)))
-    return {"frames": {tool: sorted(pairs) for tool, pairs in frames.items()},
+            closed = {key: label for key, label in clause["labels"].items() if label not in (PB.ABSENT, PB.COPY)}
+            before = p["clauses"][index - 1]["tool"] if index else ""
+            readings[clause["tool"]].add(PB.reading_line(before, PB.frame_of(p["words"][lo:hi], spans), closed))
+    return {"readings": {tool: sorted(lines) for tool, lines in readings.items()},
             "separators": sorted(separators), "clauses_max": most,
-            "copy_max": {tool: dict(sorted(keys.items())) for tool, keys in sorted(longest.items())}}
+            "copy_max": {tool: dict(sorted(keys.items())) for tool, keys in sorted(longest.items())},
+            "copied": {key: sorted(words) for key, words in sorted(copied.items())}}
 
 
 def examples(rows: list[dict], tools: dict) -> tuple[dict, set, set, dict]:
@@ -507,12 +557,17 @@ def train_member(data: dict, seed: int, log=print) -> dict:
             for parameter in net.parameters():
                 parameter.copy_(parameter.half().float())
         members[name] = (net.names, net.outputs, net.flat())
-        sample = d[0][:CHECKED] if isinstance(d, tuple) else [word for fl, _, _ in d[:CHECKED] for word in fl]
+        sample = spread(d[0]) if isinstance(d, tuple) else [word for fl, _, _ in spread(d) for word in fl]
         with torch.no_grad():
             checks[name] = [(features, net(net.ids([features]))[0].tolist()) for features in sample]
         log(f"  {name}: {len(d[1]) if isinstance(d, tuple) else len(d)} examples, "
             f"{len(net.names)} features, {len(members[name][2])} weights")
     return members, checks
+
+
+def spread(examples: list) -> list:
+    """CHECKED of them, taken evenly over the whole list (all, if there are fewer)."""
+    return examples[::max(1, len(examples) // CHECKED)][:CHECKED]
 
 
 def same_as_trained(raw: bytes, checks: list[dict]) -> list[dict]:
@@ -560,6 +615,16 @@ def reads_its_rows(raw: bytes, rows: list[dict]) -> dict:
     return {key: out[key] for key in ("rows", "answered", "as_labelled", "proposed_and_dropped", "risky_and_not_labelled")}
 
 
+def refuse_misread_rows(on_rows: dict) -> None:
+    """No file is written that answers one of its own training rows wrongly
+    (reads_its_rows): with a risky action the row does not hold, or in any
+    other way than the row is labelled."""
+    if on_rows["risky_and_not_labelled"]:
+        raise SystemExit(f"the file answers a training row with a risky action the row does not hold ({on_rows})")
+    if on_rows["as_labelled"] != on_rows["answered"]:
+        raise SystemExit(f"the file answers a training row otherwise than the row is labelled ({on_rows})")
+
+
 def pack(members: list[tuple[int, dict]], known: set, pairs: set, tools: dict, free_text: list[str],
          dim: int = DIM, hidden: int = HIDDEN, value_words: dict | None = None,
          ground: dict | None = None) -> bytes:
@@ -575,11 +640,13 @@ def pack(members: list[tuple[int, dict]], known: set, pairs: set, tools: dict, f
             raise ValueError("the members do not have the same nets over the same features")
     names = sorted({name for feature_names, _, _ in first.values() for name in feature_names})
     number = {name: n for n, name in enumerate(names)}
-    ground = ground or {"frames": {}, "separators": sorted(SEPARATORS), "clauses_max": 2, "copy_max": {}}
+    ground = {"readings": {}, "separators": sorted(SEPARATORS), "clauses_max": 2, "copy_max": {}, "copied": {},
+              **(ground or {})}
     head = {"schema": PB.SCHEMA, "dim": dim, "hidden": hidden, "known": sorted(known), "tools": tools,
             "free_text": sorted(free_text), "value_words": value_words or {}, "nets": {}, "members": [],
             "separators": sorted(ground["separators"]), "clauses_max": int(ground["clauses_max"]),
-            "copy_max": ground["copy_max"], "frames": {}}
+            "copy_max": ground["copy_max"], "copied": {key: sorted(words) for key, words in ground["copied"].items()},
+            "readings": {}}
     body = bytearray()
 
     def add(blob: bytes) -> int:
@@ -608,10 +675,13 @@ def pack(members: list[tuple[int, dict]], known: set, pairs: set, tools: dict, f
             values.extend(flat[rows:])
             entry["weights"][key] = add(struct.pack(f"<{len(values)}e", *values))
         head["members"].append(entry)
-    # Each tool's frames, after the weights: one pair a line.
+    # Each tool's readings, after the weights: one a line.
     for tool in sorted(tools):
-        blob = "\n".join(sorted(ground["frames"].get(tool, ()))).encode("utf-8")
-        head["frames"][tool] = [add(blob), len(blob)]
+        lines = sorted(ground["readings"].get(tool, ()))
+        if any("\n" in line for line in lines):
+            raise ValueError(f"a reading of {tool} holds a line break")
+        blob = "\n".join(lines).encode("utf-8")
+        head["readings"][tool] = [add(blob), len(blob)]
     encoded = json.dumps(head, ensure_ascii=False, sort_keys=True).encode("utf-8")
     return PB.MAGIC + len(encoded).to_bytes(4, "little") + encoded + bytes(body)
 
@@ -622,6 +692,8 @@ def sha256_file(path: Path) -> str:
 
 def write(out: Path, rows: list[dict], row_stats: dict, seeds: list[int], free_text: list[str],
           name: str, log=print) -> dict:
+    if len(set(seeds)) != len(seeds) or len(seeds) < PB.MEMBERS_MIN:
+        raise SystemExit(f"a bundle answers when its members agree: it takes at least {PB.MEMBERS_MIN} different seeds")
     tools = schema()
     data, known, pairs, used = examples(rows, tools)
     trained, checks = [], []
@@ -638,8 +710,7 @@ def write(out: Path, rows: list[dict], row_stats: dict, seeds: list[int], free_t
         raise SystemExit(f"the file does not read as it was trained ({same})")
     on_rows = reads_its_rows(raw, rows)
     log(f"on its own rows: {on_rows}")
-    if on_rows["risky_and_not_labelled"]:
-        raise SystemExit(f"the file answers a training row with a risky action the row does not hold ({on_rows})")
+    refuse_misread_rows(on_rows)
     out.mkdir(parents=True, exist_ok=True)
     (out / PB.FILE).write_bytes(raw)
     import torch
@@ -649,22 +720,23 @@ def write(out: Path, rows: list[dict], row_stats: dict, seeds: list[int], free_t
         "members": [{"seed": seed, "nets": len(nets),
                      "weights": sum(len(flat) for _, _, flat in nets.values()), "read_as_trained": check}
                     for (seed, nets), check in zip(trained, same)],
-        "answers_when": "every member proposes the same calls and the checks admit every one of them",
+        "answers_when": "every member proposes the same calls and the checks admit every one of them as it was read",
         "weights_as": "little-endian half floats; each net was rounded to them before it was checked",
         "trainer": {"dim": DIM, "hidden": HIDDEN, "epochs": EPOCHS, "learning_rate": RATE,
                     "torch": torch.__version__, "threads": 1},
         "rows": {**row_stats, **used, "known_words": len(known), "known_pairs": len(pairs),
                  "value_words": len(always), "closed_words": len(closed),
                  "value_and_closed_words": len({**closed, **always}),
-                 "frames": {tool: len(pairs_) for tool, pairs_ in sorted(ground_["frames"].items())},
+                 "readings": {tool: len(lines) for tool, lines in sorted(ground_["readings"].items())},
+                 "copied_words": {key: len(words) for key, words in sorted(ground_["copied"].items())},
                  "separators": ground_["separators"], "clauses_max": ground_["clauses_max"],
                  "copy_max": ground_["copy_max"],
                  "sha256": hashlib.sha256("".join(json.dumps(r, sort_keys=True, ensure_ascii=False) + "\n"
                                                   for r in rows).encode("utf-8")).hexdigest()},
         "free_text": sorted(free_text),
         "reads_its_rows": on_rows,
-        "code": {"panes_bundle.py": sha256_file(REPO / "panes_bundle.py"),
-                 "panes_bundle_train.py": sha256_file(REPO / "panes_bundle_train.py")},
+        "code": {source: sha256_file(REPO / source)
+                 for source in ("panes_bundle.py", "panes_bundle_train.py") + ROW_CODE},
     }
     (out / "manifest.json").write_text(json.dumps(manifest, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     return manifest

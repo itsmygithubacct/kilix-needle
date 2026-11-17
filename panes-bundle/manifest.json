@@ -1,9 +1,12 @@
 {
- "answers_when": "every member proposes the same calls and the checks admit every one of them",
- "bytes": 3224446,
+ "answers_when": "every member proposes the same calls and the checks admit every one of them as it was read",
+ "bytes": 3335239,
  "code": {
-  "panes_bundle.py": "b110aa5734d59275c1f02f910c21a287d78c971d98521978b6f3c755751e7a0d",
-  "panes_bundle_train.py": "a53049732a9d731a9ab227d0d3f239d5f10380a1d433e96f74c701bfa69460e6"
+  "actions.py": "329748e4e5adc595f2a0dc71ddf69bd252d4708bab172ae3221c25a5e44069af",
+  "panes_bundle.py": "e2bd0495a45cae1663e60a0f6f32b47b12aed24845f5897661da660bcd42742e",
+  "panes_bundle_train.py": "f4824dce7103e01fe60dfe6837df147ebc55d249966ea3867ca3474fea18829b",
+  "toolset.py": "9e456fc9b095088810f92dead17fb02d7c8d13e9a7af4e8caaa99d5285350476",
+  "tuning.py": "65402b342f4ae7964ac57fce9b5e3e38566a7d22507adaf411784aba15ed84ac"
  },
  "file": "bundle.bin",
  "free_text": [
@@ -17,8 +20,8 @@
    "nets": 42,
    "read_as_trained": {
     "another_output": 0,
-    "examples": 21525,
-    "largest_score_difference": 6.736921498884385e-06
+    "examples": 21399,
+    "largest_score_difference": 1.4856860431677887e-05
    },
    "seed": 0,
    "weights": 598263
@@ -27,18 +30,18 @@
    "nets": 42,
    "read_as_trained": {
     "another_output": 0,
-    "examples": 21525,
-    "largest_score_difference": 1.0730022438565356e-05
+    "examples": 21399,
+    "largest_score_difference": 1.4084218186383168e-05
    },
    "seed": 1,
    "weights": 598263
   }
  ],
- "name": "v2",
+ "name": "v4",
  "reads_its_rows": {
-  "answered": 6396,
-  "as_labelled": 6391,
-  "proposed_and_dropped": 15,
+  "answered": 6070,
+  "as_labelled": 6070,
+  "proposed_and_dropped": 10,
   "risky_and_not_labelled": 0,
   "rows": 7318
  },
@@ -46,6 +49,13 @@
   "capped": {},
   "clauses_max": 2,
   "closed_words": 27,
+  "copied_words": {
+   "command": 70,
+   "name": 77,
+   "pane": 42,
+   "program": 35,
+   "tab": 25
+  },
   "copy_max": {
    "close_pane": {
     "pane": 1
@@ -145,28 +155,30 @@
    "evals/system/test.jsonl",
    "evals/test.jsonl"
   ],
-  "frames": {
-   "arrange_panes": 676,
-   "close_pane": 193,
-   "close_tab": 168,
-   "go_to_pane": 329,
-   "go_to_tab": 190,
-   "maximize_pane": 226,
-   "move_tab": 53,
-   "open_pane": 563,
-   "open_tab": 263,
-   "rename_pane": 142,
-   "rename_tab": 306,
-   "resize_pane": 365,
-   "run_in_pane": 164,
-   "swap_panes": 373
-  },
   "generated": 6442,
   "inconsistent_dropped": 773,
   "kept": 5669,
   "known_pairs": 5497,
   "known_words": 975,
+  "library_commit": "aa3489323ee74dc1661aa604e7145c5e14bcf500",
+  "library_sha256": "243cf60ad0236403af6439d7beb19e32e2ba701f1b0d6d6f28bac87addadc181",
   "per_template": 12,
+  "readings": {
+   "arrange_panes": 712,
+   "close_pane": 139,
+   "close_tab": 66,
+   "go_to_pane": 206,
+   "go_to_tab": 97,
+   "maximize_pane": 267,
+   "move_tab": 53,
+   "open_pane": 632,
+   "open_tab": 125,
+   "rename_pane": 79,
+   "rename_tab": 120,
+   "resize_pane": 268,
+   "run_in_pane": 121,
+   "swap_panes": 352
+  },
   "rows": 7318,
   "rows_skipped": 15,
   "rows_used": 7303,
@@ -289,8 +301,8 @@
   "value_and_closed_words": 199,
   "value_words": 188
  },
- "schema": "kilix-needle.panes-bundle-manifest/v3",
- "sha256": "6dc46328ab4a536053b25363dda44f546fc8b82d0836a5afac0d9240e508476a",
+ "schema": "kilix-needle.panes-bundle-manifest/v4",
+ "sha256": "d922707a45a24726183151b1d0d394237a665d6fcd702388879769a6cef342de",
  "trainer": {
   "dim": 8,
   "epochs": 40,

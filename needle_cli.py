@@ -164,9 +164,12 @@ HELP_REQUEST = re.compile(r"\s*(?:(?:show|print|get)\s+(?:me\s+)?(?:the\s+)?)?(?
 # Whether the panes bundle is asked before the model when KILIX_NEEDLE_BUNDLE
 # is not set. A default changes only by a gate on a blind held-out set and an
 # independent review (README, "The panes bundle"). The gate on the blind set
-# v17 passed (2026-11-17), and the review after it found requests the bundle
-# misreads (panes-bundle/README.md, "What the review found"). Off until what
-# it found is fixed and the fixed reader has passed a gate of its own.
+# v17 passed (2026-11-17). The review after it found requests the bundle
+# misread, and so did a second review of the reader that answered the first
+# (panes-bundle/README.md, "What the reviews found"). The gate compares calls
+# with labels and cannot see a misreading of that kind. Off until the reader
+# as it now is has been through a review that finds none and a gate of its
+# own.
 BUNDLE_BY_DEFAULT = False
 
 _BUNDLE_ON = ("1", "on", "true", "yes")
@@ -191,19 +194,57 @@ def _admitted(sentence: str, calls: list):
     return [(result.kind, dict(result.args)) for result in results]
 
 
+# What the checks add to a call that leaves it out, whatever the request
+# says: the caller's own pane, no restoring, a step of 2. Anything else they
+# add to a call of the bundle they found in the request themselves.
+_ADDED_TO_ANY = {("maximize_pane", "pane"): "current", ("maximize_pane", "restore"): False,
+                 ("rename_pane", "pane"): "current", ("resize_pane", "amount"): 2}
+
+
+def _as_read(call: dict, kind: str, admitted: dict) -> bool:
+    """Whether the checks admitted a call of the bundle as the bundle read
+    it: the same tool, every argument it read with the value it read (a
+    title as the checks spell one, a pane's number as its id), and nothing
+    added but what the checks add to any such call."""
+    read = call["arguments"]
+    if kind != call["name"] or any(key not in admitted for key in read):
+        return False
+    for key, value in admitted.items():
+        if key not in read:
+            if (kind, key) not in _ADDED_TO_ANY:
+                return False
+            default = _ADDED_TO_ANY[kind, key]
+            if type(value) is not type(default) or value != default:
+                return False
+            continue
+        mine = read[key]
+        same = type(value) is type(mine) and value == mine
+        if not same and key in ("pane", "tab") and isinstance(mine, str) and isinstance(value, str):
+            title = " ".join(mine.casefold().split())
+            same = value == "name:" + title or (key == "pane" and mine.isascii() and mine.isdigit()
+                                                and value == f"id:{int(mine)}")
+        if not same:
+            return False
+    return True
+
+
 def checks_agree(request: str, calls: list, texts: list) -> bool:
     """Whether a proposal of the panes bundle can be used as it was read.
 
-    The checks must admit every call. And where the bundle read two clauses
-    (`texts`: the clause each call was read from), the checks must admit for
-    each call, shown its clause alone, what they admit shown the whole
-    request. The checks read the whole request and bind what they find in
-    it: a "tab 2" anywhere becomes the tab of a rename, so "rename this tab
-    to api and go to tab 2" would rename tab 2. The bundle read that "tab 2"
-    for the other call. Where the two readings differ, the bundle stands
-    aside."""
+    The checks must admit every call, and admit it as the bundle read it
+    (_as_read). The checks read the whole request and bind what they find in
+    it: a "tab 2" anywhere becomes the tab of a rename, so "call this tab 2"
+    would rename tab 2 to "2", and "make this pane 3 rows taller" would
+    resize pane 3. The bundle read neither a tab nor a pane there. Where the
+    checks admit something else than it read, the bundle stands aside.
+
+    And where the bundle read two clauses (`texts`: the clause each call was
+    read from), the checks must admit for each call, shown its clause alone,
+    what they admit shown the whole request."""
     whole = _admitted(request, calls)
     if whole is None:
+        return False
+    if not all(_as_read(call, kind, admitted) for call, (kind, admitted) in zip(calls, whole)):
         return False
     if len(calls) == 1:
         return True
@@ -222,19 +263,25 @@ def bundle_proposal(request: str):
     """(calls, the bundle's label) when the panes bundle answers, else None.
 
     The bundle answers when it is switched on, knows the request
-    (panes_bundle.read) and the checks admit every call it proposes, the
-    same for each clause alone as for the whole request (checks_agree). In
-    every other case it stands aside and the model reads the request as
-    before."""
+    (panes_bundle.read) and the checks admit every call it proposes as it
+    read it, the same for each clause alone as for the whole request
+    (checks_agree). In every other case it stands aside and the model reads
+    the request as before. That holds for whatever goes wrong on the way: a
+    reader that cannot be imported is said on stderr and the model reads
+    the request."""
     if not bundle_enabled():
         return None
-    import panes_bundle
-    texts: list = []
-    proposed = panes_bundle.read(request, texts)
-    if not proposed:
-        return None
-    calls, label = proposed
-    if not checks_agree(request, calls, texts):
+    try:
+        import panes_bundle
+        texts: list = []
+        proposed = panes_bundle.read(request, texts)
+        if not proposed:
+            return None
+        calls, label = proposed
+        if not checks_agree(request, calls, texts):
+            return None
+    except Exception as error:      # noqa: BLE001  nothing in front of the model may stop a request
+        print(f"kilix-needle: the panes bundle is not used ({type(error).__name__}: {error})", file=sys.stderr)
         return None
     return calls, label
 
