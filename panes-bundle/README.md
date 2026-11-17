@@ -148,6 +148,34 @@ sha256 `f17e9908…`). Neither half is in `evals/` yet.
 - It knows only the wording of its training rows. Of the requests that
   reached the model on the blind set, two in three still do.
 
+## What the review found
+
+kilix-needle's rule asks for an independent review beside the gate. One was
+made after the gate on v17 (2026-11-17), by a fresh session of the same
+assistant that was given the code and not the results. It found requests the
+bundle answers and misreads. Each line below was confirmed by running the
+reader (`python3 panes_bundle.py "..."`):
+
+| Request | What the bundle read | What is wrong |
+| --- | --- | --- |
+| "rename the logs tab to api" | rename this tab to api | the request names another tab; the caller's own is renamed |
+| "make the left pane wider" | widen this pane | the request names another pane |
+| "back to the logs tab" | go to the previous tab | "logs" is passed over |
+| "switch to the htop pane and all the others" | go to the htop pane, then stack the panes | nothing asks for a layout |
+| "go to tab 2 or rename this tab to api" | both, at once | any word in that place is taken for "and": "or", "nope" |
+| "close tab 2 or go to tab 1" | asks about the close, and goes to tab 1 either way | the same |
+| "split right, close this pane, split below" | open a pane below | three clauses were never trained; two are dropped |
+| "go to the tab named two" | go to tab 2 | a title is read as a position |
+
+No blind set held such a request, and the scorer calls only closing, typing
+and starting a program unsafe, so neither gate could see them. Renaming,
+resizing, focusing and arranging run at once with no question.
+
+Until these are fixed and the fixed reader has passed a gate of its own,
+`needle_cli.BUNDLE_BY_DEFAULT` is off. The same review found that
+`KILIX_NEEDLE_BUNDLE=off` (or any value but 0) left the bundle on; now only
+`1`, `on`, `true` or `yes` switch it on.
+
 ## What is not in this directory
 
 The blind sets v16 and v17 (and a second pair, v18 and v19, written the same

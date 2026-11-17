@@ -342,6 +342,22 @@ class BeforeTheModel(unittest.TestCase):
         with mock.patch.object(needle_cli, "BUNDLE_BY_DEFAULT", True):
             self.assertIsNone(needle_cli.bundle_proposal("move to the next tab"))
 
+    def test_only_a_plain_yes_switches_the_bundle_on(self):
+        # "off", "false", an empty value or a typo must never leave it on.
+        with mock.patch.object(needle_cli, "BUNDLE_BY_DEFAULT", True):
+            for value in ("0", "off", "OFF", "false", "no", "", " ", "2", "enabled?"):
+                os.environ["KILIX_NEEDLE_BUNDLE"] = value
+                self.assertFalse(needle_cli.bundle_enabled(), value)
+                self.assertIsNone(needle_cli.bundle_proposal("move to the next tab"), value)
+        with mock.patch.object(needle_cli, "BUNDLE_BY_DEFAULT", False):
+            for value in ("1", "on", "On", "true", "yes", " 1 "):
+                os.environ["KILIX_NEEDLE_BUNDLE"] = value
+                self.assertTrue(needle_cli.bundle_enabled(), value)
+        os.environ["KILIX_NEEDLE_BUNDLE"] = "0"
+
+    def test_the_default_is_off_until_the_review_is_answered(self):
+        self.assertIs(needle_cli.BUNDLE_BY_DEFAULT, False)
+
     def test_switched_off_the_bundle_is_not_even_loaded(self):
         os.environ["KILIX_NEEDLE_BUNDLE"] = "0"
         with mock.patch.object(PB, "default", side_effect=AssertionError("the bundle was loaded")):

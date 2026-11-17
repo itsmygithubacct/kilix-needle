@@ -1371,8 +1371,12 @@ close a tab held a word the bundle had never seen, and it was copied as the
 tab's title. The third condition above is the fix, and v17 gated the result.
 The record of both gates is in `panes-bundle/README.md`.
 
-`KILIX_NEEDLE_BUNDLE=0` switches the bundle off and `=1` on; unset,
-`needle_cli.BUNDLE_BY_DEFAULT` decides (on in this branch).
+`KILIX_NEEDLE_BUNDLE=1` (or `on`, `true`, `yes`) switches the bundle on. Any
+other value switches it off. Unset, `needle_cli.BUNDLE_BY_DEFAULT` decides,
+and that is **off**: the gate passed, but the review after it found requests
+the bundle misreads (`panes-bundle/README.md`, "What the review found"). It
+stays off until those are fixed and the fixed reader has passed a gate of
+its own.
 
 ```sh
 python3 panes_bundle.py "split right and run htop"        # its reading, or why it has none

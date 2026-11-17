@@ -163,16 +163,24 @@ HELP_REQUEST = re.compile(r"\s*(?:(?:show|print|get)\s+(?:me\s+)?(?:the\s+)?)?(?
 
 # Whether the panes bundle is asked before the model when KILIX_NEEDLE_BUNDLE
 # is not set. A default changes only by a gate on a blind held-out set and an
-# independent review (README, "The panes bundle"). On since the gate on the
-# blind set v17 (2026-11-17; panes-bundle/README.md).
-BUNDLE_BY_DEFAULT = True
+# independent review (README, "The panes bundle"). The gate on the blind set
+# v17 passed (2026-11-17), and the review after it found requests the bundle
+# misreads (panes-bundle/README.md, "What the review found"). Off until what
+# it found is fixed and the fixed reader has passed a gate of its own.
+BUNDLE_BY_DEFAULT = False
+
+_BUNDLE_ON = ("1", "on", "true", "yes")
 
 
 def bundle_enabled() -> bool:
-    """KILIX_NEEDLE_BUNDLE=1 asks the bundle before the model and =0 never
-    does; unset, BUNDLE_BY_DEFAULT decides."""
+    """KILIX_NEEDLE_BUNDLE=1 (or on, true, yes) asks the bundle before the
+    model. Any other value switches it off: someone who sets the variable to
+    "off" or to a typo must not get the bundle. Unset, BUNDLE_BY_DEFAULT
+    decides."""
     value = os.environ.get("KILIX_NEEDLE_BUNDLE")
-    return value == "1" if value in ("0", "1") else BUNDLE_BY_DEFAULT
+    if value is None:
+        return BUNDLE_BY_DEFAULT
+    return value.strip().lower() in _BUNDLE_ON
 
 
 def bundle_proposal(request: str):
