@@ -75,6 +75,10 @@ GENERIC = frozenset("""
     service services unit units daemon daemons process processes program programs app apps
     application applications package packages pid pids server servers web webserver database db
     system machine computer box host everything stuff thing things same rest
+    again too also now already still finally asap urgent urgently quick quickly please pls thanks
+    frozen freezing stuck hung hanging broken crashed crashing dead down slow lagging laggy
+    restarted started stopped reloaded enabled disabled installed removed uninstalled purged
+    killed terminated ended closed quit bounced upgraded updated refreshed
     """.split())
 
 
@@ -180,25 +184,31 @@ def needs_person(act: Action) -> str | None:
 # ---------------------------------------------------------------- reading
 
 _SHELL = re.compile(r"[;|&<>`$\\{}\[\]*]|\$\(")
-_NEGATION = re.compile(r"\b(?:don'?t|do not|dont|doesn'?t|does not|didn'?t|never|not|no need|no longer|"
+
+
+def _words(pattern: str):
+    """A word pattern whose edges are not inside a name: '-', '.', '@' and '+' join a name."""
+    return re.compile(r"(?<![\w@+.-])(?:" + pattern + r")(?![\w@+-]|\.\w)")
+
+_NEGATION = _words(r"(?:don'?t|do not|dont|doesn'?t|does not|didn'?t|never|not|no need|no longer|"
                        r"without|cancel|never ?mind|forget (?:it|that|about)|scratch that|actually|"
-                       r"instead|but|except|unless|nope|wait)\b")
-_CONDITION = re.compile(r"\b(?:if|when|whenever|once|after|before|until|till|while|in case|as soon as|"
+                       r"instead|but|except|unless|nope|wait)")
+_CONDITION = _words(r"(?:if|when|whenever|once|after|before|until|till|while|in case|as soon as|"
                         r"tomorrow|tonight|later|soon|eventually|midnight|noon|every|daily|weekly|hourly|"
                         r"monthly|schedule[ds]?|scheduled|o'?clock|at \d|in \d+ ?(?:s|secs?|seconds?|m|mins?|"
-                        r"minutes?|h|hrs?|hours?|days?|weeks?))\b")
-_ALTERNATIVE = re.compile(r"\b(?:or|either|maybe|perhaps|possibly)\b")
-_HYPOTHETICAL = re.compile(r"\b(?:should|shall|would|might|may|could|can|wants?|wanted|wanting|asked|asks|"
+                        r"minutes?|h|hrs?|hours?|days?|weeks?))")
+_ALTERNATIVE = _words(r"(?:or|either|maybe|perhaps|possibly)")
+_HYPOTHETICAL = _words(r"(?:should|shall|would|might|may|could|can|wants?|wanted|wanting|asked|asks|"
                            r"said|says|told|tells|suggest\w*|recommend\w*|probably|how to|is it|"
                            r"what happens|supposed|need to know|wonder\w*|thinking|planning|plan to|"
-                           r"going to|gonna|let me|i'?ll|i will|we'?ll|we will)\b")
+                           r"going to|gonna|let me|i'?ll|i will|we'?ll|we will)")
 _QUESTION = re.compile(r"^(?:is|are|was|were|does|do|did|has|have|had|what|what's|whats|which|who|why|"
                        r"how|where|whether|am i|can i|could i)\b")
-_REMOTE = re.compile(r"\b(?:on|at|in|from|to) (?:the |my |our |a |that |this )?(?:other |remote )?"
+_REMOTE = _words(r"(?:on|at|in|from|to) (?:the |my |our |a |that |this )?(?:other |remote )?"
                      r"(?:server|host|box|vm|container|cluster|pod|node|prod|production|staging|"
-                     r"web\d+|db\d+|remote)\b|\bssh (?:into|to|onto)\b|\bremotely\b")
-_OUT_OF_SCOPE = re.compile(
-    r"\b(?:reboot|rebooting|restart (?:the |my |this )?(?:machine|computer|system|server|pc|laptop|box|os)|"
+                     r"web\d+|db\d+|remote)|ssh (?:into|to|onto)|remotely")
+_OUT_OF_SCOPE = _words(
+    r"(?:reboot|rebooting|restart (?:the |my |this )?(?:machine|computer|system|server|pc|laptop|box|os)|"
     r"shut ?down|shutdown|power ?off|poweroff|halt|suspend|hibernate|log ?out|logout|log off|"
     r"mount|unmount|umount|format|edit|modify|change|configure|chmod|chown|useradd|adduser|userdel|"
     r"deluser|usermod|passwd|passwords?|groups?|firewall|ufw|iptables|nft|cron ?jobs?|cronjobs?|crontabs?|"
@@ -207,7 +217,7 @@ _OUT_OF_SCOPE = re.compile(
     r"rename|create|write|downgrade|hold|unhold|mask|unmask|snap|flatpak|pip|pip3|npm|cargo|gem|"
     r"kubectl|reinstall|setup|set up|ppa|add-apt-repository|sources\.list|logs?|journal|status|"
     r"show|list|check (?:if|whether|that)|tell me|why|containers?|images?|https?|deb|dpkg|"
-    r"a repo|a repository|the repo|repositories|repository)\b")
+    r"a repo|a repository|the repo|repositories|repository)")
 _CAPITAL_QUESTION = re.compile(r"\?\s*\S")      # a '?' with words after it
 
 _PREFIX = re.compile(r"^(?:(?:hey|hi|ok|okay|so|um|uh|yo|alright|right)\b[,.!]?\s+)*"
@@ -227,6 +237,7 @@ _PURGE = re.compile(r"\b(?:remove|uninstall)\s+(\S+)\s+(?:and|with|including|plu
                     r"\b(?:remove|uninstall)\s+(\S+)\s+completely\b", re.I)
 _SPLIT = re.compile(r"\s*,\s*(?:and\s+)?(?:then\s+)?|\s+and\s+then\s+|\s+then\s+|\s+and\s+(?:also\s+)?|"
                     r"\s+(?:also|plus)\s+")
+_SPLIT_KEEP = re.compile("(" + _SPLIT.pattern + ")")
 
 _SERVICE_VERBS = {"start": "start", "stop": "stop", "restart": "restart", "bounce": "restart",
                   "reload": "reload", "enable": "enable", "disable": "disable"}
@@ -235,9 +246,10 @@ _PACKAGE_VERBS = {"install": "install", "remove": "remove", "uninstall": "remove
 _FILLER = frozenset("the a an my named called service unit daemon".split())
 _PROCESS_FILLER = frozenset("the a an my named called process program app application pid with".split())
 _PACKAGE_FILLER = frozenset("the a an named called package packages".split())
-_SIGNAL_WORDS = {"sigkill": "kill", "-9": "kill", "-kill": "kill", "-sigkill": "kill",
-                 "sigterm": "term", "-15": "term", "-term": "term", "-sigterm": "term", "term": "term",
-                 "sighup": "hup", "-1": "hup", "-hup": "hup", "-sighup": "hup", "hup": "hup"}
+_SIGNAL_WORDS = {"sigkill": "kill", "sigterm": "term", "sighup": "hup"}
+_KILL_OPTIONS = {"-9": "kill", "-term": "term", "-hup": "hup"}      # SPEC's typed kill form
+_SEND_SIGNALS = {"sigkill": "kill", "kill": "kill", "sigterm": "term", "term": "term",
+                 "sighup": "hup", "hup": "hup"}
 
 _REFRESH = re.compile(r"(?:update|refresh|reload|resync|sync) (?:the )?(?:apt|package|packages|apt package)?\s*"
                       r"(?:lists?|index|indexes|sources|cache|database|metadata|repos)|"
@@ -252,6 +264,45 @@ _UPGRADE = re.compile(r"upgrade|upgrade (?:all )?(?:the |my )?(?:installed )?(?:
                       r"(?:sudo )?apt(?:-get)? upgrade")
 
 
+_TYPOS = {"teh": "the", "pleas": "please", "plese": "please", "pleae": "please", "cna": "can",
+          "coudl": "could", "yuo": "you", "thnaks": "thanks", "thansk": "thanks", "thnx": "thanks",
+          "servcie": "service", "sevice": "service", "proccess": "process", "porcess": "process",
+          "pacakge": "package", "packge": "package"}
+_PARTICIPLES = {"restarted": "restart", "started": "start", "stopped": "stop", "reloaded": "reload",
+                "enabled": "enable", "disabled": "disable", "installed": "install", "removed": "remove",
+                "uninstalled": "uninstall", "purged": "purge", "killed": "kill", "terminated": "terminate"}
+_REWRITES = (
+    # get|have NAME restarted -> restart NAME
+    (re.compile(r"^(?:get|have) (\S+(?: (?:user )?service)?) (" + "|".join(_PARTICIPLES) + r")$", re.I),
+     lambda m: f"{_PARTICIPLES[m.group(2).lower()]} {m.group(1)}"),
+    # give NAME a [quick|fresh] restart|reload|bounce
+    (re.compile(r"^give (?:the )?(\S+(?: service)?) a (?:quick |fresh |good )?(restart|reload|bounce)$", re.I),
+     lambda m: f"{m.group(2)} {m.group(1)}"),
+    # make|have|set NAME (to) start|come up|run at|on boot -> enable NAME
+    (re.compile(r"^(?:make|have|set) (\S+(?: service)?) (?:to )?(?:start|come up|run|launch)(?: automatically)? "
+                r"(?:at|on) (?:boot|startup)$", re.I), lambda m: f"enable {m.group(1)}"),
+    # enable|disable NAME at|on boot|startup
+    (re.compile(r"^(enable|disable) (\S+(?: (?:user )?service)?) (?:at|on) (?:boot|startup)$", re.I),
+     lambda m: f"{m.group(1)} {m.group(2)}"),
+    # hang up [process|pid] N
+    (re.compile(r"^hang up (?:process |pid )?(\d+)$", re.I), lambda m: f"send hup to process {m.group(1)}"),
+    # SIGKILL|SIGTERM|SIGHUP [process|pid] N
+    (re.compile(r"^(sigkill|sigterm|sighup) (?:process |pid )?(\d+)$", re.I),
+     lambda m: f"send {m.group(1)} to process {m.group(2)}"),
+)
+_RE_REFRESH = re.compile(r"(?:re-?read|pull|fetch|download|get) (?:the )?(?:fresh |new |latest |the latest )?"
+                         r"(?:apt |package )(?:lists?|index|indexes)(?: from the mirrors)?", re.I)
+
+
+def _rewrite(clause: str) -> str:
+    clause = re.sub(r"^start up\b", "start", clause, flags=re.I)
+    for pattern, replace in _REWRITES:
+        m = pattern.fullmatch(clause)
+        if m:
+            return replace(m)
+    return clause
+
+
 def _strip(word: str) -> str:
     return word.strip("\"'").rstrip(".,!")
 
@@ -263,11 +314,12 @@ def _service_segment(words, low):
     i = 0
     while i < len(words):
         w = low[i]
-        if w in ("for", "as") and (low[i + 1:i + 2] == ["user"] or low[i + 1:i + 3] in (["my", "user"], ["the", "user"])):
+        if w in ("for", "as") and (low[i + 1:i + 2] == ["user"]
+                                   or low[i + 1:i + 3] in (["my", "user"], ["the", "user"], ["a", "user"])):
             scope = "user"
             i += 2 if low[i + 1] == "user" else 3
             continue
-        if w in ("user", "--user"):
+        if w in ("user", "--user", "user-level"):
             scope = "user"
         elif w not in _FILLER:
             keep.append(words[i])
@@ -277,8 +329,9 @@ def _service_segment(words, low):
 
 def _segment(text: str):
     """One clause: ("service"|"process"|"packages"|"updates"|"verb"|"names", payload) or (None, reason)."""
+    text = _rewrite(text)
     low_text = text.lower()
-    if _REFRESH.fullmatch(low_text):
+    if _REFRESH.fullmatch(low_text) or _RE_REFRESH.fullmatch(low_text):
         return "updates", [("refresh", None)]
     if _UPGRADE.fullmatch(low_text):
         return "updates", [("upgrade", None)]
@@ -319,9 +372,10 @@ def _segment(text: str):
                           "'upgrade packages'; one package alone is not upgraded from here")
         # No verb: a list continuing the previous clause ("install curl, jq and htop").
         names = [w for w, lw in zip(words, low) if lw not in _FILLER | _PACKAGE_FILLER]
-        if names and len(names) == len(words) - sum(lw in _FILLER | _PACKAGE_FILLER for lw in low):
+        if len(names) == 1:
             return "names", names
-        return None, "a clause without a verb"
+        return None, ("words the checks do not read: a list item is one name"
+                      if names else "a clause without a verb")
     head = low[:verb_at]
     verb = low[verb_at]
     tail, tlow = words[verb_at + 1:], low[verb_at + 1:]
@@ -348,29 +402,33 @@ def _segment(text: str):
     if verb == "send":
         # send [a|the] [SIG]HUP|TERM|KILL [signal] to [process|pid] TARGET
         rest = [w for w in tlow if w not in ("a", "the", "signal")]
-        if len(rest) >= 3 and rest[0] in _SIGNAL_WORDS and rest[1] == "to":
-            signal = _SIGNAL_WORDS[rest[0]]
+        if len(rest) >= 3 and rest[0] in _SEND_SIGNALS and rest[1] == "to":
+            signal = _SEND_SIGNALS[rest[0]]
             targets = [w for w, lw in zip(tail, tlow) if lw not in ("a", "the", "signal", rest[0], "to")
                        and lw not in _PROCESS_FILLER]
-            return "process", [(signal, t) for t in targets]
+            if len(targets) != 1:
+                return None, "send a signal to one process; join several with 'and'"
+            return "process", [(signal, targets[0])]
         return None, "send takes a signal (hup, term or kill) and a process"
     if verb in _PROCESS_VERBS:
         if head not in ([], ["force"], ["hard"], ["force", "-"]):
             return None, f"unexpected words before '{verb}'"
         if head in (["force"], ["hard"]):
             signal = "kill"
-        targets = []
+        targets, option = [], False
         for w, lw in zip(tail, tlow):
-            if lw in _SIGNAL_WORDS and verb in ("kill", "pkill", "killall"):
+            if lw.startswith("-"):
+                if verb != "kill" or lw not in _KILL_OPTIONS or option or targets:
+                    return None, "options are read only in 'kill -9|-HUP|-TERM PID'"
+                signal, option = _KILL_OPTIONS[lw], True
+            elif lw in _SIGNAL_WORDS and verb == "kill":
                 signal = _SIGNAL_WORDS[lw]
-            elif lw == "-s":
-                continue
-            elif lw in ("kill", "term", "hup") and tlow[:1] == ["-s"]:
-                signal = lw
             elif lw in _PROCESS_FILLER:
                 continue
             else:
                 targets.append(w)
+        if option and (len(targets) != 1 or not targets[0].isdigit()):
+            return None, "options are read only in 'kill -9|-HUP|-TERM PID'"
         if verb in ("pkill", "killall") and any(t.isdigit() for t in targets):
             return None, f"{verb} takes a program name"
         if len(targets) > 1:
@@ -416,10 +474,13 @@ def _prepare(request):
     text = " ".join(request.split())
     for a, b in (("’", "'"), ("‘", "'"), ("“", '"'), ("”", '"')):
         text = text.replace(a, b)
+    text = re.sub(r"[A-Za-z]+", lambda m: _TYPOS.get(m.group(0).lower(), m.group(0)), text)
     if _SHELL.search(text):
         return None, "shell syntax and wildcards are not accepted; name one action"
     if _CAPITAL_QUESTION.search(text):
         return None, "a question in the middle of a request"
+    if "/" in text or re.search(r"\.deb(?![\w-])", text, re.I):
+        return None, "files, paths and URLs are not installed or changed from here"
     text = _PREFIX.sub("", text)
     text = _FRAMING.sub(" ", text)
     text = " ".join(text.split())
@@ -447,16 +508,24 @@ def parse_explain(request):
     if text is None:
         return None, reason
     text = _PURGE.sub(lambda m: "purge " + (m.group(1) or m.group(2) or m.group(3)), text)
-    segments = [s for s in _SPLIT.split(text) if s]
-    if not segments:
-        return None, "the request names no action"
+    parts = _SPLIT_KEEP.split(text)
+    segments, joins = parts[0::2], [""] + parts[1::2]
+    if not segments or any(not seg.strip() for seg in segments):
+        return None, "an empty clause"
     try:
         readings = []
-        for segment in segments:
+        open_list = False       # a name joined by a bare comma, waiting for "and NAME"
+        for segment, join in zip(segments, joins):
             kind, payload = _segment(segment)
             if kind is None:
                 return None, payload
+            if kind == "names":
+                open_list = not re.search(r"\b(?:and|then|also|plus)\b", join)
+            elif open_list:
+                return None, "a list joined by commas ends with 'and NAME'"
             readings.append((kind, payload))
+        if open_list:
+            return None, "a list joined by commas ends with 'and NAME'"
         actions = []
         pending_verbs = []      # "enable and start nginx": verbs waiting for a name
         last = None             # (kind, payload) the next name list continues

@@ -1211,7 +1211,11 @@ into nothing; every word must be a verb, a filler or the target they know. A
 target is a name the request spells out. Negated, cancelled, conditional,
 scheduled, reported or hypothetical requests, alternatives ("or"), questions,
 other machines, shell syntax, "it" or "that", and targets chosen by a property
-("whatever uses the memory") run nothing. The rules are in
+("whatever uses the memory") run nothing. A list item is one name, and a list
+joined by commas ends with "and NAME" ("install curl, jq and htop"); a remark
+after a comma ("reload apache2, i just added a vhost") is not read, so the
+request runs nothing rather than guess which words are names. Options are read
+only in the typed `kill -9|-HUP|-TERM PID` form. The rules are in
 `evals/admin/SPEC.md`. Wording the checks do not read, and that none of those
 rules refuses, goes to the base Needle model over the four tools. Its proposal
 must name every target as the request writes it, and it is only offered: a

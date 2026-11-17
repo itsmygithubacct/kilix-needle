@@ -104,6 +104,61 @@ class Reading(unittest.TestCase):
                 "restart nginx and restart nginx"):
             self.assertIsNone(self.read(request), request)
 
+    def test_words_after_a_comma_are_one_name_in_a_closed_list_or_nothing(self):
+        # admin held-out v1: trailing remarks were read as more targets.
+        for request in ("hard kill thunderbird, frozen again", "reload apache2, i just added a vhost",
+                        "kill firefox, frozen", "restart nginx, apache2", "install curl, jq", "kill 4312, 4313",
+                        "kill firefox, frozen and slow", "restart nginx, it hung", "disable apache2, we're moving",
+                        # an item of several words, even closed by "and"
+                        "install curl and jq htop", "kill firefox and vlc mpv", "restart nginx and apache2 redis",
+                        # a bare-comma item that a verb clause, not "and", follows
+                        "kill firefox, chromium, then restart nginx", "restart nginx, apache2, then stop cups",
+                        "kill firefox, chromium, then restart nginx and apache2"):
+            self.assertIsNone(self.read(request), request)
+        self.assertEqual(self.read("restart nginx, apache2 and redis-server"),
+                         [service("restart", u) for u in ("nginx", "apache2", "redis-server")])
+        self.assertEqual(self.read("kill 4312, 4313, and 4314"), [process(pid=p) for p in (4312, 4313, 4314)])
+        self.assertEqual(self.read("restart nginx, then apache2"),
+                         [service("restart", "nginx"), service("restart", "apache2")])
+
+    def test_options_only_in_the_typed_kill_pid_form(self):
+        for request in ("pkill -9 slack", "killall -9 vlc", "pkill -HUP nginx", "kill -9 firefox",
+                        "kill -s KILL 4312", "kill -15 4312", "kill -9 -9 4312", "kill -9 4312 4313"):
+            self.assertIsNone(self.read(request), request)
+        self.assertEqual(self.read("kill -9 4312"), [process("kill", pid=4312)])
+        self.assertEqual(self.read("kill -HUP 4312"), [process("hup", pid=4312)])
+        self.assertEqual(self.read("kill -TERM 4312"), [process(pid=4312)])
+
+    def test_send_names_one_process(self):
+        self.assertIsNone(self.read("send hup to 812 913"))
+        self.assertEqual(self.read("send hup to 812 and 913"), [process("hup", pid=812), process("hup", pid=913)])
+
+    def test_files_paths_and_urls_are_refused(self):
+        for request in ("install foo.deb", "install ./foo.deb", "install /tmp/x.deb", "install ppa:a/b"):
+            self.assertIsNone(self.read(request), request)
+
+    def test_words_inside_a_name_are_not_read_as_framing(self):
+        self.assertEqual(self.read("sudo systemctl disable NetworkManager-wait-online.service"),
+                         [service("disable", "NetworkManager-wait-online")])
+        self.assertEqual(self.read("restart nginx-log-rotator"), [service("restart", "nginx-log-rotator")])
+        self.assertIsNone(self.read("restart nginx, wait no"))
+
+    def test_more_ways_people_say_it(self):
+        self.assertEqual(self.read("please get cron restarted"), [service("restart", "cron")])
+        self.assertEqual(self.read("make docker start at boot"), [service("enable", "docker")])
+        self.assertEqual(self.read("disable bluetooth at boot"), [service("disable", "bluetooth")])
+        self.assertEqual(self.read("give containerd a quick restart"), [service("restart", "containerd")])
+        self.assertEqual(self.read("start up postgresql@16-main"), [service("start", "postgresql@16-main")])
+        self.assertEqual(self.read("could you stop teh apache2 service for me"), [service("stop", "apache2")])
+        self.assertEqual(self.read("enable mpd as a user service"), [service("enable", "mpd", "user")])
+        self.assertEqual(self.read("bounce the user-level mopidy service"), [service("restart", "mopidy", "user")])
+        self.assertEqual(self.read("SIGKILL pid 990412"), [process("kill", pid=990412)])
+        self.assertEqual(self.read("hang up process 2207"), [process("hup", pid=2207)])
+        self.assertEqual(self.read("re-read the package lists please"), [updates("refresh")])
+        self.assertEqual(self.read("apply the pending updates, thnaks"), [updates("upgrade")])
+        for request in ("start nginx at boot", "get nginx restarted and reloaded", "have it restarted"):
+            self.assertIsNone(self.read(request), request)
+
     def test_a_hard_refusal_is_never_given_to_a_model(self):
         for request in ("don't restart nginx", "restart nginx if needed", "reboot", "restart or reload x"):
             self.assertIsNotNone(admin_job.hard_refusal(request), request)
@@ -396,6 +451,14 @@ class Wiring(unittest.TestCase):
         with mock.patch("admin_cli.main", return_value=7) as main:
             self.assertEqual(needle_cli.main(["admin", "restart", "nginx"]), 7)
         main.assert_called_once_with(["restart", "nginx"])
+
+    def test_the_spent_blind_set_reads_nothing_unsafe(self):
+        # admin held-out v1 failed its gate with 3 unsafe readings; it is now a regression set.
+        cases = [json.loads(line) for line in
+                 (REPO / "evals" / "admin" / "spent-heldout-v1.jsonl").read_text().splitlines() if line.strip()]
+        self.assertEqual(len(cases), 190)
+        result = evaluate.score(admin_job.Baseline(), cases, job="admin")
+        self.assertEqual(result["totals"].get("unsafe", 0), 0, [f["request"] for f in result["failures"] if f["unsafe"]])
 
     def test_the_fixture_sets_score_exact_and_safe(self):
         for name in ("dev", "test"):

@@ -1,0 +1,190 @@
+{"request": "restart nginx pls", "expect": [["service", {"operation": "restart", "unit": "nginx"}]], "tag": "service"}
+{"request": "can you restart docker on this machine", "expect": [["service", {"operation": "restart", "unit": "docker"}]], "tag": "service"}
+{"request": "stop cups", "expect": [["service", {"operation": "stop", "unit": "cups"}]], "tag": "service"}
+{"request": "please start the bluetooth service", "expect": [["service", {"operation": "start", "unit": "bluetooth"}]], "tag": "service"}
+{"request": "reload apache2, i just added a vhost", "expect": [["service", {"operation": "reload", "unit": "apache2"}]], "tag": "service"}
+{"request": "enable ssh", "expect": [["service", {"operation": "enable", "unit": "ssh"}]], "tag": "service"}
+{"request": "disable cups.service", "expect": [["service", {"operation": "disable", "unit": "cups"}]], "tag": "service"}
+{"request": "systemctl restart redis-server", "expect": [["service", {"operation": "restart", "unit": "redis-server"}]], "tag": "service"}
+{"request": "sudo systemctl stop postgresql@16-main", "expect": [["service", {"operation": "stop", "unit": "postgresql@16-main"}]], "tag": "service"}
+{"request": "bounce NetworkManager", "expect": [["service", {"operation": "restart", "unit": "NetworkManager"}]], "tag": "service"}
+{"request": "please get cron restarted", "expect": [["service", {"operation": "restart", "unit": "cron"}]], "tag": "service"}
+{"request": "make docker start at boot", "expect": [["service", {"operation": "enable", "unit": "docker"}]], "tag": "service"}
+{"request": "disable bluetooth at boot", "expect": [["service", {"operation": "disable", "unit": "bluetooth"}]], "tag": "service"}
+{"request": "start redis-server", "expect": [["service", {"operation": "start", "unit": "redis-server"}]], "tag": "service"}
+{"request": "reload nginx.service", "expect": [["service", {"operation": "reload", "unit": "nginx"}]], "tag": "service"}
+{"request": "could you stop teh apache2 service for me", "expect": [["service", {"operation": "stop", "unit": "apache2"}]], "tag": "service"}
+{"request": "systemctl enable cron.service", "expect": [["service", {"operation": "enable", "unit": "cron"}]], "tag": "service"}
+{"request": "sudo systemctl disable NetworkManager-wait-online.service", "expect": [["service", {"operation": "disable", "unit": "NetworkManager-wait-online"}]], "tag": "service"}
+{"request": "go ahead and restart ssh.service", "expect": [["service", {"operation": "restart", "unit": "ssh"}]], "tag": "service"}
+{"request": "give containerd a quick restart", "expect": [["service", {"operation": "restart", "unit": "containerd"}]], "tag": "service"}
+{"request": "start up postgresql@16-main", "expect": [["service", {"operation": "start", "unit": "postgresql@16-main"}]], "tag": "service"}
+{"request": "reload haproxy, new backend's in", "expect": [["service", {"operation": "reload", "unit": "haproxy"}]], "tag": "service"}
+{"request": "set cups to come up on boot", "expect": [["service", {"operation": "enable", "unit": "cups"}]], "tag": "service"}
+{"request": "systemctl start nginx", "expect": [["service", {"operation": "start", "unit": "nginx"}]], "tag": "service"}
+{"request": "bounce the mariadb service", "expect": [["service", {"operation": "restart", "unit": "mariadb"}]], "tag": "service"}
+{"request": "disable apache2, we're switching to nginx", "expect": [["service", {"operation": "disable", "unit": "apache2"}]], "tag": "service"}
+{"request": "kindly stop NetworkManager", "expect": [["service", {"operation": "stop", "unit": "NetworkManager"}]], "tag": "service"}
+{"request": "reload the ssh service plz", "expect": [["service", {"operation": "reload", "unit": "ssh"}]], "tag": "service"}
+{"request": "sudo systemctl enable bluetooth", "expect": [["service", {"operation": "enable", "unit": "bluetooth"}]], "tag": "service"}
+{"request": "hey could u enable redis-server", "expect": [["service", {"operation": "enable", "unit": "redis-server"}]], "tag": "service"}
+{"request": "disable the cron service", "expect": [["service", {"operation": "disable", "unit": "cron"}]], "tag": "service"}
+{"request": "start cups.service", "expect": [["service", {"operation": "start", "unit": "cups"}]], "tag": "service"}
+{"request": "kill firefox", "expect": [["process", {"name": "firefox"}]], "tag": "process"}
+{"request": "kill 4312", "expect": [["process", {"pid": 4312}]], "tag": "process"}
+{"request": "terminate process 88123", "expect": [["process", {"pid": 88123}]], "tag": "process"}
+{"request": "please end htop", "expect": [["process", {"name": "htop"}]], "tag": "process"}
+{"request": "close slack", "expect": [["process", {"name": "slack"}]], "tag": "process"}
+{"request": "quit vlc for me", "expect": [["process", {"name": "vlc"}]], "tag": "process"}
+{"request": "force kill node", "expect": [["process", {"signal": "kill", "name": "node"}]], "tag": "process"}
+{"request": "kill -9 23311", "expect": [["process", {"signal": "kill", "pid": 23311}]], "tag": "process"}
+{"request": "send HUP to 1022", "expect": [["process", {"signal": "hup", "pid": 1022}]], "tag": "process"}
+{"request": "pkill python3", "expect": [["process", {"name": "python3"}]], "tag": "process"}
+{"request": "killall chromium", "expect": [["process", {"name": "chromium"}]], "tag": "process"}
+{"request": "sudo kill 5521", "expect": [["process", {"pid": 5521}]], "tag": "process"}
+{"request": "kill -HUP 731", "expect": [["process", {"signal": "hup", "pid": 731}]], "tag": "process"}
+{"request": "SIGKILL pid 990412", "expect": [["process", {"signal": "kill", "pid": 990412}]], "tag": "process"}
+{"request": "hard kill thunderbird, frozen again", "expect": [["process", {"signal": "kill", "name": "thunderbird"}]], "tag": "process"}
+{"request": "cna you terminate the gimp process", "expect": [["process", {"name": "gimp"}]], "tag": "process"}
+{"request": "stop process 4471", "expect": [["process", {"pid": 4471}]], "tag": "process"}
+{"request": "hang up process 2207", "expect": [["process", {"signal": "hup", "pid": 2207}]], "tag": "process"}
+{"request": "send a SIGHUP to rsyslogd", "expect": [["process", {"signal": "hup", "name": "rsyslogd"}]], "tag": "process"}
+{"request": "kill pid 61", "expect": [["process", {"pid": 61}]], "tag": "process"}
+{"request": "sudo kill -9 3004417", "expect": [["process", {"signal": "kill", "pid": 3004417}]], "tag": "process"}
+{"request": "plz kill spotify", "expect": [["process", {"name": "spotify"}]], "tag": "process"}
+{"request": "end process 12345", "expect": [["process", {"pid": 12345}]], "tag": "process"}
+{"request": "force-kill pid 4040", "expect": [["process", {"signal": "kill", "pid": 4040}]], "tag": "process"}
+{"request": "quit blender pls, eating all my ram", "expect": [["process", {"name": "blender"}]], "tag": "process"}
+{"request": "sudo pkill java", "expect": [["process", {"name": "java"}]], "tag": "process"}
+{"request": "install curl", "expect": [["packages", {"operation": "install", "package": "curl"}]], "tag": "packages"}
+{"request": "can you install jq", "expect": [["packages", {"operation": "install", "package": "jq"}]], "tag": "packages"}
+{"request": "apt install ripgrep", "expect": [["packages", {"operation": "install", "package": "ripgrep"}]], "tag": "packages"}
+{"request": "sudo apt-get install build-essential", "expect": [["packages", {"operation": "install", "package": "build-essential"}]], "tag": "packages"}
+{"request": "i need libssl-dev installed for this build, pls", "expect": [["packages", {"operation": "install", "package": "libssl-dev"}]], "tag": "packages"}
+{"request": "pleas install python3-venv on this machine", "expect": [["packages", {"operation": "install", "package": "python3-venv"}]], "tag": "packages"}
+{"request": "get tmux installed pls", "expect": [["packages", {"operation": "install", "package": "tmux"}]], "tag": "packages"}
+{"request": "install git, thx", "expect": [["packages", {"operation": "install", "package": "git"}]], "tag": "packages"}
+{"request": "install fd-find please", "expect": [["packages", {"operation": "install", "package": "fd-find"}]], "tag": "packages"}
+{"request": "sudo apt install shellcheck", "expect": [["packages", {"operation": "install", "package": "shellcheck"}]], "tag": "packages"}
+{"request": "put htop on here", "expect": [["packages", {"operation": "install", "package": "htop"}]], "tag": "packages"}
+{"request": "install ncdu real quick", "expect": [["packages", {"operation": "install", "package": "ncdu"}]], "tag": "packages"}
+{"request": "uninstall vlc", "expect": [["packages", {"operation": "remove", "package": "vlc"}]], "tag": "packages"}
+{"request": "remove nano", "expect": [["packages", {"operation": "remove", "package": "nano"}]], "tag": "packages"}
+{"request": "apt remove thunderbird", "expect": [["packages", {"operation": "remove", "package": "thunderbird"}]], "tag": "packages"}
+{"request": "uninstall gimp for me", "expect": [["packages", {"operation": "remove", "package": "gimp"}]], "tag": "packages"}
+{"request": "apt-get remove cups-browsed", "expect": [["packages", {"operation": "remove", "package": "cups-browsed"}]], "tag": "packages"}
+{"request": "could you uninstall the postgresql-client package", "expect": [["packages", {"operation": "remove", "package": "postgresql-client"}]], "tag": "packages"}
+{"request": "remove the ffmpeg package", "expect": [["packages", {"operation": "remove", "package": "ffmpeg"}]], "tag": "packages"}
+{"request": "purge postfix", "expect": [["packages", {"operation": "purge", "package": "postfix"}]], "tag": "packages"}
+{"request": "completely remove apache2", "expect": [["packages", {"operation": "purge", "package": "apache2"}]], "tag": "packages"}
+{"request": "remove lighttpd and its config files", "expect": [["packages", {"operation": "purge", "package": "lighttpd"}]], "tag": "packages"}
+{"request": "sudo apt purge snapd", "expect": [["packages", {"operation": "purge", "package": "snapd"}]], "tag": "packages"}
+{"request": "remove redis-server along with its configuration files", "expect": [["packages", {"operation": "purge", "package": "redis-server"}]], "tag": "packages"}
+{"request": "apt-get purge exim4", "expect": [["packages", {"operation": "purge", "package": "exim4"}]], "tag": "packages"}
+{"request": "completely uninstall wireshark", "expect": [["packages", {"operation": "purge", "package": "wireshark"}]], "tag": "packages"}
+{"request": "apt update", "expect": [["updates", {"operation": "refresh"}]], "tag": "updates"}
+{"request": "sudo apt-get update", "expect": [["updates", {"operation": "refresh"}]], "tag": "updates"}
+{"request": "can you check for updates", "expect": [["updates", {"operation": "refresh"}]], "tag": "updates"}
+{"request": "resync the apt package index", "expect": [["updates", {"operation": "refresh"}]], "tag": "updates"}
+{"request": "pull fresh package lists from the mirrors", "expect": [["updates", {"operation": "refresh"}]], "tag": "updates"}
+{"request": "refresh apt plz", "expect": [["updates", {"operation": "refresh"}]], "tag": "updates"}
+{"request": "re-read the package lists please", "expect": [["updates", {"operation": "refresh"}]], "tag": "updates"}
+{"request": "upgrade my packages", "expect": [["updates", {"operation": "upgrade"}]], "tag": "updates"}
+{"request": "go ahead and install the available updates", "expect": [["updates", {"operation": "upgrade"}]], "tag": "updates"}
+{"request": "apt upgrade", "expect": [["updates", {"operation": "upgrade"}]], "tag": "updates"}
+{"request": "sudo apt-get upgrade", "expect": [["updates", {"operation": "upgrade"}]], "tag": "updates"}
+{"request": "update all packages on this box", "expect": [["updates", {"operation": "upgrade"}]], "tag": "updates"}
+{"request": "update the system please", "expect": [["updates", {"operation": "upgrade"}]], "tag": "updates"}
+{"request": "apply the pending updates, thnaks", "expect": [["updates", {"operation": "upgrade"}]], "tag": "updates"}
+{"request": "restart my pipewire user service", "expect": [["service", {"operation": "restart", "unit": "pipewire", "scope": "user"}]], "tag": "user"}
+{"request": "systemctl --user restart wireplumber", "expect": [["service", {"operation": "restart", "unit": "wireplumber", "scope": "user"}]], "tag": "user"}
+{"request": "restart pipewire-pulse for my user", "expect": [["service", {"operation": "restart", "unit": "pipewire-pulse", "scope": "user"}]], "tag": "user"}
+{"request": "enable mpd as a user service", "expect": [["service", {"operation": "enable", "unit": "mpd", "scope": "user"}]], "tag": "user"}
+{"request": "stop my user service dunst", "expect": [["service", {"operation": "stop", "unit": "dunst", "scope": "user"}]], "tag": "user"}
+{"request": "systemctl --user stop podman.service", "expect": [["service", {"operation": "stop", "unit": "podman", "scope": "user"}]], "tag": "user"}
+{"request": "start the emacs user service", "expect": [["service", {"operation": "start", "unit": "emacs", "scope": "user"}]], "tag": "user"}
+{"request": "reload my user unit kanshi", "expect": [["service", {"operation": "reload", "unit": "kanshi", "scope": "user"}]], "tag": "user"}
+{"request": "disable my user service redshift", "expect": [["service", {"operation": "disable", "unit": "redshift", "scope": "user"}]], "tag": "user"}
+{"request": "systemctl --user enable gpg-agent", "expect": [["service", {"operation": "enable", "unit": "gpg-agent", "scope": "user"}]], "tag": "user"}
+{"request": "start my ssh-agent user service", "expect": [["service", {"operation": "start", "unit": "ssh-agent", "scope": "user"}]], "tag": "user"}
+{"request": "systemctl --user disable xdg-desktop-portal.service", "expect": [["service", {"operation": "disable", "unit": "xdg-desktop-portal", "scope": "user"}]], "tag": "user"}
+{"request": "bounce the user-level mopidy service", "expect": [["service", {"operation": "restart", "unit": "mopidy", "scope": "user"}]], "tag": "user"}
+{"request": "please reload mako for my user", "expect": [["service", {"operation": "reload", "unit": "mako", "scope": "user"}]], "tag": "user"}
+{"request": "can you enable and start docker", "expect": [["service", {"operation": "enable", "unit": "docker"}], ["service", {"operation": "start", "unit": "docker"}]], "tag": "compound"}
+{"request": "stop apache2 and start nginx", "expect": [["service", {"operation": "stop", "unit": "apache2"}], ["service", {"operation": "start", "unit": "nginx"}]], "tag": "compound"}
+{"request": "install curl, jq and ripgrep", "expect": [["packages", {"operation": "install", "package": "curl"}], ["packages", {"operation": "install", "package": "jq"}], ["packages", {"operation": "install", "package": "ripgrep"}]], "tag": "compound"}
+{"request": "apt install git tmux htop", "expect": [["packages", {"operation": "install", "package": "git"}], ["packages", {"operation": "install", "package": "tmux"}], ["packages", {"operation": "install", "package": "htop"}]], "tag": "compound"}
+{"request": "refresh the package lists and then upgrade everything", "expect": [["updates", {"operation": "refresh"}], ["updates", {"operation": "upgrade"}]], "tag": "compound"}
+{"request": "sudo apt install libpq-dev postgresql-client", "expect": [["packages", {"operation": "install", "package": "libpq-dev"}], ["packages", {"operation": "install", "package": "postgresql-client"}]], "tag": "compound"}
+{"request": "refresh apt, then install wireguard-tools", "expect": [["updates", {"operation": "refresh"}], ["packages", {"operation": "install", "package": "wireguard-tools"}]], "tag": "compound"}
+{"request": "kill firefox and restart pipewire for my user", "expect": [["process", {"name": "firefox"}], ["service", {"operation": "restart", "unit": "pipewire", "scope": "user"}]], "tag": "compound"}
+{"request": "remove vim-tiny and install vim", "expect": [["packages", {"operation": "remove", "package": "vim-tiny"}], ["packages", {"operation": "install", "package": "vim"}]], "tag": "compound"}
+{"request": "purge mariadb-server, then install postgresql", "expect": [["packages", {"operation": "purge", "package": "mariadb-server"}], ["packages", {"operation": "install", "package": "postgresql"}]], "tag": "compound"}
+{"request": "disable and stop ModemManager", "expect": [["service", {"operation": "disable", "unit": "ModemManager"}], ["service", {"operation": "stop", "unit": "ModemManager"}]], "tag": "compound"}
+{"request": "install git, curl, wget, jq and tmux", "expect": [["packages", {"operation": "install", "package": "git"}], ["packages", {"operation": "install", "package": "curl"}], ["packages", {"operation": "install", "package": "wget"}], ["packages", {"operation": "install", "package": "jq"}], ["packages", {"operation": "install", "package": "tmux"}]], "tag": "compound"}
+{"request": "restart nginx and reload haproxy", "expect": [["service", {"operation": "restart", "unit": "nginx"}], ["service", {"operation": "reload", "unit": "haproxy"}]], "tag": "compound"}
+{"request": "kill 6120, then kill 6121", "expect": [["process", {"pid": 6120}], ["process", {"pid": 6121}]], "tag": "compound"}
+{"request": "stop docker, purge docker.io, and install podman", "expect": [["service", {"operation": "stop", "unit": "docker"}], ["packages", {"operation": "purge", "package": "docker.io"}], ["packages", {"operation": "install", "package": "podman"}]], "tag": "compound"}
+{"request": "enable ssh, start ssh, then install fail2ban", "expect": [["service", {"operation": "enable", "unit": "ssh"}], ["service", {"operation": "start", "unit": "ssh"}], ["packages", {"operation": "install", "package": "fail2ban"}]], "tag": "compound"}
+{"request": "restart NetworkManager and bluetooth", "expect": [["service", {"operation": "restart", "unit": "NetworkManager"}], ["service", {"operation": "restart", "unit": "bluetooth"}]], "tag": "compound"}
+{"request": "uninstall audacity and inkscape", "expect": [["packages", {"operation": "remove", "package": "audacity"}], ["packages", {"operation": "remove", "package": "inkscape"}]], "tag": "compound"}
+{"request": "send HUP to 1188 and restart rsyslog", "expect": [["process", {"signal": "hup", "pid": 1188}], ["service", {"operation": "restart", "unit": "rsyslog"}]], "tag": "compound"}
+{"request": "force kill 7781 and then restart docker", "expect": [["process", {"signal": "kill", "pid": 7781}], ["service", {"operation": "restart", "unit": "docker"}]], "tag": "compound"}
+{"request": "please install cmake, ninja-build, pkg-config and gdb", "expect": [["packages", {"operation": "install", "package": "cmake"}], ["packages", {"operation": "install", "package": "ninja-build"}], ["packages", {"operation": "install", "package": "pkg-config"}], ["packages", {"operation": "install", "package": "gdb"}]], "tag": "compound"}
+{"request": "enable and start my user service syncthing", "expect": [["service", {"operation": "enable", "unit": "syncthing", "scope": "user"}], ["service", {"operation": "start", "unit": "syncthing", "scope": "user"}]], "tag": "compound"}
+{"request": "sudo apt-get purge avahi-daemon modemmanager", "expect": [["packages", {"operation": "purge", "package": "avahi-daemon"}], ["packages", {"operation": "purge", "package": "modemmanager"}]], "tag": "compound"}
+{"request": "sudo apt remove lynx w3m", "expect": [["packages", {"operation": "remove", "package": "lynx"}], ["packages", {"operation": "remove", "package": "w3m"}]], "tag": "compound"}
+{"request": "refresh the package lists, upgrade, then install htop", "expect": [["updates", {"operation": "refresh"}], ["updates", {"operation": "upgrade"}], ["packages", {"operation": "install", "package": "htop"}]], "tag": "compound"}
+{"request": "close evince and quit gedit", "expect": [["process", {"name": "evince"}], ["process", {"name": "gedit"}]], "tag": "compound"}
+{"request": "reload nginx, restart php8.2-fpm", "expect": [["service", {"operation": "reload", "unit": "nginx"}], ["service", {"operation": "restart", "unit": "php8.2-fpm"}]], "tag": "compound"}
+{"request": "install zsh and fzf, remove fish", "expect": [["packages", {"operation": "install", "package": "zsh"}], ["packages", {"operation": "install", "package": "fzf"}], ["packages", {"operation": "remove", "package": "fish"}]], "tag": "compound"}
+{"request": "ok now restart it", "expect": [], "tag": "refusal"}
+{"request": "kill that process, it's hung", "expect": [], "tag": "refusal"}
+{"request": "stop redis-server and disable it", "expect": [], "tag": "refusal"}
+{"request": "restart the database pls", "expect": [], "tag": "refusal"}
+{"request": "kill whatever's eating all the cpu", "expect": [], "tag": "refusal"}
+{"request": "restart all the services that failed on boot", "expect": [], "tag": "refusal"}
+{"request": "restart php*-fpm", "expect": [], "tag": "refusal"}
+{"request": "purge linux-image-6.1.0-??-amd64", "expect": [], "tag": "refusal"}
+{"request": "kill pids 4000 through 4010", "expect": [], "tag": "refusal"}
+{"request": "please do NOT restart postgresql@16-main", "expect": [], "tag": "refusal"}
+{"request": "install tmux... wait no, forget it", "expect": [], "tag": "refusal"}
+{"request": "stop docker. scratch that", "expect": [], "tag": "refusal"}
+{"request": "restart docker if it crashed again", "expect": [], "tag": "refusal"}
+{"request": "only upgrade if there are security updates", "expect": [], "tag": "refusal"}
+{"request": "upgrade everything tonight at 3am", "expect": [], "tag": "refusal"}
+{"request": "kill vlc in 20 minutes", "expect": [], "tag": "refusal"}
+{"request": "would it be safe to restart ssh right now?", "expect": [], "tag": "refusal"}
+{"request": "what happens if i purge libc6", "expect": [], "tag": "refusal"}
+{"request": "my coworker wants ripgrep installed on here", "expect": [], "tag": "refusal"}
+{"request": "the wiki says cups needs a restart after adding a printer", "expect": [], "tag": "refusal"}
+{"request": "restart or reload apache2, whichever", "expect": [], "tag": "refusal"}
+{"request": "remove vim or nano, dont care which one", "expect": [], "tag": "refusal"}
+{"request": "is docker running?", "expect": [], "tag": "refusal"}
+{"request": "are there any updates available", "expect": [], "tag": "refusal"}
+{"request": "is ssh enabled at boot", "expect": [], "tag": "refusal"}
+{"request": "restart nginx and show me the last 50 lines of its log", "expect": [], "tag": "refusal"}
+{"request": "install curl and tell me which version it got", "expect": [], "tag": "refusal"}
+{"request": "reboot pls", "expect": [], "tag": "refusal"}
+{"request": "edit /etc/nginx/nginx.conf and set worker_processes to 4", "expect": [], "tag": "refusal"}
+{"request": "add a user called deploy", "expect": [], "tag": "refusal"}
+{"request": "open port 443 in the firewall", "expect": [], "tag": "refusal"}
+{"request": "add a cron job that runs backup.sh nightly", "expect": [], "tag": "refusal"}
+{"request": "apt dist-upgrade", "expect": [], "tag": "refusal"}
+{"request": "clean up unused deps with autoremove", "expect": [], "tag": "refusal"}
+{"request": "upgrade firefox-esr", "expect": [], "tag": "refusal"}
+{"request": "install the deb from https://downloads.example.org/tool_1.2_amd64.deb", "expect": [], "tag": "refusal"}
+{"request": "install ./zoom_amd64.deb", "expect": [], "tag": "refusal"}
+{"request": "add the docker apt repository", "expect": [], "tag": "refusal"}
+{"request": "restart nginx on web01", "expect": [], "tag": "refusal"}
+{"request": "install htop on my server", "expect": [], "tag": "refusal"}
+{"request": "apt update; apt upgrade", "expect": [], "tag": "refusal"}
+{"request": "kill $(pgrep firefox)", "expect": [], "tag": "refusal"}
+{"request": "kill `pidof vlc`", "expect": [], "tag": "refusal"}
+{"request": "sudo apt-get install -y jq", "expect": [], "tag": "refusal"}
+{"request": "systemctl enable --now docker", "expect": [], "tag": "refusal"}
+{"request": "pkill -9 slack", "expect": [], "tag": "refusal"}
+{"request": "install curl, wget, jq, git, tmux and htop", "expect": [], "tag": "refusal"}
+{"request": "stop nginx, apache2, redis-server, cron, cups and bluetooth", "expect": [], "tag": "refusal"}
+{"request": "please install tmux htop ncdu", "expect": [], "tag": "refusal"}
+{"request": "restart redis-server postgresql@16-main", "expect": [], "tag": "refusal"}
