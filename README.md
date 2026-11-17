@@ -1395,6 +1395,8 @@ That bundle answered 58 of the 166 requests that reached the model. A whole
 call that it answers took 227 ms where the model's took 3.8 s (median of 40
 requests, a new process each time, on an eight-core machine with nothing
 else measured on it), and a call it declines was within 50 ms of before.
+Measured again with the reader as it now is: 231 ms for a call it answers,
+32 ms more for one it declines.
 
 Three reviews then found what the gate could not see. The scorer compares
 calls with labels and calls only closing, typing and starting a program
@@ -1418,9 +1420,9 @@ name stands, is still taken for the name ("rename the tab asap").
 The price is reach. On the three blind sets written for this change, which
 shaped the rules and gate nothing now, the gated reader answered about a
 third of the requests that reach the model, the reader of the second review
-about three in ten, and this one 17 of 170, 14 of 166 and 16 of 156, every
+about three in ten, and this one 16 of 170, 11 of 166 and 15 of 156, every
 answer exact (6 of 180 on the job's own held-out set). The route is exact
-on 102, 109 and 95 cases there, against 96, 106 and 92 without the bundle.
+on 102, 107 and 95 cases there, against 96, 106 and 92 without the bundle.
 
 **The reader that answered the second review was reviewed and changed
 after it; the reader as it now is has been neither reviewed nor gated**, so

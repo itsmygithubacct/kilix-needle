@@ -433,41 +433,54 @@ digests.
 
 The nets are the same: the same rows, seeds and settings give the same
 weights (the part of the file that holds them is byte for byte what the
-gated file held). What changed is what a request is held to: conditions 1,
-6, 9 and 12 are new, 8 is clause by clause, and the file is loaded more
-carefully.
+gated file held), and the trainer, run again with each reader, wrote this
+file byte for byte. What changed is what a request is held to. Conditions
+1, 6, 9 and 12 are new since the gated reader and 8 is clause by clause;
+since the third review, condition 6 holds a name of several words, the
+account of condition 9 knows the order after a close, the layout, the
+focus, the caller's own pane and a renamed pane's old title, the two crossed
+layouts are not answered, and the manifest is read as carefully as the file.
+
+Every rule added since the third review only declines more. On 40,988
+requests (the generated pool, the four eval sets the bundle is not trained
+on, the second reviewer's walks, dev, test and the third reviewer's filler
+words) the reader as it now is answers no request the reviewed one did not,
+and none with other calls (`exp8/compare_readers.py` in the experiment's
+records).
 
 What a tighter hold on wording lets through of the 14,956 walked requests
-the reviewed reader answered, and what it keeps of the bundle's right
-answers on eval sets it is not trained on:
+the reader of the second review answered, and what it keeps of the bundle's
+right answers on eval sets it is not trained on:
 
 | Hold on a clause | Walked requests still answered | Answers on v15, v16, v17, v18 |
 | --- | ---: | --- |
-| pairs of neighbours of its tool's frames (the reviewed reader) | 14,956 | 16, 48, 52, 41, all exact |
+| pairs of neighbours of its tool's frames (the reader of the second review) | 14,956 | 16, 48, 52, 41, all exact |
 | three neighbours | 1,297 | 12, 38, 40, 34 |
 | four neighbours | 639 | 8, 30, 31, 25 |
 | the whole frame is a training clause's | 414 | 8, 23, 20, 20 |
-| this reader: the whole reading, and conditions 6, 8, 9, 12 | 361 | 6, 17, 14, 16 |
+| the whole reading, and conditions 6, 8, 9, 12 (the reader of the third review) | 361 | 6, 17, 14, 16 |
+| this reader | 346 | 6, 16, 11, 15 |
 
-The 361 are whole training clauses with other names in them ("close
-this tab", "stack everything", "label this pane 2").
+The 346 are whole training clauses with other names in them ("close this
+tab", "stack everything", "label this pane 2").
 
 **The price is reach.** Measured on eval sets the bundle is not trained on,
 with the tuned model qat-9. These sets shaped the rules, so they gate
 nothing:
 
-| Set | Cases | Exact without the bundle | With the gated reader | With the reviewed reader | With this reader | This reader answers | Of them exact |
-| --- | ---: | ---: | ---: | ---: | ---: | --- | ---: |
-| v15 (the job's own held-out set) | 182 | 90 | 95 | 93 | 93 | 6 of the 180 that reach the model (3%) | 6 |
-| v16 | 179 | 96 | 116 | 115 | 102 | 17 of 170 (10%) | 17 |
-| v17 | 171 | 106 | 121 | 121 | 109 | 14 of 166 (8%) | 14 |
-| v18 | 162 | 92 | 103 | 102 | 95 | 16 of 156 (10%) | 16 |
+| Set | Cases | Exact without the bundle | With the gated reader | With the reader of the second review | Of the third | With this reader | This reader answers | Of them exact |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: |
+| v15 (the job's own held-out set) | 182 | 90 | 95 | 93 | 93 | 93 | 6 of the 180 that reach the model (3.3%) | 6 |
+| v16 | 179 | 96 | 116 | 115 | 102 | 102 | 16 of 170 (9.4%) | 16 |
+| v17 | 171 | 106 | 121 | 121 | 109 | 107 | 11 of 166 (6.6%) | 11 |
+| v18 | 162 | 92 | 103 | 102 | 95 | 95 | 15 of 156 (9.6%) | 15 |
 
-No answer of the bundle was unsafe, and no kind of request lost a case. The
-reviewed reader answered 16, 48, 52 and 41 of those requests, and the gated
-reader 58 of the 166 on v17. The second pair of members (seeds 2 and 3, the
-same tables) answers 6, 16, 14 and 14, all exact, and the route is exact on
-93, 102, 109 and 94 cases.
+No answer of the bundle was unsafe, and no kind of request lost a case. What
+the third review cost on these sets is 5 answers, each exact: 3 names of
+two words with a word the bundle never saw (one on each of v16, v17, v18),
+the one crossed layout (v17) and one two-clause request (v17). The second
+pair of members (seeds 2 and 3, the same tables) answers 6, 16, 11 and 13,
+all exact, and the route is exact on 93, 102, 107 and 94 cases.
 
 What each condition turns away that no other does, and whether the answer it
 turns away would have been as labelled (`exp8/hold_cost.py` in the
@@ -475,50 +488,70 @@ experiment's records):
 
 | Condition | Generated requests (24,676): as labelled / not | v15 to v18 (694 cases): as labelled / not |
 | --- | --- | --- |
-| 1, the whole reading | 4,141 / 17 | 108 / 0 |
-| 9, what the clause before changes | 1,741 / 0 | 14 / 0 |
-| 8, a word that names a value, clause by clause | 5 / 0 | 0 / 0 |
+| 1, the whole reading | 4,020 / 17 | 104 / 0 |
+| 9, what the clause before changes | 2,181 / 0 | 15 / 0 |
+| the crossed layouts | 250 / 0 | 1 / 0 |
+| 8, a word that names a value, clause by clause | 3 / 0 | 0 / 0 |
 | 6, a copied name made of wording | 0 / 0 | 2 / 0 |
+| 6, a name of several words with a word never seen | 0 / 0 | 3 / 0 |
 | 5, 10, and the closing mark of 6 | 0 / 0 | 0 / 0 |
 
-Condition 9 counts as a loss here only because the labels call those
-answers right: they are the rows labelled as the route would run them. On
-24,676 generated requests (5,309 of them training rows; four generator
-seeds and 318 templates written after training), after the exact readers,
-the bundle answers 11,926, every one as labelled. The reviewed reader
+Condition 9 and the crossed layouts count as a loss here only because the
+labels call those answers right: they are rows labelled as the route would
+run them, and layouts labelled the other way round from kitty. On 24,676
+generated requests (5,309 of them training rows; four generator seeds and
+318 templates written after training), after the exact readers, the bundle
+answers 11,096, every one as labelled. The reader of the second review
 answered 17,522 and the gated reader 18,345, 94 of them not as labelled.
 
 Probes made from generated rows the bundle answers:
 
 - One word put into a row at every place (420 rows, 83 words: negations,
-  "or", "all", "other", titles, words of place and layout; 248,087
-  requests): 8 still got the row's own answer, where the row with the word
-  in it is another training clause ("the" six times, "layout" and "again"
-  once each). The reviewed reader passed a word over 863 times and the
-  gated reader 12,386 times.
+  "or", "all", "other", titles, words of place and layout; 252,569
+  requests): 11 still got the row's own answer, where the row with the word
+  in it is another training clause ("the" six times, "again" four times,
+  "a" once). The reader of the second review passed a word over 863 times
+  and the gated reader 12,386 times.
 - Two rows joined by "and", "then" or a comma, 40 for every two tools
-  (7,840 requests), through the reader and the checks: 1,777 answers,
+  (7,840 requests), through the reader and the checks: 1,657 answers,
   every one what the checks admit for each row alone. The reader proposed
-  1,843. In 57 the checks refuse a call, and in 9 they admit something else
+  1,716. In 56 the checks refuse a call, and in 3 they admit something else
   than for each row alone (a rename gets the other clause's tab, a resize
-  the other's amount); condition 12 drops all 66. The reviewed route
-  answered 3,096, 5 of them two requests of one kind read as one, and the
-  gated route 3,634, 329 of them otherwise than for each row alone.
+  the other's amount); condition 12 drops all 59. The route of the second
+  review answered 3,096, 5 of them two requests of one kind read as one,
+  and the gated route 3,634, 329 of them otherwise than for each row alone.
 - Two rows joined by a word that never joined two in training (2,000), or
   three rows joined (1,500): none answered. Joined by a trained word
-  (2,000): 546 answered, each with the two rows' labels in order.
+  (2,000): 544 answered, each with the two rows' labels in order.
 - A word of place put into a row, and the row joined to a clause whose own
-  call holds that place, as the second reviewer did (400 rows, 23,027
-  sentences the reader declines alone, 92,108 joined requests): none
-  answered. The reviewed reader answered 826 of the reviewer's 1,972.
+  call holds that place, as the second reviewer did (400 rows, 22,967
+  sentences the reader declines alone, 91,868 joined requests): none
+  answered. The reader of the second review answered 826 of the reviewer's
+  1,972.
+- The third reviewer's sweep: every pair of 254 clauses made from generator
+  readings, joined by "and" (64,516 requests), each answer run on three
+  fake desktops that change when a call runs, against the same calls run
+  one by one. 84 of the runs differ, all of two kinds: a pane or tab named
+  twice by different words (the second call fails either way), or a pane
+  renamed by its side and then named by the title it had when the request
+  was made, which is what those words say. The reader of the third review
+  had 587 such runs, and 789 more that differed in where the focus ended.
+
+**Time**, measured again with this reader the way it was for the gate (Core i7-6820HQ,
+eight cores, nothing else measured on it, under the benchmark lock; three
+whole calls each way in a new process): a request of v16 the bundle answers
+took 231 ms (median, 16 requests) with it and 3,830 ms without; a request
+it declines took 32 ms more by the median of the paired differences (40
+requests). Inside a running process the file loads in 9 ms, an answer takes
+1.8 ms and a decline 0.5 ms (medians).
 
 More generated wording does not buy the reach back. With the readings of
 all 24,676 generated requests added to the table (1,043 more readings; the
-nets untouched, every other condition in place) the bundle answers no more
-on v15, v16 and v18 and one more on v17. Where the rule on word pairs is
-lifted as well it answers 3, 1 and 1 more on v16, v17 and v18, all as
-labelled. What it does not answer on these sets is wording no template of
-ours has.
+nets untouched, every other condition in place, measured on the reader of
+the third review) the bundle answers no more on v15, v16 and v18 and one
+more on v17. Where the rule on word pairs is lifted as well it answers 3, 1
+and 1 more on v16, v17 and v18, all as labelled. What it does not answer on
+these sets is wording no template of ours has.
 
 **The reader as it now is has been neither reviewed nor gated.** The third
 review was of the reader before its last change (`bd860c4`). The blind half
@@ -571,8 +604,15 @@ has left unchanged, and none has yet. `needle_cli.BUNDLE_BY_DEFAULT` is off.
   taken (6). Of the reviewer's 67 words in 8 wordings (536 requests) the
   route uses the bundle's reading for 67, and in 66 the word is the name:
   33 words, each in the two wordings where the name follows the noun with
-  no word between ("rename the tab W", "title this pane W"). The reviewed
-  reader did that for 264 requests.
+  no word between ("rename the tab W", "title this pane W"). The reader of
+  the third review did that for 264 requests. The tuned model is no better
+  here: of those 66 requests qat-9 takes the word into the name on 52 and
+  does nothing on 14, and of all 536 it takes the word into the name on 273,
+  among them 185 of the 402 that do give a name ("rename this tab to api
+  thx" names the tab "api thx"; the bundle declines those now). A rule
+  against the 66 would send them to a reader that mostly does the same, and
+  it is not added. That was decided before the model's replies were read
+  (the experiment's records, `runs/exp8/REVIEW.md`).
 - **It knows only the wording of its training rows.** Of the requests that
   reach the model it answers about one in ten on the sets written for this
   change and one in thirty on the job's own held-out set.
