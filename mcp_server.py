@@ -56,8 +56,8 @@ TOOL_LIST = [
      "inputSchema": {"type": "object", "properties": {"request": _REQUEST},
                      "required": ["request"], "additionalProperties": False}},
     {"name": "kilix_act",
-     "description": "Do a plain request on Kilix panes and tabs: list, open, focus, arrange, "
-                    "rename, resize, close, or type a command at a pane's shell prompt. "
+     "description": "Do a plain request on Kilix panes and tabs: list, read, open, focus, "
+                    "arrange, rename, resize, close, or type a command at a pane's shell prompt. "
                     "Closing, typing and starting a program need confirm_risky. Your own "
                     "pane and tab are never closed.",
      "inputSchema": {"type": "object", "properties": {

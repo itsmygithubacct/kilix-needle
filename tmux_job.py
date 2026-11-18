@@ -128,6 +128,58 @@ def parse(request: str) -> dict:
     return {"operation": operation, **args}
 
 
+def _quoted(text: str) -> str | None:
+    for mark in ('"', "'", "`"):
+        if mark not in text:
+            return f"{mark}{text}{mark}"
+    return None
+
+
+def sentence(action) -> str | None:
+    """This grammar's own sentence for an action, or None.
+
+    A reader other than the grammar (the bundle of small nets) proposes an
+    action; it is admitted only if this sentence reads back as that very
+    action (reads_back). So every name, target, directory and count passes
+    the grammar's own checks, though the request was not in its words."""
+    if not isinstance(action, dict):
+        return None
+    op = action.get("operation")
+    try:
+        if op == "list":
+            return "list sessions"
+        if op == "new":
+            cwd = action.get("cwd")
+            where = _quoted(cwd) if isinstance(cwd, str) else None
+            return f"new session {action['name']}" + (f" in {where}" if where else "")
+        if op == "read":
+            lines = action.get("lines")
+            return f"read {action['target']}" + (f" last {lines} lines" if lines is not None else "")
+        if op in ("send", "type"):
+            text = _quoted(action["text"])
+            return f"{op} {text} {'to' if op == 'send' else 'in'} {action['target']}" if text else None
+        if op == "key":
+            return f"press {' '.join(action['keys'])} in {action['target']}"
+        if op == "rename":
+            return f"rename session {action['target']} to {action['new_name']}"
+        if op == "close":
+            return f"close session {action['target']}"
+    except (KeyError, TypeError):
+        return None
+    return None
+
+
+def reads_back(action) -> bool:
+    """Whether the grammar reads its own sentence for `action` as `action`."""
+    text = sentence(action)
+    if text is None:
+        return False
+    try:
+        return parse(text) == action
+    except Refused:
+        return False
+
+
 def socket_path(value: str) -> str:
     if (not isinstance(value, str) or not value.startswith("/") or len(value) > 4096
             or any(unicodedata.category(c) in ("Cc", "Cf", "Cs", "Zl", "Zp") for c in value)):

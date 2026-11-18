@@ -133,6 +133,46 @@ def ending_request(ident: str) -> str:
     return _read_back(f"end session {id_literal(ident)}", ident, "kill")
 
 
+def sentence(action) -> str | None:
+    """This grammar's own sentence for an action, or None.
+
+    A reader other than the grammar (the bundle of small nets) proposes an
+    action; it is admitted only if this sentence reads back as that very
+    action (reads_back), so every ID, pane and count passes the grammar's
+    own checks, though the request was not in its words."""
+    if not isinstance(action, dict):
+        return None
+    op = action.get("operation")
+    ident = action.get("id")
+    if ident is not None and not valid_id(ident):
+        return None
+    try:
+        return {
+            "list": lambda: "list sessions",
+            "journals": lambda: "list archived journals",
+            "status": lambda: f"show session {id_literal(ident)}",
+            "pane": lambda: f"which session is pane {int(action['pane_id'])}",
+            "observe": lambda: f"show the last {int(action['max_lines'])} lines of session {id_literal(ident)}",
+            "journal": lambda: f"show archived journal {id_literal(ident)}",
+            "foreground": lambda: f"show foreground processes of session {id_literal(ident)}",
+            "marker": lambda: f"which session last showed raw marker {action['marker']}",
+            "kill": lambda: f"end session {id_literal(ident)}",
+        }[op]()
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def reads_back(action) -> bool:
+    """Whether the grammar reads its own sentence for `action` as `action`."""
+    text = sentence(action)
+    if text is None:
+        return False
+    try:
+        return _grammar(text) == action
+    except Refused:
+        return False
+
+
 def valid_id(ident) -> bool:
     """An ID Needle will pass to `kilix pty` as one argument. A leading '-' would read as a flag."""
     return (isinstance(ident, str) and ID_CHARS.fullmatch(ident) is not None

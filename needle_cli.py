@@ -281,7 +281,9 @@ def bundle_proposal(request: str):
         # A list is the bundle's own kind and changes nothing: the route
         # answers it with the exact reader's list (run_request), and there is
         # no call for the checks to admit. The reader answers it only alone.
-        if [call["name"] for call in calls] == [panes_bundle.LIST]:
+        # A read of a pane is the same: pane_reads checks it against the tree.
+        import pane_reads
+        if [call["name"] for call in calls] in ([panes_bundle.LIST], [pane_reads.NAME]):
             return calls, label
         if not checks_agree(request, calls, texts):
             return None
@@ -342,10 +344,38 @@ def run_request(engine: Engine, request: str, options: Options,
                                              f"{pane.get('title', '')}"})
         return {"request": request, "status": 0, "note": "", "items": items}
 
+    def pane_read(request, args):
+        # Reading a pane changes nothing and never goes through the model's
+        # action proposals: checked against the tree, then `get-text`.
+        import pane_reads
+        try:
+            tree = kilix.snapshot(under_overlay=options.under_overlay)
+        except kilix.KilixError as error:
+            return {"request": request, "status": 1, "items": [], "note": str(error)}
+        item = {"kind": pane_reads.NAME, "args": dict(args) if isinstance(args, dict) else {},
+                "summary": pane_reads.summary(args)}
+        reason = pane_reads.check(args, tree)
+        if reason:
+            item.update(outcome="refused", reason=reason)
+            return {"request": request, "status": 1, "note": reason, "items": [item]}
+        if options.dry_run:
+            item["outcome"] = "would"
+            return {"request": request, "status": 0, "note": "", "items": [item]}
+        try:
+            item.update(result=pane_reads.read(args, kilix._run), outcome="done")
+        except kilix.KilixError as error:
+            item.update(outcome="failed", reason=str(error))
+            return {"request": request, "status": 1, "note": str(error), "items": [item]}
+        return {"request": request, "status": 0, "note": "", "items": [item]}
+
     def exact(request):
         unit = inventory_unit(request)
         if unit is not None:
             return listed(request, unit)
+        import pane_reads
+        wanted = pane_reads.parse(request)
+        if wanted is not None:
+            return pane_read(request, wanted)
         # "help" sent as a request answers with the jobs, not a refused open_tab.
         if HELP_REQUEST.fullmatch(request):
             return {"request": request, "status": 0, "items": [],
@@ -396,6 +426,8 @@ def run_request(engine: Engine, request: str, options: Options,
             # The bundle read a list ("list pane 412 and its title"): the
             # same list the exact reader gives, of what it names.
             return listed(request, calls[0]["arguments"]["what"]), label, calls
+        if calls[0]["name"] == "read_pane":
+            return pane_read(request, calls[0]["arguments"]), label, calls
         return run_calls(request, calls, options, confirm), label, calls
 
     return _recorded("panes", engine, request, options, lambda request, calls: run_calls(
