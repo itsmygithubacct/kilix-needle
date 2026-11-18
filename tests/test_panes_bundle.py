@@ -1003,7 +1003,11 @@ class TrainerRefusals(unittest.TestCase):
         self.assertNotEqual(before, PBT.tree_digest(folder))
         self.assertIsNone(PBT.library_commit(folder / "no-such-checkout"))
         self.assertEqual(PBT.ROW_CODE, ("actions.py", "tuning.py", "toolset.py", "panes_bundle_agent.py",
-                                        "job_schemas.py", "job_rows.py", "pane_reads.py"))
+                                        "job_schemas.py", "job_rows.py", "pane_reads.py",
+                                        # the checks job_rows.admitted asks whether a job takes a row
+                                        "job_routes.py", "files_job.py", "files_backend.py", "system_job.py",
+                                        "system_normalize.py", "agents.py", "apps.py", "tmux_job.py", "pty_job.py",
+                                        "logs_words.py"))
 
 
 class WhatTheReviewsFound(unittest.TestCase):
@@ -1017,12 +1021,14 @@ class WhatTheReviewsFound(unittest.TestCase):
         "rename the logs tab to api": PB.UNSHOWN,
         # "logs" was passed over: go to the previous tab
         "back to the logs tab": PB.UNSHOWN,
-        # nothing asks for a layout: the panes were stacked. Since v5 "all the
-        # others" reads as a list, which is answered only alone
-        "switch to the htop pane and all the others": PB.ALONE,
+        # nothing asks for a layout: the panes were stacked. v5 read "all the
+        # others" as a list, which is answered only alone; to v6 the whole is
+        # wording no tool was trained on
+        "switch to the htop pane and all the others": PB.UNSHOWN,
         # any word between two clauses was taken for "and"
         "go to tab 2 or rename this tab to api": "clauses joined by a word that never joined two in training",
-        "go to tab 2 nope rename this tab to api": "clauses joined by a word that never joined two in training",
+        # (v5 declined it for the joining word; v6 for a word pair no training row had)
+        "go to tab 2 nope rename this tab to api": PB.PAIR,
         "close tab 2 or go to tab 1": "clauses joined by a word that never joined two in training",
         # three clauses were never trained; two of these were dropped
         "split right, close this pane, split below": None,
@@ -1037,7 +1043,8 @@ class WhatTheReviewsFound(unittest.TestCase):
         # a pane named by its title and by its place: one of the two passed over
         "just type df -h in the build pane at the bottom for me": None,
         # the name swallowed the clauses after it
-        "retitle the tab logs, call the pane above logs, tab name: frontend": PB.LONG,
+        # (v5 declined it for the name's length; v6 for a word pair no training row had)
+        "retitle the tab logs, call the pane above logs, tab name: frontend": PB.PAIR,
         # what to close is still never named by a word the bundle does not know
         "close the 3rd tab": "an untrained word names what to close or type into",
         # digits the nets take for a number and the reader cannot read as one
@@ -1118,6 +1125,8 @@ class WhatTheReviewsFound(unittest.TestCase):
         # two clauses, the second resolved by nothing the first changes
         "rename this tab to logs and split right": [call("rename_tab", name="logs"), call("open_pane", side="right")],
         "rename this tab to api then split right": [call("rename_tab", name="api"), call("open_pane", side="right")],
+        # v5 did not split it at "and" (NO_LONGER_READ); v6 does again
+        "rename this tab to api and split right": [call("rename_tab", name="api"), call("open_pane", side="right")],
         "make this pane wider and go to the left pane": [call("resize_pane", direction="wider"),
                                                          call("go_to_pane", pane="left")],
         "split right and go to tab 2": [call("open_pane", side="right"), call("go_to_tab", tab="2")],
@@ -1137,8 +1146,10 @@ class WhatTheReviewsFound(unittest.TestCase):
     # Read by v4, no longer by v5: its separator nets do not split these at
     # "and" (the agent rows' "open a new tab named X and run Y" is one clause),
     # and the whole is wording no tool was trained on. They go to the model.
-    # Held so that the loss is seen (panes-bundle/README.md, "What v5 gave up").
-    NO_LONGER_READ = ("rename this tab to api and split right", "close the next tab and open a new tab")
+    # Held so that the loss is seen (panes-bundle/README.md, "What it still
+    # gets wrong"). v5 did not read "rename this tab to api and split right"
+    # either; v6 reads it again (STILL_READ).
+    NO_LONGER_READ = ("close the next tab and open a new tab",)
 
     def setUp(self):
         if not (PB.DIRECTORY / "manifest.json").is_file():
@@ -1232,9 +1243,11 @@ class WhatTheReviewsFound(unittest.TestCase):
         self.assertIn(PB.LIST, self.bundle.tools)
         self.assertEqual(set(PB.RENAMES), {tool for tool in self.bundle.tools if tool.startswith("rename_")})
         # every tool is in the table of what a call changes, or is one of the four that change nothing a later
-        # call is resolved by but a title or the pane they name (changes), or the list, which changes nothing
+        # call is resolved by but a title or the pane they name (changes), or the list or the read of a pane,
+        # which change nothing
         self.assertEqual(set(self.bundle.tools),
-                         set(PB._CHANGES) | {"rename_tab", "rename_pane", "resize_pane", "run_in_pane", PB.LIST})
+                         set(PB._CHANGES) | {"rename_tab", "rename_pane", "resize_pane", "run_in_pane", PB.LIST,
+                                             PB.READ})
         self.assertTrue(set(PB._GOES_BY) <= set(self.bundle.tools))
         self.assertTrue(set(PB.NOT_THE_CALLERS) <= set(self.bundle.tools))
         # every argument that names something by a copied text is held to one new word, but a program and a
@@ -1257,10 +1270,15 @@ class WhatV5Reads(unittest.TestCase):
     """What file format v5 added, read by the checked-in file: agent-style
     wording, ids, the list kind and the second reader. The requests are made
     up, or are walks of the second review every run of three of whose frames
-    stands in a frame of the generated and agent-style rows alone."""
+    stands in a frame of the generated and agent-style rows alone.
 
-    # The kinds the standard of experiment 10 passed (panes-bundle/README.md, "The reader now")
-    SECOND_KINDS = {"arrange_panes", PB.COMPOUND, "go_to_pane", "go_to_tab", "move_tab", "rename_tab"}
+    v5 was shipped with the second reader on for the kinds the standard of
+    experiment 10 passed (SECOND_KINDS); v6 is shipped with the kinds of
+    experiment 11 (WhatV6Reads). What the reviews of v5 found is held here
+    with v5's kinds switched on by hand, as they were when it was found."""
+
+    # The kinds the standard of experiment 10 passed (panes-bundle/README.md, "The reader of format v5")
+    SECOND_KINDS = frozenset({"arrange_panes", PB.COMPOUND, "go_to_pane", "go_to_tab", "move_tab", "rename_tab"})
     IDS = {
         "rename tab id 4 to api": [call("rename_tab", tab="id:4", name="api")],
         "rename tab id 1 to x; make pane 2 wider by 5": [call("rename_tab", tab="id:1", name="x"),
@@ -1275,8 +1293,9 @@ class WhatV5Reads(unittest.TestCase):
         "move the focused tab to the left": [call("move_tab", direction="left")],
         "focus tab two?": [call("go_to_tab", tab="2")],
         "hop to the bottom": [call("go_to_pane", pane="below")],
-        "switch to fat": [call("arrange_panes", layout="fat")],
     }
+    # v5 answered it (a fat layout); v6 declines it, with v5's kinds on too
+    NO_LONGER_SECOND = {"switch to fat": PB.PLAIN}
     # What the second reader answers and the labeller of the walks judged to
     # ask for nothing plainly, or to name what may be a tab or a pane
     # (panes-bundle/README.md, "What it still gets wrong"). The tuned model
@@ -1293,14 +1312,12 @@ class WhatV5Reads(unittest.TestCase):
         if not (PB.DIRECTORY / "manifest.json").is_file():
             self.skipTest("no bundle is checked in")
         self.bundle = PB.Bundle.load()
+        self.bundle.second_kinds = self.SECOND_KINDS
 
     def used(self, request):
         texts: list = []
         calls, _ = self.bundle.read(request, texts)
         return calls if calls and needle_cli.checks_agree(request, calls, texts) else None
-
-    def test_the_second_reader_is_on_for_the_kinds_its_standard_passed(self):
-        self.assertEqual(self.bundle.second_kinds, self.SECOND_KINDS)
 
     def test_ids(self):
         for request, calls in self.IDS.items():
@@ -1312,14 +1329,17 @@ class WhatV5Reads(unittest.TestCase):
     def test_a_list_stands_alone(self):
         self.assertEqual(self.bundle.read("list pane 412 and its title"),
                          ([call(PB.LIST, what="panes", about="412")], PB.OK))
-        for request in ("list tabs; close tab 2", "list panes with their ids and close tab 2"):
-            self.assertEqual(self.bundle.read(request), ([], PB.ALONE), request)
+        self.assertEqual(self.bundle.read("list panes with their ids and close tab 2"), ([], PB.ALONE))
+        # declined by v5 as a list beside a close, and by v6 for a word pair no training clause had
+        self.assertEqual(self.bundle.read("list tabs; close tab 2"), ([], PB.PAIR))
 
     def test_the_second_reader_answers_only_the_kinds_it_is_on_for(self):
         answered = {**self.SECOND, **self.SECOND_FRAGMENTS}
         for request, calls in answered.items():
             self.assertEqual(self.bundle.read(request), (calls, PB.OK_SECOND), request)
             self.assertEqual(self.used(request), calls, request)
+        for request, why in self.NO_LONGER_SECOND.items():
+            self.assertEqual(self.bundle.read(request), ([], why), request)
         self.bundle.second_kinds = frozenset()
         for request in answered:
             self.assertEqual(self.bundle.read(request), ([], PB.UNSHOWN), request)
@@ -1331,6 +1351,86 @@ class WhatV5Reads(unittest.TestCase):
             self.assertIsNone(self.used(request), request)
         # A clause it would answer alone still does not go by what the clause before it changes.
         self.assertEqual(self.bundle.read("go to tab 2 and shift the active tab to slot 1"), ([], PB.LEANS))
+
+
+class WhatV6Reads(unittest.TestCase):
+    """What file format v6 added, read by the checked-in file: a read of
+    another pane's screen, more wordings of a list, the reader's changes and
+    the second reader on for the kinds of experiment 11. The requests are
+    made up."""
+
+    # The kinds the standard of experiment 11 passed (panes-bundle/README.md, "The reader now")
+    SECOND_KINDS = frozenset({"go_to_pane", PB.LIST, "open_pane"})
+    READS = {
+        "show the last 20 lines of pane 42": [call(PB.READ, pane=42, lines=20)],
+        "read the last 5 lines of pane 300": [call(PB.READ, pane=300, lines=5)],
+        "tail pane 301": [call(PB.READ, pane=301)],
+        # "#" before digits and "'s" after them are words of their own
+        "read pane #63": [call(PB.READ, pane=63)],
+        "read pane 71's screen": [call(PB.READ, pane=71)],
+    }
+    # a pane named by its place or its title, a number the tool does not take, wording no read was trained on
+    NOT_READ = ("read the left pane", "read the build pane", "read pane 0", "read pane -3", "read pane 4294967296",
+                "show the last 0 lines of pane 42", "the last 20 lines of pane 42", "read the last tab")
+    SECOND = {
+        "jump over to the left pane": [call("go_to_pane", pane="left")],
+        "pop open a pane on the right": [call("open_pane", side="right")],
+    }
+    # A fragment the labeller of the walks judged to ask for nothing plainly
+    # (panes-bundle/README.md, "What it still gets wrong"), of a kind v6 has
+    # on. Held here so that nobody takes it for fixed.
+    SECOND_FRAGMENTS = {"over to the right": [call("go_to_pane", pane="right")]}
+
+    def setUp(self):
+        if not (PB.DIRECTORY / "manifest.json").is_file():
+            self.skipTest("no bundle is checked in")
+        self.bundle = PB.Bundle.load()
+
+    def test_the_second_reader_is_on_for_the_kinds_its_standard_passed(self):
+        self.assertEqual(self.bundle.second_kinds, self.SECOND_KINDS)
+
+    def test_a_read_names_its_pane_by_its_id(self):
+        for request, calls in self.READS.items():
+            self.assertEqual(self.bundle.read(request), (calls, PB.OK), request)
+        for request in self.NOT_READ:
+            self.assertEqual(self.bundle.read(request)[0], [], request)
+
+    def test_a_read_s_training_clause_is_held_to_its_label(self):
+        # "last" names a value ("go to the last tab"); a read's "last 20 lines" does not name it
+        self.assertIn("last", self.bundle.value_words)
+        self.assertEqual(self.bundle.read("go to the last tab"), ([call("go_to_tab", tab="last")], PB.OK))
+        self.assertEqual(self.bundle.read("show the last 20 lines of pane 42"),
+                         ([call(PB.READ, pane=42, lines=20)], PB.OK))
+
+    def test_a_number_s_marks_are_words_of_their_own(self):
+        self.assertEqual([w for w, _, _ in PB.tokenize("read pane #63")], ["read", "pane", "#", "63"])
+        self.assertEqual([w for w, _, _ in PB.tokenize("pane 71's screen")], ["pane", "71", "'s", "screen"])
+        # beside digits only
+        self.assertEqual([w for w, _, _ in PB.tokenize("Bob's #tag")], ["Bob's", "#tag"])
+
+    def test_a_copied_text_longer_than_any_in_training_is_declined(self):
+        # the first review's long retitle is declined before its length is asked (WhatTheReviewsFound.FIRST)
+        self.assertEqual(self.bundle.copy_max["rename_tab"]["name"], 3)
+        self.assertEqual(self.bundle.read("rename this tab to build logs api server"), ([], PB.LONG))
+
+    def test_a_read_or_a_list_stands_alone(self):
+        for request in ("read pane 42 and go to tab 2", "list panes with their ids and close tab 2"):
+            self.assertEqual(self.bundle.read(request), ([], PB.ALONE), request)
+
+    def test_more_wordings_of_a_list(self):
+        self.assertEqual(self.bundle.read("what tabs are there"), ([call(PB.LIST, what="tabs")], PB.OK))
+
+    def test_the_second_reader_answers_only_its_kinds(self):
+        answered = {**self.SECOND, **self.SECOND_FRAGMENTS}
+        for request, calls in answered.items():
+            self.assertEqual(self.bundle.read(request), (calls, PB.OK_SECOND), request)
+        # what v5's second reader answered, it answers now only in v6's kinds
+        for request in (*WhatV5Reads.SECOND, *WhatV5Reads.SECOND_FRAGMENTS, *WhatV5Reads.NO_LONGER_SECOND):
+            calls, _ = self.bundle.read(request)
+            self.assertLessEqual({c["name"] for c in calls}, set(self.SECOND_KINDS), request)
+        self.bundle.second_kinds = frozenset()
+        for request in answered:
+            self.assertEqual(self.bundle.read(request), ([], PB.UNSHOWN), request)
 
 
 class WhatTheFourthReviewFound(unittest.TestCase):
@@ -1357,6 +1457,13 @@ class WhatTheFourthReviewFound(unittest.TestCase):
         if not (PB.DIRECTORY / "manifest.json").is_file():
             self.skipTest("no bundle is checked in")
         self.bundle = PB.Bundle.load()
+        # the review read v5 with its kinds on: held with them on by hand (WhatV5Reads)
+        self.bundle.second_kinds = WhatV5Reads.SECOND_KINDS
+
+    def test_as_shipped_none_of_it_is_answered(self):
+        shipped = PB.Bundle.load()
+        for request in (*self.BESIDE, *self.STILL):
+            self.assertEqual(shipped.read(request)[0], [], request)
 
     def test_beside_another_clause_a_kind_that_is_off_is_not_answered(self):
         for request, kind in self.BESIDE.items():
@@ -1779,15 +1886,25 @@ class TheCheckedInBundleBeforeTheModel(Route):
         self.assertRegex(self.said, r"close pane 301 .*\? \[y/N\]")
 
     def test_what_the_second_reader_answers_is_recorded_as_its_own(self):
-        # The caller's tab is the third; moved to the first place through the caller's pane.
-        status, ran, model = self.ask("shift the active tab to slot 1")
+        # Pane 301 is to the left of the caller's.
+        status, ran, model = self.ask("jump over to the left pane")
         self.assertEqual((status, model.prompts), (0, []))
-        backward = ["action", "--match=id:300", "move_tab_backward"]
-        self.assertEqual([args for args, _ in ran], [["focus-window", "--match=id:300"], backward, backward])
+        self.assertEqual([args for args, _ in ran], [["focus-window", "--match=id:301"]])
         self.assertEqual(self.entries()[-1]["engine"], PB.default().label + " (second reader)")
         # and what the first reader answers is not
         self.ask("rename this tab to api")
         self.assertEqual(self.entries()[-1]["engine"], PB.default().label)
+
+    def test_a_read_it_answers_is_checked_against_the_desktop(self):
+        # "#301" is no wording of the exact reader's: the bundle reads pane 301's screen
+        status, ran, model = self.ask("read pane #301")
+        self.assertEqual((status, model.prompts), (0, []))
+        self.assertEqual([args for args, _ in ran], [["get-text", "--match", "id:301", "--extent", "screen"]])
+        self.assertEqual(self.entries()[-1]["engine"], PB.default().label)
+        self.assertEqual(self.entries()[-1]["calls"], [call(PB.READ, pane=301)])
+        # a pane that is not on the desktop: nothing is read
+        status, ran, model = self.ask("read pane #412")
+        self.assertEqual((status, ran), (1, []))
 
     def test_a_list_it_reads_is_the_exact_readers_list(self):
         status, ran, model = self.ask("list pane 412 and its title")

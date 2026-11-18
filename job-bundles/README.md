@@ -71,10 +71,14 @@ wording with slots: `{slot}` takes a value from a pool, `[a|b]` one wording,
 
 A row is kept only if its job takes it as labelled (`job_rows.admitted`):
 
-- files, system, agents, apps: the job's grammar reads the request, and
-  reads it as the row is labelled. On these jobs an answer of the bundle is
-  admitted only when the grammar reads the request the same way (below), so
-  a row the grammar does not read would teach an answer that is never used;
+- agents, apps: the job's grammar reads the request, and reads it as the
+  row is labelled. On these jobs an answer of the bundle is admitted only
+  when the grammar reads the request the same way (below), so a row the
+  grammar does not read would teach an answer that is never used;
+- files, system: where the job's grammar reads the request, it reads it as
+  the row is labelled; where it does not, arm B's checks take the row's
+  reading (`job_routes.files_checks`, `job_routes.system_checks`, below).
+  So no row teaches a reading the grammar contradicts;
 - tmux, pty: the call reads back through the job's grammar sentence
   (`tmux_job.reads_back`, `pty_job.reads_back`);
 - logs: the logs tool's argument checks take it (`logs_words.check`);
@@ -94,7 +98,10 @@ with the second reader off and with it on for every kind.
 ## How an answer is checked
 
 `job_routes.py` runs a request through a job's route in one of three arms,
-with every stage of today's route that only refuses kept in each:
+with every stage of today's route that only refuses kept in each (for
+files, tmux, pty and logs that is the grammar's refusal of a whole
+request before it reads it, `request_refusal`: the bundle reads only what
+the job would read at all):
 
 - **A** is today's route: the exact readers or the job's grammar, then the
   job's tuned model where one is loaded (panes, agents).
@@ -106,16 +113,44 @@ A bundle's answer goes through the job's own checks, as the grammar's does:
 
 | job | the check |
 | --- | --- |
-| files | `files_job.interpret`, and it must equal the grammar's reading |
-| system | `system_job.interpret`, and it must equal the grammar's reading |
+| files | `files_job.interpret`: it must equal the grammar's reading; in B, or be one query the file collector's own checks take (`files_checks`, which asks `files_backend.check_query`) |
+| system | `system_job.interpret`: it must equal the grammar's reading; in B, or pass the checks the system normalizer makes of a model's proposal (`system_checks`: the preflight, at most three calls, the strict schema, none twice, every value grounded in the request) |
 | agents | `agents.interpret` |
 | apps | `apps.interpret` |
 | tmux, pty | the call reads back through the job's grammar sentence |
 | logs | `logs_words.check` |
 | panes | `needle_cli.checks_agree` and `actions.interpret`; a list is the exact list reader's; a read is checked against the desktop (`pane_reads.check`) |
 
-So on files and system the bundle answers at most what the grammar reads,
-and as the grammar reads it.
+So in C the bundle answers on files and system at most what the grammar
+reads, and as the grammar reads it. In B it also answers a request the
+grammar does not read, when the job's own checks of a proposal take its
+answer: both tools only read. The file collector's checks are the ones it
+makes before it reads anything, factored out of `collect` unchanged.
+
+## The files as checked in
+
+Each was trained from seeds 0 and 1 on this laptop's CPU (dim 8, hidden
+32, 40 epochs, one thread), with the generators' seed 0. Each answers every
+one of its own rows that it answers as labelled, with the second reader as
+shipped and with it on for every kind. The second reader is on for the
+agents' `wait` only: the one kind of these jobs it answered on experiment
+11's development requests, where it met that experiment's standard.
+
+| job | rows | answered as labelled (second reader as shipped) | tools' readings | nets a member | size | sha256 | second reader |
+| --- | ---: | ---: | --- | ---: | ---: | --- | --- |
+| files | 4,703 | 4,475 of 4,475 answered | 4 tools, 1,523 readings | 23 | 0.47 MB | `a9f04e5c2fa1` | off |
+| system | 5,657 | 5,657 of 5,657 answered | 7 tools, 3,167 readings | 29 | 0.59 MB | `0881dbee6cbe` | off |
+| agents | 3,426 | 3,410 of 3,410 answered | 3 tools, 1,941 readings | 24 | 0.46 MB | `4813bc65dc7f` | wait |
+| apps | 17,786 | 17,786 of 17,786 answered | 2 tools, 17,786 readings | 4 | 1.86 MB | `19ad9aed5c80` | off |
+| tmux | 2,155 | 2,155 of 2,155 answered | 4 tools, 376 readings | 14 | 0.19 MB | `14efa3a0a937` | off |
+| pty | 1,552 | 1,552 of 1,552 answered | 7 tools, 297 readings | 14 | 0.17 MB | `4ba4cafccb81` | off |
+| logs | 1,814 | 1,814 of 1,814 answered | 4 tools, 600 readings | 26 | 0.27 MB | `7f415877d974` | off |
+
+The files bundle declines 228 of its own rows. 226 name the scope "." ("…
+in ."): the reader takes a copied text that is a sentence's closing mark
+for that mark (the rule against a copied text that ends in a mark that
+ended the sentence). The other two end in ".?.". The reader declines them
+as it would a request.
 
 ## What is not in this directory
 

@@ -1,0 +1,140 @@
+{
+ "answers_when": "every member proposes the same calls and the checks admit every one of them as it was read",
+ "bytes": 455208,
+ "code": {
+  "actions.py": "329748e4e5adc595f2a0dc71ddf69bd252d4708bab172ae3221c25a5e44069af",
+  "agents.py": "65c0d030f1eec9afb1b5adadce890fb536f363c5f5db16c10e236b74490c2a22",
+  "apps.py": "6f4577ebb6cf495a2df3d3856c9976b4f7243f5b28249168359271ad683e9829",
+  "files_backend.py": "70ec964e036f70907e3adf6208eca5a689bd58ed2160e40082b7059d87d4781c",
+  "files_job.py": "e07331846d6db0203967280aea6533b7e92afa3403dc2db9b7e461174021fd1f",
+  "job_routes.py": "ed5e150e7a6f3e8dc5dd0d914dd3506e76e7375ec8288c7614154b5ee8c65f6d",
+  "job_rows.py": "7f5572f67657f1360b161b4b563bec3a405912eb9d1ab6fe34b16859386a3dd9",
+  "job_schemas.py": "b012de1844eaa4b1ec616ec25222c7674aca87c6194642f3c904bbdfdfe9259f",
+  "logs_words.py": "0f824fb76fc7cfab6b74b36cd10eb6b38ac9fdf0249c5d8fe5419004d52966fa",
+  "pane_reads.py": "4ad3eb1ff32b318d644024d2e9cea3d797131d65eeba7f292c22a9f484c5b122",
+  "panes_bundle.py": "2d072b3ed9d832c4eeacd6c091ae6cd3619f28e80b7e31c15caf844863b075da",
+  "panes_bundle_agent.py": "acb31ad82b241b2274256d253ab31730b6f912c0961278017fd71edc396e3a05",
+  "panes_bundle_train.py": "2414d20da14a6f37c30c1819a44607ce903250e89e8fe8f4ff7963bde8e7c131",
+  "pty_job.py": "4f51644793ee1008951ed36c242d8cea33fe732e336834514e2361ee8cb2363c",
+  "system_job.py": "808cbabfe76001a78c64011dae9a9427e6124cadc65920450a548e94f9d4bae1",
+  "system_normalize.py": "d2a08abb22a76fed4fabfc64b2b049b123a9be0d67afc9eb6258bfdc580fdfc3",
+  "tmux_job.py": "8a0d44404280ccb4bbab06fe38918cf75320783dc21fb1991dc9d8755929a3a9",
+  "toolset.py": "9e456fc9b095088810f92dead17fb02d7c8d13e9a7af4e8caaa99d5285350476",
+  "tuning.py": "65402b342f4ae7964ac57fce9b5e3e38566a7d22507adaf411784aba15ed84ac"
+ },
+ "file": "bundle.bin",
+ "free_text": [
+  "agent",
+  "tell",
+  "wait"
+ ],
+ "job": "agents",
+ "members": [
+  {
+   "nets": 24,
+   "read_as_trained": {
+    "another_output": 0,
+    "examples": 19407,
+    "largest_score_difference": 4.6107313416143825e-06
+   },
+   "seed": 0,
+   "weights": 61266
+  },
+  {
+   "nets": 24,
+   "read_as_trained": {
+    "another_output": 0,
+    "examples": 19407,
+    "largest_score_difference": 4.032921097518738e-06
+   },
+   "seed": 1,
+   "weights": 61266
+  }
+ ],
+ "name": "exp11-agents-01",
+ "reads_its_rows": {
+  "answered": 3410,
+  "as_labelled": 3410,
+  "proposed_and_dropped": 0,
+  "risky_and_not_labelled": 0,
+  "rows": 3426
+ },
+ "reads_its_rows_with_the_second_reader": {
+  "answered": 3410,
+  "as_labelled": 3410,
+  "proposed_and_dropped": 0,
+  "risky_and_not_labelled": 0,
+  "rows": 3426
+ },
+ "rows": {
+  "clauses_max": 1,
+  "closed_words": 13,
+  "copied_words": {
+   "dir": 34,
+   "model": 8,
+   "prompt": 75,
+   "s_dir": 34,
+   "text": 59
+  },
+  "copy_max": {
+   "agent": {
+    "dir": 3,
+    "model": 1,
+    "prompt": 8
+   },
+   "tell": {
+    "s_dir": 3,
+    "text": 7
+   },
+   "wait": {
+    "s_dir": 3,
+    "timeout": 1
+   }
+  },
+  "job_rows": {
+   "cap": 4000,
+   "history_excluded": false,
+   "history_requests_compared": 0,
+   "kept": 3426,
+   "made": {
+    "generated": 3635,
+    "kept": 3426,
+    "not_admitted": 168,
+    "same_as_another_row": 41,
+    "wordings": 1282
+   },
+   "per_template": 60,
+   "seed": 0
+  },
+  "known_pairs": 217,
+  "known_words": 55,
+  "readings": {
+   "agent": 760,
+   "tell": 157,
+   "wait": 1024
+  },
+  "rows": 3426,
+  "rows_skipped": 0,
+  "rows_used": 3426,
+  "separators": [],
+  "sha256": "c3f8f1ff591ff72266ace4272c269422407e43aa6bd491afe7f8a5a2a3742f5c",
+  "value_and_closed_words": 223,
+  "value_words": 219
+ },
+ "schema": "kilix-needle.panes-bundle-manifest/v6",
+ "second_reader": {
+  "kinds": [
+   "wait"
+  ]
+ },
+ "sha256": "4813bc65dc7fe0ae020be847ba637311ac22fa05ae53210f037b43e52b984457",
+ "trainer": {
+  "dim": 8,
+  "epochs": 40,
+  "hidden": 32,
+  "learning_rate": 0.01,
+  "threads": 1,
+  "torch": "2.6.0+cu124"
+ },
+ "weights_as": "little-endian half floats; each net was rounded to them before it was checked"
+}

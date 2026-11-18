@@ -1,9 +1,10 @@
 # The panes bundle
 
-`bundle.bin` holds what `panes_bundle.py` reads: two members, the same 47
-small nets trained from seeds 0 and 1 (638,309 weights each), and the tables
-the reader goes by, in one file of 3.9 MB (file format v5). `manifest.json`
-is its provenance. It records:
+`bundle.bin` holds what `panes_bundle.py` reads: two members, the same 51
+small nets trained from seeds 0 and 1 (667,725 weights each), and the tables
+the reader goes by, in one file of 4.2 MB (file format v6; what v6 changed
+is below, "The reader now"). `manifest.json` is its provenance. It
+records:
 
 - the file's sha256 and size;
 - the trainer's settings and its PyTorch version;
@@ -17,8 +18,10 @@ is its provenance. It records:
   kind;
 - the kinds the second reader answers (`second_reader.kinds`, below);
 - the sha256 of `panes_bundle.py`, `panes_bundle_train.py` and
-  `panes_bundle_agent.py`, and of `actions.py`, `tuning.py` and
-  `toolset.py`, which decide the rows, as they were when the file was
+  `panes_bundle_agent.py`, and of the code that decides the rows and which
+  of them are kept (`actions.py`, `tuning.py`, `toolset.py`,
+  `job_schemas.py`, `job_rows.py`, `pane_reads.py`, `job_routes.py` and the
+  jobs' grammars and checks it asks), as they were when the file was
   written.
 
 `panes_bundle.py` refuses a file whose digest does not match the manifest,
@@ -231,9 +234,12 @@ swaps and renames of panes beside a second clause, kinds its standard had
 kept off; below, "What the fourth review found".)
 
 Its answers carry the label "(second reader)" in the history. As this file
-is shipped it is switched on for arrange_panes, go_to_pane, go_to_tab,
-move_tab and rename_tab, and for `compound`. Each kind was switched on by a
-standard declared before it was measured (below, "The reader now"). The
+(v6) is shipped it is switched on for go_to_pane, list and open_pane: the
+kinds it answered on experiment 11's development requests, each exact at
+least as often as the route (below, "The reader now"). As v5 was shipped
+it was on for arrange_panes, go_to_pane, go_to_tab, move_tab and
+rename_tab, and for `compound`, each by the standard of experiment 10
+(below, "The reader of format v5"). The
 kinds are the manifest's word: the file's digest is of `bundle.bin`, and
 whoever can write the manifest can switch every kind on. A close, a typed
 command or a started program is never the second reader's to answer,
@@ -555,7 +561,47 @@ standing aside at once; the switch (22 values); the bundle's calls held as
 the model's are (126 paired runs in six modes); the trainer's counts and
 digests.
 
-## The reader now (format v5, this file)
+## The reader now (format v6, this file)
+
+Experiment 11 of the neuronte-lm research made a bundle for every
+kilix-needle job (`../job-bundles/README.md`), on rules written down before
+they were measured. For panes, format v6:
+
+- **reads another pane's screen**: `read_pane`, a kind of its own, with the
+  pane's id and, if the request gives one, a number of lines. Like the
+  exact reader's reads, it is checked against the desktop
+  (`pane_reads.check`). Its rows are made up in `job_rows.py`. The four
+  agent-style templates whose wording a read now answers are left out
+  (`panes_bundle_agent.READ_TEMPLATES`);
+- **has more list wordings**: the list rows of `job_rows.py`, each of the
+  list's closed values in every wording;
+- **reads with three changes**:
+  - a training clause of a read, read as it was labelled, is held to its
+    label: "the last 20 lines of pane 42" names no last tab. Every other
+    panes clause keeps the rule that a word naming a value must be in its
+    call;
+  - a mark just inside a closing quote is the quoted text's own
+    ("'panic!'" copies panic!);
+  - "71's" and "#63" are read as numbers;
+- **has the second reader on for go_to_pane, list and open_pane**. On
+  experiment 11's development requests, with the second reader on for every
+  kind, it answered in those three kinds only, each exact at least as often
+  as the route and never unsafe. v5's other kinds (arrange_panes,
+  go_to_tab, move_tab, rename_tab and compound) are off: it answered none
+  of them there, and the experiment's rule switches a kind on only on that
+  evidence. Switched on by hand (`Bundle.second_kinds`), they are read much
+  as v5 read them, and the tests hold what the reviews of v5 found with
+  them on (`WhatV5Reads`, `WhatTheFourthReviewFound`). One request v5's
+  second reader answered, "switch to fat", v6 declines with them on too.
+
+This file was trained on 16,614 rows: the tuner's generated rows, the spent
+eval sets, the agent-style rows and 5,280 rows of `job_rows.py`. It answers
+14,400 of them, all as labelled, and declines the rest. Its twin from seeds
+2 and 3, which the experiment's gate also reads, answers 14,402, all as
+labelled. How it did on the experiment's held-out requests is in the
+research records, not here.
+
+## The reader of format v5
 
 On 2026-11-18 the owner asked for the bundle to answer more. Format v5
 widens what it answers in five ways, each held to rules written down before
@@ -885,14 +931,14 @@ format v5 (above, "How it was gated").
   frontend". The tuned model answers 14 of the same 15 otherwise than
   labelled too. That is the line the owner set for it: no worse than the
   model, and never unsafe.
-- **v5 no longer splits some requests at "and".** "rename this tab to api
-  and split right" and "close the next tab and open a new tab" go to the
-  model. The agent rows' "open a new tab named X and run Y" is one clause,
-  and the separator nets learnt from it that "and" between a name and a
-  verb need not join two clauses; the whole is then wording no tool was
-  trained on. "rename this tab to logs and split right" and "rename this
-  tab to api then split right" are still read (`tests/test_panes_bundle.py`,
-  `NO_LONGER_READ`).
+- **Since v5 it does not split some requests at "and".** "close the next
+  tab and open a new tab" goes to the model. The agent rows' "open a new
+  tab named X and run Y" is one clause, and the separator nets learnt from
+  it that "and" between a name and a verb need not join two clauses; the
+  whole is then wording no tool was trained on. v5 did not split "rename
+  this tab to api and split right" either; v6 does again. "rename this tab
+  to logs and split right" and "rename this tab to api then split right"
+  are still read (`tests/test_panes_bundle.py`, `NO_LONGER_READ`).
 - **Only a rename names a tab by its id.** The agent rows name a tab by its
   id only in renames. "go to tab id 4" and "close tab id 7" are no
   training clause and go to the model, and so does "rename tab 4 to api",

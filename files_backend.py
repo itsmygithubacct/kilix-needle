@@ -69,7 +69,10 @@ def _dates(value, now, *, local_calendar=False):
     return float('-inf'), float('inf')
 
 
-def collect(query, *, cwd, home, limit=20, now=None):
+def check_query(query, *, cwd, home, limit=20):
+    """The checks collect makes before it reads anything. Returns the
+    directory the query would read; raises ValueError for a query collect
+    refuses. A proposal for the files tool can be held to them as they stand."""
     fields = {'find_files': {'scope', 'name', 'extension', 'modified'},
               'search_text': {'scope', 'text'}, 'list_files': {'scope', 'order'},
               'preview_file': {'scope', 'path'}}
@@ -96,6 +99,12 @@ def collect(query, *, cwd, home, limit=20, now=None):
             a.get('name_match', 'contains') not in ('contains', 'prefix') or
             (a.get('name_match') == 'prefix' and not a['name'])):
         raise ValueError('unsupported file filters')
+    return resolve_scope(a['scope'], cwd, home)
+
+
+def collect(query, *, cwd, home, limit=20, now=None):
+    check_query(query, cwd=cwd, home=home, limit=limit)
+    a = query['args']; k = query['kind']
     local_calendar = now is None
     started = time.monotonic(); now = now or dt.datetime.now().astimezone()
     root = resolve_scope(query['args']['scope'], cwd, home)

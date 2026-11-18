@@ -9,7 +9,9 @@ a cache taken beforehand (by the request's digest, as the route asks it).
     B  the bundle, then the job's model where one is loaded. The stages of
        today's route that produce calls without a model are left out; those
        that only refuse are kept (the prompt check; for panes, "help" and a
-       typing request with no command; for system, the request's bounds).
+       typing request with no command; for system, the request's bounds;
+       for files, tmux, pty and logs, the grammar's refusal of a whole
+       request before it reads it: request_refusal).
     C  the exact readers or the grammar, then the bundle, then the model.
 
 A bundle's answer is a proposal like a model's, held to the job's own checks
@@ -17,8 +19,12 @@ A bundle's answer is a proposal like a model's, held to the job's own checks
 
     panes   needle_cli.checks_agree; a list is the exact reader's list and a
             read of a pane is checked against the desktop (pane_reads.check)
-    files   files_job.interpret: it must equal the files grammar's reading
-    system  system_job.interpret: it must equal the system grammar's reading
+    files   files_job.interpret: it must equal the files grammar's reading;
+            in B, or be one query the file collector's own checks take
+            (files_checks)
+    system  system_job.interpret: it must equal the system grammar's
+            reading; in B, or pass the checks the system normalizer makes
+            of a model's proposal (system_checks)
     agents  agents.interpret
     apps    apps.interpret
     tmux    tmux_job.reads_back: the grammar's own sentence for the call reads
@@ -89,6 +95,7 @@ class Routes:
         os.environ.setdefault("KILIX_NEEDLE_BUNDLE", "0")
         self.bundles, self.replies = dict(bundles), dict(replies)
         self.desktop = Desktop(desktop or {})
+        self.cwd = (desktop or {}).get("caller", {}).get("cwd") or CALLER_CWD
         self.engines = dict(engines or {})
         self._reads: dict = {}
 
@@ -302,11 +309,14 @@ class Routes:
     def _files(self, arm, request):
         import files_job
         from actions import Refusal
+        refused = request_refusal("files", request)
+        if refused:
+            return answer("refused", refused=True, error=refused, job="files")
 
         def admit(calls):
             results = files_job.interpret(request, calls)
             if any(isinstance(r, Refusal) for r in results):
-                return None
+                return files_checks(calls, self.cwd) if arm == "B" else None
             return [[a.kind, dict(a.args)] for a in results]
 
         if arm != "B":
@@ -330,7 +340,7 @@ class Routes:
         def admit(calls):
             results = system_job.interpret(request, calls)
             if any(isinstance(r, Refusal) for r in results):
-                return None
+                return system_checks(request, calls) if arm == "B" else None
             return [[a.kind, dict(a.args)] for a in results]
 
         if arm != "B":
@@ -347,6 +357,9 @@ class Routes:
 
     def _operation(self, job, arm, request, parse, admit_one):
         """tmux, pty and logs: one operation, as {"operation", ...}."""
+        refused = request_refusal(job, request)
+        if refused:
+            return answer("refused", refused=True, error=refused, job=job)
         if arm != "B":
             try:
                 found = parse(request)
@@ -477,6 +490,98 @@ def normalize(job: str, calls, *, cwd: str = f"{HOME}/gpu_terminal/ledger-api") 
             out.append([kind, args])
         return out
     return calls
+
+
+# ---- arm B's checks of files and system proposals ----------------------
+#
+# Experiment 11, the owner's eighth answer: in arm B a bundle answer to the
+# read-only files and system tools is admitted when it equals the grammar's
+# reading, as before, or when it passes the job's own checks of a proposal.
+
+CALLER_CWD = f"{HOME}/gpu_terminal/ledger-api"
+
+
+def request_refusal(job: str, request) -> str | None:
+    """The job's own refusal of a request as a whole, which its grammar makes
+    before it reads anything: a stage that only refuses, kept in every arm,
+    so that a bundle reads only what the job would read at all (system's is
+    system_normalize._bounds, kept in _system; panes, agents and apps have
+    the engine's check_prompt). None when the job takes the request."""
+    import unicodedata
+    if not isinstance(request, str) or not request.strip():
+        return "the request is empty"
+    if job == "files":
+        import files_job
+        if len(request.encode("utf-8")) > 4096:
+            return "provide a request of 1-4096 UTF-8 bytes"
+        if any(unicodedata.category(c) in ("Cc", "Cf", "Zl", "Zp") for c in request):
+            return "control characters are not supported"
+        if files_job._HELP.fullmatch(request.strip()):
+            return "a request for help"
+    elif job == "tmux":
+        import tmux_job
+        if len(request) > tmux_job.MAX_TEXT + 1024 or tmux_job.controls(request):
+            return "control characters other than tab are not supported"
+    elif job == "pty":
+        import pty_job
+        if len(request) > pty_job.MAX_REQUEST or pty_job.controls(request):
+            return "control and format characters are not supported in a pty request"
+    elif job == "logs":
+        import logs_words
+        if len(request) > logs_words.MAX_REQUEST or any(ord(c) < 32 or ord(c) == 127 for c in request):
+            return "a logs request is bounded and has no control characters"
+    return None
+
+
+def files_checks(calls, cwd: str = CALLER_CWD):
+    """One query (the files tool runs one), which the file collector's own
+    checks take before it reads anything (files_backend.check_query): its
+    fields, a relative preview path with no hidden or parent part, an order
+    and filters it supports, a literal text to search for, and a scope that
+    resolves to an absolute directory with no parent step. [[kind, args]] or
+    None."""
+    import files_backend
+    if not isinstance(calls, list) or len(calls) != 1 or not isinstance(calls[0], dict) \
+            or set(calls[0]) != {"name", "arguments"} or not isinstance(calls[0]["arguments"], dict):
+        return None
+    kind, args = calls[0]["name"], dict(calls[0]["arguments"])
+    try:
+        files_backend.check_query({"kind": kind, "args": args}, cwd=cwd, home=HOME)
+    except (ValueError, TypeError, KeyError):
+        return None
+    return [[kind, args]]
+
+
+def system_checks(request: str, calls):
+    """The checks system_normalize.plan makes of a model's proposal for a
+    request its grammar does not read, without the grammar step: the
+    request's bounds and the preflight (no write, negation, unresolved
+    referent or topic the tools do not cover), at most three calls, each in
+    the strict schema (system_job.normalize), none twice, and every value
+    grounded in the request (_ground). [[kind, args]] or None."""
+    import system_job
+    import system_normalize
+    if system_normalize._bounds(request) or system_normalize._preflight(request):
+        return None
+    if not isinstance(calls, list) or not calls or len(calls) > 3:
+        return None
+    actions, seen = [], set()
+    try:
+        for call in calls:
+            if not isinstance(call, dict) or set(call) != {"name", "arguments"}:
+                return None
+            kind = call["name"]
+            args = system_job.normalize(kind, call["arguments"])
+            signature = (kind, tuple(sorted(args.items())))
+            if signature in seen:
+                return None
+            seen.add(signature)
+            actions.append([kind, args])
+        if any(system_normalize._ground(request, kind, args) for kind, args in actions):
+            return None
+    except (ValueError, TypeError, KeyError):
+        return None
+    return actions
 
 
 _RISKY_PANES = ("close_pane", "close_tab", "run_in_pane")

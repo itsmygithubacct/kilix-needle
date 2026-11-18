@@ -95,7 +95,13 @@ def _choices(job: str, tool: str, pool_) -> list | None:
     if callable(pool_):
         forms = getattr(pool_, "forms", 0)
         return list(range(forms)) if forms else None
-    kinds = {arg["key"]: arg["kind"] for arg in job_schemas.SCHEMAS.get(job, {}).get(tool, {}).get("args", ())}
+    if job == "panes":
+        # the panes job's schema is the actions' own; of the kinds its rows
+        # here hold, the list's "what" is a closed value (a read has numbers)
+        import panes_bundle
+        kinds = {"what": "enum"} if tool == panes_bundle.LIST else {}
+    else:
+        kinds = {arg["key"]: arg["kind"] for arg in job_schemas.SCHEMAS.get(job, {}).get(tool, {}).get("args", ())}
     if all(kinds.get(key) in ("enum", "flag") for _, values in pool_ for key in values):
         return list(pool_)
     return None
@@ -153,18 +159,23 @@ QUESTION_WORDS = frozenset({"what", "what's", "whats", "which", "is", "are", "ho
                             "where", "who", "did", "has", "have", "was", "were", "will", "anything"})
 
 
-def _endings(text: str) -> list[str]:
+def _endings(text: str, spans=()) -> list[str]:
     """The text as written, without its final mark, with a full stop, and,
-    for a question, with a question mark. No mark is put after a path or a
-    quote: the reader would not split it from them."""
-    base = text[:-1].rstrip() if text[-1:] in ".?!" and text[-2:-1] not in "\"'`!?." else text
-    last = base.split()[-1] if base.split() else ""
-    if "/" in last or last[-1:] in "\"'`":
+    for a question, with a question mark. A mark that ends a copied value at
+    the end of the text is the value's own ("tell claude: what is left to
+    do?"), and no mark is put after a path or a quote: the reader would not
+    split it from them."""
+    if any(isinstance(surface, str) and surface[-1:] in (".", "?", "!") and text.endswith(surface)
+           for surface, _ in spans):
         return [text]
-    out = [base, base + "."]
-    if base.split()[0].casefold().strip(",") in QUESTION_WORDS:
+    base = text[:-1].rstrip() if text[-1:] in ".?!" and text[-2:-1] not in "\"'`!?." else text
+    words = base.split()
+    if not words or "/" in words[-1] or words[-1][-1:] in "\"'`":
+        return [text]
+    out = [text, base, base + "."]
+    if words[0].casefold().strip(",") in QUESTION_WORDS:
         out.append(base + "?")
-    return out
+    return list(dict.fromkeys(out))
 
 
 def _span_surface(surface, key, value):
@@ -212,7 +223,14 @@ DIRS = [f"{HOME}/gpu_terminal/{p}" for p in PROJECTS] + [
     f"{HOME}/research/{d}" for d in ("papers", "drafts", "experiments", "reading")] + [
     f"{HOME}/Documents/{d}" for d in ("work", "receipts")] + [f"{HOME}/src/{p}" for p in PROJECTS[:6]] + [
     "/etc/nginx", "/var/log", "/srv/app", "/opt/tools", f"{HOME}/.config/kitty", f"{HOME}/scratch"]
-SCOPES = ["here", "Downloads", "Documents", "research", "projects"]
+SCOPES = ["here", "Downloads", "Documents", "research", "projects", "this project", "the current directory",
+          "this directory", "."]
+SYSTEM_FILES = ["/etc/hosts", "/etc/fstab", "/etc/nginx/nginx.conf", "/etc/ssh/sshd_config", "/var/log/syslog",
+                "/var/log/nginx/access.log", "/etc/resolv.conf", "/etc/os-release", "/var/log/auth.log",
+                "/etc/systemd/system/backup.service", "/var/log/postgresql/postgresql-16-main.log"]
+# a word searched for without quotes
+WORDS = ["TODO", "FIXME", "XXX", "HACK", "deprecated", "unwrap", "panic", "localhost", "DATABASE_URL",
+         "max_retries", "segfault", "token", "license", "timeout", "NotImplementedError", "useEffect"]
 SEARCH = ["TODO", "FIXME", "def main", "import torch", "connection refused", "timeout", "panic!", "SECRET_KEY",
           "max_retries", "fn parse_header", "class Config", "unwrap()", "deprecated", "localhost:8080",
           "assert_eq!", "useEffect", "DATABASE_URL", "retry_backoff", "func NewServer", "@pytest.mark.slow",
@@ -314,6 +332,21 @@ def _rel_file(rng):
     return f, {"path": f}
 
 
+def _any_abs_file(rng):
+    """An absolute path to a file: in a project or a home directory, or a system file."""
+    if rng.random() < 0.3:
+        p = rng.choice(SYSTEM_FILES + LOG_FILES)
+        return p, {"path": p}
+    return _abs_file(rng)
+
+
+def _rel_file_dot(rng):
+    """A relative path, now and then written from "./"."""
+    f = rng.choice(FILES)
+    f = f"./{f}" if rng.random() < 0.15 else f
+    return f, {"path": f}
+
+
 def _scope(rng):
     if rng.random() < 0.55:
         s = rng.choice(SCOPES)
@@ -358,6 +391,42 @@ def _files_templates():
     # list largest / recent files
     t.append(("list_files", "[show|list] [largest|large] files in {scope}", common, {"order": "size"}))
     t.append(("list_files", "[show|list] [recent|newest] files in {scope}", common, {"order": "modified"}))
+    # Wordings of experiment 11's development half: the files tool's own
+    # checks take a reading the grammar does not (job_routes.files_checks).
+    more = {**common, "apath": _any_abs_file, "rpath": _rel_file_dot, "word": copy("text", *WORDS),
+            "here": copy("scope", "here")}
+    view = "[cat|show|show me|preview|read|view|print|display]"
+    t.append(("preview_file", f"{view} [the file |the contents of |]{{apath}}", more))
+    t.append(("preview_file", "[what's|what is] in {apath}(?)", more))
+    t.append(("preview_file", f"{view} [the file |the contents of |]{{rpath}} {{here}}", more))
+    t.append(("preview_file", f"{view} [the file |the contents of |]{{rpath}} in {{scope}}", more))
+    t.append(("preview_file", f"{view} [the file |]{{qpath}} in {{scope}}", more))
+    t.append(("search_text", "search {scope} for [the text |the string |the error message |]{qtext}", more))
+    t.append(("search_text", "search {scope} for {word}", more))
+    t.append(("search_text", "[grep|grep for|grep -rn|grep -r|look for|search for] {qtext} in {scope}", more))
+    t.append(("search_text", "[grep for|look for|search for] {word} in {scope}", more))
+    t.append(("search_text", "look through {scope} for {qtext}", more))
+    t.append(("search_text", "search {here} for [the text |the string |the error message |]{qtext}", more))
+    t.append(("find_files", "find [all |]{ext} files in {scope} modified in the last {days} days", more,
+              {"modified": "days"}))
+    t.append(("find_files", "find all {ext} files in {scope}( modified {today})", more))
+    t.append(("find_files", "[any|are there any] {ext} files modified {today} in {scope}(?)", more))
+    t.append(("find_files", "find {ext} files [named|called] {qname} in {scope}", more))
+    t.append(("find_files", "find {ext} files [starting with|beginning with] {qname} in {scope}", more,
+              {"prefix": True}))
+    t.append(("find_files", "find files [beginning with|whose name begins with] {qname} in {scope}", more,
+              {"prefix": True}))
+    t.append(("list_files", "[list|show] [the |][most recent|recent|newest|latest|recently changed|recently modified] "
+                            "files in {scope}(, newest first)", more, {"order": "modified"}))
+    t.append(("list_files", "[list|show] [the |][largest|biggest|large] files in {scope}(, largest first)", more,
+              {"order": "size"}))
+    t.append(("list_files", "[largest|biggest] files in {scope}", more, {"order": "size"}))
+    t.append(("list_files", "[recent|newest] files in {scope}", more, {"order": "modified"}))
+    t.append(("list_files", "which files in {scope} [changed|were modified|were changed] most recently(?)", more,
+              {"order": "modified"}))
+    t.append(("list_files", "sort the files in {scope} by size(, largest first)", more, {"order": "size"}))
+    t.append(("list_files", "sort the files in {scope} by [date|modification time](, newest first)", more,
+              {"order": "modified"}))
     return t
 
 
@@ -427,6 +496,46 @@ def _system_templates():
         ("slow_machine", "why is [my |the |][machine|computer|system] [so |]slow", c),
         ("boot_failures", "what failed during [this|the current] boot", c),
     ]
+    # Wordings of experiment 11's development half: the system normalizer's
+    # checks of a proposal take a reading the grammar does not
+    # (job_routes.system_checks).
+    rss = pool(("memory", {"sort": "memory"}), ("ram", {"sort": "memory"}), ("cpu", {"sort": "cpu"}),
+               ("RSS", {"sort": "memory"}))
+    d = {**c, "rss": rss}
+    t += [
+        ("resources", "am I [running |][low on|short on|out of] {mem}(?)", d),
+        ("resources", "am I [running |][low on|short on|out of] [disk|disk space|space](?)", d, {"kind": "disk"}),
+        ("resources", "is the disk [full|almost full|nearly full|filling up](?)", d, {"kind": "disk"}),
+        ("resources", "[show|check|report] [the |][current |][cpu|cpu load|cpu usage|load average]", d,
+         {"kind": "cpu"}),
+        ("resources", "[what's|what is] the [current |][cpu load|load average|cpu usage](?)", d, {"kind": "cpu"}),
+        ("resources", "[show|check|report] [the |][memory|ram|memory usage|ram usage]", d, {"kind": "memory"}),
+        ("resources", "[show|check|report] [the |][disk|disk usage|disk space]", d, {"kind": "disk"}),
+        ("resources", "how much {mem} [is free|is available|is left|do I have]( left)(?)", d),
+        ("resources", "how much {mem} does this [box|machine] have available(?)", d),
+        ("resources", "[show|check|report] [all|overall|system] resources", d, {"kind": "all"}),
+        ("resources", "[show |check |][the |]overall resource [use|usage]", d, {"kind": "all"}),
+        ("resources", "[free space|disk space|disk usage] on {mount}(?)", d, {"kind": "disk"}),
+        ("processes", "[list|show] the top {n} {rss} hogs", d),
+        ("processes", "[list|show] the [heaviest|hungriest|biggest] processes by {rss}", d),
+        ("processes", "sort [the |]processes by {rss}", d),
+        ("processes", "which processes [hold|use] the most {rss}(?)", d),
+        ("processes", "top {rss} processes(, limit {n})", d),
+        ("processes", "[show|list] {n} processes [ordered|sorted] by {rss}", d),
+        ("journal", "[show |read |][the |]{unit} service journal", d),
+        ("journal", "[show |read |][the |]journal for {unit}(, last {jn} entries)", d),
+        ("journal", "{tag} [log|logs|journal] since {date}", d),
+        ("journal", "[show |read |][the |]journal {errs}", d),
+        ("journal", "[show |read |][the |]{errs} in the journal", d),
+        ("packages", "which package does {cmd} come from(?)", d, {"operation": "owner"}),
+        ("packages", "which package [ships|installed|provides|owns] {owned}(?)", d, {"operation": "owner"}),
+        ("services", "list all services( and their [state|status])", d, {"state": "all"}),
+        ("services", "list [all |]user services", d, {"state": "all", "scope": "user"}),
+        ("services", "list failed user services", d, {"state": "failed", "scope": "user"}),
+        ("services", "is the {uunit} user service [running|active](?)", d, {"scope": "user"}),
+        ("services", "is {uunit} running as a user service(?)", d, {"scope": "user"}),
+        ("services", "which services [have failed|failed](?)", d, {"state": "failed"}),
+    ]
     return t
 
 
@@ -452,6 +561,12 @@ def _agents_templates():
         ("agent", "[start|launch|open] {agent} in {dir} with model {model}", c),
         ("agent", "[start|launch|open] {agent} with model {model} in {dir}: {prompt}", c),
         ("agent", "[start|open] a new {agent} session in {dir}", c),
+        ("agent", "spawn {agent} in {dir}", c),
+        ("agent", "spawn {agent} in {dir}: {prompt}", c),
+        ("agent", "[start|launch|open|spawn] {agent} {place} in {dir}", c),
+        ("agent", "[start|launch|open|spawn] {agent} {place} in {dir}: {prompt}", c),
+        ("agent", "[start|launch|open|spawn] {agent} in {dir} using model {model}", c),
+        ("agent", "[start|launch|open|spawn] {agent} in {dir} using model {model}: {prompt}", c),
         ("wait", "wait [until|till|for] [the |]{s_agent}[ session|] in {s_dir} [is idle|is done|finishes|to finish]",
          c, {"for": "idle"}),
         ("wait", "wait [until|till] [the |]{s_agent}[ session|] in {s_dir} [needs input|asks something|is waiting for approval|asks for approval]",
@@ -470,8 +585,16 @@ def _apps_templates():
     import apps
     names = [(name, {"app": app}) for app, aliases in apps.LAUNCH_NAMES.items() for name in aliases]
     sections = [(name, {"section": section}) for section, aliases in apps.SECTION_NAMES.items() for name in aliases]
+    names += [(app, {"app": app}) for app in apps.LAUNCHABLE if (app, {"app": app}) not in names]
     c = {"app": names, "section": sections}
     return [
+        ("launch", "start a game of {app}", c),
+        ("launch", "play {app}", c),
+        ("settings", "{section} settings[ please|]", c),
+        ("settings", "open the {section} section of [the |]settings( screen)", c),
+        ("settings", "[take me to|jump to|go to|open] the {section} [section|page|tab] of [the |]settings( screen)", c),
+        ("settings", "open the settings screen for [the |]{section}", c),
+        ("settings", "I want to change the {section} settings, open them", c),
         ("launch", "[open|launch|start|run|fire up|bring up] [the |]{app}", c),
         ("launch", "[open|launch|start] [the |]{app}( in a new tab)[ please|]", c),
         ("launch", "[can you |please |]open [the |]{app}", c),
@@ -485,7 +608,8 @@ def _tmux_templates():
     c = {"target": _target, "name": copy("name", *TMUX_SESSIONS + ["scratch2", "build-7", "api_v2", "night"]),
          "new_name": copy("new_name", *("old", "ci-old", "api2", "archive", "done", "paused", "v2", "stage")),
          "sess": copy("target", *TMUX_SESSIONS), "cwd": _quoted("cwd", DIRS), "bcwd": copy("cwd", *DIRS),
-         "lines": number("lines", 1, 2000, (10, 20, 30, 50, 100, 200, 500))}
+         "lines": number("lines", 1, 2000, (10, 20, 30, 50, 100, 200, 500)),
+         "pct": [(f"%{n}", {"target": f"%{n}"}) for n in range(41)]}
     return [
         ("tmux_list", "[list|show] [the |all |my |][tmux |]sessions[.|]", c),
         ("tmux_list", "[ls|tmux ls|what tmux sessions are there|which sessions are running|list tmux sessions please]", c),
@@ -496,6 +620,18 @@ def _tmux_templates():
         ("tmux_new", "[create|start|open|make] a [new |][tmux |]session [named|called] {name}", c),
         ("tmux_new", "[create|start|open|make] a [new |][tmux |]session [named|called] {name} in {bcwd}", c),
         ("tmux_new", "tmux new -s {name}", c),
+        ("tmux_new", "create [tmux |]session {name}", c),
+        ("tmux_new", "[create|start|new] [tmux |]session {name} in {bcwd}", c),
+        ("tmux_read", "[read|show] [target |]{pct}", c),
+        ("tmux_list", "[which|what] sessions [exist|are there|are running|are open](?)", c),
+        ("tmux_list", "tmux list(-sessions)", c),
+        ("tmux_list", "list [current|every|all|all the|the current] [tmux |]sessions( on the server)", c),
+        ("tmux_list", "sessions?", c),
+        ("tmux_list", "what sessions does this tmux server have(?)", c),
+        ("tmux_read", "read the {sess} session", c),
+        ("tmux_read", "read pane {pct}, last {lines} lines", c),
+        ("tmux_read", "[tmux |]capture-pane -t {target}", c),
+        ("tmux_read", "what does {target} show(?)", c),
         ("tmux_read", "read {target}", c),
         ("tmux_read", "read {target} last {lines} lines", c),
         ("tmux_read", "[show|capture|read|get] the last {lines} lines [of|from] {target}", c),
@@ -558,12 +694,23 @@ def _logs_templates():
         ("logs_search", "find {query} in the [log|transcript] of pane {pane}", c),
         ("logs_search", "search the [raw |]log file {file} for {query}", c, {"provider": "raw"}),
         ("logs_source", "[show|get|read] [me |][the |]source [of|for] event {event}", c),
+        ("logs_events", "read events from the session [titled|named|called] {title}", c),
+        ("logs_search", "search pane {pane}'s [session|log|transcript] for {query}", c),
+        ("logs_search", "search [the |]session {title} for {query}", c),
+        ("logs_brief", "summarize the session {title}", c),
+        ("logs_events", "read the [plain-text|plain text|raw] log {file}", c, {"provider": "raw"}),
+        ("logs_search", "[look for|search for|find] {query} in {file}", c, {"provider": "raw"}),
+        ("logs_search", "search {file} for {query}", c, {"provider": "raw"}),
+        ("logs_source", "[raw source|the raw source|the source] of {event}", c),
+        ("logs_source", "show [the |]source of [event |]{event}", c),
     ]
 
 
 def _read_pane_templates():
+    unit = pool(("panes", {"what": "panes"}), ("tabs", {"what": "tabs"}), ("panes and tabs", {"what": "panes and tabs"}),
+                ("tabs and panes", {"what": "panes and tabs"}))
     c = {"pane": number("pane", 2, 999, ()), "lines": number("lines", 1, 1000, (10, 20, 30, 40, 50, 60, 80, 100,
-                                                                                 150, 200, 300, 500))}
+                                                                                 150, 200, 300, 500)), "unit": unit}
     return [
         ("read_pane", "[read|show|get|print|dump|capture|grab|fetch|view] pane {pane}", c),
         ("read_pane", "[read|show|get|capture] [the |][screen|text|output|contents] of pane {pane}", c),
@@ -579,6 +726,34 @@ def _read_pane_templates():
         ("read_pane", "get the text of pane {pane}, last {lines} lines", c),
         ("read_pane", "get-text pane {pane}", c),
         ("read_pane", "[show|read] the bottom {lines} lines of pane {pane}", c),
+        # wordings of experiment 11's development half
+        ("read_pane", "last {lines} lines [of|from|in] pane {pane}[ please|]", c),
+        ("read_pane", "[read|show|get|print|capture|fetch|grab|tail] pane {pane}, [last|only the last|the last] {lines} lines",
+         c),
+        ("read_pane", "[read|show|get|fetch|grab] the [last|most recent|latest] {lines} lines [of|in|from|out of] pane {pane}",
+         c),
+        ("read_pane", "tail -n {lines} pane {pane}", c),
+        ("read_pane", "tail pane {pane}", c),
+        ("read_pane", "[pull|fetch|get|grab|cat|show|read|scrape|capture|dump] the [screen|screen text|contents|output|"
+                      "visible screen|whole visible screen|text] [of|from|in] pane {pane}", c),
+        ("read_pane", "pane {pane} [contents|output|screen][ please|, please|]", c),
+        ("read_pane", "pane {pane}: what's on [screen|the screen](?)", c),
+        ("read_pane", "what's on [the |]screen in pane {pane}(?)", c),
+        ("read_pane", "what's the latest output in pane {pane}(?)", c),
+        ("read_pane", "[read|show|get] pane id {pane}", c),
+        ("read_pane", "[read|show|get] pane #{pane}", c),
+        ("read_pane", "[get|show|read|scrape|fetch] pane {pane}'s [screen|screen text|output|contents]", c),
+        ("read_pane", "[read|show|get] pane {pane}'s last {lines} lines", c),
+        ("read_pane", "show the tail of pane {pane}", c),
+        ("read_pane", "show the tail of pane {pane}, {lines} lines", c),
+        ("read_pane", "read pane {pane} without switching to it", c),
+        # the bundle's list of panes and tabs
+        ("list", "[list|show|show me|enumerate] [all |every |the |all the |open |all open |]{unit}", c),
+        ("list", "[list|show|show me|enumerate] [all |the |]{unit} [right now|in kilix|in all tabs|across all tabs]", c),
+        ("list", "what {unit} are [there|open]( [right now|in kilix|in kilix right now])(?)", c),
+        ("list", "[list|show] [the |all |every |]{unit} and their titles", c),
+        ("list", "list open tabs and the panes inside them", c, {"what": "panes and tabs"}),
+        ("list", "list every pane and tab", c, {"what": "panes and tabs"}),
     ]
 
 
@@ -588,6 +763,19 @@ TEMPLATES = {"files": _files_templates, "system": _system_templates, "agents": _
 
 
 # ---- what a row is checked against -----------------------------------------
+
+def _grammar_reads_at_all(job: str, request: str) -> bool:
+    """Whether the files or system grammar reads the request at all."""
+    if job == "files":
+        import files_job
+        try:
+            files_job.parse(request)
+        except ValueError:
+            return False
+        return True
+    import system_job
+    return bool(system_job.parse(request))
+
 
 def _grammar_reads(job: str, request: str, calls: list) -> bool:
     """Whether the job's grammar reads the request as these job calls."""
@@ -622,12 +810,28 @@ def admitted(job: str, request: str, calls: list) -> bool:
     """Whether a row's reading is one its job takes, as rows() keeps it."""
     if job == "panes":
         import pane_reads
+        import panes_bundle
+        if len(calls) == 1 and calls[0]["name"] == panes_bundle.LIST:
+            return calls[0]["arguments"].get("what") in ("panes", "tabs", "panes and tabs")
         return len(calls) == 1 and calls[0]["name"] == pane_reads.NAME and \
             pane_reads.check_args(calls[0]["arguments"]) is None
     got = job_schemas.to_job(job, calls)
     if got is None:
         return False
-    if job in ("files", "system", "agents", "apps"):
+    if job in ("files", "system"):
+        # Experiment 11, the owner's eighth answer: arm B admits a files or
+        # system answer that equals the grammar's reading or that the job's
+        # own checks of a proposal take (job_routes.files_checks,
+        # job_routes.system_checks). A row is kept on stricter terms: where
+        # the grammar reads the request, only as the grammar reads it, so
+        # that no row teaches a reading the grammar contradicts.
+        if _grammar_reads_at_all(job, request):
+            return _grammar_reads(job, request, got)
+        import job_routes
+        if job == "files":
+            return job_routes.files_checks(got) is not None
+        return job_routes.system_checks(request, got) is not None
+    if job in ("agents", "apps"):
         return _grammar_reads(job, request, got)
     if job == "tmux":
         import tmux_job
@@ -681,7 +885,7 @@ def rows(job: str, seed: int, per_template: int = 60, exclude: set | None = None
             for _ in range(reps):
                 written, args, spans = _fill(skeleton, pools, rng, chosen)
                 args = {**fixed, **args}
-                for text in _endings(written):
+                for text in _endings(written, spans):
                     counts["generated"] += 1
                     if same(text) in seen:
                         counts["same_as_another_row"] += 1

@@ -81,7 +81,10 @@ DIM, HIDDEN, EPOCHS, RATE = 8, 32, 40, 0.01
 CHECKED = 200       # examples of each net, spread over all it has, scored by PyTorch and again by the reader
 # What decides the rows, beside the generator's library: recorded in the manifest.
 ROW_CODE = ("actions.py", "tuning.py", "toolset.py", "panes_bundle_agent.py", "job_schemas.py", "job_rows.py",
-            "pane_reads.py")
+            "pane_reads.py",
+            # the checks job_rows.admitted asks whether a job takes a row
+            "job_routes.py", "files_job.py", "files_backend.py", "system_job.py", "system_normalize.py",
+            "agents.py", "apps.py", "tmux_job.py", "pty_job.py", "logs_words.py")
 # The job's eval sets that have gated and are no longer a gate: what --spent adds.
 SPENT = ("evals/dev.jsonl", "evals/test.jsonl") + tuple(f"evals/heldout-v{n}.jsonl" for n in range(2, 15))
 # The bundle's own kind (panes_bundle.LIST): what the list holds, and what the

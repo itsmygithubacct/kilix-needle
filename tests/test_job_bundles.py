@@ -1,7 +1,9 @@
 """The bundle widened to every job: its schemas (job_schemas), its training
 rows (job_rows), and the arms of experiment 11 over the real routes'
 functions (job_routes)."""
+import hashlib
 import io
+import json
 import os
 import shutil
 import sys
@@ -125,13 +127,22 @@ class Rows(unittest.TestCase):
                 for surface, _ in row["spans"]:
                     self.assertIn(surface, row["query"])
             if job == "panes":
-                self.assertEqual({row["actions"][0][0] for row in rows}, {PB.READ})
+                self.assertEqual({row["actions"][0][0] for row in rows}, {PB.READ, PB.LIST})
 
     def test_a_row_the_grammar_reads_otherwise_is_not_kept(self):
         # The files grammar reads this as a search in here, not in Downloads.
         self.assertFalse(job_rows.admitted("files", 'find text "x" in here',
                                            [call("search_text", text="x", scope="Downloads")]))
         self.assertTrue(job_rows.admitted("files", 'find text "x" in here', [call("search_text", text="x", scope="here")]))
+
+    def test_a_row_the_grammar_does_not_read_is_kept_when_arm_b_s_checks_take_it(self):
+        self.assertTrue(job_rows.admitted("files", "cat src/app.py here", [call("preview_file", path="src/app.py",
+                                                                                    scope="here")]))
+        # a hidden path: the file collector refuses it
+        self.assertFalse(job_rows.admitted("files", "cat .env here", [call("preview_file", path=".env", scope="here")]))
+        self.assertTrue(job_rows.admitted("system", "am I running low on memory?", [call("resources", kind="memory")]))
+        # the normalizer's checks: the request does not ask for the disk
+        self.assertFalse(job_rows.admitted("system", "am I running low on memory?", [call("resources", kind="disk")]))
 
     def test_the_same_seed_makes_the_same_rows(self):
         self.assertEqual(job_rows.rows("tmux", 3, per_template=2), job_rows.rows("tmux", 3, per_template=2))
@@ -255,11 +266,44 @@ class Arms(unittest.TestCase):
         self.assertEqual((got["stage"], got["calls"]), ("bundle", [["read", {"target": "build:0.1", "lines": 40}]]))
         routes = self.routes(tmux=Proposes([call("tmux_read", target="a b")]))
         self.assertEqual(routes.run("B", "tmux", "show me a b")["calls"], [])
-        # files: only the grammar's own reading
+        # files: the grammar's own reading; in B also one query the file
+        # collector's own checks take (the owner's eighth answer), in C not
         routes = self.routes(files=Proposes([call("search_text", text="TODO", scope="here")]))
         self.assertEqual(routes.run("B", "files", 'find text "TODO" in here')["calls"],
                          [["search_text", {"scope": "here", "text": "TODO"}]])
-        self.assertEqual(routes.run("B", "files", "grep for TODO around here")["calls"], [])
+        self.assertEqual(routes.run("B", "files", "grep for TODO around here")["calls"],
+                         [["search_text", {"scope": "here", "text": "TODO"}]])
+        self.assertEqual(routes.run("C", "files", "grep for TODO around here")["calls"], [])
+        routes = self.routes(files=Proposes([call("preview_file", path=".env", scope="here")]))
+        self.assertEqual(routes.run("B", "files", "cat .env here")["calls"], [])
+        routes = self.routes(files=Proposes([call("preview_file", path="a.md", scope="here"),
+                                             call("preview_file", path="b.md", scope="here")]))
+        self.assertEqual(routes.run("B", "files", "cat a.md and b.md here")["calls"], [])
+
+    def test_each_job_s_refusal_of_a_whole_request_is_kept_in_every_arm(self):
+        # a format character (right-to-left override): the files, tmux and pty
+        # grammars refuse the request before they read it, so B does too
+        routes = self.routes(files=Proposes([call("preview_file", path="src/app.py", scope="here")]),
+                             tmux=Proposes([call("tmux_read", target="build:0.1")]))
+        for arm in ("A", "B", "C"):
+            self.assertEqual(routes.run(arm, "files", "cat src/app.py here\u202e")["calls"], [], arm)
+            self.assertEqual(routes.run(arm, "tmux", "read build:0.1\x07")["calls"], [], arm)
+        self.assertEqual(routes.run("B", "files", "cat src/app.py here")["calls"],
+                         [["preview_file", {"scope": "here", "path": "src/app.py"}]])
+        self.assertEqual(routes.run("B", "files", "help")["calls"], [])
+
+    def test_in_b_a_system_answer_passes_the_normalizer_s_checks(self):
+        import system_job
+        routes = self.routes(system=Proposes([call("resources", kind="memory")]))
+        self.assertEqual(routes.run("B", "system", "am I running low on memory?")["calls"],
+                         [["resources", system_job.normalize("resources", {"kind": "memory"})]])
+        self.assertEqual(routes.run("A", "system", "am I running low on memory?")["stage"], "hint")
+        self.assertEqual(routes.run("C", "system", "am I running low on memory?")["calls"], [])
+        # the preflight: a state change
+        self.assertEqual(routes.run("B", "system", "restart nginx and show memory")["calls"], [])
+        # grounded: the request does not ask for the disk
+        routes = self.routes(system=Proposes([call("resources", kind="disk")]))
+        self.assertEqual(routes.run("B", "system", "am I running low on memory?")["calls"], [])
 
     def test_a_bundle_s_read_of_a_pane_is_checked_against_the_desktop(self):
         routes = self.routes(panes=Proposes([call("read_pane", pane=301, lines=20)]))
@@ -333,6 +377,78 @@ class SameAsTheRealRoutes(unittest.TestCase):
                 self.assertTrue(items and all(i["kind"].startswith("list_") for i in items), request)
                 continue
             self.assertEqual([[i["kind"], i["args"]] for i in items], mine, request)
+
+
+class TheCheckedInBundles(unittest.TestCase):
+    """The bundles as checked in (job-bundles/README.md, "The files as
+    checked in"), in arm B on the tests' desktop. The requests are made up."""
+
+    ANSWERED = {
+        ("files", "show me the contents of /etc/hosts"): [["preview_file", {"scope": "/etc", "path": "hosts"}]],
+        ("files", "list the largest files in Documents"): [["list_files", {"scope": "Documents", "order": "size"}]],
+        ("system", "am I low on memory"): [["resources", {"path": "/", "kind": "memory"}]],
+        ("system", "is nginx running"): [["services", {"state": "all", "scope": "system", "unit": "nginx.service"}]],
+        ("system", "which package owns /usr/bin/jq"): [["packages", {"operation": "owner", "target": "/usr/bin/jq"}]],
+        ("agents", "wait until the claude session in ~/x finishes"): [["wait", {"session": "claude@~/x",
+                                                                                "for": "idle"}]],
+        ("apps", "take me to the voice settings"): [["settings", {"section": "voice"}]],
+        ("tmux", "create session docs"): [["new", {"name": "docs"}]],
+        ("tmux", "read %3"): [["read", {"target": "%3"}]],
+        ("pty", "list pty sessions"): [["list", {}]],
+        ("logs", "show the source of event ev-1"): [["source", {"event_id": "ev-1"}]],
+        # a mark just inside a closing quote is the quoted text's own
+        ("logs", 'search pane 301\'s log for "panic!"'): [["search", {"session": "301", "query": "panic!"}]],
+        # risky, and asked for in a whole training clause
+        ("agents", "start claude in ~/x"): [["agent", {"agent": "claude", "dir": "~/x"}]],
+        ("apps", "open the pdf viewer"): [["launch", {"app": "kilix-pdf"}]],
+    }
+    # Nothing is answered: no tool of the job does it, or the job's checks
+    # refuse what the bundle read (a hidden or parent path; "src" is no scope
+    # the file collector resolves).
+    NOT_ANSWERED = (("files", "delete src/app.py"), ("files", "show me .env"), ("files", "read ../secrets.txt"),
+                    ("files", "search src for TODO"), ("system", "restart nginx"),
+                    ("apps", "uninstall the pdf viewer"), ("tmux", "kill session docs"),
+                    ("pty", "end pty session build"), ("logs", "delete the logs"),
+                    ("agents", "tell me what claude is doing"))
+
+    @classmethod
+    def setUpClass(cls):
+        cls.bundles = {}
+        for job in job_schemas.JOBS:
+            if not (PB.directory(job) / "manifest.json").is_file():
+                raise unittest.SkipTest(f"no {job} bundle is checked in")
+            cls.bundles[job] = PB.Bundle.load(PB.directory(job))
+        cls.routes = JR.Routes(cls.bundles, {}, DESKTOP)
+
+    def test_each_is_its_job_s_with_the_second_reader_s_kinds_of_experiment_11(self):
+        for job, bundle in self.bundles.items():
+            self.assertEqual(bundle.job, job)
+            if job != "panes":
+                self.assertEqual(set(bundle.tools), set(job_schemas.SCHEMAS[job]), job)
+                self.assertEqual(bundle.second_kinds, frozenset({"wait"} if job == "agents" else ()), job)
+
+    def test_each_was_written_by_this_reader_and_trainer_and_answers_its_rows_as_labelled(self):
+        for job in self.bundles:
+            manifest = json.loads((PB.directory(job) / "manifest.json").read_text())
+            self.assertEqual(manifest["job"], job)
+            self.assertEqual(sorted(manifest["code"]),
+                             sorted(("panes_bundle.py", "panes_bundle_train.py") + PBT.ROW_CODE), job)
+            for source in ("panes_bundle.py", "panes_bundle_train.py"):
+                self.assertEqual(manifest["code"][source],
+                                 hashlib.sha256((PBT.REPO / source).read_bytes()).hexdigest(), (job, source))
+            for key in ("reads_its_rows", "reads_its_rows_with_the_second_reader"):
+                own = manifest[key]
+                self.assertEqual((own["as_labelled"], own["risky_and_not_labelled"]), (own["answered"], 0),
+                                 (job, key))
+
+    def test_what_they_answer_in_b(self):
+        for (job, request), calls in self.ANSWERED.items():
+            got = self.routes.run("B", job, request)
+            self.assertEqual((got["stage"], got["calls"]), ("bundle", calls), (job, request))
+        for job, request in self.NOT_ANSWERED:
+            got = self.routes.run("B", job, request)
+            self.assertEqual(got["calls"], [], (job, request))
+            self.assertNotEqual(got["stage"], "bundle", (job, request))
 
 
 class Scoring(unittest.TestCase):

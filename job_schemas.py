@@ -10,8 +10,12 @@ and values the job's call builds from (a "last N days" is a closed value and a
 number). `to_job` turns a reading into the job's own call, the way the job's
 grammar writes it, and the job's own checks then decide, unchanged:
 
-- files: the call must equal the files grammar's reading (files_job.interpret);
-- system: the queries must equal the system grammar's (system_job.interpret);
+- files: the call must equal the files grammar's reading (files_job.interpret),
+  or, in arm B of experiment 11, be one query the file collector's own checks
+  take (job_routes.files_checks);
+- system: the queries must equal the system grammar's (system_job.interpret),
+  or, in arm B, pass the checks the system normalizer makes of a model's
+  proposal (job_routes.system_checks);
 - agents: the calls must match the agents grammar's readings (agents.interpret);
 - apps: the apps reading (apps.interpret);
 - tmux, pty: the grammar's own sentence for the call reads back as the call
@@ -145,6 +149,8 @@ def closed_values(job: str) -> set:
 
 def _files_scope(text):
     import files_job
+    if text.strip() in (".", "./"):
+        return "here"
     for candidate in (text, f'"{text}"' if '"' not in text else None):
         if candidate is None:
             continue
@@ -159,6 +165,8 @@ def _files(tool, a):
     import files_job
     if tool == "preview_file":
         path = a["path"]
+        if path.startswith("./"):
+            path = path[2:]
         if "scope" in a:
             scope = _files_scope(a["scope"])
             return None if scope is None else {"name": tool, "arguments": {"scope": scope, "path": path}}

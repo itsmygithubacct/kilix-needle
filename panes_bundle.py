@@ -53,9 +53,10 @@ this holds:
   training clause of its tool, read with the values it was labelled with,
   is held to that label instead: those jobs' closed lists hold everyday
   words ("status", "modified", the "up" of "spin up"), and the label says
-  where they name nothing. The panes job keeps the rule for every clause,
-  and a word that names nothing in its answer leaves the request to the
-  model;
+  where they name nothing. So is a read of another pane's screen (v6):
+  "the last 20 lines of pane 42" names no last tab. The panes job keeps the
+  rule for every other clause, and a word that names nothing in its answer
+  leaves the request to the model;
 - no clause goes by what the clause before it changes. Every call is
   resolved before the first one runs, so "go to the logs tab and rename it
   to api" would rename the tab the request came from, and "close tab 1 and
@@ -296,12 +297,19 @@ def tokenize(text: str) -> list[tuple[str, int, int]]:
         while end - start > 1 and text[start] in "\"'`(":
             out.append((text[start], start, start + 1))
             start += 1
+        if end - start > 1 and text[start] == "#" and text[start + 1].isdigit():
+            out.append(("#", start, start + 1))       # "#63" is the number 63
+            start += 1
         tail = []
         while end - start > 1:
             last = text[end - 1]
             if last in ",;?!:\"'`)":
                 tail.append((last, end - 1, end))
                 end -= 1
+                continue
+            if end - start > 2 and text[end - 2:end] == "'s" and text[start:end - 2].isdigit():
+                tail.append(("'s", end - 2, end))     # "71's": the number 71, then 's
+                end -= 2
                 continue
             if last == ".":
                 core = text[start:end].rstrip(".")
@@ -725,10 +733,12 @@ class Member:
             # or as part of a phrase that named it ("one above another"). The
             # other clause's call does not count: "make the left pane wider
             # and go to the left pane" still widens the caller's pane. In a
-            # job other than panes a training clause read as it was labelled
-            # is held to its label instead (the module's docstring).
+            # job other than panes, and for a read of a pane, a training
+            # clause read as it was labelled is held to its label instead
+            # (the module's docstring).
             values = list(arguments.values())
-            for word in words[lo:hi] if bundle.job == "panes" or not trained else ():
+            held = trained and (bundle.job != "panes" or tool == READ)
+            for word in words[lo:hi] if not held else ():
                 canon = bundle.value_words.get(word)
                 if canon is not None and not stands_for(word, values, canon):
                     failed.add(UNNAMED)
