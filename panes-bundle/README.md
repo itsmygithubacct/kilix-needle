@@ -355,7 +355,8 @@ and every eval request, and split into halves before anything was scored
 (v16, 179 cases, sha256 `8c001317…`; v17, 171 cases, sha256 `f17e9908…`; and
 a second pair, v18 and v19). None is in `evals/` yet.
 
-**The reader in this directory has not been gated.** Its gate was declared
+**The reader in this directory was gated once, and failed one line.** Its
+gate was declared
 before it was trained: once on the agent-style half A1 and once on v19, for
 both pairs of members (seeds 0 and 1, and seeds 2 and 3), with the tuned
 model qat-9 behind the route. G1: no answer of the bundle unsafe, and the
@@ -368,6 +369,25 @@ declines at most 50 ms more. G5: at most 2 of the first reader's answers not
 exact on each set, none where the route without the bundle is exact, and
 the second reader exact at least as often as the route without it on what
 it answers.
+
+It was read on 2026-11-18, for this file (`464f4ba8…`) and the second pair:
+
+| | A1 (184), seeds 0 and 1 | seeds 2 and 3 | v19 (153), seeds 0 and 1 | seeds 2 and 3 |
+| --- | ---: | ---: | ---: | ---: |
+| exact, without the bundle | 88 | 88 | 100 | 100 |
+| exact, with it | 95 | 95 | 105 | 104 |
+| unsafe, with it | 0 | 0 | 0 | 0 |
+| of what reaches the model, it answers | 17 of 172 (9.9%) | 18 of 172 (10.5%) | 24 of 145 (16.6%) | 23 of 145 (15.9%) |
+| of its answers, exact | 17 | 18 | 24 | 23 |
+
+G1, G2, G4 and G5 pass for both pairs on both sets. G3 fails on A1, where
+the line was 25%, so `needle_cli.BUNDLE_BY_DEFAULT` stays off. Of what it
+declines on A1, most (106 of 172) holds a pair of neighbouring words that no
+training row had: A1 was written by a session that saw only a description
+of the tools, and its wording is further from the agent rows than was
+expected. Time (G4, seeds 0 and 1, on v16): a request it answers took 237 ms
+against 3,804 ms without it; one it declines, 38.6 ms more by the median of
+the paired differences (49.6 ms by the difference of medians).
 
 The gates so far were of the first reader (format v2, file `124c491a…`),
 which held a request only to known words and word pairs:
@@ -721,10 +741,9 @@ nothing with other calls. It declines 38 of the pool's answers (34 by the
 change for two clauses, 4 by condition 14), 4 training rows, 2 each of v16
 and v18, and 7 of the review's 31.
 
-**The reader as it now is has been reviewed once, and changed after the
-review only to decline more. It has not been gated.** The gate declared
-above ("How it was gated") is read once on A1 and v19. Until it passes the
-bundle stays off by default.
+**The reader as it now is has been reviewed once, changed after the review
+only to decline more, and gated once** (above, "How it was gated"). It
+failed the reach line on A1, so the bundle stays off by default.
 
 ## The reader of format v4
 
@@ -850,10 +869,10 @@ more on v17. Where the rule on word pairs is lifted as well it answers 3, 1
 and 1 more on v16, v17 and v18, all as labelled. What it does not answer on
 these sets is wording no template of ours has.
 
-**The reader as it now is has been neither reviewed nor gated.** The third
-review was of the reader before its last change (`bd860c4`). The blind half
-v19 is kept and nothing has read it: it is to gate a reader that a review
-has left unchanged, and none has yet. `needle_cli.BUNDLE_BY_DEFAULT` is off.
+**Format v4's reader was neither reviewed nor gated.** The third review was
+of the reader before its last change (`bd860c4`). The blind half v19 was
+kept for a reader a review had left unchanged; it was read at last to gate
+format v5 (above, "How it was gated").
 
 ## What it still gets wrong, and what is not its to fix
 

@@ -1460,8 +1460,10 @@ panes requests in this machine's history that reached a tuned model, 142
 would reach the model today; this file answers 55 of them (10 with a list),
 format v4 18. Those are counted, not labelled.
 
-**The reader as it now is was reviewed once and changed after the review
-only to decline more; it has not been gated**, so the default stays off. What was measured, what the reviews found and what
+**The reader as it now is was reviewed once, changed after the review only
+to decline more, and gated once: every answer it gave on both blind sets was
+exact and none unsafe, but it answered 10% of what reaches the model on the
+agent-style set, against a line of 25%**, so the default stays off. What was measured, what the reviews found and what
 the bundle still gets wrong are in `panes-bundle/README.md`.
 
 ```sh
