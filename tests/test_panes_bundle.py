@@ -715,9 +715,30 @@ class Artifact(unittest.TestCase):
         damaged = PB.MAGIC + len(encoded).to_bytes(4, "little") + encoded + raw[start + size:]
         with self.assertRaisesRegex(PB.BundleError, "runs of"):
             PB.Bundle.load(directory(self, damaged))
-        old = PB.MAGIC.replace(b"5", b"4") + raw[len(PB.MAGIC):]
+        old = PB.MAGIC.replace(b"6", b"4") + raw[len(PB.MAGIC):]
         with self.assertRaisesRegex(PB.BundleError, "not a panes bundle"):
             PB.Bundle.load(directory(self, old))
+        # a header for no job the reader knows
+        encoded = json.dumps({**head, "job": "weather"}).encode()
+        damaged = PB.MAGIC + len(encoded).to_bytes(4, "little") + encoded + raw[start + size:]
+        with self.assertRaisesRegex(PB.BundleError, "no job"):
+            PB.Bundle.load(directory(self, damaged))
+
+    def test_a_file_of_the_format_before_is_a_panes_bundle(self):
+        raw = packed()
+        start = len(PB.MAGIC) + 4
+        size = int.from_bytes(raw[len(PB.MAGIC):start], "little")
+        head = json.loads(raw[start:start + size])
+        self.assertEqual((head["job"], PB.Bundle(raw).job), ("panes", "panes"))
+        (magic, (schema, _)), = PB.OLDER.items()
+        del head["job"]
+        encoded = json.dumps({**head, "schema": schema}).encode()
+        old = magic + len(encoded).to_bytes(4, "little") + encoded + raw[start + size:]
+        self.assertEqual(PB.Bundle(old).job, "panes")
+        # a v5 header that names a job is still a panes bundle's
+        encoded = json.dumps({**head, "schema": schema, "job": "tmux"}).encode()
+        self.assertEqual(PB.Bundle(magic + len(encoded).to_bytes(4, "little") + encoded + raw[start + size:]).job,
+                         "panes")
 
     def test_one_member_is_no_bundle(self):
         # It answers when its members agree, and one agrees with itself about anything.
@@ -981,7 +1002,8 @@ class TrainerRefusals(unittest.TestCase):
         (folder / "a" / "one.txt").write_text("two")
         self.assertNotEqual(before, PBT.tree_digest(folder))
         self.assertIsNone(PBT.library_commit(folder / "no-such-checkout"))
-        self.assertEqual(PBT.ROW_CODE, ("actions.py", "tuning.py", "toolset.py", "panes_bundle_agent.py"))
+        self.assertEqual(PBT.ROW_CODE, ("actions.py", "tuning.py", "toolset.py", "panes_bundle_agent.py",
+                                        "job_schemas.py", "job_rows.py", "pane_reads.py"))
 
 
 class WhatTheReviewsFound(unittest.TestCase):

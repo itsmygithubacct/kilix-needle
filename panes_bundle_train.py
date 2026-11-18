@@ -48,6 +48,14 @@ against the model (the standard of the experiment that chose it). Before
 anything is written the file is also read with the second reader on for every
 kind, and must answer its training rows as they are labelled that way too.
 
+`--job JOB` trains the bundle of another job (job_schemas.py: its tools, made
+for reading) on the rows of job_rows.py, made from `--job-rows SEED` with
+`--job-per-template` examples of each template, into job-bundles/JOB/. For
+the panes job `--job-rows SEED` adds the rows of job_rows.py (the reads of a
+pane's text) to the others. Every row is one the job's own checks take as it
+is labelled (job_rows.admitted), and so is every answer the file gives to its
+own rows before it is written.
+
 Training needs PyTorch (a CPU is enough: minutes). Reading needs nothing.
 """
 from __future__ import annotations
@@ -72,7 +80,8 @@ SEPARATORS = {"and", "then", ",", ";"}      # used only to label training rows
 DIM, HIDDEN, EPOCHS, RATE = 8, 32, 40, 0.01
 CHECKED = 200       # examples of each net, spread over all it has, scored by PyTorch and again by the reader
 # What decides the rows, beside the generator's library: recorded in the manifest.
-ROW_CODE = ("actions.py", "tuning.py", "toolset.py", "panes_bundle_agent.py")
+ROW_CODE = ("actions.py", "tuning.py", "toolset.py", "panes_bundle_agent.py", "job_schemas.py", "job_rows.py",
+            "pane_reads.py")
 # The job's eval sets that have gated and are no longer a gate: what --spent adds.
 SPENT = ("evals/dev.jsonl", "evals/test.jsonl") + tuple(f"evals/heldout-v{n}.jsonl" for n in range(2, 15))
 # The bundle's own kind (panes_bundle.LIST): what the list holds, and what the
@@ -80,13 +89,19 @@ SPENT = ("evals/dev.jsonl", "evals/test.jsonl") + tuple(f"evals/heldout-v{n}.jso
 # must account for and the list does not need.
 LIST_ARGS = (("what", "enum", None, None), ("about", "ref", None, None))
 LIST_WHAT = ("panes", "tabs", "panes and tabs")
+# The bundle's other kind, a read of a pane's text (panes_bundle.READ): the
+# pane's id, and how many of its last lines.
+READ_ARGS = (("pane", "int", 1, 999_999_999), ("lines", "int", 1, 1000))
 _ID = re.compile(r"(?:id|pane):[0-9]+")
 
 
-def schema() -> dict:
+def schema(job: str = "panes") -> dict:
     """Each tool's arguments as the bundle treats them: a value of a closed
     list (enum), a flag, a number in a range (int), a pane or tab (ref: a word
-    of place or copied text) or free text."""
+    of place or copied text) or free text. Another job's are job_schemas'."""
+    if job != "panes":
+        import job_schemas
+        return job_schemas.schema(job)
     from actions import TOOLS
     tools = {}
     for tool in TOOLS:
@@ -102,6 +117,7 @@ def schema() -> dict:
                 args.append([key, "ref" if key in ("pane", "tab") else "text", None, None])
         tools[tool["name"]] = {"args": args, "required": list(tool["parameters"].get("required", []))}
     tools[PB.LIST] = {"args": [list(arg) for arg in LIST_ARGS], "required": ["what"]}
+    tools[PB.READ] = {"args": [list(arg) for arg in READ_ARGS], "required": ["pane"]}
     return tools
 
 
@@ -307,8 +323,11 @@ def agent_rows(seed: int, per_template: int, rows: list[dict], tools: dict, excl
       as the other rows left it."""
     import panes_bundle_agent as agent
     from actions import Action, interpret
-    made = agent.rows(seed, per_template)
+    reads = PB.READ in tools
+    made = agent.rows(seed, per_template, reads=reads)
     out = collections.Counter(generated=len(made))
+    if reads:
+        out["left_out_as_reads"] = len(agent.rows(seed, per_template)) - len(made)
     present = {agent.fold(row["query"]) for row in rows}
     kept, why = [], collections.defaultdict(collections.Counter)
     for row in made:
@@ -464,7 +483,7 @@ def prepare(row: dict, tools: dict):
     return {"words": words, "clauses": out, "separators": separators}
 
 
-def ground(prepared: list[dict]) -> dict:
+def ground(prepared: list[dict], job: str = "panes") -> dict:
     """What the reader holds a request to, beside words and pairs: for each
     tool the readings of its training clauses (PB.reading_line: the tool of
     the clause before it, the clause with each copied text replaced by a
@@ -503,10 +522,10 @@ def ground(prepared: list[dict]) -> dict:
             "copied": {key: sorted(words) for key, words in sorted(copied.items())},
             "frame_runs": {tool: sorted(lines) for tool, lines in frame_runs.items()},
             "closed_sets": {tool: sorted(lines) for tool, lines in closed_sets.items()},
-            "said": sorted(closed_values())}
+            "said": sorted(closed_values(job))}
 
 
-def examples(rows: list[dict], tools: dict) -> tuple[dict, set, set, dict]:
+def examples(rows: list[dict], tools: dict, job: str = "panes") -> tuple[dict, set, set, dict]:
     """Training examples for every net, the known words and the known pairs."""
     prepared, skipped = [], 0
     for row in rows:
@@ -550,7 +569,7 @@ def examples(rows: list[dict], tools: dict) -> tuple[dict, set, set, dict]:
                     data.setdefault(f"span {clause['tool']} {key}", []).append(
                         ([PB.word_features(mine, i) for i in range(len(mine))], a, b))
     return data, known, pairs, {"rows": len(rows), "rows_used": len(prepared), "rows_skipped": skipped,
-                                "ground": ground(prepared)}
+                                "ground": ground(prepared, job)}
 
 
 def value_words(rows: list[dict]) -> dict:
@@ -577,10 +596,14 @@ def value_words(rows: list[dict]) -> dict:
     return {word: sorted(canon.get(word, ())) for word in sorted(seen) if named[word] == seen[word]}
 
 
-def closed_values() -> set:
+def closed_values(job: str = "panes") -> set:
     """Every value of a closed list: the tools' enumerated values (sides,
     layouts, directions) and the words of place, but not "current", which
-    names the caller's own pane or tab and is as often left out."""
+    names the caller's own pane or tab and is as often left out. Another
+    job's are those of its schema (job_schemas.closed_values)."""
+    if job != "panes":
+        import job_schemas
+        return {str(value) for value in job_schemas.closed_values(job)}
     from actions import TOOLS
     values = {value for value in PB.CANON if value != "current"}
     for tool in TOOLS:
@@ -589,7 +612,7 @@ def closed_values() -> set:
     return values
 
 
-def closed_words(rows: list[dict]) -> dict:
+def closed_words(rows: list[dict], job: str = "panes") -> dict:
     """{word: the values it is another word for}, for every word that alone
     named a value of a closed list in some training row ("top" for above),
     and for each such value itself. value_words holds the words that named a
@@ -601,7 +624,7 @@ def closed_words(rows: list[dict]) -> dict:
     def words(text):
         return [t[0].lower() for t in PB.tokenize(str(text))]
 
-    closed = closed_values()
+    closed = closed_values(job)
     canon, alone = collections.defaultdict(set), set(closed)
     for row in rows:
         for surface, bound in row["spans"]:
@@ -727,7 +750,7 @@ def same_as_trained(raw: bytes, checks: list[dict]) -> list[dict]:
     return out
 
 
-def reads_its_rows(raw: bytes, rows: list[dict], second: bool = False) -> dict:
+def reads_its_rows(raw: bytes, rows: list[dict], second: bool = False, job: str = "panes") -> dict:
     """The file read as a request meets it (Bundle.read, then the checks as
     needle_cli.checks_agree holds a proposal to them), on every row it was
     trained on: how many it answers, how many of those as the row is
@@ -737,7 +760,11 @@ def reads_its_rows(raw: bytes, rows: list[dict], second: bool = False) -> dict:
     is as labelled when it lists what the row's list does.
 
     `second`: with the second reader switched on for every kind. A file is
-    written whatever this finds; the manifest records it."""
+    written whatever this finds; the manifest records it.
+
+    A read of a pane meets pane_reads' checks of its arguments. Another job's
+    answer meets that job's checks as job_rows.admitted holds a row to them,
+    and is as labelled when its calls are the row's."""
     from actions import Action, interpret
     from evaluate import _norm, expected
     from needle_cli import checks_agree
@@ -748,6 +775,17 @@ def reads_its_rows(raw: bytes, rows: list[dict], second: bool = False) -> dict:
         texts: list = []
         calls, _ = bundle.read(row["query"], texts)
         if not calls:
+            continue
+        if job != "panes" or calls[0]["name"] == PB.READ:
+            import job_rows
+            if not job_rows.admitted(job, row["query"], calls):
+                out["proposed_and_dropped"] += 1
+                continue
+            want = [[kind, dict(args)] for kind, args in row["actions"]]
+            out["answered"] += 1
+            out["as_labelled"] += [[c["name"], c["arguments"]] for c in calls] == want
+            out["risky_and_not_labelled"] += any(PB.risky(c) and [c["name"], c["arguments"]] not in want
+                                                 for c in calls)
             continue
         if calls[0]["name"] == PB.LIST:
             out["answered"] += 1
@@ -777,7 +815,7 @@ def refuse_misread_rows(on_rows: dict) -> None:
 
 def pack(members: list[tuple[int, dict]], known: set, pairs: set, tools: dict, free_text: list[str],
          dim: int = DIM, hidden: int = HIDDEN, value_words: dict | None = None,
-         ground: dict | None = None) -> bytes:
+         ground: dict | None = None, job: str = "panes") -> bytes:
     """The bundle as one file (the layout is described in panes_bundle).
 
     members: [(seed, {net: (feature names, outputs, flat weights)})]. All
@@ -792,7 +830,7 @@ def pack(members: list[tuple[int, dict]], known: set, pairs: set, tools: dict, f
     number = {name: n for n, name in enumerate(names)}
     ground = {"readings": {}, "separators": sorted(SEPARATORS), "clauses_max": 2, "copy_max": {}, "copied": {},
               "frame_runs": {}, "closed_sets": {}, "said": [], **(ground or {})}
-    head = {"schema": PB.SCHEMA, "dim": dim, "hidden": hidden, "known": sorted(known), "tools": tools,
+    head = {"schema": PB.SCHEMA, "job": job, "dim": dim, "hidden": hidden, "known": sorted(known), "tools": tools,
             "free_text": sorted(free_text), "value_words": value_words or {}, "nets": {}, "members": [],
             "separators": sorted(ground["separators"]), "clauses_max": int(ground["clauses_max"]),
             "copy_max": ground["copy_max"], "copied": {key: sorted(words) for key, words in ground["copied"].items()},
@@ -849,36 +887,40 @@ def sha256_file(path: Path) -> str:
 
 
 def write(out: Path, rows: list[dict], row_stats: dict, seeds: list[int], free_text: list[str],
-          name: str, log=print, second_kinds=()) -> dict:
+          name: str, log=print, second_kinds=(), job: str = "panes", misread_to: str | None = None) -> dict:
     if len(set(seeds)) != len(seeds) or len(seeds) < PB.MEMBERS_MIN:
         raise SystemExit(f"a bundle answers when its members agree: it takes at least {PB.MEMBERS_MIN} different seeds")
-    tools = schema()
+    tools = schema(job)
     if any(kind not in tools and kind != PB.COMPOUND for kind in second_kinds):
         raise SystemExit(f"the second reader cannot answer {sorted(set(second_kinds) - set(tools))}")
-    data, known, pairs, used = examples(rows, tools)
+    data, known, pairs, used = examples(rows, tools, job)
     trained, checks = [], []
     for seed in seeds:
         log(f"member seed {seed}")
         nets, sampled = train_member(data, seed, log)
         trained.append((seed, nets))
         checks.append(sampled)
-    always, closed = value_words(rows), closed_words(rows)
+    always, closed = value_words(rows), closed_words(rows, job)
     ground_ = used.pop("ground")
-    raw = pack(trained, known, pairs, tools, free_text, value_words={**closed, **always}, ground=ground_)
+    raw = pack(trained, known, pairs, tools, free_text, value_words={**closed, **always}, ground=ground_, job=job)
     same = same_as_trained(raw, checks)
     if any(member["another_output"] for member in same):
         raise SystemExit(f"the file does not read as it was trained ({same})")
-    on_rows = reads_its_rows(raw, rows)
+    on_rows = reads_its_rows(raw, rows, job=job)
     log(f"on its own rows: {on_rows}")
-    refuse_misread_rows(on_rows)
-    on_rows_second = reads_its_rows(raw, rows, second=True)
+    on_rows_second = reads_its_rows(raw, rows, second=True, job=job)
     log(f"on its own rows, with the second reader on for every kind: {on_rows_second}")
+    if misread_to and any(n["as_labelled"] != n["answered"] or n["risky_and_not_labelled"]
+                          for n in (on_rows, on_rows_second)):
+        Path(misread_to).write_bytes(raw)
+        log(f"the file that misreads its rows is kept in {misread_to}, to be looked into; it is no bundle")
+    refuse_misread_rows(on_rows)
     refuse_misread_rows(on_rows_second)
     out.mkdir(parents=True, exist_ok=True)
     (out / PB.FILE).write_bytes(raw)
     import torch
     manifest = {
-        "schema": PB.MANIFEST_SCHEMA, "name": name, "file": PB.FILE,
+        "schema": PB.MANIFEST_SCHEMA, "job": job, "name": name, "file": PB.FILE,
         "sha256": hashlib.sha256(raw).hexdigest(), "bytes": len(raw),
         "members": [{"seed": seed, "nets": len(nets),
                      "weights": sum(len(flat) for _, _, flat in nets.values()), "read_as_trained": check}
@@ -911,13 +953,20 @@ def write(out: Path, rows: list[dict], row_stats: dict, seeds: list[int], free_t
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--out", default=str(PB.DIRECTORY))
+    parser.add_argument("--job", choices=PB.JOBS, default="panes")
+    parser.add_argument("--out", help="where to write the bundle (the job's own directory if not given)")
+    parser.add_argument("--job-rows", type=int, metavar="SEED",
+                        help="rows of job_rows.py made from this seed: another job's rows (seed 0 if not given), "
+                             "or added to the panes job's")
+    parser.add_argument("--job-per-template", type=int, default=60)
     parser.add_argument("--seeds", type=int, nargs="+", default=[0, 1])
     parser.add_argument("--per-template", type=int, help="examples of each template (the tuner's own number if not given)")
     parser.add_argument("--free-text", nargs="*", default=[],
                         help="tools whose copied text may hold word pairs not seen in training")
     parser.add_argument("--rows", help="read rows from this file (query, actions, spans) and do not generate")
     parser.add_argument("--save-rows", help="also write the rows used to this file")
+    parser.add_argument("--misread-to", help="if the file answers one of its rows otherwise than labelled, keep it "
+                                             "in this file (to look into; nothing reads it as a bundle)")
     parser.add_argument("--spent", action="store_true",
                         help="add the cases of the job's spent eval sets (never a current gate set)")
     parser.add_argument("--agent", type=int, metavar="SEED",
@@ -930,13 +979,18 @@ def main(argv: list[str] | None = None) -> int:
                         help="the kinds (tools, or 'compound') the second reader answers")
     parser.add_argument("--name", default="")
     args = parser.parse_args(argv)
-    if args.exclude_history and args.agent is None:
-        parser.error("--exclude-history goes with --agent")
+    if args.exclude_history and args.agent is None and args.job_rows is None:
+        parser.error("--exclude-history goes with --agent or --job-rows")
+    if args.job != "panes" and (args.spent or args.agent is not None or args.exclude_history):
+        parser.error("--spent, --agent and --exclude-history are the panes job's")
+    out = Path(args.out) if args.out else PB.directory(args.job)
     if args.rows:
         refuse_gates([os.path.abspath(args.rows)])
         raw_rows = Path(args.rows).read_bytes()
         rows = [json.loads(line) for line in raw_rows.decode("utf-8").splitlines() if line.strip()]
         stats = {"source": args.rows, "source_sha256": hashlib.sha256(raw_rows).hexdigest()}
+    elif args.job != "panes":
+        rows, stats = [], {}
     else:
         rows, stats = build_rows(args.per_template)
     if args.spent:
@@ -949,12 +1003,37 @@ def main(argv: list[str] | None = None) -> int:
         rows += more
         stats["agent"] = {**made, "seed": args.agent, "per_template": args.agent_per_template,
                           "history_excluded": args.exclude_history, "history_requests_compared": compared}
+    if args.job != "panes" and not args.rows or args.job == "panes" and args.job_rows is not None:
+        import job_rows
+        import panes_bundle_agent as agent
+        seed = args.job_rows if args.job_rows is not None else 0
+        made, counts = job_rows.rows(args.job, seed, args.job_per_template)
+        # Two rows are the same when they differ only in case and spaces: the
+        # reader's frame holds a final mark ("list sessions." is not "list
+        # sessions"). A history request is left out with or without one.
+        present = {job_rows.same(row["query"]) for row in rows}
+        exclude, compared = history_requests() if args.exclude_history else (set(), 0)
+        kept = collections.Counter()
+        for row in made:
+            key = job_rows.same(row["query"])
+            if key in present:
+                kept["same_as_another_row"] += 1
+            elif agent.fold(row["query"]) in exclude:
+                kept["same_as_a_history_request"] += 1
+            else:
+                present.add(key)
+                rows.append({k: row[k] for k in ("query", "actions", "spans")})
+                kept["kept"] += 1
+        stats["job_rows"] = {"seed": seed, "per_template": args.job_per_template, "cap": job_rows.CAP,
+                             "made": {k: v for k, v in counts.items() if not k.startswith("not_admitted ")},
+                             **dict(kept), "history_excluded": args.exclude_history,
+                             "history_requests_compared": compared}
     if args.save_rows:
         with open(args.save_rows, "w", encoding="utf-8") as handle:
             for row in rows:
                 handle.write(json.dumps(row, ensure_ascii=False) + "\n")
-    manifest = write(Path(args.out), rows, stats, args.seeds, args.free_text, args.name,
-                     second_kinds=args.second_kinds)
+    manifest = write(out, rows, stats, args.seeds, args.free_text, args.name,
+                     second_kinds=args.second_kinds, job=args.job, misread_to=args.misread_to)
     print(json.dumps({k: manifest[k] for k in ("name", "members", "rows")}, indent=1)[:2000])
     return 0
 

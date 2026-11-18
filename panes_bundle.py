@@ -15,6 +15,12 @@ own, and the state picks the net exactly; nothing is routed by a score:
 What is systematic is code, not learned: splitting words, reading a number
 word as a number, copying text character for character.
 
+The same reader reads a bundle for each of the other jobs (format v6: the
+file says which job it reads for). Their tools and arguments are those of
+job_schemas.py, made for reading; job_schemas.to_job writes a reading as the
+job's own call, and the job's own checks decide whether it is admitted, as
+they decide a model's proposal. Those bundles live in job-bundles/<job>/.
+
 The bundle answers only what it was trained on, said with other names. It
 proposes nothing, and the model reads the request as before, unless all of
 this holds:
@@ -38,11 +44,18 @@ this holds:
   than any copied for that argument in training;
 - a copied name, title or command holds no word the bundle knows only as
   wording ("rename this tab please" does not name it "please"), and ends
-  in no mark that ended the sentence ("api!");
+  in no mark that ended the sentence ("api!"; a mark just inside a closing
+  quote is the quoted text's own: "'api!'" is api!);
 - every word of a clause that names a value is in that clause's call: one
   that always named a value in training, or that alone named a side, a
   place, a layout or a direction ("the top pane to the left" is not the
-  pane to the left);
+  pane to the left). In a job other than panes, a clause that is a
+  training clause of its tool, read with the values it was labelled with,
+  is held to that label instead: those jobs' closed lists hold everyday
+  words ("status", "modified", the "up" of "spin up"), and the label says
+  where they name nothing. The panes job keeps the rule for every clause,
+  and a word that names nothing in its answer leaves the request to the
+  model;
 - no clause goes by what the clause before it changes. Every call is
   resolved before the first one runs, so "go to the logs tab and rename it
   to api" would rename the tab the request came from, and "close tab 1 and
@@ -117,9 +130,15 @@ import struct
 import sys
 
 DIRECTORY = Path(__file__).resolve().parent / "panes-bundle"
-SCHEMA = "kilix-needle.panes-bundle/v5"
-MANIFEST_SCHEMA = "kilix-needle.panes-bundle-manifest/v5"
-MAGIC = b"KNPB5\n"
+# The bundles of the other jobs (job_schemas.py says what each one reads).
+JOB_DIRECTORY = Path(__file__).resolve().parent / "job-bundles"
+JOBS = ("panes", "files", "system", "agents", "apps", "tmux", "pty", "logs")
+SCHEMA = "kilix-needle.panes-bundle/v6"
+MANIFEST_SCHEMA = "kilix-needle.panes-bundle-manifest/v6"
+MAGIC = b"KNPB6\n"
+# A file of the format before (v5) is a panes bundle: v6 only added the job
+# a bundle reads for. Each older magic with its schema and manifest schema.
+OLDER = {b"KNPB5\n": ("kilix-needle.panes-bundle/v5", "kilix-needle.panes-bundle-manifest/v5")}
 FILE = "bundle.bin"
 MAX_BYTES = 64 << 20        # no bundle is near this size; a manifest that states more is refused
 MANIFEST_MAX = 1 << 20      # and no manifest is near this one
@@ -129,6 +148,10 @@ NONE, ABSENT, COPY = "<none>", "<absent>", "<copy>"
 # route answers with the list the exact list reader gives (needle_cli). It
 # changes nothing, and it is answered only as the request's one clause.
 LIST = "list"
+# The bundle's other kind of its own: a read of a pane's text (pane_reads.py),
+# which changes nothing either, and which is also answered only alone.
+READ = "read_pane"
+ALONE_KINDS = (LIST, READ)
 # What the second reader may answer: a tool's name, or this for two clauses.
 COMPOUND = "compound"
 OK, OK_SECOND = "ok", "ok, by the second reader"
@@ -493,7 +516,7 @@ CLOSED = "a copied text ends in a mark that ended the sentence"
 LEANS = "a clause that goes by what the clause before it changes"
 TURNED = "a layout kitty shows the other way round from the tool's labels"
 OPPOSED = "a resize whose verb and direction pull opposite ways"
-ALONE = "a list beside another clause"
+ALONE = "a list or a read of a pane beside another clause"
 _HOLDS = (LONG, UNSHOWN, CARRIED, UNNAMED, PLAIN, MIXED, CLOSED, LEANS, TURNED, OPPOSED)
 # Why the second reader does not answer a clause that is not a training
 # clause of its tool (reported in the place of UNSHOWN, for a kind it may
@@ -507,7 +530,9 @@ SECOND_RISKY = "a call that closes, types or starts a program: only whole traini
 # neighbours of a tool's own clauses gives "not a new tab, thanks" and "i
 # need one", and both opened something (the second review).
 RUN = 3
-_RISKY = ("close_pane", "close_tab", "run_in_pane")
+# The calls that close, type into a pane, start a program, start or message
+# a coding agent, or launch an app (the bundles of the agents and apps jobs).
+_RISKY = ("close_pane", "close_tab", "run_in_pane", "agent", "tell", "launch")
 
 
 def risky(call: dict) -> bool:
@@ -661,7 +686,10 @@ class Member:
                     if key in ONE_NEW and "<x>" in mine[first:last + 1] and len(text.split()) > 1:
                         failed.add(MIXED)
                     end = toks[lo + last]
-                    if set(end[0]) <= _CLOSING and (last == first or end[1] == toks[lo + last - 1][2]):
+                    after = toks[lo + last + 1] if lo + last + 1 < len(toks) else None
+                    quoted = after is not None and after[0] in "\"'`" and after[1] == end[2]
+                    if set(end[0]) <= _CLOSING and (last == first or end[1] == toks[lo + last - 1][2]) \
+                            and not quoted:
                         failed.add(CLOSED)
                 arguments[key] = text
                 spans[key] = (first, last, number is not None)
@@ -682,8 +710,9 @@ class Member:
             # stands before it here: one that only ever followed another
             # leans on it ("go to it" alone names no pane).
             frame, shown = frame_of(words[lo:hi], spans), bundle.readings(tool)
-            if reading_line("", frame, closed) not in shown and not (
-                    calls and reading_line(calls[-1]["name"], frame, closed) in shown):
+            trained = reading_line("", frame, closed) in shown or bool(
+                calls and reading_line(calls[-1]["name"], frame, closed) in shown)
+            if not trained:
                 # Not a training clause of its tool. Only the second reader
                 # may answer it, and only for a kind it is switched on for
                 # (below): this is whether it would.
@@ -695,9 +724,11 @@ class Member:
             # "top", "grid"), has to be in this clause's call: as that value,
             # or as part of a phrase that named it ("one above another"). The
             # other clause's call does not count: "make the left pane wider
-            # and go to the left pane" still widens the caller's pane.
+            # and go to the left pane" still widens the caller's pane. In a
+            # job other than panes a training clause read as it was labelled
+            # is held to its label instead (the module's docstring).
             values = list(arguments.values())
-            for word in words[lo:hi]:
+            for word in words[lo:hi] if bundle.job == "panes" or not trained else ():
                 canon = bundle.value_words.get(word)
                 if canon is not None and not stands_for(word, values, canon):
                     failed.add(UNNAMED)
@@ -735,7 +766,7 @@ class Member:
             places.append((toks[lo][1], toks[hi - 1][2]))
         # A list is the whole request: "list the panes and close pane 4" is
         # not a list, and the list changes nothing a clause after it goes by.
-        if len(calls) > 1 and any(c["name"] == LIST for c in calls):
+        if len(calls) > 1 and any(c["name"] in ALONE_KINDS for c in calls):
             return [], ALONE
         if PAIR in failed:
             return [], PAIR
@@ -807,7 +838,8 @@ class Bundle:
     """The file and its members. It answers only when all members agree."""
 
     def __init__(self, raw: bytes, manifest: dict | None = None):
-        if raw[:len(MAGIC)] != MAGIC:
+        magic = raw[:len(MAGIC)]
+        if magic != MAGIC and magic not in OLDER:
             raise BundleError("not a panes bundle file")
         size = int.from_bytes(raw[len(MAGIC):len(MAGIC) + 4], "little")
         start = len(MAGIC) + 4
@@ -815,8 +847,13 @@ class Bundle:
             head = json.loads(raw[start:start + size].decode("utf-8"))
         except ValueError as error:
             raise BundleError(f"the bundle header is unreadable: {error}") from None
-        if not isinstance(head, dict) or head.get("schema") != SCHEMA:
+        want = SCHEMA if magic == MAGIC else OLDER[magic][0]
+        if not isinstance(head, dict) or head.get("schema") != want:
             raise BundleError(f"unknown bundle schema {head.get('schema') if isinstance(head, dict) else head!r}")
+        # The job whose requests it reads: a v5 file is a panes bundle.
+        self.job = head.get("job") if magic == MAGIC else "panes"
+        if self.job not in JOBS:
+            raise BundleError(f"the bundle is for no job this reader knows ({self.job!r})")
         self.raw, self.head, self.body = raw, head, start + size
         self.manifest = manifest or {}
         try:
@@ -960,7 +997,8 @@ class Bundle:
                                                 at_most=MANIFEST_MAX).decode("utf-8"))
         except (ValueError, RecursionError) as error:
             raise BundleError(f"the bundle manifest is unreadable: {type(error).__name__}") from None
-        if not isinstance(manifest, dict) or manifest.get("schema") != MANIFEST_SCHEMA:
+        if not isinstance(manifest, dict) or manifest.get("schema") not in (
+                MANIFEST_SCHEMA, *(older for _, older in OLDER.values())):
             raise BundleError("unknown bundle manifest schema")
         # The manifest names a file of its own directory, and how large it
         # is. A path is not followed out of the directory, and nothing is
@@ -1028,6 +1066,13 @@ def _regular_file(path: Path, what: str, *, size: int | None = None, at_most: in
 
 
 _LOADED: dict = {}
+
+
+def directory(job: str) -> Path:
+    """Where the bundle of a job is checked in."""
+    if job not in JOBS:
+        raise ValueError(f"no such job: {job!r}")
+    return DIRECTORY if job == "panes" else JOB_DIRECTORY / job
 
 
 def _not_used(error: Exception) -> None:

@@ -180,6 +180,24 @@ SIDE_WORDS = SIDES + (("down", "below"), ("up", "above"))
 DIRECTIONS = ("wider", "narrower", "taller", "shorter")
 
 
+# A list of one pane, and what no action does (templates "list one N" and
+# "none N"). With a read of a pane among the kinds (bundle format v6), the
+# frames of READ_FRAMES ask for a read: rows(reads=True) leaves their rows
+# out, and every other row is the one rows() makes without it.
+LIST_ONE = ("list pane {p}", "show pane {p}", "list pane {p} and its title", "show pane {p} and its title",
+            "list pane {p} and its current command", "describe pane {p}",
+            "list pane {p} with its title and tab", "list all panes including pane {p}")
+NONE = ("open a new tab in {d}", "open a new tab titled {n} in {d}", "open a new tab in {d} running htop",
+        "open a new tab titled {n} in {d} and run htop", "open a pane to the right in {d}",
+        "split pane {p} to the right", "split pane {p} down", "split pane {p} vertically",
+        "show the screen text of pane {p}", "read the output of pane {p}",
+        "show the last lines of pane {p}", "what is pane {p} doing", "is pane {p} idle")
+READ_FRAMES = ("show pane {p}", "show the screen text of pane {p}", "read the output of pane {p}",
+               "show the last lines of pane {p}")
+READ_TEMPLATES = frozenset([f"list one {LIST_ONE.index(f)}" for f in READ_FRAMES if f in LIST_ONE] +
+                           [f"none {NONE.index(f)}" for f in READ_FRAMES if f in NONE])
+
+
 def templates(v: Values) -> dict:
     """{template name: a function that makes one row}."""
     rng = v.rng
@@ -354,9 +372,7 @@ def templates(v: Values) -> dict:
             if rng.random() < 0.1:
                 words += ". read only"
             return _row(_cap(rng, _ending(rng, words)), [["list", {"what": what}]], [])
-    for i, frame in enumerate(("list pane {p}", "show pane {p}", "list pane {p} and its title", "show pane {p} and its title",
-                               "list pane {p} and its current command", "describe pane {p}",
-                               "list pane {p} with its title and tab", "list all panes including pane {p}")):
+    for i, frame in enumerate(LIST_ONE):
         @add(f"list one {i}")
         def _(frame=frame):
             p = v.pane_id()
@@ -387,11 +403,7 @@ def templates(v: Values) -> dict:
     # so their directories, names and numbers are their own: a word copied
     # elsewhere that it knew as wording would be a copied word made of
     # wording, and those rows are left out (panes_bundle_train.agent_rows).
-    for i, frame in enumerate(("open a new tab in {d}", "open a new tab titled {n} in {d}", "open a new tab in {d} running htop",
-                               "open a new tab titled {n} in {d} and run htop", "open a pane to the right in {d}",
-                               "split pane {p} to the right", "split pane {p} down", "split pane {p} vertically",
-                               "show the screen text of pane {p}", "read the output of pane {p}",
-                               "show the last lines of pane {p}", "what is pane {p} doing", "is pane {p} idle")):
+    for i, frame in enumerate(NONE):
         @add(f"none {i}")
         def _(frame=frame):
             text = frame.format(d=rng.choice(_NONE_DIRS), n=rng.choice(_NONE_NAMES), p=str(rng.randint(2000, 2999)))
@@ -405,9 +417,10 @@ def fold(text: str) -> str:
     return " ".join(str(text).casefold().split()).strip(" .!?,;:'\"")
 
 
-def rows(seed: int = 0, per_template: int = 30) -> list[dict]:
+def rows(seed: int = 0, per_template: int = 30, reads: bool = False) -> list[dict]:
     """per_template rows of each template (three times as many lists and
-    pairs of clauses), in a fixed order; no two the same."""
+    pairs of clauses), in a fixed order; no two the same. `reads`: leave
+    out the rows of READ_TEMPLATES, which a read of a pane answers."""
     rng = random.Random(seed)
     made = templates(Values(rng))
     out, seen = [], set()
@@ -424,7 +437,7 @@ def rows(seed: int = 0, per_template: int = 30) -> list[dict]:
             row["template"] = name
             out.append(row)
             got += 1
-    return out
+    return [row for row in out if row["template"] not in READ_TEMPLATES] if reads else out
 
 
 def main(argv=None) -> int:
