@@ -52,6 +52,8 @@ this holds:
   api": read alone, "call it api" is a tab's rename);
 - a tool fits every clause, no required argument is missing, every number
   is one the tool takes and is written in digits the reader reads;
+- no resize's verb and direction pull opposite ways ("grow this pane
+  lower", "shrink this pane broader": OPPOSED);
 - its members (the same nets trained from different seeds) all give the
   same calls.
 So what decides whether it answers is a lookup of wordings it has seen, and
@@ -71,7 +73,10 @@ frame stood side by side in a training frame of the tool (RUN; pairs gave
 lists are those of a training clause of the tool, and a side, place, layout
 or direction it gives is named by a word of the clause. It never answers a
 call that closes, types or starts a program, nor a request with one in it
-(risky). Its answers carry a label of their own.
+(risky). Two clauses are a kind of their own (COMPOUND), and in them it
+answers a clause only where it is switched on for that clause's tool too:
+beside another clause, a clause in new wording is no more answered than
+alone. Its answers carry a label of their own.
 
 Its calls are proposals like the model's: they pass every check
 (actions.interpret), resolution against the live tree and the same
@@ -187,6 +192,18 @@ NOT_THE_CALLERS = {"close_pane": (*SIDES, "next", "previous"), "close_tab": ("ne
 # other way round from what was asked. The model is trained on the same
 # labels: this is the tool's to fix, not the bundle's.
 CROSSED = {("arrange_panes", "layout"): ("vertical", "horizontal")}
+# A resize whose verb grows the pane while its direction shrinks it, or the
+# other way round, is not read: "grow this pane lower" asks for a taller pane
+# in the words of a person and a shorter one in the words the bundle was
+# trained on ("lower" is shorter there), and "shrink this pane broader" says
+# both. The direction would decide alone (the fourth review). The tuner's own
+# rows hold four such, all of one template ("stretch this pane lower",
+# labelled shorter). "Narrow" is left out: it is as often what a pane is.
+_GROWS = frozenset({"grow", "expand", "enlarge", "stretch", "extend", "lengthen", "increase", "widen",
+                    "broaden", "heighten"})
+_SHRINKS = frozenset({"shrink", "reduce", "decrease", "compress", "squeeze", "shorten", "lessen",
+                      "contract", "trim"})
+_GROWING = {"wider": True, "taller": True, "narrower": False, "shorter": False}
 # A name, or a title a pane or tab is found by (a list's `about` among them),
 # of more than one word is made of words that were copied for such an
 # argument in training. One that holds a word the bundle has never seen is
@@ -475,8 +492,9 @@ MIXED = "a copied name or title of several words holds one the bundle has never 
 CLOSED = "a copied text ends in a mark that ended the sentence"
 LEANS = "a clause that goes by what the clause before it changes"
 TURNED = "a layout kitty shows the other way round from the tool's labels"
+OPPOSED = "a resize whose verb and direction pull opposite ways"
 ALONE = "a list beside another clause"
-_HOLDS = (LONG, UNSHOWN, CARRIED, UNNAMED, PLAIN, MIXED, CLOSED, LEANS, TURNED)
+_HOLDS = (LONG, UNSHOWN, CARRIED, UNNAMED, PLAIN, MIXED, CLOSED, LEANS, TURNED, OPPOSED)
 # Why the second reader does not answer a clause that is not a training
 # clause of its tool (reported in the place of UNSHOWN, for a kind it may
 # answer).
@@ -572,6 +590,7 @@ class Member:
             return [], "more clauses than any training row had"
         tool_net = self.net("tool")
         calls, accounted, places, unshown = [], {i for i, sep in enumerate(is_sep) if sep}, [], []
+        unshown_tools: list = []     # the tool of each clause in `unshown`
         for index, (lo, hi) in enumerate(clauses):
             mine = forms[lo:hi]
             context = [w for j, w in enumerate(forms) if not lo <= j < hi and not is_sep[j]]
@@ -649,6 +668,9 @@ class Member:
                 copied.update(range(first, last + 1))
             if any(key not in arguments for key in spec["required"]):
                 return [], "a required argument is missing"
+            direction = arguments.get("direction") if tool == "resize_pane" else None
+            if direction in _GROWING and set(words[lo:hi]) & (_SHRINKS if _GROWING[direction] else _GROWS):
+                failed.add(OPPOSED)
             # The clause as this answer reads it must be a training clause
             # of this tool, read as that clause was labelled: the same words
             # in the same order around the copied texts and the same values
@@ -666,6 +688,7 @@ class Member:
                 # may answer it, and only for a kind it is switched on for
                 # (below): this is whether it would.
                 unshown.append(self.second(tool, frame, closed, words[lo:hi], calls[-1]["name"] if calls else ""))
+                unshown_tools.append(tool)
             # Nothing the clause says may be dropped: a word that in training
             # always named a value ("lower", a program, a number), or that
             # alone named a side, a place, a layout or a direction ("left",
@@ -727,10 +750,18 @@ class Member:
         # against the model before it was.
         # It never answers a call that closes, types or starts a program, nor
         # anything beside one.
+        # Two clauses are a kind of their own (`compound`), and the second
+        # reader answers a clause of them only where it is switched on for
+        # that clause's tool as well: beside another clause, a clause in new
+        # wording is no more answered than alone. Without this, `compound`
+        # let it answer resizes, swaps, maximizes and renames of panes beside
+        # a second clause, kinds its standard had turned down, and it resized
+        # a pane the wrong way ("rename this tab to api and grow this pane
+        # lower"; the fourth review).
         second = None
         if unshown:
             kind = calls[0]["name"] if len(calls) == 1 else COMPOUND
-            if kind not in bundle.second_kinds:
+            if kind not in bundle.second_kinds or any(t not in bundle.second_kinds for t in unshown_tools):
                 failed.add(UNSHOWN)
             else:
                 second = next((why for why in unshown if why), None) or \

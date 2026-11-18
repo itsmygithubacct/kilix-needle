@@ -1365,6 +1365,8 @@ It answers only what it was trained on, said with other names:
 - it never arranges the panes "vertical" or "horizontal": kitty shows
   those the other way round from the tool's description (below, "Known
   issues");
+- it reads no resize whose verb and direction pull opposite ways ("grow
+  this pane lower", "shrink this pane broader");
 - a rename in the second clause that does not say "tab" or "pane" follows a
   clause about the kind of thing it renames;
 - a request for a list of the panes or tabs is answered only alone, with
@@ -1382,7 +1384,8 @@ answer a clause that is no training clause of its tool: every run of three
 neighbouring words of it stood in a training clause of that tool, its values
 from closed lists were had together by one, a side, place or layout it gives
 is named by a word of it, and it never answers a call that closes, types or
-starts a program. A kind was switched on only where the second reader was
+starts a program. Beside another clause, it answers a clause only for a kind
+it is switched on for alone. A kind was switched on only where the second reader was
 never unsafe, was right at least as often as the tuned model on the
 labelled requests of that kind it answers (the spent sets, generated
 requests, the reviews' requests and the probes'), and passed over a word
@@ -1437,22 +1440,28 @@ conditions above are the answer to all three, and none of their requests is
 answered now, but for one kind: a word it never saw, standing alone where a
 name stands, is still taken for the name ("rename the tab asap").
 
+A fourth review, of the widened reader (format v5), found that beside a
+second clause the second reader answered the kinds its standard had kept
+off, and resized a pane the wrong way ("rename this tab to api and grow this
+pane lower" made it shorter). Now a clause is answered beside another only
+for a kind that is on alone, and no resize is read whose verb and direction
+pull opposite ways. Both changes only decline more.
+
 The price was reach. On the three blind sets written for this change, which
 shaped the rules and gate nothing now, the gated reader answered about a
 third of the requests that reach the model, the reader of the second review
 about three in ten, and the reader that answered the third review (format
 v4) 16 of 170, 11 of 166 and 15 of 156, every answer exact. Format v5 (this
-file: agent-style rows, the list, ids, the second reader) answers 20, 15 and
-23 of them, every answer exact (8 of 180 on the job's own held-out set, 6
-before). The route is exact on 104, 107 and 99 cases there, against 102, 107
+file: agent-style rows, the list, ids, the second reader) answers 18, 15 and
+21 of them, every answer exact (8 of 180 on the job's own held-out set, 6
+before). The route is exact on 102, 107 and 98 cases there, against 102, 107
 and 95 with format v4 and 96, 106 and 92 without the bundle. Of the 161
 panes requests in this machine's history that reached a tuned model, 142
 would reach the model today; this file answers 55 of them (10 with a list),
 format v4 18. Those are counted, not labelled.
 
-**The readers of the first three reviews were each reviewed and changed
-after it; the reader as it now is has been neither reviewed nor gated**, so
-the default stays off. What was measured, what the reviews found and what
+**The reader as it now is was reviewed once and changed after the review
+only to decline more; it has not been gated**, so the default stays off. What was measured, what the reviews found and what
 the bundle still gets wrong are in `panes-bundle/README.md`.
 
 ```sh

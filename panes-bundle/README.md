@@ -193,7 +193,18 @@ the model reads the request as before, unless all of these hold:
     when it is the request's one clause, and the route answers it with the
     read-only list the exact list reader gives (`needle_cli`). What the
     request names beside the list ("list pane 412 and its title": `about`)
-    is held to conditions 5 and 6 and is not used.
+    is held to conditions 5 and 6 and is not used: "describe pane 301" shows
+    the whole list, pane 301 among the rest.
+14. **No resize's verb and direction pull opposite ways.** "Grow this pane
+    lower" asks for a taller pane in a person's words and a shorter one in
+    the words the bundle was trained on ("lower" is shorter there), and
+    "shrink this pane broader" says both. Where a resize's direction grows
+    the pane and a word of its clause shrinks it (shrink, reduce, decrease,
+    compress, squeeze, shorten, lessen, contract, trim), or the other way
+    round (grow, expand, enlarge, stretch, extend, lengthen, increase,
+    widen, broaden, heighten), it is not answered. The tuner's own rows hold
+    four such, all of one template ("stretch this pane lower", labelled
+    shorter); this file does not answer them.
 
 ### The second reader
 
@@ -212,15 +223,21 @@ For a kind the manifest switches on (`second_reader.kinds`: a tool, or
 - no call it would answer closes, types or starts a program. Those are
   answered only for whole training clauses.
 
+In a request of two clauses (`compound`) it answers a clause only where it
+is switched on for that clause's tool too: beside another clause, a clause
+in new wording is no more answered than alone. (As first shipped it was
+not so held, and the fourth review found it answering resizes, maximizes,
+swaps and renames of panes beside a second clause, kinds its standard had
+kept off; below, "What the fourth review found".)
+
 Its answers carry the label "(second reader)" in the history. As this file
-is shipped it is switched on for six kinds: arrange_panes, go_to_pane,
-go_to_tab, move_tab, rename_tab, and `compound`, a request of two clauses
-whatever their tools. So a clause in new wording that opens a pane is not
-answered alone, and may be answered beside a second clause: of the 51
-two-clause requests of the generated pool the second reader answers, all a
-new pane and a layout, 34 open the pane in wording that is no training
-clause. Each kind was switched on by a standard declared before it was
-measured (below, "The reader now").
+is shipped it is switched on for arrange_panes, go_to_pane, go_to_tab,
+move_tab and rename_tab, and for `compound`. Each kind was switched on by a
+standard declared before it was measured (below, "The reader now"). The
+kinds are the manifest's word: the file's digest is of `bundle.bin`, and
+whoever can write the manifest can switch every kind on. A close, a typed
+command or a started program is never the second reader's to answer,
+whatever the manifest says.
 
 None of these is a confidence threshold. They are lookups of wordings,
 words and word pairs, agreement, and the checks.
@@ -313,18 +330,18 @@ nothing unless all of this holds:
   differently.
 - The whole reader with the checks, as a request meets them, answers every
   training row it answers as that row is labelled. With the second reader
-  off, this file proposes calls for 9,374 of its 11,514 rows. 15 proposals
+  off, this file proposes calls for 9,370 of its 11,514 rows. 15 proposals
   are dropped by condition 12: in 7 the checks add the pane that a resize
   names, in 2 the tab of a rename, and in 6 they admit for a clause alone
-  something else than for the whole request. The other 9,359 are admitted
+  something else than for the whole request. The other 9,355 are admitted
   exactly as labelled. With the second reader on for the six kinds it is
   shipped with, or for every kind, it answers 6 more, each as labelled. Of
   the rows it does not answer, 1,114 are labelled with no call (no tool fits
   them), 396 are declined by condition 9 (training rows with two actions
   whose second is resolved by something the first changes), 297 by
   condition 6 (a name or title of several words that holds a word new to
-  the bundle) and 209 because they arrange the panes "vertical" or
-  "horizontal" (below, "What it still gets wrong").
+  the bundle), 209 because they arrange the panes "vertical" or
+  "horizontal" (below, "What it still gets wrong") and 4 by condition 14.
 
 Run again on the same machine, with the same PyTorch, it wrote this file
 byte for byte.
@@ -581,7 +598,9 @@ standard was applied, it was held to runs of three and to no risky call:
 | swap_panes | 39 | 39 | 35 | 0 | 20 | 20 | 19 | no |
 
 No joined request or request of three clauses was answered by the second
-reader. Every kind met (a) and (b). (c) kept seven off: on the probes of
+reader, and no probe put a word into one of two clauses, so `compound` met
+(c) with no probe at all (the fourth review; below). Every kind met (a) and
+(b). (c) kept seven off: on the probes of
 those kinds the model answered otherwise than the row more often than the
 second reader did, which for the list is always, since the model has no
 list to give. The prediction, made before, was that at most three kinds
@@ -594,29 +613,33 @@ nothing:
 | Set | Cases | Exact without the bundle | With format v4 | With this file | With the second reader on for every kind | This file answers | Of them exact |
 | --- | ---: | ---: | ---: | ---: | ---: | --- | ---: |
 | v15 (the job's own held-out set) | 182 | 90 | 93 | 93 | 93 | 8 of the 180 that reach the model (4.4%) | 8 |
-| v16 | 179 | 96 | 102 | 104 | 107 | 20 of 170 (11.8%) | 20 |
+| v16 | 179 | 96 | 102 | 102 | 107 | 18 of 170 (10.6%) | 18 |
 | v17 | 171 | 106 | 107 | 107 | 110 | 15 of 166 (9.0%) | 15 |
-| v18 | 162 | 92 | 95 | 99 | 99 | 23 of 156 (14.7%) | 23 |
+| v18 | 162 | 92 | 95 | 98 | 99 | 21 of 156 (13.5%) | 21 |
 
-The second reader gives 2, 5, 3 and 6 of those answers. No answer of the
+The second reader gives 2, 3, 3 and 4 of those answers. No answer of the
 bundle is unsafe: the one unsafe case on v16 is an exact reader's and the
 one on v18 the model's, with the bundle and without it. The second pair of
-members (seeds 2 and 3) answers 8, 20, 17 and 23, all exact, and the route
-is exact on 93, 104, 108 and 99 cases. With the second reader on for every
-kind the route would be exact on 3 more cases of v16 and of v17. That is
-what (c) cost here; what it guards against, a word put into a request, is
-not in these sets.
+members (seeds 2 and 3) answers 8, 18, 17 and 21, all exact, and the route
+is exact on 93, 102, 108 and 98 cases. With the second reader on for every
+kind the route would be exact on 5 more cases of v16, 3 of v17 and 1 of
+v18. That is what (c) cost here, and the change for two clauses after the
+fourth review (below), which declined 2 answers each of v16 and v18, all
+exact; what they guard against, a word put into a request, is not in these
+sets. As first shipped, before that change, this file answered 20 of v16
+and 23 of v18, and the route was exact on 104 and 99.
 
 Against format v4, each through its own reader and the checks: on the
-24,676 generated requests of experiment 9's pool this file answers 434 that
-format v4 declined (137 by the first reader, 297 by the second) and declines
-92 it answered (37 where the members no longer agree, 24 in wording no
-longer a training clause's, 21 for an untrained pair of words, 6 for three
-neighbours, 2 for a closed value no word names, 2 for a risky call). Every
-answer it gives on that pool is as labelled (11,115 of the first reader, 296
-of the second; training rows are among the pool). On v15 to v18 it answers
-23 that format v4 declined and declines 1 that it answered (on v16, a copied
-text that holds a word the bundle knows only as wording).
+24,676 generated requests of experiment 9's pool this file answers 400 that
+format v4 declined (137 by the first reader, 263 by the second) and declines
+96 it answered (37 where the members no longer agree, 32 in wording no
+longer a training clause's or of a kind the second reader is off for, 21
+for an untrained pair of words, 4 by condition 14, 2 for three
+neighbours). Every answer it gives on that pool is as labelled (11,111 of
+the first reader, 262 of the second; training rows are among the pool). On
+v15 to v18 it answers 19 that format v4 declined and declines 1 that it
+answered (on v16, a copied text that holds a word the bundle knows only as
+wording).
 
 Of the 161 panes requests in this machine's history that reached a tuned
 model, 142 would reach it today (the exact readers now take 18; one is
@@ -636,11 +659,72 @@ example among them. `stands_for` now takes `id:N` as the number N. The
 standard was applied again to the fixed reader and gave the same six kinds
 (addendum 3), and the fix changes nothing on the training rows.
 
-**The reader as it now is has been neither reviewed nor gated.** A fourth
-review by a fresh session comes next. After it, only changes that make the
-reader decline more; then the gate declared above ("How it was gated"),
-read once on A1 and v19. Until both are done the bundle stays off by
-default.
+### What the fourth review found
+
+A fresh session of the same assistant, given the code of format v5 as first
+shipped and a brief, and none of the results, reviewed it on 2026-11-18 (the
+dates of these records are UTC). Its verdict: the change did not hold. The
+requests below are its own.
+
+| Finding | Which reader | What was done |
+| --- | --- | --- |
+| 1. "rename this tab to api and grow this pane lower" resized the pane shorter, with no question | second, two clauses | declined (condition 14, and the change below) |
+| 2. Beside a second clause the second reader answered resizes, maximizes, swaps and renames of panes, kinds its standard had kept off. (c) was never applied to two clauses: no probe had two | second, two clauses | declined: a clause is answered beside another only for a kind that is on (the change below) |
+| 3. Clauses that make no sense, or contradict themselves, acted: "label the pane to the left pane to the left api and go to tab 2", "full-screen this pane to the normal pane layout and go to tab 2" | second, two clauses | declined by the same change |
+| 4. Questions and fragments read as requests: "tab 2?", "arrange the panes tall?", "back to the build pane?", "i'd like the panes stacked" | second | left: each is labelled the request it reads (below), and qat-9 reads each the same |
+| 5. A list about one pane shows the whole list ("describe pane 301") | first | left, and said in condition 13: it changes nothing, and the model has no list to give |
+| 6. The list shows a tab by its id ("tab 20: work"), and "tab 20" is read as a place | both | left: the tool's convention, which the model shares (below, "What it still gets wrong") |
+| 7. The second reader's kinds are the manifest's, under no digest | | said (above, "The second reader") |
+| 8. The records' dates are a day after the session's | | they are UTC |
+
+**Compared with qat-9, as the declaration asks.** The 31 requests the report
+quotes were labelled by a fresh labeller that saw neither the bundle's
+answer nor the model's, and qat-9's replies to them were taken on the Core i7-6820HQ under
+the lock, both before the comparison was run (`runs/exp10/review/` of the
+experiment's records). On those the reviewed reader answered:
+
+| Reader and kind | Answered | Exact | qat-9 exact on them |
+| --- | ---: | ---: | ---: |
+| second, arrange_panes | 2 | 2 | 2 |
+| second, go_to_pane | 2 | 2 | 2 |
+| second, go_to_tab | 2 | 2 | 2 |
+| second, compound | 7 | 3 | 1 |
+| first, list | 4 | 4 | 0 |
+| first, rename_tab | 2 | 2 | 2 |
+| first, resize_pane | 1 | 0 | 0 |
+
+No answer was unsafe. So by the declared rules no kind is switched off: the
+second reader is nowhere worse than qat-9 here, and its four two-clause
+misreadings (the three resizes of finding 1, "move this tab left; shrink
+this pane broader" read wider among them, and the full-screen of finding 3)
+are qat-9's too, which the rules report and leave.
+The first reader's misreading, "stretch this pane lower" read as shorter
+(labelled taller, and the tuner's own row), is declined: condition 14.
+
+**The change for two clauses goes beyond the rules, and declines only.** The
+seven kinds were kept off because the second reader passed over a word put
+into a request more often than the model, and nothing in its holds depends
+on where a clause stands; `compound` had gone on with no probe of its own.
+Now a clause in new wording is answered beside another only for a kind that
+is on. It costs answers that were right: of the review's 31, two that the
+second reader read as labelled and qat-9 does not ("maximize left pane again
+and go to tab 2", "label the pane to the left pane to the left api and go to
+tab 2"); of the generated pool, 34, each as labelled, all a new pane beside
+a layout; and 2 each of v16 and v18.
+
+That the reader after the review only declines more was checked
+(`exp8/compare_readers.py`, the reviewed reader against this one on the same
+file): on the generated pool, the training rows, dev, test, v15 to v18, the
+reviews' requests and walks, the second review's 14,956 walks, the fourth's
+31 and the probes, it answers nothing the reviewed reader did not and
+nothing with other calls. It declines 38 of the pool's answers (34 by the
+change for two clauses, 4 by condition 14), 4 training rows, 2 each of v16
+and v18, and 7 of the review's 31.
+
+**The reader as it now is has been reviewed once, and changed after the
+review only to decline more. It has not been gated.** The gate declared
+above ("How it was gated") is read once on A1 and v19. Until it passes the
+bundle stays off by default.
 
 ## The reader of format v4
 
@@ -793,7 +877,17 @@ has left unchanged, and none has yet. `needle_cli.BUNDLE_BY_DEFAULT` is off.
 - **Only a rename names a tab by its id.** The agent rows name a tab by its
   id only in renames. "go to tab id 4" and "close tab id 7" are no
   training clause and go to the model, and so does "rename tab 4 to api",
-  where 4 would be a place.
+  where 4 would be a place. The model reads "go to tab id 4" as the tab in
+  the fourth place (the fourth review's requests).
+- **The list shows a tab by its id, and "tab N" is a place.** The list the
+  route gives (the exact list reader's, and the bundle's list kind with it)
+  writes "tab 20: work", 20 being the tab's id. "Tab 20" in a request is the
+  tab in the twentieth place, as the tool defines it, for the bundle and the
+  model alike: "change the title of tab 20 to api" is refused when there are
+  fewer tabs. Once a tab has been closed, ids and places come apart, and an
+  agent that copies "tab 4" from a list may act on another tab with no
+  question. That is the list's wording and the tool's convention to change,
+  not the bundle's (the fourth review).
 - **It repeats its labels.** A training clause is answered as it was
   labelled, with other names. Where a label is itself not what a person
   means, the bundle says the same for that literal wording: a resize that

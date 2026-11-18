@@ -1311,6 +1311,77 @@ class WhatV5Reads(unittest.TestCase):
         self.assertEqual(self.bundle.read("go to tab 2 and shift the active tab to slot 1"), ([], PB.LEANS))
 
 
+class WhatTheFourthReviewFound(unittest.TestCase):
+    """The fourth review, of format v5 as first shipped (panes-bundle/README.md,
+    "What the fourth review found"). The requests are the reviewer's."""
+
+    # The second reader answered each of these: a clause in new wording, of a
+    # kind its standard kept off, beside a second clause (`compound`).
+    BESIDE = {
+        "rename this tab to api and grow this pane lower": "resize_pane",    # resized it shorter
+        "grow this pane lower and go to tab 2": "resize_pane",               # shorter
+        "move this tab left; shrink this pane broader": "resize_pane",       # wider
+        "maximize left pane again and go to tab 2": "maximize_pane",
+        "label the pane to the left pane to the left api and go to tab 2": "rename_pane",
+        "full-screen this pane to the normal pane layout and go to tab 2": "maximize_pane",
+    }
+    # A clause in new wording of a kind that is on is still answered beside another.
+    STILL = {"arrange the panes tall? and go to tab 2": [call("arrange_panes", layout="tall"), call("go_to_tab", tab="2")]}
+    # The tuner's own rows, each a training clause the first reader answered by its direction.
+    OPPOSED = ("stretch this pane lower", "stretch this pane narrower", "stretch this pane shorter",
+               "stretch this pane thinner")
+
+    def setUp(self):
+        if not (PB.DIRECTORY / "manifest.json").is_file():
+            self.skipTest("no bundle is checked in")
+        self.bundle = PB.Bundle.load()
+
+    def test_beside_another_clause_a_kind_that_is_off_is_not_answered(self):
+        for request, kind in self.BESIDE.items():
+            self.assertNotIn(kind, self.bundle.second_kinds, request)
+            self.assertEqual(self.bundle.read(request), ([], PB.UNSHOWN), request)
+        for request, calls in self.STILL.items():
+            self.assertEqual(self.bundle.read(request), (calls, PB.OK_SECOND), request)
+
+    def test_it_is_the_clauses_kind_that_holds_it(self):
+        # With the clause's own kind switched on by hand, the request is answered again.
+        self.bundle.second_kinds = self.bundle.second_kinds | {"maximize_pane"}
+        self.assertEqual(self.bundle.read("maximize left pane again and go to tab 2"),
+                         ([call("maximize_pane", pane="left"), call("go_to_tab", tab="2")], PB.OK_SECOND))
+
+    def test_a_resize_whose_verb_and_direction_pull_opposite_ways(self):
+        for request in self.OPPOSED:
+            self.assertEqual(self.bundle.read(request), ([], PB.OPPOSED), request)
+        # whichever reader would answer it
+        self.bundle.second_kinds = frozenset(self.bundle.tools) | {PB.COMPOUND}
+        for request in ("grow this pane lower", "expand this pane lower by 5 cells", "shrink this pane broader",
+                        "expand this pane a little narrower", "rename this tab to api and grow this pane lower"):
+            self.assertEqual(self.bundle.read(request)[0], [], request)
+        # and where they agree, as before
+        self.assertEqual(self.bundle.read("stretch this pane taller"), ([call("resize_pane", direction="taller")], PB.OK))
+        self.assertEqual(self.bundle.read("make this pane lower"), ([call("resize_pane", direction="shorter")], PB.OK))
+
+    def test_a_list_about_one_pane_is_the_whole_list(self):
+        # Held as it is: what a list is about is read and not used, and the
+        # route shows the exact list reader's whole list (needle_cli.listed).
+        self.assertEqual(self.bundle.read("describe pane 301"), ([call(PB.LIST, what="panes", about="301")], PB.OK))
+
+    def test_the_manifests_kinds_are_not_under_the_files_digest(self):
+        # Held as it is: the digest is the file's; the second reader's kinds
+        # are the manifest's word, and a manifest that names every kind loads.
+        # The risky hold does not depend on them.
+        with tempfile.TemporaryDirectory() as tmp:
+            shutil.copy(PB.DIRECTORY / "bundle.bin", tmp)
+            manifest = json.loads((PB.DIRECTORY / "manifest.json").read_text())
+            manifest["second_reader"] = {"kinds": sorted(set(self.bundle.tools) | {PB.COMPOUND})}
+            Path(tmp, "manifest.json").write_text(json.dumps(manifest))
+            every = PB.Bundle.load(Path(tmp))
+            self.assertEqual(every.second_kinds, frozenset(self.bundle.tools) | {PB.COMPOUND})
+            for request in ("close the pane on the left now", "type ls in the left pane please"):
+                calls, _ = every.read(request)
+                self.assertFalse(any(Action(c["name"], c["arguments"]).risky for c in calls), request)
+
+
 class Terminal(io.StringIO):
     def __init__(self, answers):
         super().__init__("".join(f"{answer}\n" for answer in answers))
