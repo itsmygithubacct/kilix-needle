@@ -662,9 +662,9 @@ standard was applied again to the fixed reader and gave the same six kinds
 ### What the fourth review found
 
 A fresh session of the same assistant, given the code of format v5 as first
-shipped and a brief, and none of the results, reviewed it on 2026-11-18 (the
-dates of these records are UTC). Its verdict: the change did not hold. The
-requests below are its own.
+shipped and a brief, and not the working records behind it, reviewed it on
+2026-11-18 (the dates here are UTC). Its verdict: the change did not hold.
+The requests below are its own.
 
 | Finding | Which reader | What was done |
 | --- | --- | --- |
