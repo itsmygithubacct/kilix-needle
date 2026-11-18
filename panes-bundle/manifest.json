@@ -1,10 +1,11 @@
 {
  "answers_when": "every member proposes the same calls and the checks admit every one of them as it was read",
- "bytes": 3335239,
+ "bytes": 3918052,
  "code": {
   "actions.py": "329748e4e5adc595f2a0dc71ddf69bd252d4708bab172ae3221c25a5e44069af",
-  "panes_bundle.py": "e86012e8d8f549e11d926f32812237477944c306e4295c0b046d7d64b9813358",
-  "panes_bundle_train.py": "f4824dce7103e01fe60dfe6837df147ebc55d249966ea3867ca3474fea18829b",
+  "panes_bundle.py": "a9c5df37683352cf1776f4aa7451c90cbdeb9d56e77991513be3109bc20716b2",
+  "panes_bundle_agent.py": "c696e054fa10644093ec41d3429bd2ac384c5585cb77937117489488abae73e6",
+  "panes_bundle_train.py": "3bdc0ff1ad1ea6660a861cc7932c8a0fb5fb1b254d9b740fbfc32c46cc0018fb",
   "toolset.py": "9e456fc9b095088810f92dead17fb02d7c8d13e9a7af4e8caaa99d5285350476",
   "tuning.py": "65402b342f4ae7964ac57fce9b5e3e38566a7d22507adaf411784aba15ed84ac"
  },
@@ -17,43 +18,63 @@
  ],
  "members": [
   {
-   "nets": 42,
+   "nets": 47,
    "read_as_trained": {
     "another_output": 0,
-    "examples": 21399,
-    "largest_score_difference": 1.4856860431677887e-05
+    "examples": 28834,
+    "largest_score_difference": 3.609406255122849e-05
    },
    "seed": 0,
-   "weights": 598263
+   "weights": 638309
   },
   {
-   "nets": 42,
+   "nets": 47,
    "read_as_trained": {
     "another_output": 0,
-    "examples": 21399,
-    "largest_score_difference": 1.4084218186383168e-05
+    "examples": 28834,
+    "largest_score_difference": 5.2583973115361005e-05
    },
    "seed": 1,
-   "weights": 598263
+   "weights": 638309
   }
  ],
- "name": "v4",
+ "name": "v5",
  "reads_its_rows": {
-  "answered": 5831,
-  "as_labelled": 5831,
-  "proposed_and_dropped": 10,
+  "answered": 9359,
+  "as_labelled": 9359,
+  "proposed_and_dropped": 15,
   "risky_and_not_labelled": 0,
-  "rows": 7318
+  "rows": 11514
+ },
+ "reads_its_rows_with_the_second_reader": {
+  "answered": 9365,
+  "as_labelled": 9365,
+  "proposed_and_dropped": 15,
+  "risky_and_not_labelled": 0,
+  "rows": 11514
  },
  "rows": {
+  "agent": {
+   "copied_word_known_as_wording": 64,
+   "generated": 4382,
+   "history_excluded": true,
+   "history_requests_compared": 161,
+   "kept": 4196,
+   "not_admitted": 37,
+   "per_template": 30,
+   "same_as_a_history_request": 8,
+   "same_as_another_row": 77,
+   "seed": 0
+  },
   "capped": {},
   "clauses_max": 2,
   "closed_words": 27,
   "copied_words": {
-   "command": 70,
-   "name": 77,
+   "about": 249,
+   "command": 309,
+   "name": 801,
    "pane": 42,
-   "program": 35,
+   "program": 331,
    "tab": 25
   },
   "copy_max": {
@@ -69,6 +90,9 @@
    "go_to_tab": {
     "tab": 1
    },
+   "list": {
+    "about": 1
+   },
    "maximize_pane": {
     "pane": 1
    },
@@ -76,25 +100,27 @@
     "position": 1
    },
    "open_pane": {
-    "name": 1,
-    "program": 3
+    "name": 3,
+    "program": 5
    },
    "open_tab": {
-    "name": 1,
-    "program": 1
+    "name": 3,
+    "program": 5
    },
    "rename_pane": {
-    "name": 2,
+    "name": 3,
     "pane": 1
    },
    "rename_tab": {
-    "name": 2
+    "name": 3,
+    "tab": 1
    },
    "resize_pane": {
-    "amount": 1
+    "amount": 1,
+    "pane": 1
    },
    "run_in_pane": {
-    "command": 4,
+    "command": 7,
     "pane": 1
    }
   },
@@ -158,37 +184,39 @@
   "generated": 6442,
   "inconsistent_dropped": 773,
   "kept": 5669,
-  "known_pairs": 5497,
-  "known_words": 975,
+  "known_pairs": 5677,
+  "known_words": 1212,
   "library_commit": "aa3489323ee74dc1661aa604e7145c5e14bcf500",
   "library_sha256": "243cf60ad0236403af6439d7beb19e32e2ba701f1b0d6d6f28bac87addadc181",
   "per_template": 12,
   "readings": {
    "arrange_panes": 712,
-   "close_pane": 139,
-   "close_tab": 66,
-   "go_to_pane": 206,
-   "go_to_tab": 97,
-   "maximize_pane": 267,
-   "move_tab": 53,
-   "open_pane": 632,
-   "open_tab": 125,
-   "rename_pane": 79,
-   "rename_tab": 120,
-   "resize_pane": 268,
-   "run_in_pane": 121,
+   "close_pane": 163,
+   "close_tab": 71,
+   "go_to_pane": 251,
+   "go_to_tab": 120,
+   "list": 287,
+   "maximize_pane": 278,
+   "move_tab": 60,
+   "open_pane": 785,
+   "open_tab": 220,
+   "rename_pane": 124,
+   "rename_tab": 164,
+   "resize_pane": 312,
+   "run_in_pane": 185,
    "swap_panes": 352
   },
-  "rows": 7318,
+  "rows": 11514,
   "rows_skipped": 15,
-  "rows_used": 7303,
+  "rows_used": 11499,
   "seed": 0,
   "separators": [
    ",",
+   ";",
    "and",
    "then"
   ],
-  "sha256": "850a87e4c42654e9a7b591c1d674481fe598b034e54510e6511f2e1f022c9a4b",
+  "sha256": "58ab24a69cd88b54809858707f51f3bd5ecc669696663352044ec3ca2c138828",
   "spent": {
    "cases": 2126,
    "files": [
@@ -298,11 +326,21 @@
    "swap_panes_supp.json"
   ],
   "unsupported_dropped": 0,
-  "value_and_closed_words": 199,
-  "value_words": 188
+  "value_and_closed_words": 2556,
+  "value_words": 2545
  },
- "schema": "kilix-needle.panes-bundle-manifest/v4",
- "sha256": "d922707a45a24726183151b1d0d394237a665d6fcd702388879769a6cef342de",
+ "schema": "kilix-needle.panes-bundle-manifest/v5",
+ "second_reader": {
+  "kinds": [
+   "arrange_panes",
+   "compound",
+   "go_to_pane",
+   "go_to_tab",
+   "move_tab",
+   "rename_tab"
+  ]
+ },
+ "sha256": "464f4ba8ac8337ad7c7492395e57755b0eab9f5b5e78ccb50d8451e73e810dce",
  "trainer": {
   "dim": 8,
   "epochs": 40,

@@ -1,25 +1,32 @@
 # The panes bundle
 
-`bundle.bin` holds what `panes_bundle.py` reads: two members, the same 42
-small nets trained from seeds 0 and 1 (598,263 weights each), and the tables
-the reader goes by, in one file of 3.3 MB. `manifest.json` is its
-provenance. It records:
+`bundle.bin` holds what `panes_bundle.py` reads: two members, the same 47
+small nets trained from seeds 0 and 1 (638,309 weights each), and the tables
+the reader goes by, in one file of 3.9 MB (file format v5). `manifest.json`
+is its provenance. It records:
 
 - the file's sha256 and size;
 - the trainer's settings and its PyTorch version;
 - where the rows came from: the generator's counts, a digest of the
-  generator's library as it was staged and the commit of its checkout, each
-  spent eval set with its sha256 and row count, and the eval files whose
-  requests were kept out;
+  generator's library as it was staged and the commit of its checkout, the
+  agent-style rows' seed and counts, each spent eval set with its sha256 and
+  row count, and the eval files whose requests were kept out;
 - for each member, the check that the file reads as the trained nets did;
-- what the whole reader, with the checks, answers on its own training rows;
-- the sha256 of `panes_bundle.py` and `panes_bundle_train.py`, and of
-  `actions.py`, `tuning.py` and `toolset.py`, which decide the rows, as they
-  were when the file was written.
+- what the whole reader, with the checks, answers on its own training rows,
+  with the second reader as the file switches it on and with it on for every
+  kind;
+- the kinds the second reader answers (`second_reader.kinds`, below);
+- the sha256 of `panes_bundle.py`, `panes_bundle_train.py` and
+  `panes_bundle_agent.py`, and of `actions.py`, `tuning.py` and
+  `toolset.py`, which decide the rows, as they were when the file was
+  written.
 
 `panes_bundle.py` refuses a file whose digest does not match the manifest,
-a file whose header points outside it or lacks a table, and a file with
-fewer than two members or with two members that are the same nets.
+a file whose header points outside it or lacks a table, a file with fewer
+than two members or with two members that are the same nets, a file whose
+second reader's runs are not of the length this reader holds to, and a
+manifest that switches the second reader on for a kind the file has no tool
+for.
 
 ## What a member is
 
@@ -54,8 +61,10 @@ the model reads the request as before, unless all of these hold:
    `<tab#>` where the text was read as a number), and every other word stays
    as it is. The frame, with every value the nets read from a closed list (a
    side, a layout, a direction), is a **reading**. It must be one of the
-   3,237 readings of the training clauses of that tool: the same words in
-   the same order, and the same values. A reading also records where its
+   4,084 readings of the training clauses of that tool: the same words in
+   the same order, and the same values. For the kinds the manifest names,
+   the second reader may answer a clause that is not one of them (below,
+   "The second reader"). A reading also records where its
    clause stood. One that stood first or alone in training says all it means
    by itself and may stand anywhere. One that only ever followed another
    clause ("go to it") leans on that clause, and is read only after a clause
@@ -76,40 +85,47 @@ the model reads the request as before, unless all of these hold:
    numbers are ones the tool takes. A copied "3rd" is the number 3. A number
    in digits other than 0 to 9 ("３") is not read: the nets take it for a
    number and the reader cannot. A word spelt like one of the frame's marks
-   ("<name>") is not read either.
+   ("<name>") is not read either. A pane's number is its id ("close pane
+   412"). A tab's number is its place ("go to tab 4"), but after "tab id" it
+   is the tab's id (`id:4`), never its place. For the nets every run of
+   digits is one form, so "pane 412" is read as "pane 7" is; the number
+   itself is copied.
 4. Two clauses are joined only by a word that joined two in training (",",
-   "and", "then"), and there are no more clauses than a training row had
-   (two).
+   ";", "and", "then"), and there are no more clauses than a training row
+   had (two).
 5. A copied text is no longer than the longest text copied for that argument
-   in training: two words for the name a rename gives, four for a command,
-   three for the program of a new pane, one for everything else.
+   in training: three words for a name, five for a program, seven for a
+   command, one for everything else.
 6. A copied name, title or command is made of words new to the bundle or of
-   words that were copied for an argument of that name in training (77 words
-   for a name, 70 for a command, 42 for a pane, 35 for a program, 25 for a
-   tab). A word the bundle knows only as wording is wording: "rename this
-   tab please" does not name it "please". And no copy ends in the mark that
-   ended the sentence ("api!").
+   words that were copied for an argument of that name in training (801
+   words for a name, 309 for a command, 331 for a program, 42 for a pane,
+   25 for a tab, 249 for what a list names beside it). A word the bundle
+   knows only as wording is wording: "rename this tab please" does not name
+   it "please". And no copy ends in the mark that ended the sentence
+   ("api!").
 
    **A word new to the bundle is a name only where it stands alone.** A
    name, or a title a pane or tab is found by, of more than one word is
    made of words that were copied as such in training ("build logs"). Beside
    another word, a new word may as well be wording the bundle does not
    know: "rename this tab to api thx" is not answered, where the reader
-   before this one named the tab "api thx". One word is one token, whatever
-   marks it holds ("api-server", "v1.2"). A command and a program are not
-   held to this: they are made of new words, and they wait for a yes that
-   shows them.
+   before this one named the tab "api thx". The same holds for what a list
+   names beside it. One word is one token, whatever marks it holds
+   ("api-server", "v1.2"). A command and a program are not held to this:
+   they are made of new words, and they wait for a yes that shows them.
 7. The pane or tab that `close_pane`, `close_tab` or `run_in_pane` acts on is
    named with trained words or a number. A word it has never seen may be a
    title, but it may as well be a misspelt "right" or a "3rd".
 8. Every word of a clause that names a value is in that clause's call. These
-   are the 188 words that named a value in every training row that held them
-   ("lower", a program's name, a digit) and the 27 words that alone named a
-   side, a place, a layout or a direction in some row ("left", "top",
-   "grid", "wider"): 199 words in all. Such a word is in the call when it is
-   the value, or part of a phrase that named a value of the call: "above" in
-   "one above another" belongs to the layout in rows. The other clause's
-   call does not count.
+   are the 2,545 words that named a value in every training row that held
+   them ("lower", a program's name, a digit, a word of an agent's command)
+   and the 27 words that alone named a side, a place, a layout or a
+   direction in some row ("left", "top", "grid", "wider"): 2,556 words in
+   all. Such a word is in the call when it is the value, or part of a phrase
+   that named a value of the call: "above" in "one above another" belongs to
+   the layout in rows. A number is in the call as that number or as a tab's
+   id (`id:4` for the 4 of "tab id 4"). The other clause's call does not
+   count.
 9. **No clause goes by what the clause before it changes.** The route
    resolves every call of a request against the desktop as it was when the
    request was made, and it does so on purpose: "close tab 2 and close tab
@@ -172,6 +188,40 @@ the model reads the request as before, unless all of these hold:
     each call, shown its clause alone, what they admit shown the whole
     request.
 
+13. **A list stands alone.** A request for a list of the panes, the tabs or
+    both (`panes_bundle.LIST`, a kind of the bundle's own) is answered only
+    when it is the request's one clause, and the route answers it with the
+    read-only list the exact list reader gives (`needle_cli`). What the
+    request names beside the list ("list pane 412 and its title": `about`)
+    is held to conditions 5 and 6 and is not used.
+
+### The second reader
+
+For a kind the manifest switches on (`second_reader.kinds`: a tool, or
+`compound` for two clauses), a clause that is none of its tool's readings
+(condition 1) may still be answered, if every other condition holds and:
+
+- every run of three neighbours of its frame stood in a training frame of
+  the same tool, the clause's start and end counted as neighbours: in one
+  that stood first or alone, or in one that followed a clause of the tool
+  that comes before it here;
+- the values it takes from closed lists were had together by a training
+  clause of the tool;
+- a side, a place, a layout or a direction it gives is named by a word of
+  the clause;
+- no call it would answer closes, types or starts a program. Those are
+  answered only for whole training clauses.
+
+Its answers carry the label "(second reader)" in the history. As this file
+is shipped it is switched on for six kinds: arrange_panes, go_to_pane,
+go_to_tab, move_tab, rename_tab, and `compound`, a request of two clauses
+whatever their tools. So a clause in new wording that opens a pane is not
+answered alone, and may be answered beside a second clause: of the 51
+two-clause requests of the generated pool the second reader answers, all a
+new pane and a layout, 34 open the pane in wording that is no training
+clause. Each kind was switched on by a standard declared before it was
+measured (below, "The reader now").
+
 None of these is a confidence threshold. They are lookups of wordings,
 words and word pairs, agreement, and the checks.
 
@@ -198,6 +248,19 @@ All training text is ours. None of it comes from a third-party dataset.
   and 773 dropped because the checks do not admit them as labelled. A request
   equal to a request of any file under `evals/` is never generated (147
   dropped).
+- **Agent-style rows** (4,196, `--agent 0`): requests the way coding agents
+  write them, from the templates of `panes_bundle_agent.py` (seed 0, 30 for
+  each template): panes and tabs named by the ids a list gave them ("close
+  pane 412", "rename tab id 4 to api"), a full stop or "only" at the end,
+  ";" between two requests, longer names, commands and programs, and lists
+  asked for in words the exact list reader does not take ("list pane 412
+  and its title"). The templates were written by hand after the request
+  history of one machine was read for its wording only; no line of it is a
+  template or a row, and `--exclude-history` drops a row equal to one of its
+  lines and counts it. Of 4,382 generated, 77 repeat another row, 8 are
+  equal to a line of that history, 64 copy a word the bundle knows only as
+  wording (such a row would teach the hold on such words, condition 6, an
+  exception), and 37 are not admitted by the checks as labelled.
 - **Spent eval sets** (1,649 cases, `--spent`): `evals/dev.jsonl`,
   `evals/test.jsonl` and `evals/heldout-v2.jsonl` to `heldout-v14.jsonl`, as
   the router is trained on them. Of 2,126 cases, 270 were dropped because the
@@ -210,7 +273,7 @@ All training text is ours. None of it comes from a third-party dataset.
   generator does open every file under `evals/`, that one among them, as the
   tuner does: to keep a request equal to an eval request out of the rows it
   makes.
-- 15 of the 7,318 rows are not used: the boundary between two of their
+- 15 of the 11,514 rows are not used: the boundary between two of their
   actions cannot be told from what the row records.
 
 A bundle trained with `--spent` must not be scored on those sets. The
@@ -224,31 +287,44 @@ here; whether it can still gate anything else is the owner's to say.
 ## Retraining and checking
 
 ```sh
-uv run --with torch==2.6.0 panes_bundle_train.py --spent --out panes-bundle \
-    --seeds 0 1 --name v4 --free-text rename_tab rename_pane go_to_pane go_to_tab
+uv run --with torch==2.6.0 panes_bundle_train.py --spent --agent 0 --exclude-history \
+    --out panes-bundle --seeds 0 1 --name v5 \
+    --free-text rename_tab rename_pane go_to_pane go_to_tab --second-kinds arrange_panes compound go_to_pane go_to_tab move_tab rename_tab
 python3 panes_bundle.py "new right pane with htop"   # what the bundle reads, or why it reads nothing
 python3 evaluate.py evals/dev.jsonl --route bundle     # the route as shipped; dev is among the rows, so this is no score
 ```
 
-Training needs PyTorch on a CPU (about twelve minutes for both members, one
-thread). Reading needs only the standard library. The trainer writes
+`--exclude-history` reads, of this machine's request history
+(`history.directory()`), only the request of each panes line that reached a
+tuned model, and only to keep an agent-style row equal to one of them out
+(`panes_bundle_train.history_requests`). The manifest records how many lines
+were compared and how many rows were dropped, and nothing of a line. With
+no history the trainer stops.
+
+Training needs PyTorch on a CPU (about nine minutes for both members on
+one thread of a laptop, with the second pair of seeds training beside it). Reading needs only the standard library. The trainer writes
 nothing unless all of this holds:
 
 - There are at least two different seeds. The bundle answers when its
   members agree, and one member agrees with itself about anything.
 - Each net, rounded to half floats, scores a sample of its examples the same
   with PyTorch and with the reader: 200 of them spread evenly over all it
-  has (21,399 examples a member here), and no example may come out
+  has (28,834 examples a member here), and no example may come out
   differently.
 - The whole reader with the checks, as a request meets them, answers every
-  training row it answers as that row is labelled. For 5,841 of its 7,318
-  rows this file proposes calls. 10 proposals are dropped by condition 12:
-  in 5 the checks add the pane that a resize names, and in 5 they admit for
-  a clause alone something else than for the whole request. The other 5,831
-  are admitted exactly as labelled. Of the rows it does not answer, 342 are
-  declined by condition 9 (training rows with two actions whose second is
-  resolved by something the first changes) and 209 because they arrange the
-  panes "vertical" or "horizontal" (below, "What it still gets wrong").
+  training row it answers as that row is labelled. With the second reader
+  off, this file proposes calls for 9,374 of its 11,514 rows. 15 proposals
+  are dropped by condition 12: in 7 the checks add the pane that a resize
+  names, in 2 the tab of a rename, and in 6 they admit for a clause alone
+  something else than for the whole request. The other 9,359 are admitted
+  exactly as labelled. With the second reader on for the six kinds it is
+  shipped with, or for every kind, it answers 6 more, each as labelled. Of
+  the rows it does not answer, 1,114 are labelled with no call (no tool fits
+  them), 396 are declined by condition 9 (training rows with two actions
+  whose second is resolved by something the first changes), 297 by
+  condition 6 (a name or title of several words that holds a word new to
+  the bundle) and 209 because they arrange the panes "vertical" or
+  "horizontal" (below, "What it still gets wrong").
 
 Run again on the same machine, with the same PyTorch, it wrote this file
 byte for byte.
@@ -262,9 +338,22 @@ and every eval request, and split into halves before anything was scored
 (v16, 179 cases, sha256 `8c001317…`; v17, 171 cases, sha256 `f17e9908…`; and
 a second pair, v18 and v19). None is in `evals/` yet.
 
-**The reader in this directory has not been gated.** The gates so far were
-of the first reader (format v2, file `124c491a…`), which held a request only
-to known words and word pairs:
+**The reader in this directory has not been gated.** Its gate was declared
+before it was trained: once on the agent-style half A1 and once on v19, for
+both pairs of members (seeds 0 and 1, and seeds 2 and 3), with the tuned
+model qat-9 behind the route. G1: no answer of the bundle unsafe, and the
+route no less safe than without it. G2: the route exact at least as often as
+without it, and no kind of request losing more than 2 cases. G3: the bundle
+answers at least 25% of what reaches the model on A1 and 10% on v19. G4
+(seeds 0 and 1, timed on v16 on an eight-core machine): a request it
+answers takes at most half the median whole call without it, and one it
+declines at most 50 ms more. G5: at most 2 of the first reader's answers not
+exact on each set, none where the route without the bundle is exact, and
+the second reader exact at least as often as the route without it on what
+it answers.
+
+The gates so far were of the first reader (format v2, file `124c491a…`),
+which held a request only to known words and word pairs:
 
 - **v16** failed the safety gate on one case. A request to close a tab held
   a word the bundle had never seen, the bundle copied it as the tab's title,
@@ -429,7 +518,131 @@ standing aside at once; the switch (22 values); the bundle's calls held as
 the model's are (126 paired runs in six modes); the trainer's counts and
 digests.
 
-## The reader now (format v4, this file)
+## The reader now (format v5, this file)
+
+On 2026-11-18 the owner asked for the bundle to answer more. Format v5
+widens what it answers in five ways, each held to rules written down before
+it was measured (the experiment's records, `runs/exp10/DECLARATION.md`):
+
+- **Agent-style rows** (above, "Where the rows come from"). Of the 161 panes
+  requests in this machine's history that reached a tuned model, most were
+  sent by coding agents, in wording no template of the tuner has.
+- **A list kind** (condition 13). 50 of the 125 of those requests that the
+  route still sends to the model ask for a list in words the exact list
+  reader does not take, and the model mostly answered them with nothing, a
+  new pane or typing.
+- **Tab ids and number forms** (condition 3), and **";"** between two
+  clauses (condition 4), as the tool's own examples write them.
+- **The second reader** (above), switched on kind by kind.
+
+**How a kind was switched on.** For each kind, on the development requests
+the second reader answers and the first does not:
+
+- (a) no answer may be unsafe;
+- (b) it must be exact at least as often as the tuned model qat-9, both on
+  every labelled request (the spent sets dev, test and v15 to v18; the
+  generated requests that are not training rows; the reviews' requests;
+  labelled probes) and on the reviews' requests and labelled probes alone;
+- (c) where a word is put into a request the first reader answers, or two
+  are joined by a word that never joined two, it may pass the word over no
+  more often than qat-9 does.
+
+The reviews' requests are the 92 of the three reviews, and the second
+review's walked requests that the second reader answers: 182 of those, of
+the kinds that passed and whose wording may be shown, were labelled by a
+labeller that saw neither the second reader's answer nor the model's. The
+probes are made from 600 generated and agent-style rows the first reader
+answers, 40 of each tool: 326,605 with one of 75 words put in at every
+place (negations, "or", "all", "again", "only", and the commonest words of
+copied texts that the bundle also knows as wording), 4,000 pairs joined by a
+word that joined two in training or by one that never did, and 1,500
+requests of three clauses.
+
+Held, as first built, to pairs of neighbours of its tool's frames, the second
+reader gave the second review's misreadings back: it answered 11 of the
+reviews' 92 requests, all wrongly ("not a new tab, thanks" opened a tab),
+and passed over an inserted word with a risky call 163 times. So, before the
+standard was applied, it was held to runs of three and to no risky call:
+
+| Kind | Labelled requests it answers | Exact | qat-9 exact on them | Unsafe | Probes with a word put in that it answers | It passes the word over | qat-9 passes it over | On |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| arrange_panes | 87 | 81 | 79 | 0 | 38 | 38 | 38 | yes |
+| compound | 56 | 56 | 49 | 0 | 0 | 0 | 0 | yes |
+| go_to_pane | 44 | 42 | 37 | 0 | 10 | 10 | 10 | yes |
+| go_to_tab | 89 | 85 | 84 | 0 | 9 | 9 | 9 | yes |
+| list | 0 | 0 | 0 | 0 | 2 | 2 | 0 | no |
+| maximize_pane | 5 | 5 | 3 | 0 | 22 | 22 | 15 | no |
+| move_tab | 150 | 150 | 102 | 0 | 3 | 3 | 3 | yes |
+| open_pane | 337 | 337 | 119 | 0 | 6 | 6 | 1 | no |
+| open_tab | 53 | 53 | 23 | 0 | 10 | 10 | 5 | no |
+| rename_pane | 185 | 185 | 127 | 0 | 15 | 15 | 13 | no |
+| rename_tab | 56 | 53 | 53 | 0 | 12 | 12 | 12 | yes |
+| resize_pane | 257 | 257 | 199 | 0 | 4 | 4 | 3 | no |
+| swap_panes | 39 | 39 | 35 | 0 | 20 | 20 | 19 | no |
+
+No joined request or request of three clauses was answered by the second
+reader. Every kind met (a) and (b). (c) kept seven off: on the probes of
+those kinds the model answered otherwise than the row more often than the
+second reader did, which for the list is always, since the model has no
+list to give. The prediction, made before, was that at most three kinds
+would go on.
+
+**What it answers.** Measured on eval sets the bundle is not trained on,
+with the tuned model qat-9. These sets shaped the rules, so they gate
+nothing:
+
+| Set | Cases | Exact without the bundle | With format v4 | With this file | With the second reader on for every kind | This file answers | Of them exact |
+| --- | ---: | ---: | ---: | ---: | ---: | --- | ---: |
+| v15 (the job's own held-out set) | 182 | 90 | 93 | 93 | 93 | 8 of the 180 that reach the model (4.4%) | 8 |
+| v16 | 179 | 96 | 102 | 104 | 107 | 20 of 170 (11.8%) | 20 |
+| v17 | 171 | 106 | 107 | 107 | 110 | 15 of 166 (9.0%) | 15 |
+| v18 | 162 | 92 | 95 | 99 | 99 | 23 of 156 (14.7%) | 23 |
+
+The second reader gives 2, 5, 3 and 6 of those answers. No answer of the
+bundle is unsafe: the one unsafe case on v16 is an exact reader's and the
+one on v18 the model's, with the bundle and without it. The second pair of
+members (seeds 2 and 3) answers 8, 20, 17 and 23, all exact, and the route
+is exact on 93, 104, 108 and 99 cases. With the second reader on for every
+kind the route would be exact on 3 more cases of v16 and of v17. That is
+what (c) cost here; what it guards against, a word put into a request, is
+not in these sets.
+
+Against format v4, each through its own reader and the checks: on the
+24,676 generated requests of experiment 9's pool this file answers 434 that
+format v4 declined (137 by the first reader, 297 by the second) and declines
+92 it answered (37 where the members no longer agree, 24 in wording no
+longer a training clause's, 21 for an untrained pair of words, 6 for three
+neighbours, 2 for a closed value no word names, 2 for a risky call). Every
+answer it gives on that pool is as labelled (11,115 of the first reader, 296
+of the second; training rows are among the pool). On v15 to v18 it answers
+23 that format v4 declined and declines 1 that it answered (on v16, a copied
+text that holds a word the bundle knows only as wording).
+
+Of the 161 panes requests in this machine's history that reached a tuned
+model, 142 would reach it today (the exact readers now take 18; one is
+refused). This file answers 55 of them, 10 with a list; format v4 answers
+18. The second reader as shipped answers none of them; on for every kind,
+it would answer 5 more (4 new panes, 1 list). The lines are counted, never
+labelled, so whether the 55 are right is not measured. They are 25 new
+tabs, 8 closes of a pane, 6 new panes, 2 commands typed into a pane, 2
+renames of a tab, 1 of a pane and 1 switch to another tab. A close and a
+command still wait for a yes that shows them.
+
+**A fault found after the standard.** A tab's number after "tab id" was read
+as the tab's id, but condition 8 took the id as standing for the number only
+where that number had been a tab's id in training: "rename tab id 64 to x"
+was read and "rename tab id 4 to api" was declined, the agent module's own
+example among them. `stands_for` now takes `id:N` as the number N. The
+standard was applied again to the fixed reader and gave the same six kinds
+(addendum 3), and the fix changes nothing on the training rows.
+
+**The reader as it now is has been neither reviewed nor gated.** A fourth
+review by a fresh session comes next. After it, only changes that make the
+reader decline more; then the gate declared above ("How it was gated"),
+read once on A1 and v19. Until both are done the bundle stays off by
+default.
+
+## The reader of format v4
 
 The nets are the same: the same rows, seeds and settings give the same
 weights (the part of the file that holds them is byte for byte what the
@@ -560,6 +773,27 @@ has left unchanged, and none has yet. `needle_cli.BUNDLE_BY_DEFAULT` is off.
 
 ## What it still gets wrong, and what is not its to fix
 
+- **The second reader answers fragments, and names it cannot place.** Of
+  the 182 walked requests of its six kinds that were labelled, it answers
+  15 otherwise than labelled, and every one of them is a request the
+  labeller judged to ask for nothing plainly, or to name something that may
+  be a tab or a pane: "a grid", "stacked layout", "the panes stacked?",
+  "over to the right", "could you switch to work", "name this one
+  frontend". The tuned model answers 14 of the same 15 otherwise than
+  labelled too. That is the line the owner set for it: no worse than the
+  model, and never unsafe.
+- **v5 no longer splits some requests at "and".** "rename this tab to api
+  and split right" and "close the next tab and open a new tab" go to the
+  model. The agent rows' "open a new tab named X and run Y" is one clause,
+  and the separator nets learnt from it that "and" between a name and a
+  verb need not join two clauses; the whole is then wording no tool was
+  trained on. "rename this tab to logs and split right" and "rename this
+  tab to api then split right" are still read (`tests/test_panes_bundle.py`,
+  `NO_LONGER_READ`).
+- **Only a rename names a tab by its id.** The agent rows name a tab by its
+  id only in renames. "go to tab id 4" and "close tab id 7" are no
+  training clause and go to the model, and so does "rename tab 4 to api",
+  where 4 would be a place.
 - **It repeats its labels.** A training clause is answered as it was
   labelled, with other names. Where a label is itself not what a person
   means, the bundle says the same for that literal wording: a resize that
@@ -622,8 +856,14 @@ has left unchanged, and none has yet. `needle_cli.BUNDLE_BY_DEFAULT` is off.
 
 ## What is not in this directory
 
-The blind sets v16 to v19 are kept with the experiment's records, outside
-this repository, with their scores, the two reviewers' reports and scripts,
-and the probes. v16, v17 and v18 are spent for the bundle: v16 shaped
-condition 7, v17 gated the first reader, and v18 was a check set while the
-answers to the reviews were written.
+The blind sets v16 to v19 and the agent-style sets A1 and A2 are kept with
+the experiment's records, outside this repository, with their scores, the
+reviewers' reports and scripts, and the probes. v16, v17 and v18 are spent
+for the bundle: v16 shaped condition 7, v17 gated the first reader, and v18
+was a check set while the answers to the reviews were written. A1 (184
+cases) and v19 (153) are for the gate of this file, and nothing has read
+them; A2 (177) is kept for a later one. A1 and A2 were written and
+labelled by two fresh assistant sessions (subagents that had seen no code,
+no row and no history) from a specification of the tool alone, in the style
+coding agents send requests; 53 requests equal to a training row and 6
+equal to one of an earlier blind set were dropped before the set was split.

@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 from collections import defaultdict
 import json
+import re
 import statistics
 import sys
 import time
@@ -55,7 +56,17 @@ def expected(expect):
             args.setdefault("restore", False)
         for key in ("pane", "tab"):
             value = args.get(key)
-            if isinstance(value, str) and value not in _KEYWORDS and not value.isdigit() and not value.startswith("name:"):
+            if not isinstance(value, str):
+                continue
+            # A pane's number is its id, as the checks admit "pane 70"
+            # (actions._pane_id); "id:N" is a pane's or a tab's id, and "pane:N"
+            # the tab that holds pane N (kilix.tab). Neither is a title.
+            ident = re.fullmatch(r"(id|pane):([0-9]+)", value)
+            if key == "pane" and (value.isascii() and value.isdigit() or ident):
+                args[key] = f"id:{int(ident[2] if ident else value)}"
+            elif ident:
+                args[key] = f"{ident[1]}:{int(ident[2])}"
+            elif value not in _KEYWORDS and not value.isdigit() and not value.startswith("name:"):
                 args[key] = "name:" + value
         out.append(_norm(kind, args))
     return out
@@ -169,7 +180,9 @@ class PanesRoute:
                 proposed = needle_cli.bundle_proposal(request) if self.bundle else None
                 if proposed is not None:
                     self.asked["bundle"] += 1
-                    return {"function_calls": proposed[0]}
+                    # A list the bundle read is the exact reader's list: no pane action runs.
+                    listed = [call["name"] for call in proposed[0]] == ["list"]
+                    return {"function_calls": [] if listed else proposed[0]}
                 self.asked["model"] += 1
                 self.engine.reset()
                 reply = self.engine.complete(request)

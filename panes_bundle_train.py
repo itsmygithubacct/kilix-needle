@@ -29,6 +29,25 @@ members: it answers when they agree.
 `--per-template N` asks the generator for more examples of each template than
 the tuned model gets. Measured on four held-out sets: it does not help.
 
+`--agent SEED` adds the agent-style rows of panes_bundle_agent.py (requests
+the way coding agents write them: ids, "only", full stops, ";" between
+clauses, the bundle's own list kind), `--agent-per-template` of each template.
+Each one goes through the same checks as every training row, and one is
+dropped, and counted, when it repeats another row, when the checks refuse it,
+when its values cannot be placed in it, or when a word it copies is one the
+other rows know only as wording (so that rule keeps its force).
+`--exclude-history` also drops one equal (folded) to a request of the job's
+history that went to a tuned model; the manifest records the counts, never a
+request.
+
+The file holds the second reader's ground beside the readings (runs of
+neighbours of each tool's training frames, the closed values they had
+together). `--second-kinds KIND ...` switches it on for those kinds in the
+manifest: none unless named, and each one only after it has been measured
+against the model (the standard of the experiment that chose it). Before
+anything is written the file is also read with the second reader on for every
+kind, and must answer its training rows as they are labelled that way too.
+
 Training needs PyTorch (a CPU is enough: minutes). Reading needs nothing.
 """
 from __future__ import annotations
@@ -41,6 +60,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import struct
 import sys
 import tempfile
@@ -52,9 +72,15 @@ SEPARATORS = {"and", "then", ",", ";"}      # used only to label training rows
 DIM, HIDDEN, EPOCHS, RATE = 8, 32, 40, 0.01
 CHECKED = 200       # examples of each net, spread over all it has, scored by PyTorch and again by the reader
 # What decides the rows, beside the generator's library: recorded in the manifest.
-ROW_CODE = ("actions.py", "tuning.py", "toolset.py")
+ROW_CODE = ("actions.py", "tuning.py", "toolset.py", "panes_bundle_agent.py")
 # The job's eval sets that have gated and are no longer a gate: what --spent adds.
 SPENT = ("evals/dev.jsonl", "evals/test.jsonl") + tuple(f"evals/heldout-v{n}.jsonl" for n in range(2, 15))
+# The bundle's own kind (panes_bundle.LIST): what the list holds, and what the
+# request names beside it ("list pane 412 and its title"), which the reader
+# must account for and the list does not need.
+LIST_ARGS = (("what", "enum", None, None), ("about", "ref", None, None))
+LIST_WHAT = ("panes", "tabs", "panes and tabs")
+_ID = re.compile(r"(?:id|pane):[0-9]+")
 
 
 def schema() -> dict:
@@ -75,6 +101,7 @@ def schema() -> dict:
             else:
                 args.append([key, "ref" if key in ("pane", "tab") else "text", None, None])
         tools[tool["name"]] = {"args": args, "required": list(tool["parameters"].get("required", []))}
+    tools[PB.LIST] = {"args": [list(arg) for arg in LIST_ARGS], "required": ["what"]}
     return tools
 
 
@@ -219,6 +246,108 @@ def spent_rows(paths=SPENT) -> tuple[list[dict], dict]:
     return rows, stats
 
 
+def history_requests() -> tuple[set, int]:
+    """The requests of this machine's panes history that reached a tuned
+    model, folded (panes_bundle_agent.fold), and how many lines they are.
+    Only the request of such a line is taken, and only to keep a row equal to
+    it out of the agent rows: no line of the history is a row. Every other
+    line, and every other part of these, is passed over."""
+    import history
+    import panes_bundle_agent as agent
+    folder = history.directory()
+    if not folder.is_dir():
+        raise SystemExit(f"panes_bundle_train: there is no request history at {folder}")
+    out, lines = set(), 0
+    for path in sorted(folder.glob("requests*.jsonl")):
+        with open(path, encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    entry = json.loads(line)
+                except ValueError:
+                    continue
+                if not isinstance(entry, dict) or entry.get("job") != "panes" \
+                        or not isinstance(entry.get("request"), str) \
+                        or not str(entry.get("engine") or "").startswith("tuned"):
+                    continue
+                out.add(agent.fold(entry["request"]))
+                lines += 1
+    return out, lines
+
+
+def wording(rows: list[dict], tools: dict) -> tuple[set, dict]:
+    """The words of the rows that are not copied (what the bundle will know
+    as wording), and for each argument the words copied for it as text."""
+    known, held = set(), collections.defaultdict(set)
+    for row in rows:
+        p = prepare(row, tools)
+        if p is None:
+            continue
+        copied = set()
+        for clause in p["clauses"]:
+            lo = clause["range"][0]
+            for key, (a, b) in clause["spans"].items():
+                copied.update(range(lo + a, lo + b + 1))
+                if key not in clause["numbers"]:
+                    held[key].update(p["words"][lo + a:lo + b + 1])
+        known.update(w for i, w in enumerate(p["words"]) if i not in copied)
+    return known, held
+
+
+def agent_rows(seed: int, per_template: int, rows: list[dict], tools: dict, exclude: set | None = None,
+               log=print) -> tuple[list[dict], dict]:
+    """Agent-style rows (panes_bundle_agent) to add to `rows`, and what was
+    left out and why. A row is left out when:
+    - it is one of `rows` already, or equal (folded) to a request of
+      `exclude` (this machine's history, history_requests);
+    - the checks do not admit each of its actions for its request, as a
+      generated row's (a list, the bundle's own, is the row's one action);
+    - its clauses cannot be told apart, or a copied value not found;
+    - a word copied for one of its arguments is one the bundle will know
+      only as wording: the hold on such words (PB.PLAIN) is kept as strong
+      as the other rows left it."""
+    import panes_bundle_agent as agent
+    from actions import Action, interpret
+    made = agent.rows(seed, per_template)
+    out = collections.Counter(generated=len(made))
+    present = {agent.fold(row["query"]) for row in rows}
+    kept, why = [], collections.defaultdict(collections.Counter)
+    for row in made:
+        key = agent.fold(row["query"])
+        actions = [[kind, dict(args)] for kind, args in row["actions"]]
+        if key in present:
+            reason = "same_as_another_row"
+        elif exclude is not None and key in exclude:
+            reason = "same_as_a_history_request"
+        elif any(kind == PB.LIST for kind, _ in actions):
+            reason = None if len(actions) == 1 and actions[0][1].get("what") in LIST_WHAT else "not_admitted"
+        else:
+            calls = [{"name": kind, "arguments": args} for kind, args in actions]
+            admitted = [a for a in interpret(row["query"], calls) if isinstance(a, Action)] if calls else []
+            reason = None if len(admitted) == len(actions) else "not_admitted"
+        if reason is None and prepare(row, tools) is None:
+            reason = "clauses_or_values_not_placed"
+        if reason:
+            out[reason] += 1
+            why[row["template"]][reason] += 1
+            continue
+        kept.append({"query": row["query"], "actions": actions, "spans": row["spans"]})
+    known, _ = wording(rows + kept, tools)
+    _, held = wording(rows, tools)
+    plain = []
+    for row in kept:
+        p = prepare(row, tools)
+        if any(word in known and word not in held[key]
+               for clause in p["clauses"] for key, (a, b) in clause["spans"].items() if key not in clause["numbers"]
+               for word in p["words"][clause["range"][0] + a:clause["range"][0] + b + 1]):
+            out["copied_word_known_as_wording"] += 1
+            continue
+        plain.append(row)
+    out["kept"] = len(plain)
+    for template, reasons in sorted(why.items()):
+        log(f"  agent template {template}: {dict(reasons)}")
+    return plain, dict(sorted(out.items()))
+
+
 def find_words(words, sub, start=0):
     for i in range(start, len(words) - len(sub) + 1):
         if words[i:i + len(sub)] == sub:
@@ -322,8 +451,9 @@ def prepare(row: dict, tools: dict):
                 labels[key] = PB.COPY
                 spans[key] = (place[0] - lo, place[1] - lo)
                 # The copied words stand for a number: "tab two" for tab 2,
-                # where "the tab named two" would be a title.
-                if kind == "int" or (kind == "ref" and str(value).isdigit()):
+                # where "the tab named two" would be a title, and "tab id 4"
+                # for the tab whose id is 4.
+                if kind == "int" or (kind == "ref" and (str(value).isdigit() or _ID.fullmatch(str(value)))):
                     numbers.add(key)
             elif kind == "flag":
                 labels[key] = "true" if value else PB.ABSENT
@@ -346,6 +476,7 @@ def ground(prepared: list[dict]) -> dict:
     would stand in it as plain words."""
     readings, separators, most = collections.defaultdict(set), set(), 1
     longest, copied = collections.defaultdict(dict), collections.defaultdict(set)
+    frame_runs, closed_sets = collections.defaultdict(set), collections.defaultdict(set)
     for p in prepared:
         most = max(most, len(p["clauses"]))
         separators.update(p["words"][i] for i in p["separators"])
@@ -360,11 +491,19 @@ def ground(prepared: list[dict]) -> dict:
             spans = {key: (a, b, key in clause["numbers"]) for key, (a, b) in clause["spans"].items()}
             closed = {key: label for key, label in clause["labels"].items() if label not in (PB.ABSENT, PB.COPY)}
             before = p["clauses"][index - 1]["tool"] if index else ""
-            readings[clause["tool"]].add(PB.reading_line(before, PB.frame_of(p["words"][lo:hi], spans), closed))
+            frame = PB.frame_of(p["words"][lo:hi], spans)
+            readings[clause["tool"]].add(PB.reading_line(before, frame, closed))
+            # The second reader's: each run of neighbours of the frame with
+            # the tool of the clause before, and the closed values together.
+            frame_runs[clause["tool"]].update(f"{before}\t{run}" for run in PB.runs(frame))
+            closed_sets[clause["tool"]].add("".join(f"\t{key}={closed[key]}" for key in sorted(closed)))
     return {"readings": {tool: sorted(lines) for tool, lines in readings.items()},
             "separators": sorted(separators), "clauses_max": most,
             "copy_max": {tool: dict(sorted(keys.items())) for tool, keys in sorted(longest.items())},
-            "copied": {key: sorted(words) for key, words in sorted(copied.items())}}
+            "copied": {key: sorted(words) for key, words in sorted(copied.items())},
+            "frame_runs": {tool: sorted(lines) for tool, lines in frame_runs.items()},
+            "closed_sets": {tool: sorted(lines) for tool, lines in closed_sets.items()},
+            "said": sorted(closed_values())}
 
 
 def examples(rows: list[dict], tools: dict) -> tuple[dict, set, set, dict]:
@@ -588,21 +727,32 @@ def same_as_trained(raw: bytes, checks: list[dict]) -> list[dict]:
     return out
 
 
-def reads_its_rows(raw: bytes, rows: list[dict]) -> dict:
+def reads_its_rows(raw: bytes, rows: list[dict], second: bool = False) -> dict:
     """The file read as a request meets it (Bundle.read, then the checks as
     needle_cli.checks_agree holds a proposal to them), on every row it was
     trained on: how many it answers, how many of those as the row is
     labelled, and how many with a risky action the row does not hold. The
     nets are checked one by one in same_as_trained; this checks the reader
-    that stands on them."""
+    that stands on them. A list is the route's own and meets no checks: it
+    is as labelled when it lists what the row's list does.
+
+    `second`: with the second reader switched on for every kind. A file is
+    written whatever this finds; the manifest records it."""
     from actions import Action, interpret
     from evaluate import _norm, expected
     from needle_cli import checks_agree
     bundle, out = PB.Bundle(raw), collections.Counter(rows=len(rows))
+    if second:
+        bundle.second_kinds = frozenset(bundle.tools) | {PB.COMPOUND}
     for row in rows:
         texts: list = []
         calls, _ = bundle.read(row["query"], texts)
         if not calls:
+            continue
+        if calls[0]["name"] == PB.LIST:
+            out["answered"] += 1
+            out["as_labelled"] += [[c["name"], c["arguments"]["what"]] for c in calls] == \
+                [[kind, args.get("what")] for kind, args in row["actions"]]
             continue
         if not checks_agree(row["query"], calls, texts):
             out["proposed_and_dropped"] += 1
@@ -641,12 +791,14 @@ def pack(members: list[tuple[int, dict]], known: set, pairs: set, tools: dict, f
     names = sorted({name for feature_names, _, _ in first.values() for name in feature_names})
     number = {name: n for n, name in enumerate(names)}
     ground = {"readings": {}, "separators": sorted(SEPARATORS), "clauses_max": 2, "copy_max": {}, "copied": {},
-              **(ground or {})}
+              "frame_runs": {}, "closed_sets": {}, "said": [], **(ground or {})}
     head = {"schema": PB.SCHEMA, "dim": dim, "hidden": hidden, "known": sorted(known), "tools": tools,
             "free_text": sorted(free_text), "value_words": value_words or {}, "nets": {}, "members": [],
             "separators": sorted(ground["separators"]), "clauses_max": int(ground["clauses_max"]),
             "copy_max": ground["copy_max"], "copied": {key: sorted(words) for key, words in ground["copied"].items()},
-            "readings": {}}
+            "readings": {}, "frame_runs": {}, "frame_run": PB.RUN,
+            "closed_sets": {tool: sorted(ground["closed_sets"].get(tool, ())) for tool in sorted(tools)},
+            "said": sorted(ground["said"])}
     body = bytearray()
 
     def add(blob: bytes) -> int:
@@ -682,6 +834,12 @@ def pack(members: list[tuple[int, dict]], known: set, pairs: set, tools: dict, f
             raise ValueError(f"a reading of {tool} holds a line break")
         blob = "\n".join(lines).encode("utf-8")
         head["readings"][tool] = [add(blob), len(blob)]
+    for tool in sorted(tools):
+        lines = sorted(ground["frame_runs"].get(tool, ()))
+        if any("\n" in line for line in lines):
+            raise ValueError(f"a run of {tool}'s frames holds a line break")
+        blob = "\n".join(lines).encode("utf-8")
+        head["frame_runs"][tool] = [add(blob), len(blob)]
     encoded = json.dumps(head, ensure_ascii=False, sort_keys=True).encode("utf-8")
     return PB.MAGIC + len(encoded).to_bytes(4, "little") + encoded + bytes(body)
 
@@ -691,10 +849,12 @@ def sha256_file(path: Path) -> str:
 
 
 def write(out: Path, rows: list[dict], row_stats: dict, seeds: list[int], free_text: list[str],
-          name: str, log=print) -> dict:
+          name: str, log=print, second_kinds=()) -> dict:
     if len(set(seeds)) != len(seeds) or len(seeds) < PB.MEMBERS_MIN:
         raise SystemExit(f"a bundle answers when its members agree: it takes at least {PB.MEMBERS_MIN} different seeds")
     tools = schema()
+    if any(kind not in tools and kind != PB.COMPOUND for kind in second_kinds):
+        raise SystemExit(f"the second reader cannot answer {sorted(set(second_kinds) - set(tools))}")
     data, known, pairs, used = examples(rows, tools)
     trained, checks = [], []
     for seed in seeds:
@@ -711,6 +871,9 @@ def write(out: Path, rows: list[dict], row_stats: dict, seeds: list[int], free_t
     on_rows = reads_its_rows(raw, rows)
     log(f"on its own rows: {on_rows}")
     refuse_misread_rows(on_rows)
+    on_rows_second = reads_its_rows(raw, rows, second=True)
+    log(f"on its own rows, with the second reader on for every kind: {on_rows_second}")
+    refuse_misread_rows(on_rows_second)
     out.mkdir(parents=True, exist_ok=True)
     (out / PB.FILE).write_bytes(raw)
     import torch
@@ -735,6 +898,10 @@ def write(out: Path, rows: list[dict], row_stats: dict, seeds: list[int], free_t
                                                   for r in rows).encode("utf-8")).hexdigest()},
         "free_text": sorted(free_text),
         "reads_its_rows": on_rows,
+        "reads_its_rows_with_the_second_reader": on_rows_second,
+        # The kinds the second reader answers (panes_bundle.Member.second),
+        # each switched on only after it was measured against the model.
+        "second_reader": {"kinds": sorted(second_kinds)},
         "code": {source: sha256_file(REPO / source)
                  for source in ("panes_bundle.py", "panes_bundle_train.py") + ROW_CODE},
     }
@@ -753,8 +920,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--save-rows", help="also write the rows used to this file")
     parser.add_argument("--spent", action="store_true",
                         help="add the cases of the job's spent eval sets (never a current gate set)")
+    parser.add_argument("--agent", type=int, metavar="SEED",
+                        help="add agent-style rows (panes_bundle_agent) made from this seed")
+    parser.add_argument("--agent-per-template", type=int, default=30)
+    parser.add_argument("--exclude-history", action="store_true",
+                        help="leave out every agent row equal to a request of this machine's panes history "
+                             "that reached a tuned model (counted; no line of it is read for anything else)")
+    parser.add_argument("--second-kinds", nargs="*", default=[],
+                        help="the kinds (tools, or 'compound') the second reader answers")
     parser.add_argument("--name", default="")
     args = parser.parse_args(argv)
+    if args.exclude_history and args.agent is None:
+        parser.error("--exclude-history goes with --agent")
     if args.rows:
         refuse_gates([os.path.abspath(args.rows)])
         raw_rows = Path(args.rows).read_bytes()
@@ -766,11 +943,18 @@ def main(argv: list[str] | None = None) -> int:
         generated = {row["query"] for row in rows}
         more, stats["spent"] = spent_rows()
         rows += [row for row in more if row["query"] not in generated]
+    if args.agent is not None:
+        exclude, compared = history_requests() if args.exclude_history else (None, 0)
+        more, made = agent_rows(args.agent, args.agent_per_template, rows, schema(), exclude)
+        rows += more
+        stats["agent"] = {**made, "seed": args.agent, "per_template": args.agent_per_template,
+                          "history_excluded": args.exclude_history, "history_requests_compared": compared}
     if args.save_rows:
         with open(args.save_rows, "w", encoding="utf-8") as handle:
             for row in rows:
                 handle.write(json.dumps(row, ensure_ascii=False) + "\n")
-    manifest = write(Path(args.out), rows, stats, args.seeds, args.free_text, args.name)
+    manifest = write(Path(args.out), rows, stats, args.seeds, args.free_text, args.name,
+                     second_kinds=args.second_kinds)
     print(json.dumps({k: manifest[k] for k in ("name", "members", "rows")}, indent=1)[:2000])
     return 0
 

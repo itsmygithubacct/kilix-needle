@@ -57,6 +57,22 @@ this holds:
 So what decides whether it answers is a lookup of wordings it has seen, and
 agreement, never a confidence.
 
+A list of the panes or tabs (or both) is a kind of its own (LIST), answered
+only as the request's one clause, with the list the exact list reader gives.
+A tab's number after "tab id" is the tab's id ("id:4"), never its place, and
+that id is the number in the call (stands_for).
+
+The second reader, for the kinds the manifest switches on (second_reader;
+none unless it names them, each one measured against the model first),
+answers a clause that is no training clause of its tool when every other
+hold above holds and (Member.second): every run of three neighbours of its
+frame stood side by side in a training frame of the tool (RUN; pairs gave
+"not a new tab, thanks" and "i need one" again), its values from closed
+lists are those of a training clause of the tool, and a side, place, layout
+or direction it gives is named by a word of the clause. It never answers a
+call that closes, types or starts a program, nor a request with one in it
+(risky). Its answers carry a label of their own.
+
 Its calls are proposals like the model's: they pass every check
 (actions.interpret), resolution against the live tree and the same
 confirmation. The checks read the whole request and add what they find in
@@ -74,8 +90,11 @@ The header also holds the words the reader goes by: the known words, the
 tools' arguments, the tools whose copied text may be new, the words that
 name a value, the words that joined two clauses, the largest number of
 clauses in a training row, the most words copied for each argument, the
-words that were copied for each argument, and for each tool where its
-readings are.
+words that were copied for each argument, for each tool where its readings
+are, and the second reader's ground: for each tool where the runs of its
+training frames are (and their length), the values from closed lists its
+training clauses had together, and the values a word of the clause must
+name.
 """
 from __future__ import annotations
 
@@ -93,14 +112,21 @@ import struct
 import sys
 
 DIRECTORY = Path(__file__).resolve().parent / "panes-bundle"
-SCHEMA = "kilix-needle.panes-bundle/v4"
-MANIFEST_SCHEMA = "kilix-needle.panes-bundle-manifest/v4"
-MAGIC = b"KNPB4\n"
+SCHEMA = "kilix-needle.panes-bundle/v5"
+MANIFEST_SCHEMA = "kilix-needle.panes-bundle-manifest/v5"
+MAGIC = b"KNPB5\n"
 FILE = "bundle.bin"
 MAX_BYTES = 64 << 20        # no bundle is near this size; a manifest that states more is refused
 MANIFEST_MAX = 1 << 20      # and no manifest is near this one
 MEMBERS_MIN = 2             # one member agrees with itself about anything
 NONE, ABSENT, COPY = "<none>", "<absent>", "<copy>"
+# The bundle's own kind: a list of the panes or tabs (or both), which the
+# route answers with the list the exact list reader gives (needle_cli). It
+# changes nothing, and it is answered only as the request's one clause.
+LIST = "list"
+# What the second reader may answer: a tool's name, or this for two clauses.
+COMPOUND = "compound"
+OK, OK_SECOND = "ok", "ok, by the second reader"
 # Words that name a pane or tab by place; any other pane or tab is copied.
 CANON = ("current", "left", "right", "above", "below", "next", "previous", "last")
 # Closing and typing act on the pane or tab they name. The bundle names that
@@ -161,10 +187,11 @@ NOT_THE_CALLERS = {"close_pane": (*SIDES, "next", "previous"), "close_tab": ("ne
 # other way round from what was asked. The model is trained on the same
 # labels: this is the tool's to fix, not the bundle's.
 CROSSED = {("arrange_panes", "layout"): ("vertical", "horizontal")}
-# A name, or a title a pane or tab is found by, of more than one word is
-# made of words that were copied for such an argument in training. One that
-# holds a word the bundle has never seen is that one word (Member.read).
-ONE_NEW = ("name", "pane", "tab")
+# A name, or a title a pane or tab is found by (a list's `about` among them),
+# of more than one word is made of words that were copied for such an
+# argument in training. One that holds a word the bundle has never seen is
+# that one word (Member.read).
+ONE_NEW = ("name", "pane", "tab", "about")
 # A mark that ended the sentence or a part of it, split from the word before.
 _CLOSING = frozenset(",;?!:.")
 _MARK = re.compile(r"<[a-z_]+#?>")
@@ -206,8 +233,9 @@ def number_of(text) -> int | None:
 
 def stands_for(word: str, values, canon=()) -> bool:
     """Whether a word of the request is in the answer: as (part of) a text
-    value, as the number it spells, or as the value it is another word for
-    (`canon`: "lower" for below)."""
+    value, as the number it spells (a tab's id, `id:N`, among them: "tab id
+    4"), or as the value it is another word for (`canon`: "lower" for
+    below)."""
     number = number_of(word)
     for value in values:
         if isinstance(value, bool):
@@ -215,7 +243,7 @@ def stands_for(word: str, values, canon=()) -> bool:
         text = str(value)
         if text in canon or word == text.lower() or any(word == t[0].lower() for t in tokenize(text)):
             return True
-        if number is not None and text == str(number):
+        if number is not None and text in (str(number), f"id:{number}"):
             return True
     return False
 
@@ -350,8 +378,13 @@ def goes_by(call: dict, refs) -> set:
 
 
 def forms_of(words: list[str], known) -> list[str]:
-    """A word the bundle was trained on stands as itself; any other is only a place."""
-    return [w if w in known else ("<num>" if w.isdigit() else "<x>") for w in words]
+    """A word the bundle was trained on stands as itself; any other is only a
+    place. A number is always only a place: which number it is is read by
+    code, not by the nets. (A number that stood as itself where the training
+    rows had it as wording, "kill process 20", made "close pane 20" a pair of
+    words the nets never saw beside each other, where "close pane 21" was
+    one they had.)"""
+    return [("<num>" if w.isdigit() else "<x>") if w not in known or w.isdigit() else w for w in words]
 
 
 def clause_features(forms: list[str], context: list[str], index: int, count: int) -> list[str]:
@@ -442,7 +475,47 @@ MIXED = "a copied name or title of several words holds one the bundle has never 
 CLOSED = "a copied text ends in a mark that ended the sentence"
 LEANS = "a clause that goes by what the clause before it changes"
 TURNED = "a layout kitty shows the other way round from the tool's labels"
+ALONE = "a list beside another clause"
 _HOLDS = (LONG, UNSHOWN, CARRIED, UNNAMED, PLAIN, MIXED, CLOSED, LEANS, TURNED)
+# Why the second reader does not answer a clause that is not a training
+# clause of its tool (reported in the place of UNSHOWN, for a kind it may
+# answer).
+SECOND_RUN = "three neighbours together that no training clause of this tool had"
+SECOND_SET = "values from closed lists no training clause of this tool had together"
+SECOND_SAID = "a value from a closed list that no word of the clause names"
+SECOND_RISKY = "a call that closes, types or starts a program: only whole training clauses ask for one"
+# How many neighbours of a frame, side by side, the second reader holds to
+# a training frame of the tool. Two are not enough: a walk over pairs of
+# neighbours of a tool's own clauses gives "not a new tab, thanks" and "i
+# need one", and both opened something (the second review).
+RUN = 3
+_RISKY = ("close_pane", "close_tab", "run_in_pane")
+
+
+def risky(call: dict) -> bool:
+    """Whether a call closes something, types into a pane or starts a
+    program: what the checks hold for a yes (actions.Action.risky). The
+    second reader never answers one."""
+    return call["name"] in _RISKY or (call["name"] in ("open_pane", "open_tab")
+                                      and bool(call["arguments"].get("program")))
+
+
+def runs(frame: list[str]) -> list[str]:
+    """The runs of RUN neighbours of a frame, from its start to its end (a
+    shorter frame is one run), as the second reader's table holds them."""
+    padded = ["<s>"] + frame + ["</s>"]
+    k = min(RUN, len(padded))
+    return [" ".join(padded[i:i + k]) for i in range(len(padded) - k + 1)]
+
+
+def _after_id(words: list[str], at: int) -> bool:
+    """Whether the word before `at` is "id" (a ":" or "#" between them aside):
+    "tab id 4", "tab id: 4". A tab's number after it is the tab's id, never
+    its place: "go to tab id 14" is not the fourteenth tab."""
+    at -= 1
+    while at >= 0 and words[at] in (":", "#"):
+        at -= 1
+    return at >= 0 and words[at] == "id"
 
 
 class Member:
@@ -498,7 +571,7 @@ class Member:
         if len(clauses) > self.bundle.clauses_max:
             return [], "more clauses than any training row had"
         tool_net = self.net("tool")
-        calls, accounted, places = [], {i for i, sep in enumerate(is_sep) if sep}, []
+        calls, accounted, places, unshown = [], {i for i, sep in enumerate(is_sep) if sep}, [], []
         for index, (lo, hi) in enumerate(clauses):
             mine = forms[lo:hi]
             context = [w for j, w in enumerate(forms) if not lo <= j < hi and not is_sep[j]]
@@ -542,7 +615,7 @@ class Member:
                 elif kind == "ref":
                     number = number_of(text)
                     if number is not None:
-                        text = str(number)
+                        text = f"id:{number}" if key == "tab" and _after_id(words, lo + first) else str(number)
                 # No copy is longer than the longest text copied for this
                 # argument in training: a title of nine words is the rest of
                 # the sentence, not a title.
@@ -589,7 +662,10 @@ class Member:
             frame, shown = frame_of(words[lo:hi], spans), bundle.readings(tool)
             if reading_line("", frame, closed) not in shown and not (
                     calls and reading_line(calls[-1]["name"], frame, closed) in shown):
-                failed.add(UNSHOWN)
+                # Not a training clause of its tool. Only the second reader
+                # may answer it, and only for a kind it is switched on for
+                # (below): this is whether it would.
+                unshown.append(self.second(tool, frame, closed, words[lo:hi], calls[-1]["name"] if calls else ""))
             # Nothing the clause says may be dropped: a word that in training
             # always named a value ("lower", a program, a number), or that
             # alone named a side, a place, a layout or a direction ("left",
@@ -634,19 +710,66 @@ class Member:
             accounted.update(lo + i for i in copied)
             calls.append({"name": tool, "arguments": arguments})
             places.append((toks[lo][1], toks[hi - 1][2]))
+        # A list is the whole request: "list the panes and close pane 4" is
+        # not a list, and the list changes nothing a clause after it goes by.
+        if len(calls) > 1 and any(c["name"] == LIST for c in calls):
+            return [], ALONE
         if PAIR in failed:
             return [], PAIR
         # A word the bundle was never trained on must have been copied as an
         # argument; otherwise this request is not ground it knows.
         for i, form in enumerate(forms):
-            if form in ("<x>", "<num>") and i not in accounted:
+            if form in ("<x>", "<num>") and words[i] not in self.known and i not in accounted:
                 return [], WORD
+        # A clause that is not a training clause of its tool is answered by
+        # the second reader or not at all. It answers only the kinds it is
+        # switched on for (the manifest's second_reader), each one measured
+        # against the model before it was.
+        # It never answers a call that closes, types or starts a program, nor
+        # anything beside one.
+        second = None
+        if unshown:
+            kind = calls[0]["name"] if len(calls) == 1 else COMPOUND
+            if kind not in bundle.second_kinds:
+                failed.add(UNSHOWN)
+            else:
+                second = next((why for why in unshown if why), None) or \
+                    (SECOND_RISKY if any(map(risky, calls)) else None)
+                if second:
+                    failed.add(UNSHOWN)
         for reason in _HOLDS:
             if reason in failed:
-                return [], reason
+                return [], (second or reason) if reason == UNSHOWN else reason
         if texts is not None:
             texts[:] = [request[start:end] for start, end in places]
-        return calls, "ok"
+        return calls, OK_SECOND if unshown else OK
+
+    def second(self, tool: str, frame: list[str], closed: dict, words: list[str], before: str) -> str | None:
+        """Whether the second reader may answer a clause that is no training
+        clause of its tool: None if it may, else why not. Every other hold of
+        the reader still holds, and it answers no call that closes, types or
+        starts a program (read, above); beside them:
+        - every run of three neighbours of its frame (marks and words, from
+          its start to its end: runs) stood side by side in a training clause
+          of the same tool that stood first or alone, or that followed a
+          clause of the tool this one follows;
+        - its values from closed lists are those of some training clause of
+          the tool, all together;
+        - a side, a place, a layout or a direction it gives is named by a
+          word of the clause: by itself, or by a word that named it in
+          training ("top" for above). "current" needs no word."""
+        bundle = self.bundle
+        held = bundle.frame_runs(tool)
+        for run in runs(frame):
+            if f"\t{run}" not in held and not (before and f"{before}\t{run}" in held):
+                return SECOND_RUN
+        if "".join(f"\t{key}={closed[key]}" for key in sorted(closed)) not in bundle.closed_sets.get(tool, ()):
+            return SECOND_SET
+        for value in closed.values():
+            if value in bundle.said and not any(stands_for(word, [value], bundle.value_words.get(word, ()))
+                                                for word in words):
+                return SECOND_SAID
+        return None
 
 
 class Bundle:
@@ -685,9 +808,27 @@ class Bundle:
             # {tool: {argument: the most words copied for it in a training row}}
             self.copy_max = {tool: {key: int(n) for key, n in most.items()}
                              for tool, most in head["copy_max"].items()}
+            # The second reader's ground: for each tool where the runs of
+            # neighbours of its training frames are, the values from closed
+            # lists its training clauses had together, and the values that
+            # a word of the clause must name.
+            self.closed_sets = {tool: frozenset(lines) for tool, lines in head["closed_sets"].items()}
+            self.said = frozenset(head["said"])
+            if set(head["frame_runs"]) != set(self.tools):
+                raise ValueError("the second reader's runs are not those of the bundle's tools")
+            if head["frame_run"] != RUN:
+                raise ValueError(f"the second reader's runs are of {head['frame_run']} neighbours, "
+                                 f"and this reader holds to runs of {RUN}")
+            # The kinds the second reader answers: none unless the manifest
+            # names them, each one measured before it was.
+            kinds = (self.manifest.get("second_reader") or {}).get("kinds", [])
+            if not isinstance(kinds, list) or not all(k in self.tools or k == COMPOUND for k in kinds):
+                raise ValueError("the manifest names kinds the second reader cannot answer")
+            self.second_kinds = frozenset(kinds)
             self._names = self._pairs = None
             self._ids: dict = {}
             self._readings: dict = {}
+            self._frame_runs: dict = {}
             self.members = [Member(self, entry) for entry in head["members"]]
             self._check_places()
         except (KeyError, TypeError, ValueError, AttributeError) as error:
@@ -706,7 +847,8 @@ class Bundle:
         if dim < 1 or hidden < 1:
             raise BundleError("the nets of the bundle have no size")
         weights: list = [[] for _ in head["members"]]
-        blocks = [head["names"], head["pairs"]] + [head["readings"][tool] for tool in self.tools]
+        blocks = [head["names"], head["pairs"]] + [head["readings"][tool] for tool in self.tools] \
+            + [head["frame_runs"][tool] for tool in self.tools]
         for at, size in blocks:
             if not 0 <= at <= at + size <= room:
                 raise BundleError("a table of the bundle lies outside the file")
@@ -751,6 +893,14 @@ class Bundle:
         if tool not in self._readings:
             self._readings[tool] = frozenset(self._text(self.head["readings"][tool]))
         return self._readings[tool]
+
+    def frame_runs(self, tool: str) -> frozenset:
+        """Every run of neighbours of the training frames of one tool (runs),
+        each a line: the tool of the clause before ("" for one that stood
+        first or alone), a tab, and the marks or words of the run."""
+        if tool not in self._frame_runs:
+            self._frame_runs[tool] = frozenset(self._text(self.head["frame_runs"][tool]))
+        return self._frame_runs[tool]
 
     def ids(self, key: str):
         """The numbers of one net's features, in rising order."""
@@ -803,12 +953,14 @@ class Bundle:
         if not calls:
             return [], reason
         for member in self.members[1:]:
-            other, _ = member.read(request)
+            other, why = member.read(request)
             if other != calls:
                 return [], "the members do not agree"
+            if why == OK_SECOND:
+                reason = OK_SECOND
         if texts is not None:
             texts[:] = clauses
-        return calls, "ok"
+        return calls, reason
 
 
 def _regular_file(path: Path, what: str, *, size: int | None = None, at_most: int | None = None) -> bytes:
@@ -876,11 +1028,14 @@ def read(request: str, texts: list | None = None) -> tuple[list, str] | None:
     if bundle is None or "\n" in request or "\r" in request:
         return None
     try:
-        calls, _ = bundle.read(request, texts)
+        calls, reason = bundle.read(request, texts)
     except Exception as error:
         _not_used(error)
         return None
-    return (calls, bundle.label) if calls else None
+    if not calls:
+        return None
+    # What the second reader answers is recorded under a label of its own.
+    return calls, bundle.label + (" (second reader)" if reason == OK_SECOND else "")
 
 
 def main(argv: list[str]) -> int:

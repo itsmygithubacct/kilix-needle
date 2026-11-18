@@ -278,6 +278,11 @@ def bundle_proposal(request: str):
         if not proposed:
             return None
         calls, label = proposed
+        # A list is the bundle's own kind and changes nothing: the route
+        # answers it with the exact reader's list (run_request), and there is
+        # no call for the checks to admit. The reader answers it only alone.
+        if [call["name"] for call in calls] == [panes_bundle.LIST]:
+            return calls, label
         if not checks_agree(request, calls, texts):
             return None
     except Exception as error:      # noqa: BLE001  nothing in front of the model may stop a request
@@ -316,28 +321,31 @@ def run_request(engine: Engine, request: str, options: Options,
     status 0 = done or nothing to do, 1 = something was refused, skipped or failed.
     Each item has "outcome": refused | unresolved | would | skipped | done | failed.
     """
-    def exact(request):
+    def listed(request, unit):
         # Inventory never goes through the model's action proposals.
+        try:
+            tree = kilix.snapshot(under_overlay=options.under_overlay)
+        except kilix.KilixError as error:
+            return {"request": request, "status": 1, "items": [], "note": str(error)}
+        items = []
+        for tab in tree.tabs:
+            if "tabs" in unit:
+                items.append({"kind": "list_tabs", "args": {}, "outcome": "done",
+                              "tab_id": tab["id"], "title": tab.get("title", ""),
+                              "summary": f"tab {tab['id']}: {tab.get('title', '')}"})
+            if "panes" in unit:
+                for pane in tab.get("windows", []):
+                    items.append({"kind": "list_panes", "args": {}, "outcome": "done",
+                                  "pane_id": pane["id"], "tab_id": tab["id"],
+                                  "title": pane.get("title", ""),
+                                  "summary": f"pane {pane['id']} in tab {tab['id']}: "
+                                             f"{pane.get('title', '')}"})
+        return {"request": request, "status": 0, "note": "", "items": items}
+
+    def exact(request):
         unit = inventory_unit(request)
         if unit is not None:
-            try:
-                tree = kilix.snapshot(under_overlay=options.under_overlay)
-            except kilix.KilixError as error:
-                return {"request": request, "status": 1, "items": [], "note": str(error)}
-            items = []
-            for tab in tree.tabs:
-                if "tabs" in unit:
-                    items.append({"kind": "list_tabs", "args": {}, "outcome": "done",
-                                  "tab_id": tab["id"], "title": tab.get("title", ""),
-                                  "summary": f"tab {tab['id']}: {tab.get('title', '')}"})
-                if "panes" in unit:
-                    for pane in tab.get("windows", []):
-                        items.append({"kind": "list_panes", "args": {}, "outcome": "done",
-                                      "pane_id": pane["id"], "tab_id": tab["id"],
-                                      "title": pane.get("title", ""),
-                                      "summary": f"pane {pane['id']} in tab {tab['id']}: "
-                                                 f"{pane.get('title', '')}"})
-            return {"request": request, "status": 0, "note": "", "items": items}
+            return listed(request, unit)
         # "help" sent as a request answers with the jobs, not a refused open_tab.
         if HELP_REQUEST.fullmatch(request):
             return {"request": request, "status": 0, "items": [],
@@ -384,6 +392,10 @@ def run_request(engine: Engine, request: str, options: Options,
         if proposed is None:
             return None
         calls, label = proposed
+        if calls[0]["name"] == "list":
+            # The bundle read a list ("list pane 412 and its title"): the
+            # same list the exact reader gives, of what it names.
+            return listed(request, calls[0]["arguments"]["what"]), label, calls
         return run_calls(request, calls, options, confirm), label, calls
 
     return _recorded("panes", engine, request, options, lambda request, calls: run_calls(

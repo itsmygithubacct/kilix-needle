@@ -1328,19 +1328,22 @@ Between the exact readers and the model stands a bundle of small nets
 has a grammar, and every state of that grammar has one net of its own: one
 splits the request into clauses, one names the tool of a clause, one for each
 argument says absent, a value of its closed list or "copy", and one for each
-copied argument points at its first and last word. Two members, the same 42
-nets trained from two seeds, 598,263 weights each, are held in one file of
-3.3 MB. Reading needs only the standard library.
+copied argument points at its first and last word. Two members, the same 47
+nets trained from two seeds, 638,309 weights each, are held in one file of
+3.9 MB. Reading needs only the standard library. It is trained on the
+tuner's generated rows, on rows written the way coding agents send requests
+(pane and tab ids, "only", full stops, ";" between two requests), and on
+the spent eval sets.
 
 It answers only what it was trained on, said with other names:
 - every clause is a training clause of its tool, read as that clause was
   labelled: with every copied text replaced by a mark for its argument, the
   same words in the same order and the same values from the closed lists
-  (3,237 such readings). A clause that only ever followed another in
+  (4,084 such readings). A clause that only ever followed another in
   training is read only after a clause of the same tool;
 - every pair of neighbouring words stood side by side in a training row, and
   a word it never saw is part of a copied title, command or program;
-- two clauses are joined only by ",", "and" or "then", there are at most
+- two clauses are joined only by ",", ";", "and" or "then", there are at most
   two, and no copied text is longer than any copied for that argument in
   training;
 - a copied name is made of new words or of words that were copied as names
@@ -1364,10 +1367,27 @@ It answers only what it was trained on, said with other names:
   issues");
 - a rename in the second clause that does not say "tab" or "pane" follows a
   clause about the kind of thing it renames;
+- a request for a list of the panes or tabs is answered only alone, with
+  the read-only list the exact list reader gives;
+- a pane's number is its id, and a tab's number after "tab id" is the tab's
+  id, never its place;
 - both members give the same calls;
 - the checks admit every call as the bundle read it. They add what they
   find in the request, a "tab 2" as the tab of a rename; where they admit
   something else than the bundle read, it stands aside.
+
+For six kinds of answer (arranging the panes, going to a pane or a tab,
+moving a tab, renaming a tab, and any request of two clauses) a **second reader** may also
+answer a clause that is no training clause of its tool: every run of three
+neighbouring words of it stood in a training clause of that tool, its values
+from closed lists were had together by one, a side, place or layout it gives
+is named by a word of it, and it never answers a call that closes, types or
+starts a program. A kind was switched on only where the second reader was
+never unsafe, was right at least as often as the tuned model on the
+labelled requests of that kind it answers (the spent sets, generated
+requests, the reviews' requests and the probes'), and passed over a word
+put into a request no more often than the model did. Its answers carry the
+label "(second reader)".
 
 Otherwise it proposes nothing and the model reads the request as before.
 None of this is a confidence threshold. Its calls are proposals like the
@@ -1417,14 +1437,20 @@ conditions above are the answer to all three, and none of their requests is
 answered now, but for one kind: a word it never saw, standing alone where a
 name stands, is still taken for the name ("rename the tab asap").
 
-The price is reach. On the three blind sets written for this change, which
+The price was reach. On the three blind sets written for this change, which
 shaped the rules and gate nothing now, the gated reader answered about a
 third of the requests that reach the model, the reader of the second review
-about three in ten, and this one 16 of 170, 11 of 166 and 15 of 156, every
-answer exact (6 of 180 on the job's own held-out set). The route is exact
-on 102, 107 and 95 cases there, against 96, 106 and 92 without the bundle.
+about three in ten, and the reader that answered the third review (format
+v4) 16 of 170, 11 of 166 and 15 of 156, every answer exact. Format v5 (this
+file: agent-style rows, the list, ids, the second reader) answers 20, 15 and
+23 of them, every answer exact (8 of 180 on the job's own held-out set, 6
+before). The route is exact on 104, 107 and 99 cases there, against 102, 107
+and 95 with format v4 and 96, 106 and 92 without the bundle. Of the 161
+panes requests in this machine's history that reached a tuned model, 142
+would reach the model today; this file answers 55 of them (10 with a list),
+format v4 18. Those are counted, not labelled.
 
-**The reader that answered the second review was reviewed and changed
+**The readers of the first three reviews were each reviewed and changed
 after it; the reader as it now is has been neither reviewed nor gated**, so
 the default stays off. What was measured, what the reviews found and what
 the bundle still gets wrong are in `panes-bundle/README.md`.
@@ -1432,8 +1458,9 @@ the bundle still gets wrong are in `panes-bundle/README.md`.
 ```sh
 python3 panes_bundle.py "new right pane with htop"        # its reading, or why it has none
 python3 evaluate.py evals/dev.jsonl --route bundle        # the shipped route; dev is among the bundle's rows, so no score
-uv run --with torch==2.6.0 panes_bundle_train.py --spent --out panes-bundle \
-    --seeds 0 1 --name v4 --free-text rename_tab rename_pane go_to_pane go_to_tab
+uv run --with torch==2.6.0 panes_bundle_train.py --spent --agent 0 --exclude-history \
+    --out panes-bundle --seeds 0 1 --name v5 \
+    --free-text rename_tab rename_pane go_to_pane go_to_tab --second-kinds arrange_panes compound go_to_pane go_to_tab move_tab rename_tab
 ```
 
 ## Known issues
