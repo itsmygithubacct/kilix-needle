@@ -11,13 +11,17 @@ The names, paths, sessions and texts in the pools are made up here. None is
 taken from a request of any eval set or suite, or from the desktop of the
 needle-calls bench.
 
-Which rows are kept (rows()):
-- files, system, agents, apps: only rows the job's grammar reads, and reads
-  as the row is labelled (the reading written as the job's call equals the
-  grammar's). On these jobs a proposal is admitted only when it equals what
-  the grammar reads, so a row the grammar does not read would teach the
-  bundle an answer that is never used, and one it reads otherwise would teach
-  it an answer that is refused.
+Which rows are kept (rows(), admitted()):
+- agents, apps: only rows the job's grammar reads, and reads as the row is
+  labelled (the reading written as the job's call equals the grammar's). On
+  these jobs a proposal is admitted only when it equals what the grammar
+  reads, so a row the grammar does not read would teach the bundle an answer
+  that is never used, and one it reads otherwise would teach it an answer
+  that is refused.
+- files, system: where the job's grammar reads the request, only as the
+  grammar reads it; where it does not, when arm B's checks of a proposal
+  take the row's reading (job_routes.files_checks, job_routes.system_checks):
+  in B such an answer is admitted.
 - tmux, pty: rows whose call reads back through the job's grammar sentence
   (tmux_job.reads_back, pty_job.reads_back); logs: rows the logs tool's
   argument checks take; read_pane: rows whose arguments pane_reads takes.
@@ -33,8 +37,9 @@ import re
 
 import job_schemas
 
-# A number with "'s" after it ("pane 42's screen") is one word to the reader
-# (panes_bundle.tokenize), and not a number: no template puts one there.
+# A number with "'s" after it ("pane 42's screen") is two words to the
+# reader, the number and "'s" (panes_bundle.tokenize), and the reads of a
+# pane have such templates (_read_pane_templates).
 
 # ---- the template engine ----------------------------------------------------
 

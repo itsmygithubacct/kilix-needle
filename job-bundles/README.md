@@ -100,8 +100,8 @@ with the second reader off and with it on for every kind.
 `job_routes.py` runs a request through a job's route in one of three arms,
 with every stage of today's route that only refuses kept in each (for
 files, tmux, pty and logs that is the grammar's refusal of a whole
-request before it reads it, `request_refusal`: the bundle reads only what
-the job would read at all):
+request before it reads it, `request_refusal`: the bundle reads no request
+the job refuses as a whole):
 
 - **A** is today's route: the exact readers or the job's grammar, then the
   job's tuned model where one is loaded (panes, agents).
@@ -126,6 +126,28 @@ reads, and as the grammar reads it. In B it also answers a request the
 grammar does not read, when the job's own checks of a proposal take its
 answer: both tools only read. The file collector's checks are the ones it
 makes before it reads anything, factored out of `collect` unchanged.
+
+Those checks take any query of the right form, and nothing in them ties the
+query to the request's words. The fifth review found the files bundle's
+reading running on into them ("find pdf files in /home/pleb/Documents not
+modified today" read the scope "/home/pleb/Documents not"). So before the
+checks, in every arm, a files reading of the bundle is held to the
+request's words (`job_routes.files_hold`):
+
+- a scope of several words that the grammar would refuse unquoted, and a
+  path or a name of several words, are quoted in the request;
+- a search text that joins or sets apart words ("TODO or FIXME") is quoted;
+- a preview of an absolute path names no hidden directory (the collector
+  refuses a hidden part in a preview path, and the bundle's path is split
+  into a directory and a name only to be written as the job's call);
+- a preview of what may be a directory (its last part has no ".") is
+  answered only where the request says it is a file's contents: "what's in
+  /etc/nginx?" asks for a listing, and the bundle cannot tell a directory
+  from a file.
+
+Each only declines. A request that names a hidden directory as the scope
+(`preview "config" in ~/.ssh`) is the files tool's own to read, in every
+arm, as today's route reads it.
 
 ## The files as checked in
 

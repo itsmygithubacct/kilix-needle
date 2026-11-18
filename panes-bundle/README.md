@@ -939,6 +939,22 @@ format v5 (above, "How it was gated").
   this tab to api and split right" either; v6 does again. "rename this tab
   to logs and split right" and "rename this tab to api then split right"
   are still read (`tests/test_panes_bundle.py`, `NO_LONGER_READ`).
+- **A command still takes in new words that have a digit or a mark.**
+  A command or a program is made of words new to the bundle, and waits for
+  a yes that shows it. The fifth review found it taking in a plain word
+  after the command: "run make tonight in pane 42" read the command "make
+  tonight". Since then, a command of several words that holds a plain word
+  no training row had as wording or in a command or a program is declined
+  (`NEW_IN_COMMAND`). A word with
+  a digit or a mark ("-n", "15", "nvidia-smi", a path) may still be new, so
+  "run make -j8 in pane 42" still reads "-j8" as part of the command, as it
+  should, and "run make 2x in pane 42" reads "make 2x" too. A quoted
+  command is not read at all ("an untrained word pair"): no training row
+  quotes one.
+- **A full stop after a path.** The tokenizer leaves a "." on a word with a
+  "/" in it, so a path keeps its own dots; "cat /etc/hosts." would copy
+  "/etc/hosts." (the fifth review). A copy that ends in such a word is
+  declined as one that ends in the mark of the sentence (`CLOSED`).
 - **Only a rename names a tab by its id.** The agent rows name a tab by its
   id only in renames. "go to tab id 4" and "close tab id 7" are no
   training clause and go to the model, and so does "rename tab 4 to api",

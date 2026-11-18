@@ -1511,6 +1511,49 @@ class WhatTheFourthReviewFound(unittest.TestCase):
                 self.assertFalse(any(Action(c["name"], c["arguments"]).risky for c in calls), request)
 
 
+class WhatTheFifthReviewFound(unittest.TestCase):
+    """The fifth review, of format v6 (panes-bundle/README.md, "What it still
+    gets wrong"). The requests are the reviewer's, or made up."""
+
+    # A command or a program ran on into a plain word no training row had:
+    # each was answered, and each would have typed or started it.
+    RUN_ON = ("run make tonight in pane 42", "type make twice in pane 42", "in the left pane run make quietly",
+              "in the left pane run make sudo", "in the left pane run make asap",
+              "in the left pane run make repeatedly", "new tab running watch -n 15 nvidia-smi twice")
+    # Words the bundle saw, and new words with a digit or a mark, are still a command.
+    STILL = {"run make test in pane 42": [call("run_in_pane", pane="42", command="make test")],
+             "run make -j8 in pane 42": [call("run_in_pane", pane="42", command="make -j8")],
+             "new tab running watch -n 15 nvidia-smi": [call("open_tab", program="watch -n 15 nvidia-smi")],
+             "in the left pane run ./build.sh": [call("run_in_pane", pane="left", command="./build.sh")],
+             "in the left pane run cd ../..": [call("run_in_pane", pane="left", command="cd ../..")]}
+    # A full stop after a path, which the tokenizer leaves on it.
+    CLOSED = ("in the left pane run ./build.sh.", "run ./build.sh. in pane 42",
+              "new tab running tail -f /var/log/syslog.")
+
+    def setUp(self):
+        if not (PB.DIRECTORY / "manifest.json").is_file():
+            self.skipTest("no bundle is checked in")
+        self.bundle = PB.Bundle.load()
+
+    def test_a_command_does_not_run_on_into_a_word_never_seen(self):
+        for request in self.RUN_ON:
+            self.assertEqual(self.bundle.read(request), ([], PB.NEW_IN_COMMAND), request)
+        for request, calls in self.STILL.items():
+            self.assertEqual(self.bundle.read(request), (calls, PB.OK), request)
+
+    def test_a_full_stop_after_a_path_ends_the_sentence(self):
+        # the tokenizer is the trainer's too, and is not changed
+        self.assertEqual([w for w, _, _ in PB.tokenize("run ./build.sh. in pane 42")],
+                         ["run", "./build.sh.", "in", "pane", "42"])
+        for request in self.CLOSED:
+            self.assertEqual(self.bundle.read(request), ([], PB.CLOSED), request)
+
+    def test_whichever_reader_would_answer_it(self):
+        self.bundle.second_kinds = frozenset(self.bundle.tools) | {PB.COMPOUND}
+        for request in (*self.RUN_ON, *self.CLOSED):
+            self.assertEqual(self.bundle.read(request)[0], [], request)
+
+
 class Terminal(io.StringIO):
     def __init__(self, answers):
         super().__init__("".join(f"{answer}\n" for answer in answers))

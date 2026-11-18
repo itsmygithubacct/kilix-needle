@@ -21,7 +21,11 @@ A bundle's answer is a proposal like a model's, held to the job's own checks
             read of a pane is checked against the desktop (pane_reads.check)
     files   files_job.interpret: it must equal the files grammar's reading;
             in B, or be one query the file collector's own checks take
-            (files_checks)
+            (files_checks). Before either, the reading is held to the
+            request's words (files_hold): no unquoted scope or path of
+            several words, no unquoted search text that joins two, no
+            preview through a hidden directory, and no preview of what may
+            be a directory unless the request says it is a file's contents
     system  system_job.interpret: it must equal the system grammar's
             reading; in B, or pass the checks the system normalizer makes
             of a model's proposal (system_checks)
@@ -33,7 +37,9 @@ A bundle's answer is a proposal like a model's, held to the job's own checks
     logs    logs_words.check (the logs tool's argument checks)
 
 Where the checks do not take the bundle's answer, the request goes on to the
-job's model; where the job has none, it is refused.
+job's model; where the job has none, it is refused. A bundle that raises
+while it reads declines; a bundle given for one job that reads for another is
+refused when the routes are made.
 
 `normalize(job, calls)` writes a label or an answer as the scorer compares
 them: as the job's own checks normalise a call. `unsafe(kind, args)` says
@@ -94,6 +100,10 @@ class Routes:
     def __init__(self, bundles: dict, replies: dict, desktop: dict | None = None, engines: dict | None = None):
         os.environ.setdefault("KILIX_NEEDLE_BUNDLE", "0")
         self.bundles, self.replies = dict(bundles), dict(replies)
+        for job, bundle in self.bundles.items():
+            mine = getattr(bundle, "job", job)
+            if mine != job:
+                raise ValueError(f"the bundle given for the {job} job reads for the {mine} job")
         self.desktop = Desktop(desktop or {})
         self.cwd = (desktop or {}).get("caller", {}).get("cwd") or CALLER_CWD
         self.engines = dict(engines or {})
@@ -112,7 +122,10 @@ class Routes:
             if "\n" in request or "\r" in request:
                 self._reads[key] = ([], "more than one line", [])
             else:
-                calls, reason = bundle.read(request, texts)
+                try:
+                    calls, reason = bundle.read(request, texts)
+                except Exception as error:      # noqa: BLE001  a bundle that fails declines, as in the live route
+                    calls, reason, texts = [], f"the bundle could not read it ({type(error).__name__})", []
                 self._reads[key] = (calls, reason, texts)
         return self._reads[key]
 
@@ -257,14 +270,19 @@ class Routes:
 
     # ---- the jobs without a model ------------------------------------------
 
-    def _bundle_or_refuse(self, job, request, admit):
+    def _bundle_or_refuse(self, job, request, admit, hold=None):
         """B's and C's bundle stage for a job without a model: the bundle's
-        answer as `admit` takes it ([[kind, args]] or None), else refused."""
+        answer as `admit` takes it ([[kind, args]] or None), else refused.
+        `hold`, when given, says why the bundle's own reading is not
+        answered (a reason, or None) before the job's checks are asked."""
         import job_schemas
         import panes_bundle
         calls, reason, _ = self.read(job, request)
         if not calls:
             return answer("refused", refused=True, error=reason, job=job)
+        why = hold(calls) if hold else None
+        if why:
+            return answer("refused", refused=True, error=why, job=job)
         converted = job_schemas.to_job(job, calls)
         admitted = admit(converted) if converted else None
         if not admitted:
@@ -327,7 +345,7 @@ class Routes:
                     return answer("refused", refused=True, error=str(error), job="files")
             else:
                 return answer("grammar", [[a.kind, dict(a.args)] for a in found], job="files")
-        return self._bundle_or_refuse("files", request, admit)
+        return self._bundle_or_refuse("files", request, admit, hold=lambda calls: files_hold(request, calls))
 
     def _system(self, arm, request):
         import system_job
@@ -531,6 +549,75 @@ def request_refusal(job: str, request) -> str | None:
         if len(request) > logs_words.MAX_REQUEST or any(ord(c) < 32 or ord(c) == 127 for c in request):
             return "a logs request is bounded and has no control characters"
     return None
+
+
+# Words that join two search texts or set one apart ("TODO or FIXME"): a
+# search text that holds one, and that the request does not quote, is two
+# texts or a condition, not one literal.
+_JOINS = frozenset({"or", "and", "not", "nor", "but", "except", "excluding", "without", "unless"})
+# Words that say a preview is of a file's contents.
+_FILE_WORDS = frozenset({"cat", "preview", "read", "print", "file", "files", "contents", "content", "head",
+                         "tail"})
+
+
+def files_hold(request: str, calls: list) -> str | None:
+    """What a files bundle's own reading is held to before the job's checks,
+    in every arm (the fifth review). The file collector's checks take any
+    query of the right form, and nothing in them ties the query to the
+    request's words. These do, and each only declines:
+
+    - a scope of several words that the files grammar would refuse unquoted
+      (it says "quote directory paths containing spaces"), and a path or a
+      name of several words, are quoted in the request: "find pdf files in
+      /home/pleb/Documents not modified today" names no directory
+      "/home/pleb/Documents not". A scope the grammar takes as it is
+      ("this project") stays;
+    - a search text that joins or sets apart words ("TODO or FIXME") is
+      quoted in the request;
+    - a preview of an absolute path names no hidden directory. The collector
+      refuses a hidden part in a preview path; the bundle's path is split
+      into a directory and a name only to be written as the job's call, and
+      that must not hide the part in the directory. (A request that names
+      the hidden directory as the scope is the files tool's own to read, in
+      every arm, as before.)
+    - a preview of what may be a directory, a path whose last part has no
+      ".", is answered only where the request says it is a file's contents
+      ("cat", "read", "file", ...): "what's in /etc/nginx?" asks for a
+      listing, and the bundle cannot tell a directory from a file.
+
+    Returns the reason, or None."""
+    import files_job
+    for call in calls:
+        args = call.get("arguments", {})
+        scope = args.get("scope")
+        if isinstance(scope, str) and len(scope.split()) > 1 and not _quoted(request, scope):
+            try:
+                files_job._scope(scope)
+            except ValueError:
+                return "a copied scope of several words that the request does not quote"
+        for key in ("path", "name"):
+            value = args.get(key)
+            if isinstance(value, str) and len(value.split()) > 1 and not _quoted(request, value):
+                return "a copied path or name of several words that the request does not quote"
+        text = args.get("text")
+        if isinstance(text, str) and _JOINS & set(text.lower().split()) and not _quoted(request, text):
+            return "a search text that joins or sets apart words the request does not quote"
+        if call.get("name") == "preview_file" and isinstance(args.get("path"), str):
+            path = args["path"]
+            parts = [part for part in path.split("/") if part]
+            if path.startswith(("/", "~")) and any(part.startswith(".") and part not in (".", "..")
+                                                   for part in parts[:-1]):
+                return "a preview path through a hidden directory"
+            # The request's words outside the path ("/home/pleb/read/x" says no "read").
+            rest = re.sub(r"(?<![\w./~-])" + re.escape(path) + r"(?![\w/-])", " ", request)
+            words = set(re.findall(r"[a-z]+", rest.lower()))
+            if "." not in (parts[-1] if parts else "") and not _FILE_WORDS & words:
+                return "a preview of what may be a directory"
+    return None
+
+
+def _quoted(request: str, text: str) -> bool:
+    return any(f"{mark}{text}{mark}" in request for mark in "\"'`")
 
 
 def files_checks(calls, cwd: str = CALLER_CWD):

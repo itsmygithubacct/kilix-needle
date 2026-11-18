@@ -233,6 +233,14 @@ _GROWING = {"wider": True, "taller": True, "narrower": False, "shorter": False}
 # argument in training. One that holds a word the bundle has never seen is
 # that one word (Member.read).
 ONE_NEW = ("name", "pane", "tab", "about")
+# A command or a program may be made of words new to the bundle: it waits
+# for a yes that shows it. But in one of several words, a plain word that no
+# training row had as wording or in a command or a program may as well be
+# wording the bundle does not know: "run make tonight in pane 42" does not
+# ask to type "make tonight" (the fifth review). A word with a digit or a
+# mark in it ("-n", "15", "nvidia-smi", a path) may still be new
+# (Member.read).
+COMMANDS = ("command", "program")
 # A mark that ended the sentence or a part of it, split from the word before.
 _CLOSING = frozenset(",;?!:.")
 _MARK = re.compile(r"<[a-z_]+#?>")
@@ -520,12 +528,13 @@ CARRIED = "a rename that does not say what it renames, after a clause about the 
 UNNAMED = "a word that names a value is not in its clause's call"
 PLAIN = "a copied text holds a word the bundle knows only as wording"
 MIXED = "a copied name or title of several words holds one the bundle has never seen"
+NEW_IN_COMMAND = "a copied command of several words holds a plain word no training command or wording had"
 CLOSED = "a copied text ends in a mark that ended the sentence"
 LEANS = "a clause that goes by what the clause before it changes"
 TURNED = "a layout kitty shows the other way round from the tool's labels"
 OPPOSED = "a resize whose verb and direction pull opposite ways"
 ALONE = "a list or a read of a pane beside another clause"
-_HOLDS = (LONG, UNSHOWN, CARRIED, UNNAMED, PLAIN, MIXED, CLOSED, LEANS, TURNED, OPPOSED)
+_HOLDS = (LONG, UNSHOWN, CARRIED, UNNAMED, PLAIN, MIXED, NEW_IN_COMMAND, CLOSED, LEANS, TURNED, OPPOSED)
 # Why the second reader does not answer a clause that is not a training
 # clause of its tool (reported in the place of UNSHOWN, for a kind it may
 # answer).
@@ -696,8 +705,22 @@ class Member:
                     end = toks[lo + last]
                     after = toks[lo + last + 1] if lo + last + 1 < len(toks) else None
                     quoted = after is not None and after[0] in "\"'`" and after[1] == end[2]
+                    if key in COMMANDS and len(text.split()) > 1 and any(
+                            word.isalpha() and word not in self.known
+                            and not any(word in bundle.copied.get(other, ()) for other in COMMANDS)
+                            for word in words[lo + first:lo + last + 1]):
+                        failed.add(NEW_IN_COMMAND)
                     if set(end[0]) <= _CLOSING and (last == first or end[1] == toks[lo + last - 1][2]) \
                             and not quoted:
+                        failed.add(CLOSED)
+                    # The tokenizer leaves a full stop on a word with a "/" in
+                    # it, so that a path keeps its own dots: "cat /etc/hosts."
+                    # would copy "/etc/hosts." (the fifth review). A copy that
+                    # ends in such a word, with the stops after a letter or a
+                    # digit as the tokenizer splits them from other words,
+                    # ends in the mark ("../.." does not).
+                    core = end[0].rstrip(".")
+                    if core != end[0] and "/" in core and core[-1:].isalnum() and not quoted:
                         failed.add(CLOSED)
                 arguments[key] = text
                 spans[key] = (first, last, number is not None)

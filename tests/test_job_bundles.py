@@ -317,6 +317,70 @@ class Arms(unittest.TestCase):
         got = routes.run("B", "panes", "rename this tab to api")
         self.assertEqual((got["stage"], got["missing"]), ("model", True))
 
+    # What the fifth review found the files bundle reading (the reviewer's
+    # requests and readings), and one made up: each is declined in every arm
+    # that asks the bundle, before the job's checks (job_routes.files_hold).
+    HELD = (("find pdf files in /home/pleb/Documents not modified today",
+             [call("find_files", scope="/home/pleb/Documents not", extension="pdf", modified="today")]),
+            ("show largest files in /home/pleb except Downloads",
+             [call("list_files", scope="/home/pleb except Downloads", order="size")]),
+            ("search /etc /var for TODO", [call("search_text", text="TODO", scope="/etc /var")]),
+            ("look for TODO or FIXME in here", [call("search_text", text="TODO or FIXME", scope="here")]),
+            ("cat /home/pleb/.ssh/id_rsa", [call("preview_file", path="/home/pleb/.ssh/id_rsa")]),
+            ("what's in /etc/nginx?", [call("preview_file", path="/etc/nginx")]),
+            ("what's in /home/pleb/Downloads?", [call("preview_file", path="/home/pleb/Downloads")]),
+            ("find files named draft notes in here",
+             [{"name": "find_files", "arguments": {"name": "draft notes", "scope": "here"}}]))
+
+    def test_a_files_reading_is_held_to_the_request_s_words(self):
+        for request, calls in self.HELD:
+            routes = self.routes(files=Proposes(calls))
+            for arm in ("B", "C"):
+                got = routes.run(arm, "files", request)
+                self.assertEqual((got["stage"], got["calls"], got["refused"]), ("refused", [], True), (arm, request))
+            self.assertIsNotNone(JR.files_hold(request, calls), request)
+
+    def test_what_the_request_quotes_or_says_is_a_file_stays(self):
+        for request, calls, want in (
+                ('look for "TODO or FIXME" in here', [call("search_text", text="TODO or FIXME", scope="here")],
+                 [["search_text", {"scope": "here", "text": "TODO or FIXME"}]]),
+                ('search "/home/pleb/my notes" for TODO', [call("search_text", text="TODO", scope="/home/pleb/my notes")],
+                 [["search_text", {"scope": "/home/pleb/my notes", "text": "TODO"}]]),
+                # a scope of several words that the grammar takes as it is
+                ("grep for TODO in this project", [call("search_text", text="TODO", scope="this project")],
+                 [["search_text", {"scope": "here", "text": "TODO"}]]),
+                ("read /etc/nginx", [call("preview_file", path="/etc/nginx")],
+                 [["preview_file", {"scope": "/etc", "path": "nginx"}]]),
+                ("show /etc/nginx/nginx.conf", [call("preview_file", path="/etc/nginx/nginx.conf")],
+                 [["preview_file", {"scope": "/etc/nginx", "path": "nginx.conf"}]]),
+                # a hidden directory named as the scope is the files tool's own to read, in A too
+                ('preview "config" in ~/.ssh', [call("preview_file", path="config", scope="~/.ssh")],
+                 [["preview_file", {"scope": "~/.ssh", "path": "config"}]])):
+            self.assertIsNone(JR.files_hold(request, calls), request)
+            got = self.routes(files=Proposes(calls)).run("B", "files", request)
+            self.assertEqual((got["stage"], got["calls"]), ("bundle", want), request)
+        # a word of the path is not the request's word
+        self.assertIsNotNone(JR.files_hold("show /home/pleb/read/notes", [call("preview_file",
+                                                                             path="/home/pleb/read/notes")]))
+
+    def test_a_bundle_that_fails_declines(self):
+        class Fails(Proposes):
+            def read(self, request, texts=None):
+                raise RuntimeError("damaged")
+
+        got = self.routes(tmux=Fails([])).run("B", "tmux", "show me 40 lines of build:0.1")
+        self.assertEqual((got["stage"], got["calls"], got["refused"]), ("refused", [], True))
+        self.assertIn("could not read", got["error"])
+        got = self.routes(panes=Fails([])).run("B", "panes", "stack the panes, the way i like them")
+        self.assertEqual((got["stage"], got["missing"]), ("model", True))
+
+    def test_a_bundle_of_another_job_is_refused(self):
+        logs = Proposes([call("logs_source", event_id="ev-1")])
+        logs.job = "logs"
+        with self.assertRaises(ValueError):
+            JR.Routes({"files": logs}, {}, DESKTOP)
+        self.assertEqual(JR.Routes({"logs": logs}, {}, DESKTOP).bundles["logs"], logs)
+
 
 class SameAsTheRealRoutes(unittest.TestCase):
     """Arm A gives what the job's own route admits, in a plan."""
@@ -410,6 +474,26 @@ class TheCheckedInBundles(unittest.TestCase):
                     ("apps", "uninstall the pdf viewer"), ("tmux", "kill session docs"),
                     ("pty", "end pty session build"), ("logs", "delete the logs"),
                     ("agents", "tell me what claude is doing"))
+    # What the fifth review found these files answering in B (its requests):
+    # a scope or a search text run on, a full stop in a path, a directory
+    # previewed as a file, a preview through a hidden directory.
+    FIFTH_REVIEW = (("files", "find pdf files in /home/pleb/Documents not modified today"),
+                    ("files", "list recent files in /home/pleb/gpu_terminal/orchard except README.md"),
+                    ("files", "show largest files in /home/pleb except Downloads"),
+                    ("files", 'grep for "TODO" in /home/pleb/src excluding vendor'),
+                    ("files", "search /etc /var for TODO"),
+                    ("files", 'preview "Cargo.toml" in /home/pleb/gpu_terminal/marble-api as root'),
+                    ("files", "cat /etc/hosts."), ("files", "show me /var/log/syslog."),
+                    ("files", "search ~/src/app. for TODO"), ("files", "grep for TODO in /var/log."),
+                    ("files", "what's in /etc/nginx?"), ("files", "what's in /home/pleb/Downloads?"),
+                    ("files", "look for TODO or FIXME in here"), ("files", "cat /home/pleb/.ssh/id_rsa"),
+                    ("logs", 'search /var/log/syslog. for "error"'))
+    # and the same without what the review added
+    FIFTH_REVIEW_WITHOUT = {
+        ("files", "cat /etc/hosts"): [["preview_file", {"scope": "/etc", "path": "hosts"}]],
+        ("logs", 'search /var/log/syslog for "error"'): [["search", {"file": "/var/log/syslog", "provider": "raw",
+                                                                     "query": "error"}]],
+    }
 
     @classmethod
     def setUpClass(cls):
@@ -449,6 +533,18 @@ class TheCheckedInBundles(unittest.TestCase):
             got = self.routes.run("B", job, request)
             self.assertEqual(got["calls"], [], (job, request))
             self.assertNotEqual(got["stage"], "bundle", (job, request))
+
+    def test_what_the_fifth_review_found(self):
+        for job, request in self.FIFTH_REVIEW:
+            for arm in ("B", "C"):
+                got = self.routes.run(arm, job, request)
+                self.assertFalse(got["stage"].startswith("bundle"), (arm, job, request))
+        for (job, request), calls in self.FIFTH_REVIEW_WITHOUT.items():
+            got = self.routes.run("B", job, request)
+            self.assertEqual((got["stage"], got["calls"]), ("bundle", calls), (job, request))
+        # a full stop after a path ends the sentence, for the bundle's reader
+        for job, request in (("files", "cat /etc/hosts."), ("logs", 'search /var/log/syslog. for "error"')):
+            self.assertEqual(self.bundles[job].read(request), ([], PB.CLOSED), request)
 
 
 class Scoring(unittest.TestCase):
