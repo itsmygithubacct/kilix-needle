@@ -16,12 +16,15 @@ def main() -> None:
     if len(sys.argv) != 2:
         fail("usage: check-deb.py DEB")
     deb = Path(sys.argv[1])
+    changelog = Path(__file__).resolve().parents[1] / "debian/changelog"
+    version = subprocess.check_output(
+        ["dpkg-parsechangelog", "-l", str(changelog), "-S", "Version"], text=True).strip()
     fields = subprocess.run(
         ["dpkg-deb", "-f", str(deb), "Package", "Version", "Architecture", "Depends"],
         check=True, capture_output=True, text=True).stdout
     for needle in (
         "Package: kilix-needle\n",
-        "Version: 0.20261116+packaging1\n",
+        f"Version: {version}\n",
         "Architecture: all\n",
     ):
         if needle not in fields:
