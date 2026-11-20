@@ -148,8 +148,10 @@ history entry. That entry gains a `route` block.
    shown, but an unsure route never acts. Otherwise the answer names the
    candidates, with one accepted phrasing each.
 
-Routing fails closed. A missing or altered `router.json`, or a grammar that
-raises anything but its own refusal, routes to no job, and nothing acts.
+The Debian package uses the exact grammars and asks for clarification when
+they cannot identify a job. A source checkout also uses the classifier.
+An unavailable or altered classifier in a checkout, or a fault in a grammar,
+stops routing. The explicit pane-log search syntax goes directly to its handoff.
 
 `ask` runs only these jobs: panes, apps, agents, files and system. It names but
 never runs the others:

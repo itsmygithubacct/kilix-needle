@@ -4,6 +4,7 @@ kilix-needle (0.20261116+packaging2) UNRELEASED; urgency=medium
     indexed reads. Support an explicit Kilix instance for live panes.
   * Report routed MCP failures and give a runnable log search command.
   * Fingerprint the installed rollout reader when indexing logs.
+  * Route exact Ask requests with the built-in grammars in the package.
 
  -- itsmygithubacct <itsmygithubacct@users.noreply.github.com>  Fri, 20 Nov 2026 21:26:00 +0000
 

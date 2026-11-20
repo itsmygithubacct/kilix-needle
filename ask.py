@@ -357,7 +357,10 @@ def render(record: dict) -> str:
 
 def explain(request: str) -> str:
     model = router.model()
-    lines = [f"claims: {', '.join(router.claims(request)) or 'none'}"]
+    claims = ["logs"] if router.log_search(request) is not None else router.claims(request)
+    lines = [f"claims: {', '.join(claims) or 'none'}"]
+    if model is None:
+        return "\n".join(lines + ["This package routes by exact grammar."])
     for job, p in model.rank(request)[:4]:
         top = ", ".join(f"{k!r} {v:+.2f}" for k, v in model.explain(request, job, 5))
         lines.append(f"{job:8} {p:.3f}  {top}")

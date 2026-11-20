@@ -162,9 +162,11 @@ class Model:
 _model: Model | None = None
 
 
-def model() -> Model:
+def model() -> Model | None:
     global _model
     if _model is None:
+        if not MODEL_DIR.exists() and (MODEL_DIR.parent / "router-grammar-only").is_file():
+            return None
         _model = Model.load()
     return _model
 
@@ -443,42 +445,50 @@ def route(text: str, model_: Model | None = None) -> Route:
         return Route("error", None, note=f"router failed: {type(error).__name__}: {error}"[:300])
 
 
-def _clause_reader(part: str, model_: Model, threshold: float) -> str | None:
+def _clause_reader(part: str, model_: Model | None, threshold: float | None) -> str | None:
     """The job ask runs whose grammar reads this clause, as stage 0 would
     route it alone: the classifier's top job when its grammar reads the clause;
     otherwise, when the classifier is unsure, the one such job whose grammar
     does. (Asking the top job's grammar first keeps this to one grammar for most
     clauses.)"""
-    top, p = model_.rank(part)[0]
-    if top in RUNS and CLAIMS[top](part):
-        return top
-    if p >= threshold:
-        return None
+    top = None
+    if model_ is not None:
+        top, p = model_.rank(part)[0]
+        if top in RUNS and CLAIMS[top](part):
+            return top
+        if p >= threshold:
+            return None
     readers = [job for job in RUNS if job != top and CLAIMS[job](part)]
     return readers[0] if len(readers) == 1 else None
 
 
-def _other_reader(part: str, model_: Model, threshold: float, job: str) -> str | None:
+def _other_reader(part: str, model_: Model | None, threshold: float | None, job: str) -> str | None:
     """_clause_reader(part) when that is not `job`, else None, asking `job`'s
     own grammar only when the answer turns on it."""
-    top, p = model_.rank(part)[0]
-    if top != job and top in RUNS and CLAIMS[top](part):
-        return top
-    if p >= threshold:
-        return None
+    top = None
+    if model_ is not None:
+        top, p = model_.rank(part)[0]
+        if top != job and top in RUNS and CLAIMS[top](part):
+            return top
+        if p >= threshold:
+            return None
     # Unsure: the one job whose grammar reads it. `job` reading it too makes
     # two, or makes it `job`'s: either way no other job's.
     others = [other for other in RUNS if other not in (top, job) and CLAIMS[other](part)]
     return others[0] if len(others) == 1 and not CLAIMS[job](part) else None
 
 
-def _route(text: str, model_: Model) -> Route:
-    ranking = model_.rank(text)
-    threshold = model_.threshold
+def _route(text: str, model_: Model | None) -> Route:
     found = claims(text)
-    (top, p), (_second, q) = ranking[0], ranking[1]
-    alternatives = [(job, prob) for job, prob in ranking[1:3]]
-    common = dict(p=p, margin=p - q, alternatives=alternatives, claims=found)
+    common = dict(claims=found)
+    ranking = []
+    top, threshold, confident = None, None, False
+    if model_ is not None:
+        ranking = model_.rank(text)
+        (top, p), (_, q) = ranking[:2]
+        threshold = model_.threshold
+        confident = p >= threshold
+        common.update(p=p, margin=p - q, alternatives=ranking[1:3])
     parts, contested = None, set()
     # The apps grammar reads a button by name, so it can read another job's
     # clause as one: "hide the clock then split right" would hide the clock and
@@ -499,7 +509,7 @@ def _route(text: str, model_: Model) -> Route:
     # as two requests, however sure the classifier is of one job: that job
     # would act on its own clause and drop the other.
     # (Sure of no job, or of one ask only names, nothing acts: no need to look.)
-    if not found and (top in RUNS or p < threshold):
+    if not found and (top in RUNS or not confident):
         parts = clauses(text) if parts is None else parts
         only = set()
         for part in parts if len(parts) > 1 else ():
@@ -517,11 +527,11 @@ def _route(text: str, model_: Model) -> Route:
     # One grammar's claim routes unless the classifier is sure of another job:
     # a grammar can read more than its job means ("send 'x' to the pane below"
     # is a well-formed tmux sentence), so that disagreement is settled by plans.
-    if len(found) == 1 and (top == found[0] or p < threshold):
+    if len(found) == 1 and (top == found[0] or not confident):
         return Route(0, found[0], **common)
     if len(found) == 1:
         return Route(2, None, candidates=[found[0], top], **common)
-    if p >= threshold and (not found or top in found):
+    if confident and (not found or top in found):
         return Route(1, top, **common)
     if found:
         candidates = found

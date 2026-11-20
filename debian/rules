@@ -19,6 +19,7 @@ override_dh_auto_install:
 	cp -a corpus-supplement/. $(D)/corpus-supplement/
 	cp -a kilix-needle kilix-desktop $(D)/
 	cp -a commands-model.json commands-lfm3-model.json commands-tools.json needle3-model.json $(D)/
+	touch $(D)/router-grammar-only
 	find $(D) -depth -name __pycache__ -type d -exec rm -rf {} +
 	find $(D) -type f -name '*.pyc' -delete
 	chmod -R a+rX $(D)

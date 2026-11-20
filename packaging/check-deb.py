@@ -39,6 +39,8 @@ def main() -> None:
         launcher = root / "usr/bin/kilix-needle"
         if not (share / "needle_cli.py").is_file() or not launcher.is_symlink():
             fail("command missing")
+        if not (share / "router-grammar-only").is_file():
+            fail("missing grammar-only router selection")
         forbidden_parts = {"third_party", "router-model", "tests", "experiments", "evals"}
         for path in root.rglob("*"):
             if forbidden_parts.intersection(path.parts):
