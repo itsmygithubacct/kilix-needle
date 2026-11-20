@@ -57,9 +57,11 @@ def read(arguments: dict) -> dict:
                 raise ValueError("select at most one file or session")
             binding = None
             if session:
-                from .resolve import resolve_source
+                from .resolve import resolve_source, session_uuid
                 if instance is None:
-                    binding = library.binding(session, provider)
+                    binding = library.binding(session, provider, cached=bool(arguments.get("cached")))
+                    if binding is None and (session.startswith("log-") or (arguments.get("cached") and session_uuid(session))):
+                        raise query.QueryError("not_found", "selected recording is not indexed")
                 if binding is None:
                     binding = resolve_source(session, instance=instance)
                 if provider and provider != binding["provider"]:
@@ -107,6 +109,8 @@ def read(arguments: dict) -> dict:
                     except Exception as exc:
                         # A failed file must not hide other providers. Individual
                         # source transactions retain their last successful data.
+                        if path and operation == "search":
+                            raise
                         counts["failed"] += 1
                         if len(errors) < 20:
                             errors.append({"code": getattr(exc, "code", "index_failed"),
@@ -118,27 +122,13 @@ def read(arguments: dict) -> dict:
                 if operation == "index":
                     result = {"index": summary}
                 else:
-                    if not arguments.get("query"):
-                        raise ValueError("search requires query")
-                    if path and source_id is None:
-                        if errors:
-                            raise ValueError("selected source could not be indexed: " + errors[0]["message"])
-                        row = index.db.execute("SELECT p.source_id,p.device,p.inode,s.session_id FROM log_inventory i "
-                                               "JOIN log_progress p USING(inventory_id) JOIN sources s USING(source_id) "
-                                               "WHERE i.path=? AND i.provider=?", (items[0]["path"], provider)).fetchone()
-                        if row is None:
-                            raise ValueError("selected source is not indexed")
-                        if binding and binding.get("instance") is not None:
-                            expected = binding.get("expected_session_id") if provider != "raw" else None
-                            if ((row["device"], row["inode"]) != (binding["source_device"], binding["source_inode"])
-                                    or (expected and row["session_id"] != expected)):
-                                raise query.QueryError("source_changed", "pane recording changed; retry without --cached")
-                        source_id = row["source_id"]
                     with index.read_transaction():
+                        if path and source_id is None:
+                            source_id = library.cached_source_id(items[0], binding)
                         result = library.search(arguments["query"], provider=provider, source_id=source_id,
                             limit=limit, offset=offset, rank=arguments.get("rank", "bm25"), match=arguments.get("match", "all"))
                     result["index"] = summary
-            if binding and binding.get("instance") is not None:
+            if binding and "root" in binding:
                 from .resolve import check_binding
                 check_binding(binding)
             partial = bool(errors or result.get("index", {}).get("failed") or result.get("index", {}).get("partial_sources")

@@ -37,6 +37,11 @@ SNAPSHOT_ERRORS = {
 _UUID = re.compile(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
 
 
+def session_uuid(selector: str) -> str | None:
+    value = selector.strip() if isinstance(selector, str) else ""
+    return value.lower() if _UUID.fullmatch(value) else None
+
+
 def snapshot(instance: int | None = None) -> dict:
     """Read one size- and time-bounded Kilix pane snapshot."""
     if instance is None:
@@ -392,10 +397,9 @@ def _session_source(selector: str) -> dict | None:
     caller's pane cannot be verified. The reader still checks the session
     identity inside the file. None means the ID names no recording here.
     """
-    value = selector.strip() if isinstance(selector, str) else ""
-    if not _UUID.fullmatch(value):
+    value = session_uuid(selector)
+    if value is None:
         return None
-    value = value.lower()
     matches = [(provider, path) for provider, path in
                (("claude", _claude_session_path(value)), ("codex", _codex_session_path(value)),
                 ("grok", _grok_session_path(value)), ("omp", _omp_session_path(value))) if path]

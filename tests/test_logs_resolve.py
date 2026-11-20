@@ -156,6 +156,59 @@ class ResolveTests(unittest.TestCase):
                             "content": [{"type": "input_text", "text": "Read this."}]}}) + "\n")
         return path
 
+    def test_library_search_checks_header_identity_even_after_indexing_by_file(self):
+        from needle_logs.library_cli import read
+        thread = "11111111-2222-4333-8444-000000000001"
+        other = "11111111-2222-4333-8444-000000000002"
+        path = self._rollout(thread)
+        path.write_text(path.read_text().replace(thread, other))
+        options = {"provider": "codex", "cache_path": str(self.root / "cache/index")}
+        search = options | {"operation": "search", "session": thread, "query": "Read"}
+        with self._homes():
+            self.assertEqual(read(search)["errors"][0]["code"], "source_mismatch")
+            self.assertEqual(read(options | {"operation": "index", "file": str(path)})["exit_status"], 0)
+            for request in (search, search | {"cached": True}, options | {"operation": "index", "session": thread}):
+                result = read(request)
+                self.assertEqual(result["errors"][0]["code"], "source_mismatch", result)
+                self.assertNotEqual(result["exit_status"], 0)
+                self.assertFalse(result.get("matches"))
+            # A failed selector must leave the correctly identified snapshot usable.
+            result = read(search | {"session": other, "cached": True})
+            self.assertEqual([m["session_id"] for m in result["matches"]], [other])
+
+    def test_library_session_search_detects_duplicates_and_follows_archiving(self):
+        from needle_logs.library_cli import read
+        thread = "11111111-2222-4333-8444-000000000003"
+        path = self._rollout(thread)
+        options = {"provider": "codex", "cache_path": str(self.root / "cache/index")}
+        index = options | {"operation": "index", "session": thread}
+        search = options | {"operation": "search", "session": thread, "query": "Read"}
+        with self._homes():
+            self.assertEqual(read(index)["exit_status"], 0)
+            archived = self._rollout(thread, folder="archived_sessions")
+            for request in (index, search, search | {"cached": True}):
+                self.assertEqual(read(request)["errors"][0]["code"], "ambiguous_source")
+            path.replace(archived)
+            self.assertEqual(read(search | {"cached": True})["errors"][0]["code"], "not_found")
+            self.assertEqual(read(index)["exit_status"], 0)
+            for cached in (False, True):
+                result = read(search | {"cached": cached})
+                self.assertEqual(result["exit_status"], 0, result)
+                self.assertEqual([m["path"] for m in result["matches"]], [str(archived)])
+
+    def test_cached_inventory_id_can_read_its_indexed_copy_offline(self):
+        from needle_logs.library_cli import read
+        thread = "11111111-2222-4333-8444-000000000004"
+        path = self._rollout(thread)
+        options = {"provider": "codex", "cache_path": str(self.root / "cache/index")}
+        with self._homes():
+            self.assertEqual(read(options | {"operation": "index", "file": str(path)})["exit_status"], 0)
+            item = read(options | {"operation": "list", "cached": True})["sessions"][0]
+            path.unlink()
+            result = read(options | {"operation": "search", "session": item["inventory_id"],
+                                     "cached": True, "query": "Read"})
+            self.assertEqual([m["session_id"] for m in result["matches"]], [thread])
+
     def test_thread_id_reads_without_any_pane_listing(self):
         # Behind a shared Codex app-server the pane list is refused. A full
         # session ID names one recording, so it must not need the pane list.

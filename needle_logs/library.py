@@ -57,6 +57,12 @@ def has_index(index, path: str, provider: str) -> bool:
                                  "WHERE i.path=? AND i.provider=?", (os.path.abspath(path), provider)).fetchone())
 
 
+def _check_session(binding, provider, identity):
+    expected = binding.get("expected_session_id") if binding else None
+    if provider != "raw" and expected and identity != expected:
+        raise SourceError("source_mismatch", "resolved session does not match source")
+
+
 def _hash(fd: int, size: int, prefix: int = 0) -> tuple[str, str]:
     digest, older = hashlib.sha256(), ""
     offset = 0
@@ -218,24 +224,49 @@ class Library:
         return {"sessions": sessions, "total": total, "offset": offset,
                 "next_offset": offset + len(rows) if offset + len(rows) < total else None}
 
-    def binding(self, selector: str, provider=None) -> dict | None:
-        sql = "SELECT metadata FROM log_inventory WHERE available=1 AND (inventory_id=? OR session_id=?)"
-        values = [selector, selector]
-        if provider:
+    def binding(self, selector: str, provider=None, *, cached=False) -> dict | None:
+        from .resolve import _bound, _session_source, session_uuid
+        uuid = session_uuid(selector)
+        current = _session_source(uuid) if uuid else None
+        field = "lower(session_id)" if uuid else "session_id"
+        sql = f"SELECT metadata FROM log_inventory WHERE available=1 AND (inventory_id=? OR {field}=?)"
+        values = [selector, uuid or selector]
+        if provider and not uuid and not selector.startswith("log-"):
             sql += " AND provider=?"
             values.append("omp" if provider == "qwen" else provider)
-        rows = self.db.execute(sql, values).fetchall()
-        if not rows:
+        items = [json.loads(row[0]) for row in self.db.execute(sql, values)]
+        if uuid and (current is not None or not cached):
+            # Explicitly indexed files may live outside the provider's store.
+            # Moved files drop out, but an existing second copy is ambiguous.
+            items = [item for item in items if Path(item["path"]).is_file()]
+            if current is not None:
+                if any(item["path"] != current["path"] or item["provider"] != current["provider"]
+                       for item in items):
+                    raise SourceError("ambiguous_source", "multiple recordings claim that session ID; use an inventory ID")
+                return current
+        if not items:
             return None
-        if len(rows) != 1:
+        if len(items) != 1:
             raise SourceError("ambiguous_source", "multiple recordings claim that session ID; use an inventory ID")
-        item = json.loads(rows[0][0])
-        from .resolve import _bound
+        item = items[0]
         path = Path(item["path"])
         root = Path(item["root"]) if item.get("root") else path.parent
-        return _bound(path, root) | {"provider": item["provider"], "source_kind": "raw" if item["provider"] == "raw" else "structured",
+        location = {"path": str(path)} if cached else _bound(path, root)
+        return location | {"provider": item["provider"], "source_kind": "raw" if item["provider"] == "raw" else "structured",
             "resolution": "inventory", "inventory_id": item["inventory_id"],
-            "expected_session_id": item["session_id"] if item["provider"] != "raw" else None}
+            "expected_session_id": (uuid or item["session_id"]) if item["provider"] != "raw" else None}
+
+    def cached_source_id(self, item: dict, binding: dict | None) -> str:
+        row = self.db.execute("SELECT p.source_id,p.device,p.inode,s.session_id FROM log_progress p "
+                              "JOIN sources s USING(source_id) WHERE p.inventory_id=?",
+                              (item["inventory_id"],)).fetchone()
+        if row is None:
+            raise SourceError("not_found", "selected recording is not indexed")
+        if binding and "source_device" in binding and (row["device"], row["inode"]) != (
+                binding["source_device"], binding["source_inode"]):
+            raise SourceError("source_changed", "recording changed; retry without --cached")
+        _check_session(binding, item["provider"], row["session_id"])
+        return row["source_id"]
 
     def refresh(self, item: dict, *, binding: dict | None = None, rebuild=False) -> dict:
         path, provider = item["path"], item["provider"]
@@ -259,6 +290,7 @@ class Library:
                 same = valid and (old["device"], old["inode"], old["size"], old["mtime_ns"], old["ctime_ns"]) == (
                     before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns)
                 if same and not rebuild:
+                    _check_session(binding, provider, snap["session_id"])
                     named = os.stat(path, follow_symlinks=False)
                     if (named.st_dev, named.st_ino) != (before.st_dev, before.st_ino):
                         raise SourceError("source_changed", "source replaced during cached read")
@@ -276,6 +308,7 @@ class Library:
                             header = stream.readline(min(size, MAX_ROW_BYTES + 1))
                     lineage = set()
                     identity = _header_identity(provider, header, lineage=lineage) if provider != "raw" else ""
+                    _check_session(binding, provider, identity)
                     source_id = stable_id("src-", os.path.abspath(path), provider, before.st_dev, before.st_ino, identity)
                     append = (not rebuild and valid and not archive and provider != "raw" and
                               source_id == old["source_id"] and before.st_size > old["size"] and
@@ -325,9 +358,6 @@ class Library:
                             or _hash(fd, before.st_size)[0] != digest):
                         raise SourceError("source_changed", "source changed during indexing")
                     if binding is not None:
-                        expected = binding.get("expected_session_id")
-                        if provider != "raw" and expected and identity != expected:
-                            raise SourceError("source_mismatch", "resolved session does not match source")
                         from .resolve import check_binding
                         check_binding(binding)
                     coverage["complete"] = not (coverage["gaps"] or coverage.get("unlisted_gaps"))
@@ -339,6 +369,9 @@ class Library:
                     self.db.execute("UPDATE log_inventory SET error='' WHERE inventory_id=?", (item["inventory_id"],))
                     return self._result(self.index.snapshot(source_id), "appended" if append else "rebuilt", count)
         except Exception as exc:
+            if binding and getattr(exc, "code", None) == "source_mismatch":
+                # The recording remains usable by its own identity.
+                raise
             with self.db:
                 self._remember(item)
                 self.db.execute("UPDATE log_inventory SET error=? WHERE inventory_id=?", (str(exc)[:512], item["inventory_id"]))

@@ -699,8 +699,10 @@ the history stored or searched. Python callers can use
 `needle_logs.library_cli.read({...})` with the same operation names and arguments.
 
 `--session` accepts an inventory ID, a full session UUID, or a live pane selector.
-An inventory ID selects one file even when session IDs are duplicated. Other
-ambiguous selectors fail. `--file` requires `claude`, `codex`, `grok`, `omp`,
+UUID searches check the current recording locations, including the Codex archive.
+An inventory ID selects one file even when session IDs are duplicated, and
+`search --cached --session log-INVENTORY_ID` can read its indexed copy offline.
+Other ambiguous selectors fail. `--file` requires `claude`, `codex`, `grok`, `omp`,
 `qwen` (an OMP alias), or `raw`. Grok reads `updates.jsonl`; its session directory
 or sibling `events.jsonl`/`chat_history.jsonl` selects that file. OMP discovery
 uses `$PI_CODING_AGENT_DIR/sessions`, defaulting to `~/.omp/agent/sessions`.
