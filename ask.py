@@ -34,6 +34,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import sys
 
 import history
@@ -46,7 +47,7 @@ PHRASES = {
     "agents": "start codex in /abs/dir",
     "files": "find pdf files in Downloads",
     "system": "show memory",
-    "logs": 'search the session in pane 12 for "error" (structured: kilix_logs_read)',
+    "logs": 'search the session in pane 12 for "error"',
     "tmux": "list sessions (with --socket /abs/socket)",
     "pty": "list sessions",
     "desktop": 'focus window "Notes"',
@@ -154,9 +155,20 @@ def _named(job: str, request: str) -> dict:
         if desktop_windows.in_wsl():
             job, phrase = "windows", _WINDOWS_PHRASE
             cli, tools, what = _WINDOWS
+    if job == "logs":
+        search = router.log_search(request)
+        if search:
+            pane, term = search
+            option = [f"--query={term}"] if term.startswith("-") else ["--query", term]
+            command = shlex.join(["kilix-needle", "logs", "search", "--session", pane, *option])
+            hint = f"{command}  (MCP: {tools})"
+        else:
+            hint = f"{cli} --help  (MCP: {tools}); select a session, or a file and provider"
+    else:
+        hint = f"{cli} {json.dumps(request)}  (MCP: {tools}); accepted form: {phrase}"
     return {"request": request, "status": 1, "items": [],
             "note": f"this reads as a request for the {job} job ({what}); ask names it but does not run it",
-            "hint": f"{cli} {json.dumps(request)}  (MCP: {tools}); accepted form: {phrase}"}
+            "hint": hint}
 
 
 def _none(request: str) -> dict:

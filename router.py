@@ -51,6 +51,21 @@ NAMED = {
 MODEL_DIR = Path(__file__).resolve().parent / "router-model"
 MAX_CHARS = 4000
 _WORD = re.compile(r"[a-z0-9]+|[^\sa-z0-9]")
+_LOG_SEARCH = re.compile(
+    r"""search\s+the\s+(?:session\s+in|transcript\s+of)\s+pane\s+([0-9]{1,256})\s+for\s+(?:"([^"]+)"|'([^']+)')[?.]?""",
+    re.IGNORECASE)
+
+
+def log_search(text: str) -> tuple[str, str] | None:
+    """The pane and literal query of the structured search handoff."""
+    if isinstance(text, str) and len(text) <= MAX_CHARS:
+        match = _LOG_SEARCH.fullmatch(text.strip())
+        if match:
+            from needle_logs.query import MAX_QUERY
+            term = match[2] or match[3]
+            if len(term) <= MAX_QUERY and term.isprintable() and re.search(r"[^\W_]", term):
+                return match[1], term
+    return None
 
 
 def norm(text: str) -> str:
@@ -418,8 +433,10 @@ CANDIDATE_FLOOR = 0.1       # a job below this probability is not a stage-2 cand
 def route(text: str, model_: Model | None = None) -> Route:
     """Stage 0 or 1 when sure; otherwise stage 2 with the candidate jobs.
 
-    Any failure, a missing or altered artifact or a grammar that raises, is
-    the "error" stage: it names no job, so nothing acts on it."""
+    An exact structured log search only names a command and needs no model.
+    If classification fails, the error stage cannot act."""
+    if log_search(text) is not None:
+        return Route(0, "logs", claims=["logs"])
     try:
         return _route(text, model_ or model())
     except Exception as error:      # noqa: BLE001 - fail closed

@@ -2,6 +2,8 @@
 import io
 import json
 import os
+import shlex
+import tempfile
 import sys
 import unittest
 from unittest import mock
@@ -112,6 +114,21 @@ class Pipeline(unittest.TestCase):
             self.assertIn(cli, record["hint"])
             self.assertIn(f"for the {cli.split()[-1]} job", record["note"])
             self.assertEqual(jobs.runs, [])
+
+    def test_logs_handoff_is_an_accepted_cli_command(self):
+        from needle_logs.cli import _parser
+        for term in ("error", "two words", "-option", "don't expand $HOME"):
+            request = f'search the session in pane 12 for "{term}"'
+            with mock.patch.object(router, "model", side_effect=AssertionError("loaded a router model")):
+                record = ask.ask(request, FakeJobs(), act=False)
+            self.assertEqual(record["route"]["job"], "logs")
+            hint = record["hint"].split("  (MCP:", 1)[0]
+            command = shlex.split(hint)
+            self.assertEqual(command[:2], ["kilix-needle", "logs"])
+            args = _parser().parse_args(command[2:])
+            self.assertEqual((args.operation, args.session, args.query), ("search", "12", term))
+        self.assertTrue(ask._named("logs", "which recording should I look at?")["hint"].startswith(
+            "kilix-needle logs --help "))
 
     def test_stage_2_plans_quietly_and_never_acts(self):
         jobs = FakeJobs({"system": REFUSED})
@@ -274,6 +291,20 @@ class Mcp(unittest.TestCase):
             self.assertEqual(len([c for c in fake.calls() if c[0][0] == "close-tab"]), 1)
         self.assertEqual(refused["items"][0]["outcome"], "skipped")
         self.assertEqual(done["items"][0]["outcome"], "done")
+
+    def test_routed_file_read_reports_the_same_mcp_error_as_a_direct_read(self):
+        from pathlib import Path
+        server = mcp_server.Server(lambda job="panes": None)
+        with tempfile.TemporaryDirectory() as folder, mock.patch("agents_kilix.calling_cwd", return_value=None):
+            for exists in (False, True):
+                if exists:
+                    (Path(folder) / "readme.txt").write_text("hello")
+                request = f'preview "readme.txt" in {folder}'
+                direct = server.call_tool("kilix_files_read", {"request": request})
+                routed = server.call_tool("kilix_ask_act", {"request": "files: " + request})
+                self.assertEqual(direct["isError"], not exists, direct)
+                self.assertEqual(routed["isError"], direct["isError"], routed)
+                self.assertEqual(routed["structuredContent"]["status"], direct["structuredContent"]["status"])
 
     def test_ask_tools_refuse_other_arguments(self):
         server = mcp_server.Server(lambda job="panes": None)

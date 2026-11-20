@@ -597,7 +597,7 @@ class Server:
         except (asset.AssetError, EngineError, LibEngineError) as error:
             return {"content": [{"type": "text", "text": f"kilix-needle unavailable: {error}"}],
                     "isError": True}
-        return _result(record, False, request)
+        return _result(record, record["status"] != 0, request)
 
     def handle(self, message: dict) -> dict | None:
         method, ident = message.get("method"), message.get("id")
