@@ -260,6 +260,97 @@ class ResolveTests(unittest.TestCase):
                 resolve_source(session)
             self.assertEqual(raised.exception.code, "ambiguous_source")
 
+    def test_shared_mcp_reader_uses_one_instance_and_rechecks_that_instance(self):
+        import mcp_server
+        session = "12345678-1234-1234-1234-123456789abc"
+        updates = self._grok_session(session)
+        tree = {"panes": [{"pane_id": 5, "coding_session": {"provider": "grok", "session_id": session}}],
+                "instance": 1234, "instance_start": 777}
+        refused = ResolveError("caller_context_unverified", "unverified")
+        server = mcp_server.Server(mock.Mock(side_effect=AssertionError("unexpected engine")))
+        args = {"operation": "brief", "provider": "grok"}
+        with self._homes(), mock.patch.dict(os.environ, {"KITTY_PID": "", "KITTY_LISTEN_ON": "",
+                    "GPU_TERMINAL_HOME": str(self.root / "state")}), \
+                mock.patch("needle_logs.resolve.listening_instances", return_value=[1234]), \
+                mock.patch("needle_logs.resolve.snapshot", side_effect=[refused, tree, tree]) as listing:
+            pane = server.call_tool("kilix_logs_read", args | {"session": "5"})
+            file = server.call_tool("kilix_logs_read", args | {"file": str(updates.with_name("events.jsonl"))})
+        self.assertEqual(listing.call_args_list, [mock.call(), mock.call(1234), mock.call(1234)])
+        self.assertFalse(pane["isError"])
+        self.assertFalse(file["isError"])
+        source = pane["structuredContent"]["source"]
+        self.assertEqual((source["session_id"], source["path"]), (session, str(updates)))
+        self.assertEqual(source, file["structuredContent"]["source"])
+
+    def test_multiple_instances_require_selection_before_looking_for_a_pane(self):
+        from needle_logs.cli import read
+        session = "12345678-1234-1234-1234-123456789abc"
+        self._grok_session(session)
+        args = {"operation": "brief", "session": "23", "cache_path": str(self.root / "cache/db")}
+        refused = ResolveError("caller_context_unverified", "unverified")
+        first = self._grok_session("12345678-1234-1234-1234-123456789abd")
+        first_pane = self.pane | {"coding_session": {"provider": "grok", "session_id": first.parent.name}}
+        trees = {1234: dict(self.tree, panes=[first_pane], instance=1234, instance_start=9),
+                 5678: dict(self.tree, instance=5678, instance_start=10)}
+
+        def snapshot(instance=None):
+            if instance is None:
+                raise refused
+            return trees[instance]
+
+        with self._homes(), mock.patch("needle_logs.resolve.listening_instances", return_value=[1234, 5678]), \
+                mock.patch("needle_logs.resolve.snapshot", side_effect=snapshot) as listing:
+            blocked = read(args)
+            self.assertEqual(blocked["errors"][0]["code"], "ambiguous_instance")
+            self.assertIn("printenv KITTY_PID", blocked["errors"][0]["message"])
+            listing.assert_called_once_with()
+            # Both instances have a pane 23 with a different recording.
+            self.assertEqual(read(args | {"instance": 1234})["source"]["path"], str(first))
+            self.assertEqual(read(args | {"instance": 5678})["source"]["provider"], "raw")
+            wrong_provider = read(args | {"instance": 5678, "provider": "grok"})
+            self.assertEqual(wrong_provider["errors"][0]["code"], "source_mismatch")
+            # Even a UUID on disk cannot escape an explicit live-instance selection.
+            missing = read(args | {"instance": 5678, "session": session})
+            self.assertEqual(missing["errors"][0]["code"], "not_found")
+            self.assertEqual(listing.call_args_list[1:], [mock.call(1234)] * 2 + [mock.call(5678)] * 4)
+
+    def test_scoped_cached_search_refuses_a_replaced_pane_recording(self):
+        from needle_logs import library_cli
+        session = "12345678-1234-1234-1234-123456789abc"
+        updates = self._grok_session(session)
+        self.pane["coding_session"] = {"provider": "grok", "session_id": session}
+        tree = dict(self.tree, instance=5678, instance_start=10)
+        args = {"session": "23", "instance": 5678, "cache_path": str(self.root / "cache/db")}
+        with self._homes(), mock.patch("needle_logs.resolve.snapshot", return_value=tree):
+            self.assertEqual(library_cli.read(args | {"operation": "index"})["exit_status"], 0)
+            search = args | {"operation": "search", "query": "Read this", "cached": True}
+            self.assertEqual(library_cli.read(search)["matches"][0]["session_id"], session)
+            replacement = updates.with_suffix(".new")
+            replacement.write_bytes(updates.read_bytes())
+            replacement.replace(updates)
+            self.assertEqual(library_cli.read(search)["errors"][0]["code"], "source_changed")
+
+    def test_conflicting_route_and_other_host_failures_do_not_auto_select(self):
+        for code, listen, pid in (("caller_context_unverified", "unix:@kilix-7", ""),
+                                  ("caller_context_unverified", "", "7"),
+                                  ("pane_context_unavailable", "", ""),
+                                  ("snapshot_invalid", "", "")):
+            with self.subTest(code=code, listen=listen, pid=pid), \
+                    mock.patch.dict(os.environ, {"KITTY_LISTEN_ON": listen, "KITTY_PID": pid}), \
+                    mock.patch("needle_logs.resolve.listening_instances", return_value=[1234]), \
+                    mock.patch("needle_logs.resolve.snapshot", side_effect=ResolveError(code, "refused")) as listing:
+                with self.assertRaises(ResolveError) as error:
+                    resolve_source("23")
+                self.assertEqual(error.exception.code, code)
+                listing.assert_called_once_with()
+
+    def test_recycled_instance_pid_fails_binding_even_with_same_pane_and_file(self):
+        tree = dict(self.tree, instance=5678, instance_start=10)
+        with mock.patch("needle_logs.resolve.snapshot", side_effect=[tree, dict(tree, instance_start=11)]):
+            binding = resolve_source("23", instance=5678)
+            with self.assertRaisesRegex(ResolveError, "source changed"):
+                check_binding(binding)
+
     def test_discovered_file_swap_cannot_read_outside_root(self):
         candidate = self.root / f"{self.broker}.log"
         outside = self.root.parent / f"{self.root.name}-outside-synthetic.log"

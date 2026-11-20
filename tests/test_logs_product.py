@@ -144,8 +144,9 @@ class ProductTests(unittest.TestCase):
         fake_sources = types.ModuleType("needle_logs.sources")
         fake_sources.read_source = lambda path, provider: self.data
         fake_resolver = types.ModuleType("needle_logs.resolve")
-        fake_resolver.resolve_source = lambda session: {"path": str(self.source), "provider": "fake",
-                                                        "expected_session_id": "another-session", "source_kind": "structured"}
+        fake_resolver.resolve_source = lambda session, *, instance=None: {
+            "path": str(self.source), "provider": "fake",
+            "expected_session_id": "another-session", "source_kind": "structured"}
         fake_resolver.check_binding = lambda binding: None
         with patch.dict(sys.modules, {"needle_logs.sources": fake_sources, "needle_logs.resolve": fake_resolver}):
             result = cli.read({"operation": "events", "session": "selected", "cache_path": str(self.cache)})

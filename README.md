@@ -712,6 +712,20 @@ An unfinished row is retried when more bytes arrive.
 Codex forks retain the child session's identity and accept copied ancestor
 headers only when that ancestry is explicitly declared in the recording.
 
+Pane numbers and titles belong to one Kilix instance. The reader first asks
+the caller's pane inventory. When a shared Codex app-server cannot identify
+the calling pane, the reader can use a single local Kilix listener and its
+live window inventory. If several instances are listening, or the inherited
+route conflicts with the listener, select the intended window explicitly.
+Run `printenv KITTY_PID` in a fresh shell in that window. For example, if it
+prints `1234`, use `kilix-needle logs brief --instance 1234 --session 18`.
+The equivalent `kilix_logs_read` arguments are
+`{"operation":"brief","provider":"grok","session":"18","instance":1234}`.
+An explicit instance scopes the selector to its live panes, including after
+a broker reattachment. A supplied `provider` must match the selected recording.
+The Linux reader checks the socket peer's PID and user
+and rechecks the instance and recording identity before returning pane logs.
+
 `events`, `brief` and `source` retain the `kilix.logs.read/v1` evidence API.
 Events cite exact Unicode spans in records. Tool output retains its tool role,
 an assistant's statement stays an assistant claim, and reasoning, binary

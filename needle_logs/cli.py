@@ -11,7 +11,7 @@ from .index import Index
 from .hints import journal_hint
 
 SCHEMA = "kilix.logs.read/v1"
-ARGUMENTS = {"operation", "file", "provider", "session", "cache_path", "event_id", "session_id",
+ARGUMENTS = {"operation", "file", "provider", "session", "instance", "cache_path", "event_id", "session_id",
              "since_cursor", "mode", "limit", "kind", "query", "indexed"}
 
 
@@ -50,7 +50,7 @@ def read(arguments: dict, *, render: bool = False) -> dict:
                   "source": {"event_id", "cache_path", "since_cursor"}, "cache_status": {"cache_path"},
                   "cache_clear": {"cache_path", "session_id"}}
     if operation in ("events", "brief", "search"):
-        applicable[operation].add("indexed")
+        applicable[operation].update(("indexed", "instance"))
     if set(arguments) - applicable[operation] - {"operation"}:
         return _error("invalid_input", "argument does not apply to operation", 2)
     path = arguments.get("file")
@@ -76,6 +76,9 @@ def read(arguments: dict, *, render: bool = False) -> dict:
                 return _error("invalid_input", "search requires query", 2)
         if operation in ("events", "brief", "search"):
             session = arguments.get("session")
+            instance = arguments.get("instance")
+            if instance is not None and not session:
+                return _error("invalid_input", "instance requires a live pane selector in session", 2)
             if bool(path) == bool(session):
                 result = _error("invalid_input", "select exactly one file or session", 2)
                 if not path and not session:
@@ -84,14 +87,16 @@ def read(arguments: dict, *, render: bool = False) -> dict:
             expected_session = None
             if session:
                 from .resolve import resolve_source, check_binding
-                if session.startswith("log-"):
+                if instance is None and session.startswith("log-"):
                     from .library import Library
                     with Index(arguments.get("cache_path")) as catalog:
                         resolved = Library(catalog).binding(session)
                     if resolved is None:
                         return _error("not_found", "inventory ID is not known; run logs list", 1)
                 else:
-                    resolved = resolve_source(session)
+                    resolved = resolve_source(session, instance=instance)
+                if provider and provider != resolved["provider"]:
+                    return _error("source_mismatch", "selected recording does not match the requested provider", 1)
                 path, provider = resolved["path"], resolved["provider"]
                 expected_session = resolved.get("expected_session_id") if resolved.get("source_kind") == "structured" else None
             if not path or not provider:
@@ -187,7 +192,7 @@ def read(arguments: dict, *, render: bool = False) -> dict:
         return _source_error(code, str(exc), 1 if code in (
             "source_changed", "source_unavailable", "snapshot_unavailable",
             "snapshot_timeout", "snapshot_limit", "caller_context_unverified",
-            "pane_context_unavailable") else 2, arguments)
+            "pane_context_unavailable", "instance_unavailable", "ambiguous_instance", "adapter_unavailable") else 2, arguments)
     except (OSError, ImportError, RuntimeError) as exc:
         return _source_error(getattr(exc, "code", "read_error"), str(exc), 1, arguments)
     except Exception as exc:
@@ -202,6 +207,7 @@ def _parser() -> argparse.ArgumentParser:
         target = command.add_mutually_exclusive_group(required=name != "search")
         target.add_argument("--file")
         target.add_argument("--session")
+        command.add_argument("--instance", type=int, help="Kilix process ID for a live pane selector")
         command.add_argument("--provider")
         command.add_argument("--mode", default="baseline")
         command.add_argument("--limit", type=int, default=20)
@@ -230,6 +236,7 @@ def _parser() -> argparse.ArgumentParser:
             target = command.add_mutually_exclusive_group()
             target.add_argument("--file")
             target.add_argument("--session")
+            command.add_argument("--instance", type=int, help="Kilix process ID for a live pane selector")
             command.add_argument("--rebuild", action="store_true")
     show = sub.add_parser("show", help="read an indexed record, with character pagination")
     show.add_argument("record_id")

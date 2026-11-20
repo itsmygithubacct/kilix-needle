@@ -41,6 +41,9 @@ class DispatchTests(unittest.TestCase):
                    {"file": "/x"}, {"file": "/x", "provider": "raw", "session": "x"},
                    {"session": "x", "limit": True}, {"session": "x", "limit": 101},
                    {"session": "x", "operation": "search"},
+                   {"session": "5", "instance": True}, {"session": "5", "instance": -1},
+                   {"session": "5", "instance": "1234"}, {"session": "5", "instance": 2**31},
+                   {"file": "/x", "provider": "grok", "instance": 1234},
                    {"operation": "source"}, {"session": "x", "provider": "nope"}]
         for args in invalid:
             with self.subTest(args=args), self.assertRaises(ValueError):

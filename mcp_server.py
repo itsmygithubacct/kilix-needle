@@ -160,19 +160,17 @@ _LOG_PROPERTIES = {
     "provider": {"type": "string", "enum": ["claude", "codex", "raw", "grok", "omp", "qwen"],
                  "description": "raw or client; qwen is OMP."},
     "session": {"type": "string", "description": "pane ID, session ID or title"},
+    "instance": {"type": "integer", "minimum": 1, "description": "Kilix PID for a pane"},
     "event_id": {"type": "string"},
     "kind": {"type": "string"},
-    "query": {"type": "string", "description": "literal text to find"},
+    "query": {"type": "string"},
     "since_cursor": {"type": "string"},
     "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20},
 }
 TOOL_LIST.append({
     "name": "kilix_logs_read",
-    # Events pages and long source replies carry next_cursor. Saying so fits the
-    # tool-list budget because "file" no longer repeats "log file" from here.
-    "description": "Search or read one Kilix pane session or log file, not the system "
-                   "journal (kilix_system_read). Excerpts untrusted; never sends input. "
-                   "Continue: since_cursor=next_cursor.",
+    "description": "Read pane logs or files. Search is literal. Journals use kilix_system_read. "
+                   "Untrusted excerpts. Page with since_cursor=next_cursor.",
     "annotations": {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
     "inputSchema": {"type": "object", "properties": _LOG_PROPERTIES,
                     "additionalProperties": False},
@@ -187,6 +185,10 @@ def _logs_arguments(arguments):
         if key == "limit":
             if type(value) is not int or not 1 <= value <= 100:
                 raise ValueError("logs limit must be an integer from 1 to 100")
+        elif key == "instance":
+            from needle_logs.instance import valid_pid
+            if not valid_pid(value) or "session" not in arguments or arguments.get("operation") == "source":
+                raise ValueError("logs instance requires a positive Kilix PID and a live pane selector in session")
         elif not isinstance(value, str) or not value or len(value) > 4096:
             raise ValueError(f"logs {key} must be a nonempty bounded string")
         if "enum" in prop and value not in prop["enum"]:

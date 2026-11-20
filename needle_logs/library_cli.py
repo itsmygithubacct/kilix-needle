@@ -28,6 +28,9 @@ def read(arguments: dict) -> dict:
             raise ValueError("offset must be a nonnegative integer")
         if arguments.get("rank", "bm25") not in ("bm25", "recent") or arguments.get("match", "all") not in ("all", "any"):
             raise ValueError("unsupported search rank or match mode")
+        instance = arguments.get("instance")
+        if instance is not None and (operation not in ("search", "index") or not arguments.get("session")):
+            raise ValueError("instance requires a live pane selector in session")
         with Index(arguments.get("cache_path"), source_path=arguments.get("file")) as index:
             library = Library(index)
             provider = arguments.get("provider")
@@ -55,7 +58,12 @@ def read(arguments: dict) -> dict:
             binding = None
             if session:
                 from .resolve import resolve_source
-                binding = library.binding(session, provider) or resolve_source(session)
+                if instance is None:
+                    binding = library.binding(session, provider)
+                if binding is None:
+                    binding = resolve_source(session, instance=instance)
+                if provider and provider != binding["provider"]:
+                    raise query.QueryError("source_mismatch", "selected recording does not match the requested provider")
                 path, provider = binding["path"], binding["provider"]
             if path:
                 if not provider:
@@ -115,15 +123,24 @@ def read(arguments: dict) -> dict:
                     if path and source_id is None:
                         if errors:
                             raise ValueError("selected source could not be indexed: " + errors[0]["message"])
-                        row = index.db.execute("SELECT p.source_id FROM log_inventory i JOIN log_progress p USING(inventory_id) "
+                        row = index.db.execute("SELECT p.source_id,p.device,p.inode,s.session_id FROM log_inventory i "
+                                               "JOIN log_progress p USING(inventory_id) JOIN sources s USING(source_id) "
                                                "WHERE i.path=? AND i.provider=?", (items[0]["path"], provider)).fetchone()
-                        source_id = row[0] if row else None
-                        if source_id is None:
+                        if row is None:
                             raise ValueError("selected source is not indexed")
+                        if binding and binding.get("instance") is not None:
+                            expected = binding.get("expected_session_id") if provider != "raw" else None
+                            if ((row["device"], row["inode"]) != (binding["source_device"], binding["source_inode"])
+                                    or (expected and row["session_id"] != expected)):
+                                raise query.QueryError("source_changed", "pane recording changed; retry without --cached")
+                        source_id = row["source_id"]
                     with index.read_transaction():
                         result = library.search(arguments["query"], provider=provider, source_id=source_id,
                             limit=limit, offset=offset, rank=arguments.get("rank", "bm25"), match=arguments.get("match", "all"))
                     result["index"] = summary
+            if binding and binding.get("instance") is not None:
+                from .resolve import check_binding
+                check_binding(binding)
             partial = bool(errors or result.get("index", {}).get("failed") or result.get("index", {}).get("partial_sources")
                            or result.get("unindexed_sources") or result.get("partial_sources"))
             envelope = {"schema": SCHEMA, "status": "partial" if partial else "ok", "exit_status": int(partial),

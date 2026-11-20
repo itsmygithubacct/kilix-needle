@@ -1,7 +1,7 @@
 """Resolve an explicit live-pane selector to its recorded source.
 
-This module invokes only the pane list command. It never sends input, waits
-for a turn, installs a provider, or changes a pane's state.
+Pane selectors use a read-only inventory. Source bindings are checked again
+against the selected pane and instance after the read.
 """
 from __future__ import annotations
 
@@ -12,7 +12,10 @@ import re
 import selectors
 import signal
 import subprocess
+import sys
 import time
+
+from .instance import listening_instances, valid_pid
 
 
 class ResolveError(ValueError):
@@ -21,24 +24,32 @@ class ResolveError(ValueError):
         super().__init__(message)
 
 
+INSTANCE_HINT = ("Run printenv KITTY_PID in a fresh shell in the intended Kilix window. "
+                 "Retry the same session with that integer as instance in MCP or --instance PID on the CLI.")
 SNAPSHOT_ERRORS = {
     "caller_context_unverified": (
-        "The Kilix log reader cannot verify the calling pane, so it cannot look "
-        "up panes by number or title. Give the full session ID instead (a Codex "
-        "thread ID or Claude session ID), read an explicit recording with file "
-        "and provider, or run codex --no-daemon from the intended Kilix pane."),
+        "Kilix cannot verify the caller or select a unique instance. " + INSTANCE_HINT +
+        " A full session UUID, file plus provider, or codex --no-daemon in the intended pane also works."),
     "pane_context_unavailable": (
-        "The Kilix log reader has no usable authenticated pane connection. "
-        "Give the full session ID instead (a Codex thread ID or Claude session "
-        "ID), run it from the intended live Kilix pane, or read an explicit "
-        "recording with file and provider."),
+        "The Kilix log reader has no usable authenticated pane connection. " + INSTANCE_HINT +
+        " You can also give a full session UUID or a file and provider."),
 }
 _UUID = re.compile(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
 
 
-def snapshot() -> dict:
+def snapshot(instance: int | None = None) -> dict:
     """Read one size- and time-bounded Kilix pane snapshot."""
-    command = [os.environ.get("KILIX_NEEDLE_KILIX", "kilix"), "panes", "list", "--json"]
+    if instance is None:
+        command = [os.environ.get("KILIX_NEEDLE_KILIX", "kilix"), "panes", "list", "--json"]
+    else:
+        if not valid_pid(instance):
+            raise ResolveError("invalid_input", "instance must be a positive Kilix process ID")
+        from .sources import _records_path
+        toolkit = _records_path().parents[1]
+        if not (toolkit / "kilix_tui/pane_center.py").is_file():
+            raise ResolveError("adapter_unavailable", "the kilix-tui-utils pane inspector is unavailable")
+        command = [sys.executable, "-IB", str(Path(__file__).with_name("instance.py")),
+                   str(instance), str(toolkit)]
     buffers = {"out": bytearray(), "err": bytearray()}
     try:
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -69,6 +80,10 @@ def snapshot() -> dict:
             except subprocess.TimeoutExpired as error:
                 raise ResolveError("snapshot_timeout", "Kilix pane reader did not finish") from error
         if code:
+            if instance is not None:
+                raise ResolveError("instance_unavailable",
+                                   f"Cannot read the window inventory for Kilix PID {instance}. " +
+                                   INSTANCE_HINT + " You can also supply a full session UUID or a file and provider.")
             # Accept only the host's fixed diagnostic contract. Never echo
             # child stderr or arbitrary JSON messages (keys/paths may occur
             # there), and never accept pane data from a failed command.
@@ -89,6 +104,9 @@ def snapshot() -> dict:
         if (not isinstance(result, dict) or result.get("schema") != "kilix.panes/v1"
                 or not isinstance(result.get("panes"), list)):
             raise ResolveError("snapshot_invalid", "unsupported Kilix pane snapshot")
+        if instance is not None and (result.get("instance") != instance or
+                                     type(result.get("instance_start")) is not int):
+            raise ResolveError("snapshot_invalid", "missing Kilix instance identity")
         return result
     finally:
         if process.poll() is None:
@@ -99,6 +117,28 @@ def snapshot() -> dict:
             process.wait()
         process.stdout.close()
         process.stderr.close()
+
+
+def _live_snapshot(instance: int | None) -> tuple[dict, int | None]:
+    if instance is None:
+        try:
+            return snapshot(), None
+        except ResolveError as error:
+            if error.code != "caller_context_unverified":
+                raise
+            listeners = listening_instances()
+            if len(listeners) > 1:
+                raise ResolveError("ambiguous_instance", "Multiple Kilix instances are listening. " +
+                                   INSTANCE_HINT) from error
+            if not listeners:
+                raise
+            instance = listeners[0]
+            # A shared server's startup environment cannot select an instance.
+            # A conflicting or nonstandard inherited route still vetoes a guess.
+            if (os.environ.get("KITTY_LISTEN_ON") not in (None, "", f"unix:@kilix-{instance}") or
+                    os.environ.get("KITTY_PID") not in (None, "", str(instance))):
+                raise
+    return snapshot(instance), instance
 
 
 def _session(pane: dict) -> dict:
@@ -373,13 +413,16 @@ def _session_source(selector: str) -> dict | None:
                                    "resolution": "session_id"})
 
 
-def resolve_source(selector: str, *, tree: dict | None = None) -> dict:
+def resolve_source(selector: str, *, tree: dict | None = None, instance: int | None = None) -> dict:
     # A full session ID is resolved from the provider's own folders first, so
     # it needs no pane listing and no verified caller.
-    direct = _session_source(selector)
-    if direct is not None:
-        return direct
-    pane = _pick(selector, snapshot() if tree is None else tree)
+    if instance is None:
+        direct = _session_source(selector)
+        if direct is not None:
+            return direct
+    if tree is None:
+        tree, instance = _live_snapshot(instance)
+    pane = _pick(selector, tree)
     coding = _session(pane)
     provider = str(coding.get("provider") or "")
     provider = "omp" if provider == "qwen" else provider
@@ -396,6 +439,8 @@ def resolve_source(selector: str, *, tree: dict | None = None) -> dict:
     broker = _broker(pane)
     binding = {"pane_id": pane["pane_id"], "expected_broker_id": broker,
                "expected_session_id": session_id if session_id != "unknown" else None}
+    if instance is not None:
+        binding.update(instance=instance, instance_start=tree["instance_start"])
     if structured is not None:
         path, root = structured
         return binding | _bound(path, root) | {"provider": provider, "source_kind": "structured"}
@@ -424,8 +469,9 @@ def check_binding(binding: dict) -> None:
     if binding.get("resolution") == "session_id":
         current = _session_source(str(binding["expected_session_id"])) or {}
     else:
-        current = resolve_source(str(binding["pane_id"]))
+        current = resolve_source(str(binding["pane_id"]), instance=binding.get("instance"))
     keys = ("path", "provider", "expected_broker_id", "expected_session_id",
-            "root", "root_device", "root_inode", "relative_path", "source_device", "source_inode")
+            "root", "root_device", "root_inode", "relative_path", "source_device", "source_inode",
+            "instance", "instance_start")
     if any(current.get(key) != binding.get(key) for key in keys):
         raise ResolveError("source_changed", "pane source changed during the read; retry")
