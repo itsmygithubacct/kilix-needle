@@ -1,3 +1,12 @@
+kilix-needle (0.20261116+packaging3) UNRELEASED; urgency=medium
+
+  * Revalidate command targets against the confirmed preview. Resolve routed
+    file scopes from the MCP caller and require a path when it is unknown.
+  * Distinguish ambiguous requests from misses and preserve literal text in
+    suggested shell commands.
+
+ -- itsmygithubacct <itsmygithubacct@users.noreply.github.com>  Fri, 20 Nov 2026 23:31:39 +0000
+
 kilix-needle (0.20261116+packaging2) UNRELEASED; urgency=medium
 
   * Verify session identity and current recording locations for pane and

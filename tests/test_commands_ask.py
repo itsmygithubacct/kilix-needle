@@ -88,7 +88,7 @@ class AskCommands(unittest.TestCase):
         provider = Mock()
         provider.return_value.decide.return_value = {'calls': commands_contract.exact_calls(text)}
         session = commands_ask.Session('lfm2', provider=provider, model_only=True)
-        record = {'status': 0, 'items': [{'outcome': 'would', 'step': {'kind': 'app'}}]}
+        record = {'status': 0, 'plan_id': 'preview', 'items': [{'outcome': 'would', 'step': {'kind': 'app'}}]}
         jobs = self.jobs(session)
         with patch.object(compact_runner, 'run', return_value=record) as run:
             plan = ask.ask(text, jobs, act=False)
@@ -96,7 +96,8 @@ class AskCommands(unittest.TestCase):
                              route=ask.router.Route(0, 'commands'))
         provider.return_value.decide.assert_called_once_with(text)
         self.assertEqual(plan['operation_id'], result['operation_id'])
-        self.assertEqual(run.call_count, 3)  # planning, fresh preflight, execution
+        self.assertEqual(run.call_count, 2)
+        self.assertEqual(run.call_args.kwargs['expected_plan'], plan['plan_id'])
         self.assertNotIn('dry_run', run.call_args.kwargs)
 
     def test_a_labelled_request_reaches_admission_without_its_label(self):
@@ -123,7 +124,7 @@ class AskCommands(unittest.TestCase):
         # history itself; ask records each once, as it records the unlabelled one.
         shutil.rmtree(history.directory(), ignore_errors=True)
         self.addCleanup(shutil.rmtree, history.directory(), True)
-        planned = {'status': 0, 'items': [{'outcome': 'would', 'step': {'kind': 'agent'}}]}
+        planned = {'status': 0, 'plan_id': 'preview', 'items': [{'outcome': 'would', 'step': {'kind': 'agent'}}]}
         path = history.directory() / 'requests.jsonl'
 
         def entries():

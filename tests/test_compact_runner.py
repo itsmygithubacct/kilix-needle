@@ -1,4 +1,6 @@
 import support  # isolate live desktop and state before imports
+from contextlib import redirect_stdout
+import io
 import json
 from pathlib import Path
 import tempfile
@@ -6,6 +8,8 @@ import unittest
 from unittest.mock import patch
 
 import agents_kilix as ak
+import ask
+import commands_ask
 import compact
 import compact_runner as runner
 
@@ -130,6 +134,28 @@ class WorkflowTests(unittest.TestCase):
         self.activity='idle'
         self.assertEqual(self.run_request('wait for claude here to finish')['status'],0)
         self.assertEqual(self.mutations(),[])
+
+    def test_replacement_session_needs_its_own_confirmation(self):
+        self.provider = 'codex'
+        session = commands_ask.Session(host=self.host, journal=self.journal, cwd=str(self.root))
+        jobs = ask.Jobs(None, None, confirm=lambda _: False, agent=False, commands=session)
+        request = 'tell codex here: check the notes'
+
+        def replace_session(_question):
+            self.broker = 'f' * 16
+            return True
+
+        output = io.StringIO()
+        with patch.object(ask, '_yes', side_effect=replace_session), redirect_stdout(output):
+            self.assertEqual(ask.interactive(request, jobs), 1)
+        self.assertIn('pane 90', output.getvalue())
+        self.assertIn('confirm again', output.getvalue())
+        self.assertEqual(self.mutations(), [])
+        self.assertFalse(list(self.journal.root.glob('*.json')))
+        with patch.object(ask, '_yes', return_value=True), redirect_stdout(output):
+            self.assertEqual(ask.interactive(request, jobs), 0)
+        [sent] = self.mutations()
+        self.assertEqual(sent[sent.index('--expect-broker') + 1], self.broker)
 
     def test_missing_or_multiple_target_never_receives_message(self):
         for copies in (0,2):

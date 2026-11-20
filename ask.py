@@ -123,7 +123,8 @@ class Jobs:
                                             model_label=lambda: source["label"])
         if job == "files":
             import files_cli
-            return files_cli.run(request, dry_run=dry_run, cwd=self.files_cwd, agent=self.agent)
+            return files_cli.run(request, dry_run=dry_run, cwd=self.files_cwd, agent=self.agent,
+                                 require_caller_cwd=True)
         if job == "agents":
             record = needle_cli.run_agents_request(self.engine("agents"), request, options,
                                                    self.confirm, cwd=self.agents_cwd)
@@ -165,7 +166,7 @@ def _named(job: str, request: str) -> dict:
         else:
             hint = f"{cli} --help  (MCP: {tools}); select a session, or a file and provider"
     else:
-        hint = f"{cli} {json.dumps(request)}  (MCP: {tools}); accepted form: {phrase}"
+        hint = f"{cli} {shlex.quote(request)}  (MCP: {tools}); accepted form: {phrase}"
     return {"request": request, "status": 1, "items": [],
             "note": f"this reads as a request for the {job} job ({what}); ask names it but does not run it",
             "hint": hint}
@@ -285,7 +286,7 @@ def ask(request: str, jobs: Jobs, *, act: bool, assume_yes: bool = False,
             record["status"] = 1
             record["note"] = (f"unsure route: only the {chosen} job's plan admits this, so it was "
                               "planned, not run")
-            record["hint"] = f"to run it, send it to that job: {_CLI[chosen]} {json.dumps(request)} " \
+            record["hint"] = f"to run it, send it to that job: {_CLI[chosen]} {shlex.quote(request)} " \
                              f"(MCP: {_MCP[chosen]})"
     elif len(admitted) == 1:
         route.job = admitted[0]
@@ -295,7 +296,9 @@ def ask(request: str, jobs: Jobs, *, act: bool, assume_yes: bool = False,
         record = _clarify(request, route.candidates,
                           route.note and "the router is unavailable; nothing was run")
     record["route"] = route.record()
-    with history.routed(route.record()):
+    if route.stage == "clarify" and not (admitted or failures or route.note):
+        record["route"]["unmatched"] = True
+    with history.routed(record["route"]):
         _record_unsure(request, record, act)
     return record
 
@@ -400,8 +403,9 @@ def cli_jobs(args, *, interactive: bool, engines: dict | None = None) -> tuple:
         return engine("system")
 
     confirm = needle_cli._never if args.agent else needle_cli._terminal_confirm
+    cwd = os.getcwd()
     jobs = Jobs(engine, classify_system, confirm=confirm, agent=args.agent,
-                agents_cwd=os.getcwd(), files_cwd=None,
+                agents_cwd=cwd, files_cwd=cwd,
                 under_overlay=getattr(args, "under_overlay", False), commands=commands)
     return jobs, stack
 
@@ -415,13 +419,9 @@ READS = ("list_tabs", "list_panes")
 
 
 def no_job(route: dict) -> bool:
-    """A sure "none", or an unsure route answered with a clarification.
-
-    A router failure is also answered with a clarification; its note marks it,
-    and it stays an ordinary failure.
-    """
+    """Only a sure "none" or a completed candidate search with zero admissions."""
     stage, job = route.get("stage"), route.get("job")
-    return (stage in (0, 1, "forced") and job == "none") or (stage == "clarify" and not route.get("note"))
+    return (stage in (0, 1, "forced") and job == "none") or (stage == "clarify" and route.get("unmatched") is True)
 
 
 def _yes(question: str) -> bool:

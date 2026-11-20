@@ -29,7 +29,8 @@ from actions import Refusal
 import files_job
 
 
-def run(request, *, engine=None, dry_run=False, cwd=None, home=None, limit=20, agent=False):
+def run(request, *, engine=None, dry_run=False, cwd=None, home=None, limit=20, agent=False,
+        require_caller_cwd=False):
     """One files request, recorded in the local request history (history.py):
     the request and its planned query only, never the names or contents found."""
     import time
@@ -37,6 +38,8 @@ def run(request, *, engine=None, dry_run=False, cwd=None, home=None, limit=20, a
     started = time.monotonic()
     record = None
     try:
+        if cwd is None and not require_caller_cwd:
+            cwd = os.getcwd()
         record = _run(request, engine=engine, dry_run=dry_run, cwd=cwd, home=home, limit=limit)
         return record
     finally:
@@ -79,8 +82,12 @@ def _run(request, *, engine=None, dry_run=False, cwd=None, home=None, limit=20):
     if any(isinstance(r,Refusal) for r in results):
         record['note']='; '.join(r.reason for r in results if isinstance(r,Refusal));return record
     record['plan']=[dataclasses.asdict(a) for a in results]
+    scope = record['plan'][0]['args']['scope']
+    if (not cwd or not os.path.isabs(cwd)) and (scope == 'here' or scope.startswith('./')):
+        record['note'] = 'the caller directory is unavailable; give an absolute directory in the request'
+        return record
     if dry_run:record['status']=0;record['note']='plan only; no filesystem query performed';return record
-    payload={'query':record['plan'][0],'cwd':cwd or os.getcwd(),'home':home or str(Path.home()),'limit':limit}
+    payload={'query':record['plan'][0],'cwd':cwd,'home':home or str(Path.home()),'limit':limit}
     try:
         proc=subprocess.run([sys.executable,'-I','-B',str(Path(__file__).with_name('files_backend.py'))],
             input=json.dumps(payload),text=True,capture_output=True,timeout=5,check=False)

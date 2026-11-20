@@ -2,6 +2,7 @@
 import io
 import json
 import os
+from pathlib import Path
 import shlex
 import tempfile
 import sys
@@ -142,6 +143,16 @@ class Pipeline(unittest.TestCase):
         self.assertIn("planned, not run", act["note"])
         self.assertIn("kilix-needle ", act["hint"])
 
+    def test_handoff_commands_preserve_the_request_as_one_shell_argument(self):
+        request = 'focus window "Café d\'été"'
+        hint = ask._named("desktop", request)["hint"]
+        self.assertEqual(shlex.split(hint.split("  (MCP:", 1)[0])[-1], request)
+        jobs = FakeJobs({"system": REFUSED})
+        with mock.patch.object(router, "route", return_value=route(2, candidates=["system", "panes"])):
+            hint = ask.ask(request, jobs, act=True)["hint"]
+        command = hint.split("that job: ", 1)[1].split(" (MCP:", 1)[0]
+        self.assertEqual(shlex.split(command), ["kilix-needle", request])
+
     def test_two_or_no_admitting_plans_ask_the_person(self):
         for records in ({}, {"system": REFUSED, "panes": REFUSED}):
             jobs = FakeJobs(records)
@@ -149,6 +160,7 @@ class Pipeline(unittest.TestCase):
                                    return_value=route(2, candidates=["system", "panes"], p=0.5)):
                 record = ask.ask("show me htop", jobs, act=True, assume_yes=True)
             self.assertEqual((record["status"], record["route"]["stage"]), (1, "clarify"))
+            self.assertEqual(ask.no_job(record["route"]), bool(records))
             self.assertIn("system: show memory", record["hint"])
             self.assertIn("panes: split right and run htop", record["hint"])
 
@@ -293,7 +305,6 @@ class Mcp(unittest.TestCase):
         self.assertEqual(done["items"][0]["outcome"], "done")
 
     def test_routed_file_read_reports_the_same_mcp_error_as_a_direct_read(self):
-        from pathlib import Path
         server = mcp_server.Server(lambda job="panes": None)
         with tempfile.TemporaryDirectory() as folder, mock.patch("agents_kilix.calling_cwd", return_value=None):
             for exists in (False, True):
@@ -305,6 +316,25 @@ class Mcp(unittest.TestCase):
                 self.assertEqual(direct["isError"], not exists, direct)
                 self.assertEqual(routed["isError"], direct["isError"], routed)
                 self.assertEqual(routed["structuredContent"]["status"], direct["structuredContent"]["status"])
+
+    def test_routed_file_scope_uses_the_caller_and_requires_it_for_relative_paths(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            caller = root / "caller"
+            caller.mkdir()
+            (caller / "marker.txt").write_text("caller")
+            (root / "marker.txt").write_text("server")
+            with mock.patch("os.getcwd", return_value=str(root)), \
+                    mock.patch("agents_kilix.calling_cwd", return_value=str(caller)):
+                record = self.call("kilix_ask_act", request='files: preview "marker.txt" in here')
+                self.assertEqual(record["observation"]["results"][0]["text"], "caller")
+            with mock.patch("agents_kilix.calling_cwd", return_value=None):
+                for tool in ("kilix_ask_act", "kilix_ask_plan"):
+                    for scope in ("here", "this folder", "./caller"):
+                        record = self.call(tool, request=f'files: preview "marker.txt" in {scope}')
+                        self.assertEqual(record["status"], 1)
+                        self.assertIsNone(record["observation"])
+                        self.assertIn("absolute directory", record["note"])
 
     def test_ask_tools_refuse_other_arguments(self):
         server = mcp_server.Server(lambda job="panes": None)
@@ -474,6 +504,7 @@ class Cli(unittest.TestCase):
             ("none", route(1, "none"), ask.NO_JOB),
             ("unsure, no plan admits it", route(2, candidates=["system", "panes"], p=0.5), ask.NO_JOB),
             ("two jobs", router.Route("multi", None, candidates=["panes", "apps"]), 1),
+            ("two admitted jobs", route(2, candidates=["pty", "tmux"], claims=["pty", "tmux"]), 1),
             ("router error", router.Route("error", None, note="router failed"), 1),
         )
         # A plan that admits the request is covered by the unsure-route test above.

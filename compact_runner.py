@@ -216,7 +216,7 @@ class Host:
                                            'completion_verified':False}}
 
 
-def run(request,calls,*,operation_id,cwd=None,dry_run=False,host=None,journal=None):
+def run(request,calls,*,operation_id,cwd=None,dry_run=False,host=None,journal=None,expected_plan=None):
     """Run only a fully admitted batch; a pending member pauses later actions."""
     admission=compact.admit(request,calls,cwd=cwd)
     if not admission.actions:
@@ -240,8 +240,16 @@ def run(request,calls,*,operation_id,cwd=None,dry_run=False,host=None,journal=No
                     raise WorkflowError('this batch depends on a new agent turn; request its follow-up separately')
                 if step['kind'] in ('agent','tell'):previous.add(target)
             saved={'operation_id':operation_id,'fingerprint':fingerprint,'steps':steps,'items':[],'created_unix':time.time()}
-        if dry_run:
-            return {'operation_id':operation_id,'status':0,'items':[{'outcome':'would','step':s} for s in saved['steps']]}
+        if dry_run or expected_plan is not None:
+            # Revalidate the complete batch under the journal lock before recording any intent.
+            binding = json.dumps([fingerprint, saved['steps']], sort_keys=True).encode()
+            plan_id = hashlib.sha256(binding).hexdigest()
+            if dry_run:
+                return {'operation_id': operation_id, 'plan_id': plan_id, 'status': 0,
+                        'items': [{'outcome': 'would', 'step': step} for step in saved['steps']]}
+            if plan_id != expected_plan:
+                return {'operation_id': operation_id, 'status': 1, 'items': [],
+                        'note': 'the planned target or caller changed; review a new plan and confirm again'}
         for index,step in enumerate(saved['steps']):
             prior=saved['items'][index] if index<len(saved['items']) else None
             if prior and prior['outcome'] in ('done','submitted'):continue

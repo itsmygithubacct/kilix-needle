@@ -591,7 +591,7 @@ class Server:
             caller_cwd = None
         jobs = ask.Jobs(lambda job: _LazyEngine(lambda: self._ensure_engine(job)),
                         lambda: self._ensure_engine("system"), confirm=needle_cli._never,
-                        agent=True, agents_cwd=caller_cwd)
+                        agent=True, agents_cwd=caller_cwd, files_cwd=caller_cwd)
         try:
             record = ask.ask(request, jobs, act=act, assume_yes=act and confirm)
         except (asset.AssetError, EngineError, LibEngineError) as error:
