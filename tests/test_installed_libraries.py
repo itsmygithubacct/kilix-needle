@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 from pathlib import Path
 import shutil
@@ -14,7 +15,8 @@ from unittest import mock
 
 import asset
 import tuning
-from needle_logs.library import PACKAGED_INVENTORY, inventory_module, inventory_path
+from needle_logs.index import Index
+from needle_logs.library import Library, PACKAGED_INVENTORY, inventory_module, inventory_path
 from needle_logs.sources import (
     PACKAGED_RECORDS, PACKAGED_REPLAY, _REPLAY_MODULE, _readers, _records_path, _replay_package, _replayer)
 
@@ -73,6 +75,10 @@ class InstalledLibraryTests(unittest.TestCase):
                 self.assertEqual(_replayer()(b"x"), "installed-replay")
                 self.assertEqual(inventory_path(), inventory)
                 self.assertEqual(inventory_module().MARKER, "installed-inventory")
+                with Index(str(root / "cache" / "index.db")) as index:
+                    library = Library(index)
+                    self.assertEqual(library.adapter(None), "installed-record")
+                    self.assertEqual(library.parser.split(":")[1], hashlib.sha256(records.read_bytes()).hexdigest())
             sys.modules.pop(_REPLAY_MODULE, None)
             missing = root / "missing"
             with mock.patch.object(sys.modules["needle_logs.sources"], "PACKAGED_RECORDS", missing / "records.py"), \

@@ -22,7 +22,8 @@ import time
 from . import facts, query
 from .normalize import stable_id
 from .schema import RECORD_SCHEMA
-from .sources import SourceError, _accept_identity, _header_identity, _identity, _open_bound, _readers, read_source
+from .sources import (SourceError, _accept_identity, _header_identity, _identity, _open_bound,
+                      _readers, _records_path, read_source)
 
 MAX_ROW_BYTES = 64 * 1024 * 1024
 MAX_GAPS = 128
@@ -119,8 +120,8 @@ class Library:
     def __init__(self, index):
         self.index, self.db = index, index.db
         self.inventory = inventory_module()
-        self.adapter = _readers()
-        adapter = Path(__file__).resolve().parents[1] / "third_party/kilix-tui-utils/src/kilix_rollout/records.py"
+        adapter = _records_path()
+        self.adapter = _readers(adapter)
         self.parser = "library-2:" + hashlib.sha256(adapter.read_bytes()).hexdigest() + ":" + facts.VERSION
         names = {row[0] for row in self.db.execute("SELECT name FROM sqlite_master")}
         required = {"log_inventory", "log_progress", "log_search", "log_records_insert", "log_records_delete", "log_records_update"}

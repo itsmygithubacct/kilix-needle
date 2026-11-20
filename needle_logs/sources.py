@@ -47,9 +47,10 @@ def _replay_package() -> Path:
             / "src" / "kilix_transcript_clean")
 
 
-def _readers():
+def _readers(adapter: Path | None = None):
     """Load the pinned adapter by path, independent of an ambient import path."""
-    adapter = _records_path()
+    if adapter is None:
+        adapter = _records_path()
     if not adapter.is_file():
         raise SourceError("adapter_unavailable", "pinned kilix_rollout.records is unavailable")
     try:
