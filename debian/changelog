@@ -1,0 +1,9 @@
+kilix-needle (0.20261116+packaging1) UNRELEASED; urgency=medium
+
+  * Install the runtime under /usr/share/kilix-needle and the commands
+    under /usr/bin. The command model stays a first-use download.
+    Installed kilix-content, kilix-ml, kilix-transcript-clean, and
+    kilix-tui-utils are used before a checkout. Developer installs
+    are unchanged.
+
+ -- itsmygithubacct <itsmygithubacct@users.noreply.github.com>  Fri, 20 Nov 2026 06:52:09 +0000

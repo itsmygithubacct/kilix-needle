@@ -1,0 +1,20 @@
+Source: kilix-needle
+Section: utils
+Priority: optional
+Maintainer: itsmygithubacct <itsmygithubacct@users.noreply.github.com>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.7.2
+Homepage: https://github.com/itsmygithubacct/kilix-needle
+Vcs-Git: https://github.com/itsmygithubacct/kilix-needle.git
+Vcs-Browser: https://github.com/itsmygithubacct/kilix-needle
+Rules-Requires-Root: no
+
+Package: kilix-needle
+Architecture: all
+Depends: python3, kilix-content, kilix-ml, kilix-transcript-clean, kilix-tui-utils, ${misc:Depends}
+Description: plain requests to Kilix
+ kilix-needle turns a request into one Kilix job. This package installs
+ the command and its runtime under /usr/share/kilix-needle.
+ The command model is not included; kilix-needle install downloads it
+ on first use. Catalog, tuning, transcript, and rollout libraries come
+ from their own packages.

@@ -29,8 +29,19 @@ MAX_GAPS = 128
 SCHEMA = "kilix.logs.library/v1"
 
 
+PACKAGED_INVENTORY = Path("/usr/share/kilix-tui-utils/src/kilix_rollout/inventory.py")
+
+
+def inventory_path() -> Path:
+    """The log inventory: the installed package, then the checkout submodule."""
+    if PACKAGED_INVENTORY.is_file():
+        return PACKAGED_INVENTORY
+    return (Path(__file__).resolve().parents[1]
+            / "third_party/kilix-tui-utils/src/kilix_rollout/inventory.py")
+
+
 def inventory_module():
-    path = Path(__file__).resolve().parents[1] / "third_party/kilix-tui-utils/src/kilix_rollout/inventory.py"
+    path = inventory_path()
     if not path.is_file():
         raise SourceError("adapter_unavailable", "pinned log inventory is unavailable")
     spec = importlib.util.spec_from_file_location("_needle_log_inventory", path)

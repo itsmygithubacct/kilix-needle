@@ -27,9 +27,29 @@ class SourceError(Exception):
         self.code = code
 
 
+PACKAGED_RECORDS = Path("/usr/share/kilix-tui-utils/src/kilix_rollout/records.py")
+PACKAGED_REPLAY = Path("/usr/share/kilix-transcript-clean/src/kilix_transcript_clean")
+
+
+def _records_path() -> Path:
+    """The rollout adapter: the installed package, then the checkout submodule."""
+    if PACKAGED_RECORDS.is_file():
+        return PACKAGED_RECORDS
+    return (Path(__file__).resolve().parents[1] / "third_party" / "kilix-tui-utils"
+            / "src" / "kilix_rollout" / "records.py")
+
+
+def _replay_package() -> Path:
+    """The screen replay package: the installed tree, then the checkout submodule."""
+    if (PACKAGED_REPLAY / "__init__.py").is_file():
+        return PACKAGED_REPLAY
+    return (Path(__file__).resolve().parents[1] / "third_party" / "kilix-transcript-clean"
+            / "src" / "kilix_transcript_clean")
+
+
 def _readers():
-    """Load the pinned adapter by path, independent of installed packages."""
-    adapter = Path(__file__).resolve().parents[1] / "third_party" / "kilix-tui-utils" / "src" / "kilix_rollout" / "records.py"
+    """Load the pinned adapter by path, independent of an ambient import path."""
+    adapter = _records_path()
     if not adapter.is_file():
         raise SourceError("adapter_unavailable", "pinned kilix_rollout.records is unavailable")
     try:
@@ -55,8 +75,7 @@ def _replayer():
     loaded = sys.modules.get(_REPLAY_MODULE)
     if loaded is not None:
         return loaded.clean_bytes
-    package = (Path(__file__).resolve().parents[1] / "third_party" / "kilix-transcript-clean"
-               / "src" / "kilix_transcript_clean")
+    package = _replay_package()
     if not (package / "__init__.py").is_file():
         return None
     try:
