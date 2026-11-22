@@ -855,14 +855,16 @@ def _merge_split_then_run(results: list, prompt: str) -> list:
 
 
 _AS_NAME = r"(?:running|named|called|titled|labell?ed|with)\s+(?:the\s+)?"
+TARGET_COURTESIES = frozenset({"please", "pls", "plz", "thanks", "thank", "thank you",
+                               "kindly", "asap", "already"})
 # Words that place or repeat, never name: a pane or tab called one of these
 # must be introduced as a name ("the tab named over").
 _NOT_A_NAME = frozenset({"over", "other", "another", "back", "again", "up", "down", "all", "both",
                          "it", "them", "there", "here", "now", "then", "too", "also", "instead",
                          "away", "off", "out", "over there", "over here", "ones", "same",
-                         "please", "anyway", "afterwards", "yonder", "as well", "well", "behind",
+                         "anyway", "afterwards", "yonder", "as well", "well", "behind",
                          "next door", "quickly", "now please", "everything", "anything",
-                         "nothing", "something", "everyone", "others", "the others"})
+                         "nothing", "something", "everyone", "others", "the others"}) | TARGET_COURTESIES
 
 
 # Before the unit noun, these already say which one: a word after it is not its name.
@@ -890,6 +892,10 @@ def _names_a_target(word: str, key: str, prompt: str) -> bool:
     if word in _NEVER_A_NAME:
         return False
     units = r"tabs?" if key == "tab" else r"panes?|windows?|splits?"
+    if word in TARGET_COURTESIES and re.search(
+            rf"""\b(?:{units})\s+(?:(?:titled|named|called|labell?ed)\s+)?(["'`]){re.escape(word)}\1""",
+            prompt, re.IGNORECASE):
+        return True
     before = re.search(rf"(?<![\w]){re.escape(word)}\s+(?:{units})\b", prompt, re.IGNORECASE)
     if before:
         return True

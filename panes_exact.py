@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 
-from actions import _SHELL_ARGUMENT, Action, interpret, normalize
+from actions import _SHELL_ARGUMENT, TARGET_COURTESIES, Action, interpret, normalize
 
 _HEAD = re.compile(r"^(?:(?:please|pls|kindly|ok|okay|just|can you|could you|would you)[\s,]+)+", re.I)
 _TAIL = re.compile(r"(?:[\s,]+(?:please|pls|thanks|thank you|now))*[\s.!]*$", re.I)
@@ -148,6 +148,8 @@ def _pane_words(found: dict, pane: str) -> str:
         return f"pane {pane}"
     if found.get("name"):
         return f"the {pane} pane"
+    if found.get("nw") and pane.casefold() in TARGET_COURTESIES:
+        return f"pane {pane}"
     return f"the pane titled {_quote(pane) if ' ' in pane else pane}"
 
 
@@ -179,7 +181,13 @@ def read(request: str) -> tuple[list, str] | None:
     values, so the canonical sentence says exactly what the request says."""
     if missing_command(request):
         return None
-    text = _TAIL.sub("", _HEAD.sub("", normalize(request).strip()))
+    text = _HEAD.sub("", normalize(request).strip())
+    stripped = _TAIL.sub("", text)
+    # In "pane named thanks", the final word is the supplied title.
+    if re.search(r"\bpane\s+(?:titled|named|called|labell?ed)$", stripped, re.I):
+        text = text.rstrip(" .!")
+    else:
+        text = stripped
     found = _FIND_THEN.fullmatch(text)
     if found:
         text = f"{found['verb']} {found['pane']}"
@@ -350,7 +358,7 @@ def _run_slots(text: str):
     left = [w for w in re.findall(r"[A-Za-z@][\w@']*", rest) if w not in ("@PANE@", "@CMD@")]
     if any(w.lower() not in _RUN_WORDS for w in left):
         return None
-    words_found = {"id": pane} if found.get("id") else {"t": pane}
+    words_found = {"id": found.get("id"), "nw": found.get("n")}
     args = {"pane": pane, "command": command}
     return [{"name": "run_in_pane", "arguments": args}], \
         f"run {_quote(command)} in {_pane_words(words_found, pane)}"

@@ -1,3 +1,10 @@
+kilix-needle (0.20261116+packaging5) UNRELEASED; urgency=medium
+
+  * Require a named pane or tab when a courtesy follows the unit name.
+    Retain explicitly titled targets and ordinary short names.
+
+ -- itsmygithubacct <itsmygithubacct@users.noreply.github.com>  Sun, 22 Nov 2026 17:50:00 +0000
+
 kilix-needle (0.20261116+packaging4) UNRELEASED; urgency=medium
 
   * Identify the selected command model when a system request needs

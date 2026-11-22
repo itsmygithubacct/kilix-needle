@@ -1399,13 +1399,11 @@ real shape, including window groups.
   mistake the request states plainly ("close the left pane" in a row of three
   closes the pane adjacent on the left). Names, commands and programs are
   taken as given once the checks have found them verbatim in the request.
-- **A word after "tab" or "pane" is a name unless it is known not to be.**
-  "close tab logs" names a tab, and "the next tab over", "the tab please" and
-  "that tab quickly" do not, but the lists of placing and courtesy words are
-  not complete: "close the tab thanks" (asap, pls, already, ...) is read as a
-  tab named "thanks". Such a close only ever waits for a person's yes, and it
-  can only reach a tab with exactly that title. Refusing every unknown word
-  would refuse real short names ("tab nightly", "tab back-end").
+- **Short titles and courtesy words.** "Close tab logs" names the tab called
+  `logs`. After "tab" or "pane", words such as "thanks", "pls", "asap" and
+  "already" leave the target unspecified. For a tab actually called
+  `thanks`, say "close the tab named thanks". Other bare words can still
+  match a short title, such as `nightly` or `back-end`.
 - **A program is bound to the clause that asks for it, by wording.** In a
   request with several clauses, a program starts only in the kind of open,
   and on the side, that its clause asks for. A bare "run htop" belongs to the
