@@ -49,6 +49,7 @@ def contract() -> dict:
         "constraints": {"move_tab": "exactly one of direction and position",
                         "target": "current is the caller; named targets normalize to name:<value>",
                         "commands": "exact case-sensitive request span; quotes are wrappers",
+                        "run_in_pane": "requires shell input verified at submission; current Kilix reports no editor state",
                         "pronouns": "close it is refused; explicit targets required"},
         "confirmation": {"always": ["close_pane", "close_tab", "run_in_pane"],
                          "with_program": ["open_pane", "open_tab"],

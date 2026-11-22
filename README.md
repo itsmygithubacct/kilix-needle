@@ -538,12 +538,12 @@ added because a measured model output got past the one before:
 - A tab close needs a clause that says *tab*. A pane action is never taken
   from a clause that names only a tab.
 - A typed command must be the whole text after the run verb ("make test", not
-  "test"). Its pane must be named outside the command. It is typed only into a
-  pane at a shell prompt.
+  "test"). Its pane must be named outside the command. Submission requires the shell
+  editor to verify a fresh, empty primary prompt.
 - Every program, name and command must appear in the request. A target made
   only of filler words is no reference.
 
-Closing, typing and starting a program wait for `y`, and the question names
+Closing and starting a program wait for `y`, and the question names
 the pane or tab it resolved to. `--yes` (and MCP's `confirm_risky`) answers in
 advance, for scripts and agents, but only for a **plain instruction**. What
 that means, exactly:
@@ -582,12 +582,10 @@ name, nor a close of the pane or tab the request was made from.
 Anything else waits for a person, who sees the target. Every action in one
 request is resolved against the one desktop the request was made on and
 performed by id, so "close tab 2 and close tab 3" closes the tabs that were
-2 and 3. Just before a command is typed, its pane is read again: if an earlier
-command in the request started a program there, nothing is typed. With the
-usual emacs-style line editing, anything half-typed on a one-line prompt is
-first cut to the shell's kill ring (Ctrl-E, Ctrl-U; Ctrl-Y brings it back), so
-it is never run with the command appended; see Known issues for where that
-does not hold. Once any
+2 and 3. For a command in an existing pane, Kilix reports a prompt mark and the
+foreground process. The shell editor's input state is unavailable. Needle
+returns `shell_input_unverified` with the resolved pane and sends no keys.
+Enter the command manually at a fresh prompt. Once any
 action is refused, cannot be resolved or fails, nothing later in the request
 runs on a yes given in advance. Nine reviews shaped this; their records are
 in the release's research notes.
@@ -604,8 +602,8 @@ shell. Programs are split with `shlex` and executed directly.
 ## Agent harnesses
 
 `kilix-needle mcp` is an MCP server over stdio. It offers `kilix_plan`, which
-resolves a request and runs nothing, and `kilix_act`, which runs it; closing,
-typing and starting a program need `confirm_risky=true`. The plain CLI works
+resolves a request and runs nothing, and `kilix_act`, which runs it. Closing
+and starting a program need `confirm_risky=true`. The plain CLI works
 too: `kilix-needle --agent --json --yes REQUEST` prints one JSON record. Don't
 expose it inside omp.sh's Docker sandbox: its network namespace cannot reach
 Kilix's abstract socket.
@@ -626,14 +624,13 @@ What an agent should know (measured in a Codex route benchmark, 2026-09-29):
   Navigation also reads "go to the tab before this one" and "focus whichever
   pane comes next" directly. Next/previous count from the caller's pane or tab
   and wrap at an edge; an ambiguous title still refuses resolution.
-- **A yes given in advance covers these typing forms:** "run 'X' in the NAME
+- **The grammar recognizes existing-pane command requests** such as "run 'X' in the NAME
   pane", "type the command X into pane NAME", with an optional "and press
   Enter", and "In the pane titled NAME, type and press Enter on: X".
-  Missing command text refuses before loading the model.
+  A populated request still requires verified shell input. Missing command
+  text refuses before loading the model.
   A plain split also reads "open a new pane directly to the right of the pane
   I am running in and run a shell there" without loading the model.
-- **Plain `sh` panes accept typed commands** when only the shell holds the
-  terminal. `bash`, `zsh` and `fish` still need shell integration's prompt mark.
 - **The agents job accepts an explicit directory**: "start codex in /abs/dir",
   also "an interactive Codex session in a new tab, working in the directory
   /abs/dir. Do not give it a task." The grammar also reads "working directory
@@ -1370,27 +1367,15 @@ real shape, including window groups.
   closes its own pane or tab, and when its pane cannot be identified nothing
   risky runs. `kilix-needle setup` registers the MCP server at user scope,
   in each harness it finds, only when you run it.
-- **Typing assumes a fresh, one-line, emacs-mode prompt.** Kilix reports a
-  pane "at a shell prompt" in states where the line clear (Ctrl-E Ctrl-U) is
-  not enough:
-  - at a continuation prompt (after a trailing `\` or an open quote), the
-    clear reaches only the new line, so the command completes the earlier one,
-    or lands inside the open quote and runs nothing while the record says
-    `done`;
-  - in vi editing mode (`set -o vi`), in command mode the keys are vi commands
-    (measured: the previous command re-ran), and in insert mode text right of
-    the cursor is kept;
-  - with a reverse history search pending, the command joins the match.
-
-  No key sequence tried is safe in every mode, so these are disclosed rather
-  than papered over. Keep a yes given in advance for panes you know are at a
-  plain prompt. zsh and fish were not measured.
+- **Commands in existing panes require verified shell input.** Kilix 0.2.4
+  cannot distinguish a fresh command line from vi editing, reverse history
+  search, a draft or a continuation prompt. The panes job refuses the request
+  during both planning and execution, including for plain `sh`. Interactive
+  confirmation, `--yes` and MCP `confirm_risky` all produce the same refusal.
 - **Some notation still passes as a shell argument**: "5 p.m", "now/later"
   (it has the shape of a relative path), and a leading dash turned into a flag.
   The models have not produced these, but a hand-written call through the
   bridge could.
-- **The pane is read again about a second before Enter, not at it.** A
-  program started in that pane within that second could receive the command.
 - **"The pane or tab the request was made from" needs the requester to be
   known**: from `KITTY_WINDOW_ID`, or failing that from process ancestry.
   When neither identifies it, agent mode runs nothing risky, and the CLI treats
@@ -1420,11 +1405,6 @@ real shape, including window groups.
   selecting and marking, can still be resumed. That runs only its gates:
   the model's bytes are never written again. If those gates then fail, the
   run's `gates.json` records the failure while the run stays selected.
-- **"At a shell prompt" is checked twice, not proven.** Typing needs the
-  shell's prompt marks (OSC 133), and, from what Kilix reports out of band,
-  that the pane is not in the alternate screen and that what holds its
-  terminal is a shell. A program that launches a shell to trick this, in a
-  pane you already run it in, is outside what it can see.
 
 ## Files
 
@@ -1493,7 +1473,7 @@ Execution goes through `run_calls()` in `needle_cli.py`, the same path used by
 Needle 2. The bridge never reads a confirmation answer from its JSONL stream:
 use `--yes` for risky actions, and a partial refusal still prevents execution.
 With `--agent`, closing the caller's own pane or tab remains forbidden. A command
-is only typed when the target is at a shell prompt.
+requested in an existing pane receives the same shell-input check as the CLI.
 
 New action details:
 

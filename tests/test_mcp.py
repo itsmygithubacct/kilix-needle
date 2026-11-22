@@ -125,6 +125,20 @@ class Tools(unittest.TestCase):
                                         confirm_risky=True)], calls=request)
             self.assertEqual(fake.calls(), [(["close-window", "--match=id:301"], None)])
 
+    def test_both_mcp_tools_report_an_unverified_prompt_without_writing(self):
+        with FakeKilix(desktop()) as fake:
+            replies, _ = converse([
+                call(1, "kilix_plan", request="run pwd in the build pane"),
+                call(2, "kilix_act", request="run pwd in the build pane", confirm_risky=True)])
+            plan, act, parse_error = replies
+            self.assertIn("error", parse_error)
+            for reply in (plan, act):
+                record = reply["result"]["structuredContent"]
+                item, = record["items"]
+                self.assertEqual((record["status"], item["code"]), (1, "shell_input_unverified"))
+                self.assertIn("pane 301", item["reason"])
+            self.assertEqual(fake.calls(), [])
+
     def test_confirm_risky_covers_only_a_plain_instruction(self):
         # Review R1/R2: "avoid closing tab 2" and new phrasings closed tab 2
         # through MCP with confirm_risky. An agent has no person to ask.

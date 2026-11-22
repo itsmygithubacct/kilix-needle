@@ -14,7 +14,7 @@ import tmux_job
 
 
 class ObservedRequests(unittest.TestCase):
-    def test_exact_typing_preserves_bytes_and_requires_explicit_consent(self):
+    def test_exact_typing_preserves_command_in_refusal_without_suggesting_consent(self):
         command = 'touch /tmp/the-complete-requested-marker'
         requests = [
             f'type the exact command `{command}` in the shell prompt of the pane titled "build" and press Enter',
@@ -25,13 +25,14 @@ class ObservedRequests(unittest.TestCase):
         with mock.patch.dict(os.environ, KITTY_WINDOW_ID='300'):
             for request in requests:
                 with self.subTest(request=request), support.FakeKilix(support.desktop()) as fake:
-                    held = needle_cli.run_request(engine, request, needle_cli.Options(agent=True), confirm=lambda _: False)
-                    self.assertEqual((held['status'], fake.calls()), (1, []))
-                    self.assertIn('confirm_risky=true', held['items'][0]['hint'])
-                    record = needle_cli.run_request(engine, request, needle_cli.Options(agent=True, assume_yes=True))
-                    self.assertEqual(record['status'], 0, record)
-                    self.assertEqual([payload for _argv, payload in fake.calls()], [b'\x05\x15', command.encode(), b'\r'])
-                    self.assertTrue(all('KITTY_PTY_BROKER_SESSION=' in argv[1] for argv, _payload in fake.calls()))
+                    for yes in (False, True):
+                        record = needle_cli.run_request(engine, request, needle_cli.Options(agent=True, assume_yes=yes))
+                        item, = record['items']
+                        self.assertEqual((record['status'], item['code'], fake.calls()),
+                                         (1, 'shell_input_unverified', []))
+                        self.assertEqual(item['args']['command'], command)
+                        self.assertIn('pane 301', item['reason'])
+                        self.assertNotIn('hint', item)
         engine.complete.assert_not_called()
 
     def test_ambiguous_targets_do_not_suggest_waiving_confirmation(self):

@@ -5,12 +5,9 @@ shell. A reference is resolved against one `kilix @ ls` snapshot to exactly
 one pane or tab by id; anything ambiguous or missing is refused with the
 candidates named, not guessed.
 
-Typing into a pane follows the path Kilix agent panes need: a pane behind the
-PTY broker is matched by its `KITTY_PTY_BROKER_SESSION` (an `id:` match does
-not reach its input), the text goes through `--stdin` so no escape is
-interpreted, and Enter is a separate send. It is refused unless shell
-integration reports the pane at a prompt, so text never lands in an editor
-or a running program.
+Submitting a command into an existing pane requires the shell editor to verify
+its input state at submission. Kilix only exposes prompt marks, so a legacy
+run_in_pane request resolves its target and refuses before any terminal input.
 """
 from __future__ import annotations
 
@@ -26,8 +23,6 @@ from actions import Action
 
 KILIX = os.environ.get("KILIX_NEEDLE_KILIX", "kilix")
 MAX_TYPED = 1024
-CLEAR_LINE = b"\x05\x15"   # Ctrl-E (end of line), Ctrl-U (cut it to the kill ring)
-_BROKER = re.compile(r"[0-9a-f]{16,64}\Z")
 _LOCATION = {"right": "vsplit", "left": "vsplit-before",
              "below": "hsplit", "above": "hsplit-before"}
 _NEIGHBOR = {"left": "left", "right": "right", "above": "top", "below": "bottom"}
@@ -37,6 +32,14 @@ _RESIZE = {"wider": ("horizontal", 1), "narrower": ("horizontal", -1),
 
 class KilixError(RuntimeError):
     """Kilix could not be read, or an action could not be resolved or run."""
+
+
+class ShellInputUnverified(KilixError):
+    """The target editor cannot verify a fresh command line."""
+
+    def __init__(self, target: str):
+        super().__init__(f"Kilix cannot verify the shell input state in {target}. "
+                         "Enter the command manually at a fresh shell prompt.")
 
 
 @dataclass(frozen=True)
@@ -52,7 +55,6 @@ class Step:
     # The name also fits a pane in another tab; the current tab's was chosen.
     # A person must see which one (review KN-R9-01).
     elsewhere: bool = False
-    types_into: int | None = None     # the pane a command is typed into
     verification: dict | None = None  # explicit mutation identity and observed baseline
 
 
@@ -134,39 +136,6 @@ def snapshot(*, under_overlay: bool = False) -> "Tree":
     except ValueError as error:
         raise KilixError("kilix @ ls returned malformed JSON") from error
     return Tree(data, under_overlay=under_overlay)
-
-
-_SHELLS = frozenset("bash zsh fish sh dash ksh mksh tcsh csh nu xonsh elvish".split())
-
-
-def _shell_in_front(window: dict) -> bool:
-    """Beyond the in-band prompt marks (which a program could print): the pane
-    is not in the alternate screen, and what holds its terminal is a shell.
-    Review KN-R2-10: `kilix @ ls` reports both out of band."""
-    if window.get("in_alternate_screen"):
-        return False
-    processes = window.get("foreground_processes") or []
-    names = [os.path.basename(str((p.get("cmdline") or [""])[0])).lstrip("-") for p in processes]
-    # Nothing reported is not evidence of a shell (review KN-R3-07: fail closed).
-    return bool(names) and all(name in _SHELLS for name in names)
-
-
-# Shells kitty's shell integration cannot reach never send prompt marks, so
-# `at_prompt` is always false for them. For these the out-of-band signals
-# decide alone: only the shell holds the terminal, and it is not in the
-# alternate screen (route benchmark 2026-09-29: every typing request into a
-# plain `sh` pane was refused, 0/7).
-_UNMARKED_SHELLS = frozenset("sh dash ash ksh mksh csh tcsh".split())
-
-
-def _ready_to_type(window: dict) -> bool:
-    if not _shell_in_front(window):
-        return False
-    if window.get("at_prompt") is True:
-        return True
-    names = [os.path.basename(str((p.get("cmdline") or [""])[0])).lstrip("-")
-             for p in window.get("foreground_processes") or []]
-    return all(name in _UNMARKED_SHELLS for name in names)
 
 
 def _program(window: dict) -> str:
@@ -508,38 +477,18 @@ def _resolve(action: Action, tree: Tree) -> Step:
                     verification=_mutation_baseline(tree, kind, window, args) if "pane" in args else None)
     if kind == "run_in_pane":
         window = tree.pane(args["pane"], wrap=False)
-        if not _ready_to_type(window):
-            raise KilixError(f"{_describe_pane(window)} is not at a shell prompt (a program is "
-                             "running, or its shell reports no prompt marks); nothing will be "
-                             "typed into it")
-        text = args["command"].encode("utf-8")
-        if len(text) > MAX_TYPED:
+        if len(args["command"].encode("utf-8")) > MAX_TYPED:
             raise KilixError("the command is too long to type")
-        broker = str((window.get("env") or {}).get("KITTY_PTY_BROKER_SESSION") or "")
-        match = f"--match=env:KITTY_PTY_BROKER_SESSION={broker}" if _BROKER.fullmatch(broker) \
-            else f"--match=id:{window['id']}"
-        # Ctrl-E Ctrl-U first: a line someone half-typed at that prompt is cut
-        # to the shell's kill ring (Ctrl-Y brings it back) instead of being run
-        # with the command appended (review KN-R6-01: "echo PARTIAL-" + "true"
-        # ran as "echo PARTIAL-true").
-        return Step(action, f"type {args['command']!r} into {_describe_pane(window)} and press Enter",
-                    ((("send-text", match, "--stdin"), CLEAR_LINE),
-                     (("send-text", match, "--stdin"), text),
-                     (("send-text", match, "--stdin"), b"\r")),
-                    types_into=window["id"])
+        # A foreground shell and OSC 133 marks can also describe vi command
+        # mode, reverse search or PS2. Re-reading them before Enter cannot
+        # verify the editor or bind a check to the eventual submission.
+        raise ShellInputUnverified(_describe_pane(window))
     raise KilixError(f"no kilix command for {kind}")
 
 
-def still_at_prompt(window_id: int, *, under_overlay: bool = False) -> bool:
-    """Read the desktop again, just before typing: an earlier command in the
-    same request may have started a program in that pane (review KN-R5-02:
-    "run vim notes.txt … and run make …" typed make into vim)."""
-    tree = snapshot(under_overlay=under_overlay)
-    window = next((w for _tab, w in tree._all_panes() if w.get("id") == window_id), None)
-    return window is not None and _ready_to_type(window)
-
-
 def perform(step: Step) -> dict | None:
+    if step.action.kind == "run_in_pane":
+        raise ShellInputUnverified("the target pane")
     expected = step.verification
     if expected:
         fresh = snapshot()

@@ -197,9 +197,12 @@ class Bridge(unittest.TestCase):
                                  call("close_tab", tab="current"))
             result = bridge.process(item, mode="execute", assume_yes=True)
             self.assertEqual([r["outcome"] for r in result["items"]], ["refused", "skipped"])
-            item = self.envelope("run ls in the htop pane", call("run_in_pane", pane="htop", command="ls"))
-            self.assertEqual(bridge.process(item, mode="execute", assume_yes=True)["items"][0]["outcome"],
-                             "unresolved")
+            for pane in ("htop", "build"):
+                item = self.envelope(f"run ls in the {pane} pane", call("run_in_pane", pane=pane, command="ls"))
+                self.assertEqual(bridge.process(item)["actions"][0][0], "run_in_pane")
+                for mode in ("plan", "execute"):
+                    result = bridge.process(item, mode=mode, assume_yes=True)
+                    self.assertEqual((result["status"], result["items"][0]["code"]), (1, "shell_input_unverified"))
             self.assertEqual(fake.calls(), [])
 
     def test_jsonl_errors_do_not_desynchronize_next_request(self):

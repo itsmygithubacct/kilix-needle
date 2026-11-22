@@ -82,7 +82,7 @@ class PaneForms(unittest.TestCase):
         os.environ["KITTY_WINDOW_ID"] = "300"
         self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
 
-    def test_typing_retains_literal_and_separate_enter_without_model(self):
+    def test_unverified_typing_retains_literal_in_refusal_without_model(self):
         command = "touch /tmp/product-marker-" + "x" * 140
         request = "In the pane titled build, type and press Enter on: " + command
         self.assertEqual(panes_exact.admitted(request)[0], [{"name": "run_in_pane", "arguments":
@@ -96,10 +96,11 @@ class PaneForms(unittest.TestCase):
                 else:
                     record = mcp_server.Server(engine).call_tool("kilix_act", {
                         "request": request, "confirm_risky": True})["structuredContent"]
-                self.assertEqual(record["status"], 0)
-                self.assertEqual(record["items"][0]["outcome"], "done")
-                sent = [data for argv, data in fake.calls() if argv[0] == "send-text"]
-                self.assertEqual(sent[-2:], [command.encode(), b"\r"])
+                item, = record["items"]
+                self.assertEqual((record["status"], item["outcome"], item["code"]),
+                                 (1, "refused", "shell_input_unverified"))
+                self.assertEqual(item["args"]["command"], command)
+                self.assertEqual(fake.calls(), [])
         engine.assert_not_called()
         engine.complete.assert_not_called()
 

@@ -1,3 +1,10 @@
+kilix-needle (0.20261116+packaging6) UNRELEASED; urgency=medium
+
+  * Require verified shell editor input for commands in existing panes.
+    Report an unverified prompt before confirmation and send no keystrokes.
+
+ -- itsmygithubacct <itsmygithubacct@users.noreply.github.com>  Sun, 22 Nov 2026 22:22:00 +0000
+
 kilix-needle (0.20261116+packaging5) UNRELEASED; urgency=medium
 
   * Require a named pane or tab when a courtesy follows the unit name.
