@@ -392,6 +392,8 @@ def cli_jobs(args, *, interactive: bool, engines: dict | None = None) -> tuple:
 
     def engine(job):
         if commands is not None:
+            if job == 'system' and backend != 'grammar':
+                return commands_ask.NoProposal(f'system grammar ({backend} selected for commands)')
             return commands_ask.NoProposal()
         if job not in engines:
             engines[job] = stack.enter_context(needle_cli.LazyRuntime(

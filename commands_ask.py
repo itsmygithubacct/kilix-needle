@@ -8,7 +8,8 @@ import compact_runner
 
 class NoProposal:
     """Keep legacy deterministic jobs available without loading their models."""
-    label = 'grammar only'
+    def __init__(self, label='grammar only'):
+        self.label = label
 
     def reset(self):
         pass

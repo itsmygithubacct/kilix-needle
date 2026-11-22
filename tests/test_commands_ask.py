@@ -20,6 +20,19 @@ import needle_cli
 
 
 class AskCommands(unittest.TestCase):
+    def test_system_refusal_names_the_selected_command_model_without_loading_it(self):
+        question = 'how much free disk space do I have'
+        for backend in ('grammar', 'lfm2', 'lfm3', 'needle3'):
+            with self.subTest(backend=backend), patch.object(commands_ask.Session, 'decide',
+                    side_effect=AssertionError('a system refusal needs no command model')), \
+                    redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(ask.main(['--commands-backend', backend, '--job', 'system',
+                                           '--json', question]), 1)
+            record = json.loads(output.getvalue())
+            self.assertEqual(record['decision'], 'clarify')
+            expected = 'grammar only' if backend == 'grammar' else f'system grammar ({backend} selected for commands)'
+            self.assertEqual(record['query_source'], expected)
+
     def test_default_cli_uses_lfm_when_a_model_proposal_is_requested(self):
         runtime = Mock()
         runtime.__enter__ = Mock(return_value=runtime)
