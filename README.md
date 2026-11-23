@@ -1409,7 +1409,10 @@ real shape, including window groups.
   without the integration, a remote shell over ssh, and zsh, fish and
   PowerShell (whose integrations do not implement the proof yet) are refused,
   whatever their prompt looks like. Any key typed at the prompt, even one that
-  leaves the line empty, makes it unverifiable until the next prompt.
+  leaves the line empty, makes it unverifiable until the next prompt, and so
+  does type-ahead left from a running command. After an empty Enter, Ctrl-C or
+  leaving a full-screen program, the pane is verifiable again once a command
+  has run.
 - **Some notation still passes as a shell argument**: "5 p.m", "now/later"
   (it has the shape of a relative path), and a leading dash turned into a flag.
   The models have not produced these, but a hand-written call through the
