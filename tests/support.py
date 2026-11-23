@@ -35,8 +35,10 @@ dir="$KILIX_NEEDLE_TEST_CALLS"
 n=$(ls "$dir" | wc -l)
 n=$(printf '%04d' "$n")
 if [ "$2" = "ls" ]; then cat "$KILIX_NEEDLE_TEST_LS"; exit 0; fi
-if [ "$2" = "send-text" ]; then cat > "$dir/$n.stdin"; fi
+if [ "$2" = "send-text" ] || [ "$2" = "shell-submit" ]; then cat > "$dir/$n.stdin"; fi
 printf '%s\\0' "$@" > "$dir/$n.argv"
+if [ -n "$KILIX_NEEDLE_TEST_OUT" ]; then cat "$KILIX_NEEDLE_TEST_OUT"; fi
+if [ -n "$KILIX_NEEDLE_TEST_ERR" ]; then cat "$KILIX_NEEDLE_TEST_ERR" >&2; fi
 exit "${KILIX_NEEDLE_TEST_STATUS:-0}"
 """
 
@@ -66,8 +68,24 @@ class FakeKilix:
 
     def __exit__(self, *_exc):
         kilix.KILIX = self._saved
-        os.environ.pop("KILIX_NEEDLE_TEST_STATUS", None)
+        for name in ("KILIX_NEEDLE_TEST_STATUS", "KILIX_NEEDLE_TEST_OUT", "KILIX_NEEDLE_TEST_ERR"):
+            os.environ.pop(name, None)
         self._dir.cleanup()
+
+    def answer(self, *, stdout=b"", stderr=b"", status=0):
+        """What every later non-ls call prints and returns."""
+        for name, data in (("OUT", stdout), ("ERR", stderr)):
+            path = os.path.join(self._dir.name, name)
+            with open(path, "wb") as handle:
+                handle.write(data)
+            os.environ[f"KILIX_NEEDLE_TEST_{name}"] = path
+        os.environ["KILIX_NEEDLE_TEST_STATUS"] = str(status)
+
+    def serve(self, tree):
+        """Replace the `ls` every later snapshot reads."""
+        import json
+        with open(self.ls, "w", encoding="utf-8") as handle:
+            json.dump(tree, handle)
 
     def calls(self):
         """[(argv after `@`, stdin bytes or None)] in order, excluding `ls`."""
@@ -87,13 +105,24 @@ class FakeKilix:
 
 
 def window(wid, title="bash", program="bash", *, active=False, neighbors=None,
-           at_prompt=True, broker=None):
+           at_prompt=True, broker=None, shell_input=None):
     env = {"KITTY_PTY_BROKER_SESSION": broker} if broker else {}
-    return {"id": wid, "title": title, "is_active": active, "is_focused": active,
-            "neighbors": neighbors or {}, "at_prompt": at_prompt, "env": env,
-            # pids above pid_max, so ancestry can never match a real process
-            "pid": 5_000_000 + wid,
-            "foreground_processes": [{"cmdline": [f"/usr/bin/{program}"], "pid": 5_000_000 + wid}]}
+    ans = {"id": wid, "title": title, "is_active": active, "is_focused": active,
+           "neighbors": neighbors or {}, "at_prompt": at_prompt, "env": env,
+           # pids above pid_max, so ancestry can never match a real process
+           "pid": 5_000_000 + wid,
+           "foreground_processes": [{"cmdline": [f"/usr/bin/{program}"], "pid": 5_000_000 + wid}]}
+    if shell_input is not None:
+        ans["shell_input"] = shell_input
+    return ans
+
+
+PROMPT = "c0ffee" * 4
+
+
+def verified(prompt=PROMPT):
+    """The inventory's report of a shell at a verifiable, fresh prompt."""
+    return {"verifiable": True, "prompt_id": prompt, "protocol": 1}
 
 
 def group(wid):

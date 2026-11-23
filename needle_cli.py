@@ -501,7 +501,7 @@ def run_calls(request: str, calls: list, options: Options,
         except kilix.KilixError as error:
             entry.update(outcome="unresolved", reason=str(error))
             if isinstance(error, kilix.ShellInputUnverified):
-                entry.update(outcome="refused", code="shell_input_unverified")
+                _shell_input_refusal(entry, error)
             record["status"] = 1
             broken = True
             continue
@@ -553,6 +553,17 @@ def run_calls(request: str, calls: list, options: Options,
             receipt = kilix.perform(step)
             if receipt is not None:
                 entry["receipt"] = receipt
+        except kilix.ShellInputUnverified as error:
+            # Refused at submission: the prompt or pane changed after planning,
+            # or the shell found input. Nothing reached the editor.
+            entry.update(reason=str(error))
+            _shell_input_refusal(entry, error)
+            record["status"] = 1
+            return record
+        except kilix.ShellInputUnconfirmed as error:
+            entry.update(outcome="failed", reason=str(error), code="shell_input_unconfirmed")
+            record["status"] = 1
+            return record
         except kilix.KilixError as error:
             entry.update(outcome="failed", reason=str(error))
             record["status"] = 1
@@ -561,6 +572,12 @@ def run_calls(request: str, calls: list, options: Options,
         # made: its step was resolved above to an id, never to a position.
         entry["outcome"] = "done"
     return record
+
+
+def _shell_input_refusal(entry: dict, error: "kilix.ShellInputUnverified") -> None:
+    entry.update(outcome="refused", code="shell_input_unverified")
+    if error.cause:
+        entry["cause"] = error.cause
 
 
 def run_agents_request(engine, request: str, options: Options,

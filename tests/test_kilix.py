@@ -3,7 +3,7 @@ import copy
 import os
 import unittest
 
-from support import FakeKilix, desktop, tab, window
+from support import PROMPT, FakeKilix, desktop, tab, verified, window
 from actions import Action
 import kilix
 
@@ -156,6 +156,112 @@ class Typing(unittest.TestCase):
                 with self.subTest(shell=shell, mark=at_prompt), self.assertRaises(
                         kilix.ShellInputUnverified):
                     resolve(Action("run_in_pane", {"pane": "left", "command": "pwd"}), tree=tree)
+
+
+def proven(tree=None, wid=301, proof=None):
+    """The desktop with one pane reporting a verifiable prompt."""
+    tree = tree or desktop()
+    for t in tree[0]["tabs"]:
+        for w in t["windows"]:
+            if w["id"] == wid:
+                w["shell_input"] = verified() if proof is None else proof
+    return tree
+
+
+class VerifiedSubmission(unittest.TestCase):
+    """The engine's shell_input report is the only signal that permits a run."""
+
+    def test_a_verified_prompt_resolves_to_one_guarded_submission(self):
+        for pane, wid in (("left", 301), ("name:notes", 302)):
+            with self.subTest(pane=pane):
+                step = resolve(Action("run_in_pane", {"pane": pane, "command": "make 'a b' $X"}),
+                               tree=proven(wid=wid))
+                self.assertEqual(step.commands, (((
+                    "shell-submit", f"--match=id:{wid}", f"--expect-prompt={PROMPT}"),
+                    b"make 'a b' $X"),))
+                self.assertIn("verified empty shell prompt", step.summary)
+                self.assertEqual((step.verification["target_id"], step.verification["prompt_id"]),
+                                 (wid, PROMPT))
+
+    def test_an_unverifiable_report_is_refused_with_its_reason(self):
+        for proof, words in (
+                ({"verifiable": False, "code": "input", "reason": "input reached the pane after its prompt appeared"},
+                 "input reached the pane"),
+                ({"verifiable": False, "code": "unavailable", "reason": "no Kilix shell integration"},
+                 "no Kilix shell integration"),
+                ({"verifiable": True}, "reports no shell editor state"),
+                ({"verifiable": True, "prompt_id": "../x"}, "reports no shell editor state"),
+                ({"verifiable": "yes", "prompt_id": PROMPT}, "reports no shell editor state"),
+                ("verified", "reports no shell editor state")):
+            with self.subTest(proof=proof), self.assertRaisesRegex(
+                    kilix.ShellInputUnverified, f"pane 301 .*{words}.*manually") as cm:
+                resolve(Action("run_in_pane", {"pane": "left", "command": "pwd"}), tree=proven(proof=proof))
+            if isinstance(proof, dict) and proof.get("code"):
+                self.assertEqual(cm.exception.cause, proof["code"])
+
+    def test_a_command_must_be_one_line(self):
+        for command in ("pwd\nrm -rf x", "pwd\r", "echo \x1b[2J", "a\x7f"):
+            with self.subTest(command=command), self.assertRaisesRegex(kilix.KilixError, "one shell command line"):
+                resolve(Action("run_in_pane", {"pane": "left", "command": command}), tree=proven())
+
+    def step(self, tree=None):
+        return resolve(Action("run_in_pane", {"pane": "left", "command": "make test"}), tree=tree or proven())
+
+    def test_submission_sends_the_command_on_stdin_and_reads_the_receipt(self):
+        step = self.step()
+        with FakeKilix(proven()) as fake, Caller(300):
+            fake.answer(stdout=b'{"status": "submitted", "prompt_id": "%s", "window_id": 301}\n' % PROMPT.encode())
+            receipt = kilix.perform(step)
+            self.assertEqual(fake.calls(), [(["shell-submit", "--match=id:301", f"--expect-prompt={PROMPT}"],
+                                             b"make test")])
+        self.assertEqual((receipt["submitted"], receipt["target_id"], receipt["prompt_id"],
+                          receipt["completion_verified"]), (True, 301, PROMPT, False))
+
+    def test_a_changed_pane_is_refused_before_any_input(self):
+        step = self.step()
+        for change in ("pid", "closed", "broker"):
+            tree = proven()
+            build = tree[0]["tabs"][2]["windows"][1]
+            if change == "pid":
+                build["pid"] += 1
+            elif change == "broker":
+                build["env"]["KITTY_PTY_BROKER_SESSION"] = "cd" * 8
+            else:
+                tree[0]["tabs"][2]["windows"].remove(build)
+            with self.subTest(change=change), FakeKilix(tree) as fake, Caller(300):
+                with self.assertRaisesRegex(kilix.ShellInputUnverified, "changed after the request was planned") as cm:
+                    kilix.perform(step)
+                self.assertEqual((fake.calls(), cm.exception.cause), ([], "stale"))
+
+    def test_engine_and_shell_refusals_keep_their_codes(self):
+        step = self.step()
+        for code, reason in (("stale", "the prompt changed after the request was planned"),
+                             ("input", "input reached the pane after its prompt appeared"),
+                             ("draft", "the shell editor already holds input; it was left untouched"),
+                             ("busy", "the shell that reported the prompt is not in the foreground")):
+            with self.subTest(code=code), FakeKilix(proven()) as fake, Caller(300):
+                fake.answer(stderr=f"Error: {code}: {reason}\n".encode(), status=1)
+                with self.assertRaisesRegex(kilix.ShellInputUnverified, f"pane 301 .*{reason}.*manually") as cm:
+                    kilix.perform(step)
+                self.assertEqual(cm.exception.cause, code)
+
+    def test_an_engine_without_guarded_submission_is_a_refusal(self):
+        with FakeKilix(proven()) as fake, Caller(300):
+            fake.answer(stderr=b"Error: Unknown subcommand: shell-submit\n", status=1)
+            with self.assertRaises(kilix.ShellInputUnverified) as cm:
+                kilix.perform(self.step())
+        self.assertEqual(cm.exception.cause, "unavailable")
+
+    def test_an_unconfirmed_submission_is_never_reported_as_refused(self):
+        for stdout, stderr, status in ((b"", b"Error: unconfirmed: the shell claimed the command\n", 1),
+                                       (b"not json", b"", 0),
+                                       (b'{"status": "submitted", "prompt_id": "other", "window_id": 301}', b"", 0),
+                                       (b'{"status": "submitted", "prompt_id": "%s", "window_id": 302}'
+                                        % PROMPT.encode(), b"", 0)):
+            with self.subTest(stdout=stdout, stderr=stderr), FakeKilix(proven()) as fake, Caller(300):
+                fake.answer(stdout=stdout, stderr=stderr, status=status)
+                with self.assertRaises(kilix.ShellInputUnconfirmed):
+                    kilix.perform(self.step())
 
 
 class Perform(unittest.TestCase):

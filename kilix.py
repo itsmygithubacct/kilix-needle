@@ -6,8 +6,12 @@ one pane or tab by id; anything ambiguous or missing is refused with the
 candidates named, not guessed.
 
 Submitting a command into an existing pane requires the shell editor to verify
-its input state at submission. Kilix only exposes prompt marks, so a legacy
-run_in_pane request resolves its target and refuses before any terminal input.
+its input state at submission. Prompt marks, titles, foreground processes and
+screen text cannot. Kilix reports a pane's verifiable prompt as `shell_input`
+in its inventory; `kilix @ shell-submit` binds the submission to that exact
+prompt and the pane's identity, and the shell integration accepts it only at a
+fresh, empty primary prompt. Anything else is refused before any input, with
+the editor's contents untouched and never read.
 """
 from __future__ import annotations
 
@@ -37,9 +41,21 @@ class KilixError(RuntimeError):
 class ShellInputUnverified(KilixError):
     """The target editor cannot verify a fresh command line."""
 
-    def __init__(self, target: str):
-        super().__init__(f"Kilix cannot verify the shell input state in {target}. "
+    def __init__(self, target: str, detail: str = "", cause: str = ""):
+        detail = f" ({detail})" if detail else ""
+        super().__init__(f"Kilix cannot verify the shell input state in {target}{detail}. "
                          "Enter the command manually at a fresh shell prompt.")
+        self.cause = cause      # the engine's or shell's refusal code, if any
+
+
+class ShellInputUnconfirmed(KilixError):
+    """The shell took the command but its confirmation was not seen."""
+
+
+# `kitten @ shell-submit` refusals: "CODE: REASON", after kitten's "Error: ".
+_SUBMIT_REFUSAL = re.compile(r"(?:Error: )?([a-z_]{1,40}): (.+)", re.S)
+_PROMPT_ID = re.compile(r"[0-9a-f]{16,64}\Z")
+_UNTYPEABLE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 
 @dataclass(frozen=True)
@@ -477,18 +493,82 @@ def _resolve(action: Action, tree: Tree) -> Step:
                     verification=_mutation_baseline(tree, kind, window, args) if "pane" in args else None)
     if kind == "run_in_pane":
         window = tree.pane(args["pane"], wrap=False)
-        if len(args["command"].encode("utf-8")) > MAX_TYPED:
+        command = args["command"]
+        if len(command.encode("utf-8")) > MAX_TYPED:
             raise KilixError("the command is too long to type")
+        if _UNTYPEABLE.search(command):
+            raise KilixError("the command contains a newline or control character; "
+                             "it can only be one shell command line")
         # A foreground shell and OSC 133 marks can also describe vi command
-        # mode, reverse search or PS2. Re-reading them before Enter cannot
-        # verify the editor or bind a check to the eventual submission.
-        raise ShellInputUnverified(_describe_pane(window))
+        # mode, reverse search or PS2. Only the shell's own report, which the
+        # engine checks again and the editor proves at acceptance, counts.
+        proof = window.get("shell_input")
+        prompt = proof.get("prompt_id") if isinstance(proof, dict) else None
+        if not (isinstance(proof, dict) and proof.get("verifiable") is True
+                and isinstance(prompt, str) and _PROMPT_ID.fullmatch(prompt)):
+            detail, cause = "this Kilix reports no shell editor state", ""
+            if isinstance(proof, dict) and isinstance(proof.get("reason"), str):
+                detail, cause = proof["reason"][:200], str(proof.get("code") or "")[:40]
+            raise ShellInputUnverified(_describe_pane(window), detail, cause)
+        return Step(action, f"run {command!r} in {_describe_pane(window)} at its "
+                            "verified empty shell prompt",
+                    ((("shell-submit", f"--match=id:{window['id']}", f"--expect-prompt={prompt}"),
+                      command.encode("utf-8")),),
+                    verification={"kind": kind, "target_id": window["id"], "prompt_id": prompt,
+                                  "identity": _identities(tree).get(window["id"]),
+                                  "target": _describe_pane(window)})
     raise KilixError(f"no kilix command for {kind}")
+
+
+def _submit(step: Step) -> dict:
+    """One guarded submission, bound to the planned pane and prompt."""
+    expected = step.verification
+    target = expected["target"]
+    fresh = snapshot()
+    if _identities(fresh).get(expected["target_id"]) != expected["identity"]:
+        raise ShellInputUnverified(target, "the pane changed after the request was planned", "stale")
+    (argv, data), = step.commands
+    try:
+        done = subprocess.run([KILIX, "@", *_target(), *argv], input=data, capture_output=True,
+                              timeout=20, check=False)
+    except subprocess.TimeoutExpired as error:
+        raise ShellInputUnconfirmed(
+            f"{target}: the shell did not answer in time; the command may have been "
+            "submitted, so check the pane before trying again") from error
+    except OSError as error:
+        raise KilixError(f"kilix @ shell-submit failed: {error}") from error
+    if done.returncode != 0:
+        detail = done.stderr.decode("utf-8", "replace").strip()
+        refusal = _SUBMIT_REFUSAL.fullmatch(detail.splitlines()[-1] if detail else "")
+        if refusal and refusal.group(1) == "unconfirmed":
+            raise ShellInputUnconfirmed(f"{target}: {refusal.group(2)}")
+        if refusal:
+            raise ShellInputUnverified(target, refusal.group(2)[:200], refusal.group(1))
+        # An engine without verified submission does not know the command.
+        raise ShellInputUnverified(target, detail[:200] or f"status {done.returncode}", "unavailable")
+    try:
+        answer = json.loads(done.stdout)
+    except ValueError:
+        answer = None
+    if not isinstance(answer, dict) or answer.get("status") != "submitted" \
+            or answer.get("prompt_id") != expected["prompt_id"] \
+            or answer.get("window_id") != expected["target_id"]:
+        raise ShellInputUnconfirmed(f"{target}: Kilix gave no recognisable confirmation; "
+                                    "check the pane before trying again")
+    return {"schema": "kilix.needle.shell_submit.v1", "target_id": expected["target_id"],
+            "prompt_id": expected["prompt_id"], "submitted": True,
+            "accepted_by": "shell editor at a verified empty primary prompt",
+            "completion_verified": False}
 
 
 def perform(step: Step) -> dict | None:
     if step.action.kind == "run_in_pane":
-        raise ShellInputUnverified("the target pane")
+        expected = step.verification or {}
+        if expected.get("kind") != "run_in_pane" or len(step.commands) != 1 \
+                or step.commands[0][0][:1] != ("shell-submit",):
+            # Only a step resolved from a verified prompt may reach a pane.
+            raise ShellInputUnverified("the target pane")
+        return _submit(step)
     expected = step.verification
     if expected:
         fresh = snapshot()

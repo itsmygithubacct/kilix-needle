@@ -1,3 +1,12 @@
+kilix-needle (0.20261116+packaging7) UNRELEASED; urgency=medium
+
+  * Run a command in an existing pane when Kilix reports a verifiable
+    prompt: bind the plan to the pane and prompt, submit through the
+    guarded kilix @ shell-submit and keep the structured refusal for any
+    missing, stale or refused proof.
+
+ -- itsmygithubacct <itsmygithubacct@users.noreply.github.com>  Mon, 23 Nov 2026 00:30:00 +0000
+
 kilix-needle (0.20261116+packaging6) UNRELEASED; urgency=medium
 
   * Require verified shell editor input for commands in existing panes.
