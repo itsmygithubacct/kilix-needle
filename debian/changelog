@@ -3,9 +3,11 @@ kilix-needle (0.20261116+packaging7) UNRELEASED; urgency=medium
   * Run a command in an existing pane when Kilix reports a verifiable
     prompt: bind the plan to the pane and prompt, submit through the
     guarded kilix @ shell-submit and keep the structured refusal for any
-    missing, stale or refused proof.
+    missing, stale or refused proof. This needs kilix-engine
+    0.48.2+git20261123.c76d1297-1 or later; older engines report no
+    verifiable prompt, so the command is refused.
 
- -- itsmygithubacct <itsmygithubacct@users.noreply.github.com>  Mon, 23 Nov 2026 00:30:00 +0000
+ -- itsmygithubacct <itsmygithubacct@users.noreply.github.com>  Mon, 23 Nov 2026 22:23:47 +0000
 
 kilix-needle (0.20261116+packaging6) UNRELEASED; urgency=medium
 
