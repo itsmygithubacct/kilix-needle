@@ -1410,9 +1410,10 @@ real shape, including window groups.
   PowerShell (whose integrations do not implement the proof yet) are refused,
   whatever their prompt looks like. Any key typed at the prompt, even one that
   leaves the line empty, makes it unverifiable until the next prompt, and so
-  does type-ahead left from a running command. After an empty Enter, Ctrl-C or
-  leaving a full-screen program, the pane is verifiable again once a command
-  has run.
+  does type-ahead left from a running command. Enter and Ctrl-C are the
+  exception: after an empty Enter or a draft abandoned with Ctrl-C the new
+  prompt can be used at once. After leaving a full-screen program the pane is
+  usually verifiable again only once a command has run.
 - **Some notation still passes as a shell argument**: "5 p.m", "now/later"
   (it has the shape of a relative path), and a leading dash turned into a flag.
   The models have not produced these, but a hand-written call through the
