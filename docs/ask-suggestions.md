@@ -147,10 +147,108 @@ enough. Where the tree has a single sentence, only 1 and 4 are asked. A
 request takes about 1.4 questions and 460 prompt tokens on average: at the
 cost measured for `d3:2b` on a 6 GB laptop GPU, about 0.16 seconds.
 
-The earlier way, a walk that asked for the kind, the number of operations,
-each operation and each argument, is still in the module (`walk()`) for
-comparison; it took about 3.4 questions and 665 tokens per request on the same
-sets.
+The other plan source, the walk (`suggest(..., plan=walk)`), is described
+next.
+
+## How the walk plans
+
+The walk asks for the plan one operation at a time instead of building the
+grammar's sentence. Since November 2026 it works in this order.
+
+1. **Words the tools cannot express refuse before any question**
+   (`walk_refuses()`). These rules belong to the walk only. They read the
+   request's own words, with quoted texts and paths left out, and come on top
+   of the rules above:
+   - a session addressed by pane, tab, window, number, id or title (`tell
+     claude in pane 4: ...`, `codex session 0a1b...`);
+   - a reasoning effort, or a level after a model (`model gpt-6 high`);
+   - resuming or restarting a session;
+   - a command-line flag (`--yolo`);
+   - another agent or program (`grok`, `the supervisor`, `the other claude`);
+   - an SSH host;
+   - `as root`, or memory or a GPU;
+   - many copies (`five claude sessions`);
+   - a time of day (`at 6pm`);
+   - a hypothetical, an example, a quote or past events (`imagine`, `the
+     tutorial says`, `yesterday I started`);
+   - a model the grammar cannot carry;
+   - a split without a side;
+   - a request that ends on `with the task`;
+   - a place the copier cannot copy (`in ~/`, `the folder pine-cone`);
+   - `Directory: /x` given as a field;
+   - text after a colon that nothing before the colon calls a message or a
+     task;
+   - a clause whose first word is a verb none of the five tools does (`push
+     the branch`, `email the team`, `work out 18%`).
+2. **The kind of request**, as for the built sentence.
+3. **Each operation in turn.** The first question offers the operations the
+   named agents and applications allow, and `other` (something none of them
+   can do). Later questions see the operations already planned and may also
+   answer `nothing more`. That answer is offered only once the plan leaves
+   nothing the request names unused. There are at most as many operations as
+   the request has clauses (joined by `and`, `then`, commas, semicolons,
+   colons, dashes, sentences or list numbers), one more for a `both` that
+   points back at two agents, and four in all. A request that begins with a
+   launch verb and an agent (`open codex in ...`) begins with that launch.
+   `other` refuses the whole request.
+4. **Each argument the words leave open.** An argument the words already fix
+   is taken without a question:
+   - the one agent named, for a wait or a message;
+   - the applications, in the order the request names them;
+   - for the last operation the clauses lead one to expect: the only path, the
+     one direction not yet used, the only model, the only text left;
+   - the message, when one text is left.
+   Other choices are asked, among the request's own spans only, with `none`
+   where leaving the argument out is a fair answer.
+5. **The rules.** A repeated operation, anything named left out, a named
+   model left out, or a `both` without a second operation on each agent ends
+   the walk. So does any reason `refusal()` gives, before the final question
+   is asked.
+6. **The plan against its near misses.** The plan is ranked against the
+   variants of it that the rules also allow (one operation fewer, an argument
+   dropped, another named path or side, the other agent) and `none of
+   these`. It must win with odds of at least `WALK_CHECK` (0.5). A plan with
+   no such variant gets the yes/no question instead, and needs `yes` with at
+   least `VERIFY` (0.8).
+
+`walk_signals()` reads a walk's (gate, least sure choice, final ranking), and
+`suggest(..., plan=walk)` holds them to (`GATE`, `STEP`, `WALK_CHECK`).
+
+### The walk on requests the grammar does not read (not blind)
+
+Three development sets, all requests that the grown grammar does not read:
+
+- the residue of the authored sets v1-v8 and of four later fresh sets (581
+  requests, 261 of them reaching a plan source, 73 supported);
+- real requests sent to kilix-needle (88 that reach a plan source; under the
+  conventions only 2 are supported, plus 2 contestable; most address a
+  session by pane or name a model or effort Ask cannot express);
+- a fresh set of hard requests written for this work, residue of 143 (95
+  supported).
+
+These sets shaped the rules above, so the numbers are not blind. Questions
+and tokens are averages per request that reaches a plan source.
+
+| Set | Plan source | Right | Wrong | Questions | Tokens |
+|---|---|---|---|---|---|
+| authored residue | walk before | 40 | 21 | 5.75 | 1079 |
+| | built sentence | 40 | 20 | 3.00 | 1625 |
+| | walk now | 44 | 0 | 1.90 | 390 |
+| real | walk before | 1 | 51 | 6.47 | 1734 |
+| | built sentence | 1 | 48 | 1.66 | 481 |
+| | walk now | 2 | 0 | 0.15 | 29 |
+| fresh hard | walk before | 54 | 10 | 7.05 | 1413 |
+| | built sentence | 59 | 8 | 3.59 | 1446 |
+| | walk now | 63 | 0 | 3.80 | 823 |
+
+The rows for "before" are the code of 2026-11-24 before this change. "Now"
+replays the recorded answers of `d3:2b` through the final code, which matches
+a fresh run question for question except in two requests of the fresh hard
+set whose questions changed, which are counted as unanswered here. Most of the wrong suggestions before were messages to a
+session named by its pane, plans that dropped a model or effort, and
+unsupported second actions. The lexical rules of step 1 remove most of them.
+They read only words, so they would serve the built sentence too: with them,
+the built sentence made 40/0, 1/0 and 59/1 (right/wrong).
 
 ## Measured, 2026-11-24
 

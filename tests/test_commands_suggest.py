@@ -87,65 +87,187 @@ class Spans(unittest.TestCase):
         self.assertIsNone(suggest.NOT_NOW.search(plain))
 
 
+def kinds(steps):
+    return [step["kind"] if step["kind"] != "fixed" else "fixed " + step["pick"].split("=")[0] for step in steps]
+
+
+def plan_key(plan):
+    """A rule's answer for the final ranking: the option that is this plan."""
+    wording = "; then ".join(suggest.describe(c) for c in plan)
+    return lambda options: next(key for key, text in options.items() if text == wording)
+
+
 class Walk(unittest.TestCase):
+    """walk(): the decision model picks each operation in turn and each argument the words leave open."""
+
     def test_a_plan_is_built_only_from_what_the_request_names(self):
-        model = Model(COMMAND, ("Which operation", "start_codex"), ("Where should", "up"),
-                      ("Which directory", first_span), YES)
+        model = Model(COMMAND, ("Which operation", "start_codex"), ("What does the request ask for next", "done"), YES)
         calls, steps = suggest.walk("Put Codex in a pane above, in /work/tern.v2.", model)
         self.assertEqual(calls, [call("start_codex", directory="/work/tern.v2", place="up")])
-        self.assertEqual([step["kind"] for step in steps], ["gate", "operation", "directory", "place", "verify"])
+        # The only path and the one direction named are taken without a question.
+        self.assertEqual(kinds(steps), ["gate", "operation", "fixed directory", "fixed place", "operation", "verify"])
         # Claude, the applications and the other directions are not there to choose.
         self.assertEqual(set(model.questions("Which operation")[0]), {"start_codex", "wait_for_agent", "other"})
-        self.assertEqual(set(model.questions("Where should")[0]), {"up", "tab"})
-        self.assertEqual(model.questions("Which directory")[0]["1"], "/work/tern.v2")
+        self.assertEqual(suggest.walk_signals(steps), (0.95, 0.95, 1.0))
 
-    def test_no_question_is_asked_when_nothing_is_named_or_the_request_is_not_for_now(self):
+    def test_an_argument_the_words_leave_open_is_asked(self):
+        request = "Start codex in ./alpha or in ./beta in a split above or below"
+        self.assertEqual(suggest.walk(request, Model())[1][-1]["pick"], "conditional")
+        request = "Start claude in ./alpha in a split above, then wait for codex in ./beta"
+        model = Model(COMMAND, ("Which operation does the request ask for first", "start_claude"),
+                      ("What does the request ask for next", "wait_for_agent"),
+                      ("Which agent", "codex"), ("Which directory is the first", "1"),
+                      ("Which directory is the second", "2"), ("Where should", "up"), YES)
+        calls, steps = suggest.walk(request, model)
+        self.assertEqual(calls, [call("start_claude", directory="./alpha", place="up"),
+                                 call("wait_for_agent", agent="codex", directory="./beta")])
+        # The first operation is not the last one expected, so its place is asked; with two paths named,
+        # each operation's directory is asked. Two agents are named, so the wait's is asked.
+        self.assertEqual(kinds(steps), ["gate", "operation", "directory", "place", "operation", "agent",
+                                        "directory", "verify"])
+        self.assertEqual(model.questions("Which directory")[0],
+                         {"1": "./alpha", "2": "./beta",
+                          "0": "the current directory: the request names no directory for this operation"})
+
+    def test_words_the_tools_cannot_express_refuse_before_any_question(self):
         for request, why in (("Start a coding session in /srv/x", "unnamed"),
                              ("Start Codex in /srv/x unless it is busy", "conditional"),
-                             ("Start claude in /srv/x provided nobody else is there", "conditional"),
-                             ("Open the notepad or the calculator", "conditional")):
+                             ("Open the notepad or the calculator", "conditional"),
+                             ("Tell claude in pane 4: the build is green", "target"),
+                             ("message codex 0a1b2c3d-1111-2222-3333-444455556666: hi", "target"),
+                             ("Start codex in a new window", "target"),
+                             ("Start claude in ~/x with high reasoning effort", "effort"),
+                             ("Start codex in ~/x with model gpt-6 high: fix it", "effort"),
+                             ("Resume my last claude session in ~/x", "resume"),
+                             ("Restart codex here", "resume"),
+                             ("Open a codex tab titled review", "title"),
+                             ("start codex --yolo in ~/x", "flag"),
+                             ("Tell claude and grok: hello there", "other agent"),
+                             ("Ping the other claude with 'rebase'", "other agent"),
+                             ("Start codex on the ssh host", "host"),
+                             ("Imagine starting claude in ~/x", "not meant"),
+                             ("Yesterday I started codex in ~/x", "past"),
+                             ("at 6pm, start claude in sage-dynamo", "later"),
+                             ("Start codex in the other folder", "unnamed place"),
+                             ("Start codex in ~/x as root", "unsupported"),
+                             ("Start claude with model claude-opus-9 in ~/x", "model"),
+                             ("Fire up claude with gpt-6.1-sol in ~/x", "unused"),
+                             ("Start codex in a split", "unplaced"),
+                             ("Start claude in ~/x with the task", "cut off"),
+                             ("bring up codex in the folder pine-cone", "cut off"),
+                             ("start codex in ~/", "cut off"),
+                             ("Need claude. Directory: /opt/x.", "fields"),
+                             ("codex in ~/x: let it finish its turn", "unread text"),
+                             ("Start claude in ~/x and push the branch to origin", "unsupported"),
+                             ("Open the calculator and work out 18% of 2,350", "unsupported"),
+                             ("Message claude 'done' and then email the team", "unsupported")):
             with self.subTest(request=request):
-                model = Model()
+                model = Model(COMMAND, ("Which operation", "start_claude"), YES)
                 calls, steps = suggest.walk(request, model)
-                self.assertEqual((calls, model.asked), ([], []))
-                self.assertEqual((steps[-1]["kind"], steps[-1]["pick"]), ("refused", why))
+                self.assertEqual(calls, [])
+                self.assertEqual(steps[-1]["pick"], why)
+                if why != "unused":
+                    self.assertEqual((model.asked, suggest.walk_refuses(request)), ([], why))
 
-    def test_a_plan_that_leaves_out_a_named_thing_is_refused(self):
-        request = "Run Codex in dusk-ferry in a split below"
-        here = Model(COMMAND, ("Which operation", "start_codex"), ("Which directory", "0"), ("Where should", "down"), YES)
-        calls, steps = suggest.walk(request, here)
-        self.assertEqual((calls, steps[-1]["pick"]), ([], "unused"))
-        tab = Model(COMMAND, ("Which operation", "start_codex"), ("Which directory", "1"), ("Where should", "tab"), YES)
-        calls, steps = suggest.walk(request, tab)
-        self.assertEqual((calls, steps[-1]["pick"]), ([], "unused"))
-        self.assertEqual(here.questions("Does the plan") + tab.questions("Does the plan"), [])
-        whole = Model(COMMAND, ("Which operation", "start_codex"), ("Which directory", "1"), ("Where should", "down"), YES)
-        self.assertEqual(suggest.walk(request, whole)[0], [call("start_codex", directory="dusk-ferry", place="down")])
+    def test_plain_requests_are_not_refused_by_those_words(self):
+        for request in ("Codex please, left split, in tamarind-sledge", "Open a notepad window.",
+                        "I've finished the migration in ~/x. Please tell the codex session there: rerun it",
+                        "Spawn codex in ~/x; initial task \"read TODO.md\"", "Open the notepad app; that's all.",
+                        "Please tell Claude, verbatim, \"I will review the diff after lunch.\"",
+                        "pull the file manager up for me, would you", "Start Claude and Codex, both in ~/x",
+                        "Hey, let claude in ~/x know: the API key rotated, restart your dev server.",
+                        "Ping codex in ~/x: the fixtures moved to tests/data, rerun it.",
+                        "Kick off codex here. Its first job: \"start the dev server\"", "Calculator and notepad, please."):
+            with self.subTest(request=request):
+                self.assertIsNone(suggest.walk_refuses(request))
+
+    def test_operations_are_asked_one_at_a_time(self):
+        model = Model(COMMAND, ("Which operation does the request ask for first", "start_codex"),
+                      ("What does the request ask for next", "open_app"), YES)
+        calls, steps = suggest.walk("First start Codex here, then open the calculator.", model)
+        self.assertEqual(calls, [call("start_codex"), call("open_app", app="kilix-calculator")])
+        # The second question sees the first operation as planned, and may end the plan there.
+        question, options, state = model.asked[2]
+        self.assertIn("Already planned:\n1. start a new Codex coding session", state)
+        # Nothing more is not offered while the calculator the request names is not opened.
+        self.assertEqual(set(options), {"start_codex", "wait_for_agent", "open_app", "other"})
+        # Two clauses allow two operations: no third question.
+        self.assertEqual(len(model.questions("Which operation")) + len(model.questions("What does")), 2)
+
+    def test_a_request_that_opens_with_a_launch_begins_with_one(self):
+        model = Model(COMMAND, ("Which operation", "start_codex"), ("What does", "open_app"), YES)
+        calls, _ = suggest.walk("Open codex here, then the notepad", model)
+        self.assertEqual(calls, [call("start_codex"), call("open_app", app="kilix-notepad")])
+        self.assertEqual(set(model.questions("Which operation")[0]), {"start_codex", "other"})
+        model = Model(COMMAND, ("Which operation", "open_app"), ("What does", "start_codex"), YES)
+        suggest.walk("The notepad, then open codex here", model)
+        self.assertIn("open_app", model.questions("Which operation")[0])
+
+    def test_nothing_more_is_offered_only_once_nothing_named_is_left_out(self):
+        model = Model(COMMAND, ("Which operation", "open_app"), ("What does the request ask for next", "open_app"),
+                      YES)
+        calls, _ = suggest.walk("The notepad and the calculator, please", model)
+        self.assertEqual(calls, [call("open_app", app="kilix-notepad"), call("open_app", app="kilix-calculator")])
+        self.assertNotIn("done", model.questions("What does the request ask for next")[0])
+        model = Model(COMMAND, ("Which operation", "message_agent"), ("What does the request ask for next", "done"),
+                      YES)
+        calls, steps = suggest.walk('Tell claude "lint only", then sit tight', model)
+        self.assertEqual(calls, [call("message_agent", agent="claude", text="lint only")])
+        self.assertIn("done", model.questions("What does the request ask for next")[0])
 
     def test_an_unsupported_part_refuses_the_whole_request(self):
-        model = Model(COMMAND, ("How many separate", "2"), ("Which operation is the first", "open_app"),
-                      ("Which operation is the second", "other"), ("Which operation does", "other"),
-                      ("Which application", "kilix-notepad"), YES)
-        calls, steps = suggest.walk("Open the notepad and email its contents to Priya.", model)
-        self.assertEqual(calls, [])
+        model = Model(COMMAND, ("Which operation", "start_codex"), ("What does the request ask for next", "other"), YES)
+        calls, steps = suggest.walk("Start codex here and get me a coffee.", model)
+        self.assertEqual((calls, steps[-1]["pick"]), ([], "operation"))
         self.assertEqual(model.questions("Does the plan"), [])
 
-    def test_two_operations_keep_the_requests_order_and_whole_plans_compete(self):
-        model = Model(COMMAND, ("How many separate", "2"), ("Which operation is the first", "open_app"),
-                      ("Which operation is the second", "start_codex"), ("Which operation does", "start_codex"),
-                      ("Which application", "kilix-calculator"), ("Which plan does exactly", "1"), YES)
-        calls, _ = suggest.walk("First start Codex here, then open the calculator.", model)
-        self.assertEqual(calls, [call("start_codex"), call("open_app", app="kilix-calculator")])
-        offered = model.questions("Which plan does exactly")[0]
-        self.assertEqual(set(offered), {"0", "1", "2"})
-
     def test_the_same_operation_twice_is_not_a_plan(self):
-        model = Model(COMMAND, ("How many separate", "2", 0.99), ("Which operation", "start_claude"),
-                      ("Which model", "0"), YES)
-        calls, steps = suggest.walk("Start Claude here and set the model to opus-9.", model)
-        # The two-operation reading repeats itself and is dropped; the one-operation plan stands alone.
-        self.assertEqual(calls, [call("start_claude")])
-        self.assertEqual(model.questions("Which plan does exactly"), [])
+        model = Model(COMMAND, ("Which operation", "start_claude"), ("What does", "start_claude"), YES)
+        calls, steps = suggest.walk("Start Claude here and Codex here.", model)
+        self.assertEqual((calls, steps[-1]["pick"]), ([], "repeated"))
+
+    def test_both_asks_for_each_agent_again(self):
+        answers = iter(["start_codex", "wait_for_agent", "done"])
+        model = Model(COMMAND, ("Which operation", "start_claude"), ("What does", lambda options: next(answers)),
+                      ("Which agent", "codex"), YES)
+        calls, steps = suggest.walk("Start claude, then codex, then wait for both.", model)
+        self.assertEqual((calls, steps[-1]["pick"]), ([], "unused"))
+        # "both" allows one operation more than the clauses do.
+        self.assertEqual(len(model.questions("What does")), 3)
+
+    def test_the_plan_must_win_against_its_near_misses(self):
+        request = "In ~/x: start claude, then wait for codex"
+        plan = [call("start_claude", directory="~/x"), call("wait_for_agent", agent="codex", directory="~/x")]
+        rules = (COMMAND, ("Which operation does the request ask for first", "start_claude"),
+                 ("What does the request ask for next", "wait_for_agent"), ("Which agent", "codex"),
+                 ("Which directory", "1"))
+        model = Model(*rules, ("Which plan does exactly", plan_key(plan)))
+        calls, steps = suggest.walk(request, model)
+        self.assertEqual(calls, plan)
+        options = model.questions("Which plan does exactly")[0]
+        # Only near misses that the rules allow compete: the wait without its directory, or the launch
+        # without it (the other agent would leave codex unused). The plan's own key is recorded, so
+        # walk_signals reads its odds.
+        self.assertEqual(sorted(text for key, text in options.items() if key != "0"), sorted([
+            "; then ".join(suggest.describe(c) for c in variant) for variant in (
+                plan, [plan[0], call("wait_for_agent", agent="codex")], [call("start_claude"), plan[1]])]))
+        self.assertIn("0", options)
+        self.assertEqual(model.questions("Does the plan"), [])
+        self.assertEqual(suggest.walk_signals(steps)[2], 0.95)
+        near = Model(*rules, ("Which plan does exactly", plan_key([plan[0], call("wait_for_agent", agent="codex")])))
+        calls, steps = suggest.walk(request, near)
+        self.assertEqual((calls, steps[-1]["pick"]), ([], "check"))
+
+    def test_a_plan_the_rules_refuse_is_not_checked(self):
+        model = Model(COMMAND, ("Which operation", "start_codex"), YES)
+        calls, steps = suggest.walk("Quit Codex in a split on the right.", model)
+        self.assertEqual((calls, steps[-1]["pick"]), ([], "rules"))
+        self.assertEqual(model.questions("Does the plan"), [])
+
+    def test_a_weak_yes_refuses(self):
+        model = Model(COMMAND, ("Which operation", "start_codex"), ("Does the plan do exactly", "yes", 0.7))
+        calls, steps = suggest.walk("Codex in a split on the right, please.", model)
+        self.assertEqual((calls, steps[-1]["pick"]), ([], "verify"))
 
 
 def toward(wording):
@@ -194,13 +316,22 @@ class Suggest(unittest.TestCase):
 
     def test_the_walk_can_stand_in_for_the_built_sentence(self):
         request = "Codex in a split on the right, please."
-        model = Model(COMMAND, ("Which operation", "start_codex"), ("Where should", "right"), YES)
+        model = Model(COMMAND, ("Which operation", "start_codex"), YES)
         found = suggest.suggest(request, model, plan=suggest.walk)
         self.assertEqual(found, {"request": "start codex in a split to the right",
                                  "calls": [call("start_codex", place="right")], "source": "walk"})
         self.assertEqual(len(model.questions("Which operation")), 1)
-        unsure = Model(COMMAND, ("Which operation", "start_codex"), ("Where should", "right", 0.45), YES)
+        unsure = Model(COMMAND, ("Which operation", "start_codex", 0.45), YES)
         self.assertIsNone(suggest.suggest(request, unsure, plan=suggest.walk))
+        # The walk's ranking needs WALK_CHECK, not the yes/no check's VERIFY.
+        request = "In ~/x: start claude, then wait for codex"
+        plan = [call("start_claude", directory="~/x"), call("wait_for_agent", agent="codex", directory="~/x")]
+        for odds, offered in ((suggest.WALK_CHECK + 0.05, True), (suggest.WALK_CHECK - 0.05, False)):
+            ranked = Model(COMMAND, ("Which operation does the request ask for first", "start_claude"),
+                           ("What does the request ask for next", "wait_for_agent"), ("Which agent", "codex"),
+                           ("Which directory", "1"), ("Which plan does exactly", plan_key(plan), odds))
+            found = suggest.suggest(request, ranked, plan=suggest.walk)
+            self.assertEqual(bool(found), offered)
 
     def test_a_request_the_grammar_reads_is_never_sent_to_the_model(self):
         model = Model()
@@ -223,8 +354,9 @@ class Suggest(unittest.TestCase):
     def test_a_plan_the_grammar_does_not_read_back_is_not_suggested(self):
         model = Model(COMMAND, ("Which operation", "start_codex"), ("Which model", "1"), YES)
         request = "Start Codex using the model gpt-9-zeta."
-        self.assertEqual(suggest.walk(request, model)[0], [call("start_codex", model="gpt-9-zeta")])
+        self.assertEqual(suggest.walk(request, model)[1][-1]["pick"], "model")      # the walk plans nothing for it
         self.assertIsNone(suggest.suggest(request, model))
+        self.assertIsNone(suggest.suggest(request, model, plan=suggest.walk))
         self.assertIsNone(suggest.suggest('Show "tax form 2025.pdf" in the pdf viewer', Model(*self.MODEL)))
         # A wording the grammar reads as some other plan is no suggestion either.
         with mock.patch.object(suggest, "sentence", return_value="start codex in a split to the left"):
@@ -742,13 +874,12 @@ class Sources(unittest.TestCase):
         model = Model(*self.WALK)
         self.assertEqual(suggest.build(request, model)[0], [])     # no plan passes refusal(), so none is built
         self.assertEqual(model.asked, [])
-        walked = (COMMAND, ("Which operation", "start_codex"), ("Where should", "right"), YES)
+        walked = (COMMAND, ("Which operation", "start_codex"), YES)
         calls, steps = suggest.walk(request, Model(*walked))
-        self.assertEqual(calls, self.PLAN)
-        self.assertTrue(all(value >= limit for value, limit in
-                            zip(suggest.signals(steps), (suggest.GATE, suggest.STEP, suggest.VERIFY))))
-        self.assertEqual(suggest.refusal(request, calls), "unsupported")
+        self.assertEqual((calls, steps[-1]["pick"]), ([], "rules"))        # the walk holds its plan to them too
+        self.assertEqual(suggest.refusal(request, self.PLAN), "unsupported")
         self.assertIsNone(suggest.suggest(request, Model(*walked)))
+        self.assertIsNone(suggest.suggest(request, Model(*walked), plan=suggest.walk))
         self.assertIsNone(suggest.suggest(request, Model(*walked), propose=lambda: self.PLAN))
 
     def test_a_decision_model_that_cannot_be_asked_offers_nothing(self):

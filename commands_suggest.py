@@ -448,155 +448,393 @@ def tidy(calls):
     return out or None
 
 
+# The walk: the model picks each operation in turn, then each argument the
+# request's words leave open, and last ranks its plan among near misses.
+# What the five tools cannot express, in the request's own words (texts and
+# paths blanked). The walk plans nothing for a request that says one: doing it
+# without the qualifier is not what was asked.
+WALK_LIMITS = (
+    ('target', re.compile(r'\b(?:panes?|tabs?|windows?|sessions?|brokers?|workers?|threads?|stations?)\s*'
+                          r'(?:#|no\.?\s*|number\s*)?\d+\b|\b(?:pane|tab|broker)\d'
+                          r'|\b(?:claude|codex)\s+#?\d+\b|\b[0-9a-f]{8}-[0-9a-f]{4}-|\b[0-9a-f]{12,}\b', re.I)),
+    ('effort', re.compile(r'\b(?:effort|reasoning|thinking)\b'
+                          r'|\bmodel\s+[\w.-]+\s+(?:x?high|medium|low|max|maximum|minimal)\b', re.I)),
+    ('unsupported', re.compile(r'\bas\s+(?:root|admin\w*|sudo|another\s+user)\b|\bsudo\b'
+                               r'|\b(?:memory|ram|cpus?|gpus?|priority)\b', re.I)),
+    ('count', re.compile(r'\b(?:five|six|seven|eight|nine|ten|dozen|[5-9]|\d{2,})\s+(?:new\s+|more\s+)?'
+                         r'(?:claude\s+|codex\s+)?(?:sessions|instances|agents|copies|panes|tabs|times)\b', re.I)),
+    ('title', re.compile(r'\b(?:[Cc]laude|[Cc]odex)\s+session\s+[A-Z]')),       # "codex session Night Owl"
+    ('resume', re.compile(r'\b(?:resum|restart|continu|reopen|re-open|reattach|revive)\w*', re.I)),
+    ('flag', re.compile(r'(?<![\w-])--[a-z]', re.I)),
+    ('title', re.compile(r'\btitled?\b|\b(?:tab|session|agent|pane|window|instance|one)\s+(?:named|called|label+ed)\b',
+                         re.I)),
+    ('other agent', re.compile(r'\b(?:grok|gemini|aider|copilot|cursor|chatgpt|qwen|llama|mistral|deepseek|opencode|'
+                               r'cline|supervisor|coordinator|orchestrator|reviewer|subagent|worker)s?\b'
+                               r'|\bother\s+(?:claude|codex|one|session|agent|instance)\b', re.I)),
+    ('host', re.compile(r'\bssh\b|\bhosts?\b|\bremote(?:ly)?\b', re.I)),
+    ('not meant', re.compile(r'\b(?:suppos\w*|imagin\w*|hypothetical\w*|pretend\w*|theoretical\w*|thought\s+experiment|'
+                             r'example|sample|tutorial|documentation|manual|readme|quot\w+|says|said|status)\b',
+                             re.I)),
+    ('past', re.compile(r'\b(?:yesterday|ago|earlier|previously|last\s+(?:week|night|time|month|year|session))\b'
+                        r'|\b(?:i|we|they)\s+(?:already\s+|just\s+)?(?:started|launched|opened|messaged|told|sent|waited|'
+                        r'kicked|relayed|pinged|ran|asked)\b|\b(?:talked|discussed|spoke|mentioned)\b', re.I)),
+)
+# Directions the walk also reads ("split upward"), and words that ask for a split without saying where.
+WALK_PLACE = {**PLACE_WORD, 'up': re.compile(PLACE_WORD['up'].pattern + r'|\bupwards?\b', re.I),
+              'down': re.compile(PLACE_WORD['down'].pattern + r'|\bdownwards?\b', re.I)}
+WALK_SPLIT = re.compile(r'\b(?:split|pane|beside|side|vertical(?:ly)?|horizontal(?:ly)?)\b', re.I)
+# Each join, list mark or new sentence allows one more operation.
+WALK_JOIN = re.compile(r'(?:[,;:]\s*)?(?:\b(?:and|then|also|plus|afterwards|next|after\s+that|finally|lastly)\b[\s,]*)+'
+                       r'|[,;:]|\s-\s|[.!?]\s+(?=\S)|(?<!\S)\(?\d[.)](?=\s)', re.I)
+# A clause that is only courtesy asks for nothing; one that names an agent, an application, a copied span or
+# an operation's verb is expected to be an operation of its own.
+WALK_COURTESY = re.compile(r'(?:\s|\b(?:please|pls|thanks|thank\s+you|cheers|for\s+me|now|right\s+away|asap|ok|okay|'
+                           r'hey|hi|hello|ta|if\s+you\s+can|when\s+you\s+can)\b)*', re.I)
+WALK_CUE = re.compile(r'\bclaude\b|\bcodex\b|calculator|notepad|\bpdfs?\b|\bfiles?\s+(?:manager|browser|explorer)\b|kilix-'
+                      r'|\b(?:start|launch|open|run|wait|hold|hang|pause|block|tell|message|send|ping|say|relay|'
+                      r'forward|pass|let|give|spin|fire|boot|bring|pull|show|summon|kick|hand|nudge|loop|check|put|get|'
+                      r'make|create|begin|add|set|write|type|do)\w*', re.I)
+# The first word of a clause that names no agent or application must be one of these, or a word of place,
+# courtesy, number or reference: any other verb ("push the branch", "email the team") asks for something none
+# of the five tools does, and the whole request is refused.
+WALK_VERBS = re.compile(r'(?:start|launch|open|run|wait|hold|hang|pause|block|tell|message|send|ping|say|relay|forward|'
+                        r'pass|let|give|spin|fire|boot|bring|pull|show|summon|spawn|kick|hand|nudge|loop|check|put|get|'
+                        r'begin|notify|inform|ask|have|keep|stand|sit|need|want|like|write|load|view|display|fetch|go|'
+                        r'make|create|stay|await|follow|shoot|drop|alert|remind|update|warn|share|leave|hit|fill|'
+                        r'whip|crack|pop)\w*|(?:i|we|i\'\w+|we\'\w+|you|me|my|our|your|us|it|its|it\'s|this|that|these|'
+                        r'those|the|a|an|and|then|also|plus|so|just|now|kindly|quickly|simply|first|second|third|fourth|'
+                        r'next|finally|lastly|after|afterwards|once|one|two|three|four|both|all|each|here|there|over|in|'
+                        r'inside|within|at|on|onto|into|with|without|using|under|from|for|to|of|by|as|while|via|split|'
+                        r'pane|tab|right|left|up|down|above|below|beneath|underneath|top|bottom|upper|lower|side|'
+                        r'vertical|horizontal|new|fresh|another|same|current|model|task|message|text|directory|folder|'
+                        r'dir|repo|repository|project|path|cwd|again|too|please|thanks|hey|hi|ok|okay|then|yes|go|'
+                        r'agents|apps|ask|terminal|session|sessions|instance|use|verbatim|word|would|could|will|can|'
+                        r'exactly|its?|initial|context|background|fyi|note|long|short|quick|that\'s|thats)', re.I)
+WALK_ENDED = re.compile(r'\b(?:task|message|text|saying|with|that|this|these|the\s+following)\s*[.!:]?\s*$', re.I)
+# A place the copier does not copy ("in ~/", "the folder polenta-viaduct" read as a word): the request names a
+# directory that no plan can carry.
+WALK_UNREAD = re.compile(r'(?:^|\s)(?:~/?|\.{1,2}/?|/)(?=[\s.,;!?]|$)|\b(?:in|inside|at|from|under)\s+(?:the\s+)?'
+                         r'(?:folder|directory|dir|repo|repository)\s+(?:called\s+|named\s+)?\w+[-._]\w', re.I)
+# The rest after a colon is a text to pass on only when what comes before it says so.
+WALK_TAIL = re.compile(r'\b(?:tell|message|send|ping|say|relay|forward|pass|know|inform|notify|write|ask|nudge|loop|'
+                       r'remind|update|hear|note|reply|text|dm|word|task|job|start|launch|open|spin|fire|boot|bring|'
+                       r'summon|spawn|kick|hand|give|new|fresh|run|get|put)\w*', re.I)
+WALK_ASKS = re.compile(r'\b(?:tell|message|send|ping|say|relay|forward|pass|know|inform|notify|write|ask|nudge|'
+                       r'remind|reply|text|dm)\w*', re.I)
+# "Open codex in x: ...": a request that begins with a launch verb and an agent begins with that launch.
+WALK_LAUNCH = re.compile(r'^\W*(?:please\s+|hey\s+|ok\s+)?(?:open|start|launch|spin\s+up|fire\s+up|boot(?:\s+up)?|bring\s+up|'
+                         r'run|summon|spawn|kick\s+off)\s+(?:up\s+)?(?:a\s+|an\s+)?(?:new\s+|fresh\s+)?(?:claude|codex)\b',
+                         re.I)
+# "then message both": "both" pointing back at the two agents named, not "both claude and codex" or "both here".
+WALK_BOTH = re.compile(r'\bboth\b(?!\s+(?:of\s+)?(?:the\s+|them\s+)?(?:claude|codex|in|at|on|here|there|inside|under|from)\b)',
+                       re.I)
+# A time of day, which the copier may take for a directory ("at 6pm"), and words it may take for one
+# ("in the other folder") that name no place.
+WALK_LATER = re.compile(r'\b\d{1,2}(?::\d\d)?\s*(?:am|pm)\b|\b(?:tonight|tomorrow|noon|midnight)\b', re.I)
+WALK_NOT_PLACES = {'other', 'another', 'previous', 'last', 'next', 'usual', 'default', 'original', 'old'}
+WALK_ALONE = re.compile(r'(?:/|~/|\./|\.\./)\S*')       # a colon's rest that is only a path is no message
+WALK_FIELD = re.compile(r'\b(?:directory|dir|folder|path|cwd|location|split|place|side|model)\s*:', re.I)
+WALK_CHECK = 0.5        # the plan must win the ranking against its near misses with at least these odds
+WALK_NEAR = 7           # near misses ranked against the plan, at most
+WALK_DONE = 'nothing more: the operations already planned are everything the request asks for'
+WALK_OTHER = ('something that none of these can do, such as stopping, closing, deleting, editing, typing, '
+              'calculating, or using another program')
+WALK_QUESTION = 'Which plan does exactly what the request asks, no more and no less?'
+WALK_NONE = 'none of these: the request asks for something else, or should not be done now'
+
+
+def walk_limit(plain):
+    """The first thing the request's own words ask for that the five tools cannot express, or None."""
+    return next((why for why, cue in WALK_LIMITS if cue.search(plain)), None)
+
+
+def _unasked(clause):
+    """Whether a clause asks for something none of the five tools does: it names
+    no agent or application, and its first word is a verb the walk does not know."""
+    if any(cue.search(clause) for cue in (*AGENT_CUE.values(), *APP_CUE.values())):
+        return False
+    head = re.search(r"[A-Za-z][\w'-]*", clause.replace(_GONE, ' '))
+    if not head or re.search(r'\d', clause[:head.start()]):
+        return False
+    word = head.group(0)
+    return not (WALK_VERBS.fullmatch(word) or word.lower().endswith(('ing', 'ed')) or WALK_COURTESY.fullmatch(word))
+
+
+def walk_refuses(request):
+    """Why the walk plans nothing for this request, read from its words alone, or None."""
+    mentions, texts, models, masked, plain = _scan(request)
+    paths = list(dict.fromkeys(mentions))
+    agents, apps, _directions = _named(paths, plain)
+    if not (agents or apps):
+        return 'unnamed'
+    if NOT_NOW.search(plain):
+        return 'conditional'
+    why = walk_limit(plain) or ('target' if agents and re.search(r'\bwindows?\b', plain, re.I) else None)
+    if why:
+        return why
+    allowed = {model for names in contract._MODELS.values() for model in names}
+    if (any(name.rstrip('.,:') not in allowed for name in MODEL_SAID.findall(plain))
+            or any(re.search(r'\d', name) and name not in allowed for name in models)):
+        return 'model'      # a model the grammar cannot carry, and leaving it out changes the request
+    if WALK_LATER.search(masked) or any(path.lower() in WALK_NOT_PLACES for path in paths):
+        return 'later' if WALK_LATER.search(masked) else 'unnamed place'
+    rest = request[request.find(':') + 1:].strip() if ':' in request else ''
+    if rest in texts and (WALK_ALONE.fullmatch(rest.rstrip('.')) or WALK_FIELD.search(request)):
+        return 'fields'     # "Directory: /x": the rest after a colon is not a text to pass on
+    before = request[:request.find(':')] if rest in texts else ''
+    if before and (not WALK_TAIL.search(before) or rest.endswith('?') and not WALK_ASKS.search(before)):
+        return 'unread text'        # nothing before the colon says the rest is a message or a task
+    directions = {place for place, cue in WALK_PLACE.items() if cue.search(plain)}
+    if WALK_SPLIT.search(plain) and not directions and agents:
+        return 'unplaced'   # a split, but not on which side
+    if WALK_ENDED.search(request) or WALK_UNREAD.search(plain):
+        return 'cut off'
+    if any(_unasked(clause) for clause in WALK_JOIN.split(plain) if clause):
+        return 'unsupported'
+    return None
+
+
+def _walk_clauses(plain):
+    """(most, expected): at most how many operations the request's clauses
+    allow, and how many of its clauses look like an operation of their own."""
+    clauses = [clause for clause in WALK_JOIN.split(plain) if clause and clause.strip(' .!?')
+               and not WALK_COURTESY.fullmatch(clause.strip(' .!?'))]
+    expected = sum(1 for clause in clauses if WALK_CUE.search(clause))
+    most = min(4, max(1, len(clauses)) + len(WALK_BOTH.findall(plain)))     # "then wait for both" is two
+    return most, min(most, max(1, expected))
+
+
+def _walk_owed(calls, paths, mentions, again):
+    """Directory mentions the plan does not yet use: [(path, times still owed)], with
+    "there", "both" and "the same directory" owing one more use of a path."""
+    places = [value for call in calls for key, value in call['arguments'].items() if key in ('directory', 'file_path')]
+    owed = [(path, mentions.count(path) - places.count(path)) for path in paths]
+    owed = [(path, times) for path, times in owed if times > 0]
+    extra = len(mentions) + again - len(places) - sum(times for _, times in owed)
+    return owed, max(extra, 0)
+
+
+def _variants(calls, paths=(), directions=()):
+    """Near misses of a plan: one operation fewer, one argument dropped, the
+    other agent, two operations swapped, a directory or direction moved or
+    exchanged. Each is a list of calls."""
+    out = []
+    def with_arg(number, key, value):
+        args = {name: item for name, item in calls[number]['arguments'].items() if name != key}
+        if value is not None:
+            args[key] = value
+        return calls[:number] + [{'name': calls[number]['name'], 'arguments': args}] + calls[number + 1:]
+    for number, call in enumerate(calls):
+        if call['name'] != 'open_app':
+            for path in paths:
+                if call['arguments'].get('directory') != path:
+                    out.append(with_arg(number, 'directory', path))
+        if call['name'].startswith('start_'):
+            for place in directions:
+                if call['arguments'].get('place') != place:
+                    out.append(with_arg(number, 'place', place))
+    if len(calls) > 1:
+        out += [calls[:number] + calls[number + 1:] for number in range(len(calls))]
+        out += [calls[:number] + [calls[number + 1], calls[number]] + calls[number + 2:]
+                for number in range(len(calls) - 1)]
+    for number, call in enumerate(calls):
+        for key in ('directory', 'place', 'task', 'model', 'file_path'):
+            if key in call['arguments']:
+                args = {name: value for name, value in call['arguments'].items() if name != key}
+                out.append(calls[:number] + [{'name': call['name'], 'arguments': args}] + calls[number + 1:])
+        swap = {'claude': 'codex', 'codex': 'claude'}
+        if call['name'].startswith('start_'):
+            other = {'name': 'start_' + swap[call['name'].split('_')[1]], 'arguments': call['arguments']}
+        elif 'agent' in call['arguments']:
+            other = {'name': call['name'], 'arguments': {**call['arguments'], 'agent': swap[call['arguments']['agent']]}}
+        else:
+            continue
+        out.append(calls[:number] + [other] + calls[number + 1:])
+    unique = []
+    for variant in out:
+        if variant and variant != calls and variant not in unique:
+            unique.append(variant)
+    return unique
+
+
 def walk(request, choose):
     """(calls, steps): the plan the model's choices make, and every question's
     answer with its odds. `calls` is empty when a step refuses the request.
 
-    The earlier plan source, question by question: kind, count, operation,
-    each argument. suggest() now uses build(), which asked fewer questions and
-    answered more on the measured sets (docs/ask-suggestions.md); this stays
-    for comparison runs."""
+    The model is asked the kind of request, then each operation in turn
+    (after the first it may answer that nothing more is asked, or that the
+    request asks for something the tools cannot do), and each argument the
+    request's words leave open. An argument they fix (one agent named, the
+    only path or text left for the last operation, the one direction named)
+    is taken without a question. Last, the plan is ranked among its near
+    misses, and must win. suggest(..., plan=walk) offers it when every answer
+    was sure enough (walk_signals)."""
     steps = []
-    paths, texts, models, masked, plain = spans(request)
+    mentions, texts, models, masked, plain = _scan(request)
+    paths = list(dict.fromkeys(mentions))
     full, base = _frames(request, masked, texts)
-    agents, apps, directions = _named(paths, plain)
+    agents, apps, _directions = _named(paths, plain)
+    directions = {place for place, cue in WALK_PLACE.items() if cue.search(plain)}
     offered = {name: text for name, text in OPERATIONS.items() if
                (name.startswith('start_') and name.split('_')[1] in agents)
                or (name == 'wait_for_agent' and agents) or (name == 'message_agent' and agents and texts)
                or (name == 'open_app' and apps)}
+    allowed = {model for names in contract._MODELS.values() for model in names}
+    said = [name.rstrip('.,:') for name in MODEL_SAID.findall(plain)]
+    again = sum(found[0].casefold() != 'both' or bool(mentions) for found in THERE.finditer(plain))
+    again += len(SAME.findall(plain)) if mentions else 0
+    dirs = [path for path in paths if not path.lower().endswith('.pdf') and path not in texts]
+    order = sorted(apps, key=lambda app: (APP_CUE[app].search(plain) or re.search(r'$', plain)).start())
 
-    def ask(kind, state, question, options, log=steps):
+    def ask(kind, state, question, options):
         ranked = choose(state, question, options)
-        log.append({'kind': kind, 'pick': ranked[0][0], 'p': ranked[0][1],
-                    'odds': {key: round(value, 4) for key, value in ranked}})
-        return ranked
+        steps.append({'kind': kind, 'pick': ranked[0][0], 'p': ranked[0][1],
+                      'odds': {key: round(value, 4) for key, value in ranked}})
+        return ranked[0][0]
 
-    def refused(kind, log=steps):
-        log.append({'kind': 'refused', 'pick': kind, 'p': 0.0, 'odds': {}})
+    def fixed(kind, value):
+        steps.append({'kind': 'fixed', 'pick': f'{kind}={value}', 'p': 1.0, 'odds': {}})
+        return value
 
-    def build(total):
-        """The plan with `total` operations and the steps that made it, or
-        (None, steps) when a step says the request cannot be done."""
-        log, calls = [], []
-
-        def pick(kind, state, question, options):
-            return ask(kind, state, question, options, log)[0][0]
-
-        def pick_span(kind, state, question, candidates, none=None):
-            if not candidates:
-                return None
-            options = {str(number): candidate for number, candidate in enumerate(candidates, 1)}
-            if none:
-                options['0'] = none
-            elif len(candidates) == 1:
-                return candidates[0]
-            chosen = pick(kind, state, question, options)
-            return None if chosen == '0' else candidates[int(chosen) - 1]
-
-        for number in range(total):
-            note = f"\n\nThe request asks for {COUNTS[str(total)]} operation{'s' if total > 1 else ''}."
-            if calls:
-                note += '\nAlready planned:\n' + plan_text(calls, texts)
-            state, whole = base + note, full + note
-            options = dict(offered)
-            options['other'] = ('something that none of these can do, such as stopping, closing, deleting or '
-                                'editing, or using another program')
-            name = pick('operation', state, f'Which operation is the {ORDINALS[number]} one the request asks for?'
-                        if total > 1 else 'Which operation does the request ask for?', options)
-            if name == 'other':
-                refused('operation', log)       # an unsupported action refuses the whole request
-                return None, log
-            args = {}
-            this = (f'the {ORDINALS[number]} operation, to {OPERATIONS[name]}' if total > 1 else
-                    f'the operation, to {OPERATIONS[name]}')
-            other = 'another program, or none is named'
-            if name in ('wait_for_agent', 'message_agent'):
-                args['agent'] = pick('agent', state, f"Which agent's session is {this} about?",
-                                     {**{agent: AGENTS[agent] for agent in agents}, 'other': other})
-                if args['agent'] == 'other':
-                    refused('agent', log)
-                    return None, log
-            if name == 'open_app':
-                opened = [call['arguments']['app'] for call in calls if call['name'] == 'open_app']
-                question = ('Which application does the request ask to open next, after those already planned?'
-                            if opened else 'Which application does the request ask to open'
-                            + (' first?' if total > 1 else '?'))
-                args['app'] = pick('app', state, question, {**{app: APPS[app] for app in apps}, 'other': other})
-                if args['app'] == 'other':
-                    refused('app', log)
-                    return None, log
-                pdfs = [path for path in paths if path.lower().endswith('.pdf')]
-                if args['app'] == 'kilix-pdf' and pdfs:
-                    path = pick_span('file', state, 'Which file should the PDF viewer open?', pdfs,
-                                     none='no file: just open the viewer')
-                    if path:
-                        args['file_path'] = path
-            else:
-                path = pick_span('directory', state, f'Which directory is {this} for?', paths,
-                                 none='the current directory: the request names no directory for this operation')
-                if path:
-                    args['directory'] = path
-            if name.startswith('start_'):
-                if PLACE_CUE.search(plain):
-                    named = {place: PLACES[place] for place, cue in PLACE_WORD.items() if cue.search(plain)}
-                    place = pick('place', state, f'Where should the new session of {this} open?',
-                                 {**(named or PLACES), 'tab': 'a new tab, or the request does not say where for '
-                                  'this one'})
-                    if place != 'tab':
-                        args['place'] = place
-                model = pick_span('model', whole, f'Which model does the request name for {this}?', models,
-                                  none='none: the request names no model for it')
-                if model:
-                    args['model'] = model
-                task = pick_span('task', whole, f'Which text is the task that the new session of {this} should '
-                                 'be given?', texts, none='none: the request gives it no task')
-                if task:
-                    args['task'] = task
-            if name == 'message_agent':
-                args['text'] = pick_span('text', whole, f'Which text is the message for {this}?', texts)
-            calls.append({'name': name, 'arguments': args})
-        if len({_identity(call) for call in calls}) < len(calls):
-            refused('repeated', log)        # the same operation twice is a misread "and", never a plan
-            return None, log
-        if _left_out(calls, paths, texts, directions):
-            refused('unused', log)      # the request names something the plan leaves out
-            return None, log
-        return _in_order(calls, plain), log
-
-    if not offered:
-        refused('unnamed')      # no agent and no application is named, so no operation is possible
+    def refused(kind):
+        steps.append({'kind': 'refused', 'pick': kind, 'p': 0.0, 'odds': {}})
         return [], steps
-    if NOT_NOW.search(plain):
-        refused('conditional')
-        return [], steps
+
+    def span(kind, state, question, candidates, none, fix):
+        """A copied span for an argument: fixed when `fix` names one, else the model's choice."""
+        if fix is not None:
+            return fixed(kind, fix)
+        if not candidates:
+            return None
+        options = {str(number): candidate for number, candidate in enumerate(candidates, 1)}
+        if none:
+            options['0'] = none
+        elif len(candidates) == 1:
+            return fixed(kind, candidates[0])
+        chosen = ask(kind, state, question, options)
+        return None if chosen == '0' else candidates[int(chosen) - 1]
+
+    why = 'unnamed' if not offered else walk_refuses(request)
+    if why:
+        return refused(why)
     ask('gate', base, GATE_QUESTION, KINDS)
-    totals = [1]
-    if MORE_CUE.search(plain):      # only a request that joins clauses can ask for more than one operation
-        ranked = ask('count', base, 'How many separate operations does the request ask the assistant to '
-                     'carry out?', COUNTS)
-        totals = list(dict.fromkeys([int(key) for key, odds in ranked[:2] if odds >= 0.15] + [1]))
-    built = [build(total) for total in totals]
-    plans = []
-    for calls, log in built:
-        if calls is not None and calls not in [plan for plan, _ in plans]:
-            plans.append((calls, log))
-    if not plans:
-        return [], steps + built[0][1]
-    chosen = plans[0]
-    if len(plans) > 1:      # whole plans compete, which the model judges better than a count
-        options = {str(number): '; then '.join(describe(call) for call in calls)
-                   for number, (calls, _) in enumerate(plans, 1)}
-        options['0'] = 'neither does what the request asks'
-        pick = ask('plans', full, 'Which plan does exactly what the request asks, no more and no less?',
-                   options)[0][0]
-        if pick == '0':
-            refused('plans')
-            return [], steps
-        chosen = plans[int(pick) - 1]
-    calls, log = chosen
-    steps += log
-    ask('verify', full + "\n\nThe assistant's plan:\n" + plan_text(calls), VERIFY_QUESTION, VERIFY_OPTIONS)
+    most, expected = _walk_clauses(plain)
+    calls = []
+    for number in range(most):
+        last = number >= expected - 1      # the last operation the clauses lead one to expect
+        note = '\n\nAlready planned:\n' + plan_text(calls, texts) if calls else ''
+        state, whole = base + note, full + note
+        options = dict(offered)
+        if not calls and WALK_LAUNCH.search(request):
+            options = {key: text for key, text in offered.items() if key.startswith('start_')}
+        if not any(app not in [call['arguments'].get('app') for call in calls] for app in order):
+            options.pop('open_app', None)       # every application named is already opened
+        options['other'] = WALK_OTHER
+        if calls and refusal(request, calls) is None:
+            options['done'] = WALK_DONE       # offered once the plan so far leaves nothing named unused
+        question = ('Which operation does the request ask for?' if most == 1 else
+                    'Which operation does the request ask for first?' if not calls else
+                    'What does the request ask for next, after the operations already planned?')
+        name = ask('operation', state, question, options)
+        if name == 'done':
+            break
+        if name == 'other':
+            return refused('operation')     # an unsupported action refuses the whole request
+        this = f'the {ORDINALS[number]} operation, to {OPERATIONS[name]}'
+        args = {}
+        if name in ('wait_for_agent', 'message_agent'):
+            args['agent'] = (fixed('agent', agents[0]) if len(agents) == 1 else
+                             ask('agent', state, f"Which agent's session is {this} about?",
+                                 {agent: AGENTS[agent] for agent in agents}))
+        used = [value for call in calls for key, value in call['arguments'].items() if key in ('task', 'text')]
+        left = [text for text in texts if text not in used]
+        if name == 'open_app':
+            opened = [call['arguments']['app'] for call in calls if call['name'] == 'open_app']
+            args['app'] = fixed('app', next(app for app in order if app not in opened))
+            pdfs = [path for path in paths if path.lower().endswith('.pdf')]
+            owed, _extra = _walk_owed(calls, pdfs, mentions, 0)
+            if args['app'] == 'kilix-pdf' and pdfs:
+                path = span('file', state, 'Which file should the PDF viewer open?', pdfs,
+                            'no file: just open the viewer',
+                            owed[0][0] if last and len(owed) == 1 else None)
+                if path:
+                    args['file_path'] = path
+        else:
+            owed, extra = _walk_owed(calls, dirs, mentions, again)
+            fix = owed[0][0] if len(dirs) == 1 and owed and last else None
+            if fix is None and len(dirs) == 1 and extra and last:
+                fix = dirs[0]       # "there", "both", "the same directory": the one path, once more
+            path = span('directory', state, f'Which directory is {this} for?', dirs,
+                        'the current directory: the request names no directory for this operation', fix)
+            if path:
+                args['directory'] = path
+        if name.startswith('start_'):
+            places = sorted(directions - {call['arguments'].get('place') for call in calls})
+            if directions:
+                if last and len(places) == 1:
+                    place = fixed('place', places[0])
+                else:
+                    place = ask('place', state, f'Where should the new session of {this} open?',
+                                {**{place: PLACES[place] for place in sorted(directions)},
+                                 'tab': 'a new tab, or the request does not say where for this one'})
+                if place != 'tab':
+                    args['place'] = place
+            mine = [model for model in models if model in contract._MODELS[name]]
+            model = span('model', whole, f'Which model does the request name for {this}?', mine,
+                         'none: the request names no model for it',
+                         mine[0] if len(mine) == 1 and last else None)      # a model named is always used
+            if model:
+                args['model'] = model
+            task = span('task', whole, f'Which text is the task that the new session of {this} should be given?',
+                        left, 'none: the request gives it no task',
+                        left[0] if len(left) == 1 and last else None)
+            if task:
+                args['task'] = task
+        if name == 'message_agent':
+            args['text'] = span('text', whole, f'Which text is the message for {this}?', left or texts, None, None)
+        calls.append({'name': name, 'arguments': args})
+    if len({_identity(call) for call in calls}) < len(calls):
+        return refused('repeated')      # the same operation twice is a misread "and", never a plan
+    if _left_out(calls, paths, texts, directions):
+        return refused('unused')        # the request names something the plan leaves out
+    if any(name not in [call['arguments'].get('model') for call in calls] for name in said + models
+           if name in allowed):
+        return refused('unused')        # a model the request names is never left out
+    who = [call['name'].split('_')[1] if call['name'].startswith('start_') else call['arguments'].get('agent')
+           for call in calls]
+    if len(agents) == 2 and WALK_BOTH.search(plain) and min(map(who.count, agents)) < 2:
+        return refused('unused')        # "both" asks for one more operation on each of the two agents
+    calls = _in_order(calls, plain)
+    if refusal(request, calls):
+        return refused('rules')         # suggest() would refuse it: no need to ask about it
+    # The near misses that are plans in their own right (the rules allow them too) compete with it.
+    near = [plan for plan in _variants(calls, dirs, sorted(directions))
+            if _in_order(plan, plain) == plan and refusal(request, plan) is None][:WALK_NEAR]
+    if near:
+        ranked = sorted([calls] + near, key=lambda plan: '; then '.join(describe(call) for call in plan))
+        options = {str(number): '; then '.join(describe(call) for call in plan)
+                   for number, plan in enumerate(ranked, 1)}
+        options['0'] = WALK_NONE
+        mine = str(ranked.index(calls) + 1)
+        pick = ask('check', full, WALK_QUESTION, options)
+        steps[-1]['plan'] = mine
+        if pick != mine:
+            return refused('check')
+    else:       # nothing to rank it against: the yes/no check
+        ask('verify', full + "\n\nThe assistant's plan:\n" + plan_text(calls), VERIFY_QUESTION, VERIFY_OPTIONS)
+        if steps[-1]['odds'].get('yes', 0.0) < VERIFY:
+            return refused('verify')
     return calls, steps
+
+
+def walk_signals(steps):
+    """(gate, least sure choice, final check) for a walk: the check is the
+    plan's odds in the ranking against its near misses, or the yes of the
+    yes/no check when the plan has no near miss."""
+    gate = next((step['odds'].get('command', 0.0) for step in steps if step['kind'] == 'gate'), 0.0)
+    check = next((step['odds'].get(step['plan'], 0.0) for step in steps if step['kind'] == 'check'), 1.0)
+    inner = [step['p'] for step in steps if step['kind'] not in ('gate', 'verify', 'check', 'fixed')]
+    return gate, min(inner) if inner else 1.0, check
 
 
 def signals(steps):
@@ -1438,7 +1676,7 @@ def build(request, choose):
     return greedy, steps
 
 
-def suggest(request, choose=None, *, propose=None, limits=(GATE, STEP, VERIFY), plan=None):
+def suggest(request, choose=None, *, propose=None, limits=None, plan=None):
     """{'request': a wording the grammar reads, 'calls': what it reads it as,
     'source': where the plan came from} for a request the grammar cannot
     read, or None.
@@ -1446,7 +1684,8 @@ def suggest(request, choose=None, *, propose=None, limits=(GATE, STEP, VERIFY), 
     `choose` asks a decision model, which builds the grammar's sentence for
     a plan of its own (build()). `plan` names another way to get the model's
     plan: walk, which asks for each operation and argument in turn; its
-    suggestions have the source 'walk'.
+    suggestions have the source 'walk' and are held to walk_signals() and
+    WALK_CHECK. `limits` overrides the (gate, choice, check) limits.
     `propose` returns the calls a command model proposes for the request.
     Every plan is held to refusal() and to the grammar. With a decision model
     alone, its plan is offered when every answer was sure enough ('built').
@@ -1467,7 +1706,8 @@ def suggest(request, choose=None, *, propose=None, limits=(GATE, STEP, VERIFY), 
         if not built:
             return None
         if propose is None:
-            sure = all(value >= limit for value, limit in zip(signals(steps), limits))
+            read, bars = (walk_signals, (GATE, STEP, WALK_CHECK)) if plan is walk else (signals, (GATE, STEP, VERIFY))
+            sure = all(value >= limit for value, limit in zip(read(steps), limits or bars))
             return {**built, 'source': 'walk' if plan is walk else 'built'} if sure else None
     plan = tidy(propose()) if propose is not None else None
     found = _carried(plan) if plan and refusal(request, plan) is None else None
