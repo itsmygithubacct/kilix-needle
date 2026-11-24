@@ -180,11 +180,20 @@ def _quoted_payload(text):
     return value
 
 
+# A whole payload inside one pair of single or typographic quotes: the quotes
+# delimit it, as double quotes do, and are not sent. An apostrophe inside a
+# word ("don't") is text. Anything else in single quotes stays literal.
+_WRAPPED = re.compile(r"(?:'((?:[^']|(?<=\w)'(?=\w))+)'|\u2018([^\u2018\u2019]+)\u2019|\u201c([^\u201c\u201d]+)\u201d)[.!]?\s*\Z")
+
+
 def _payload(text, *, closed=False):
     """A complete quoted argument has a boundary; an unquoted tail does not."""
     quoted = _quoted_payload(text)
     if quoted is not None:
         return quoted
+    wrapped = _WRAPPED.match(text)
+    if wrapped and next(filter(None, wrapped.groups())).strip():
+        return next(filter(None, wrapped.groups()))
     if closed:
         return None
     if text.startswith('"'):

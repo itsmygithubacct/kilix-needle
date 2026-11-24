@@ -481,6 +481,28 @@ class CommandGrammar(unittest.TestCase):
             with self.subTest(request=request):
                 self.assertIsNone(contract.exact_calls(request))
 
+    def test_single_and_typographic_quotes_around_a_whole_payload_delimit_it(self):
+        text = call('message_agent', agent='claude', text='if the build breaks, revert the last commit')
+        for quoted in ("'if the build breaks, revert the last commit'",
+                       "'if the build breaks, revert the last commit'.",
+                       '\u2018if the build breaks, revert the last commit\u2019',
+                       '\u201cif the build breaks, revert the last commit\u201d!',
+                       '"if the build breaks, revert the last commit"'):
+            with self.subTest(quoted=quoted):
+                self.assertEqual(contract.exact_calls('Please pass this along to claude here: ' + quoted), [text])
+        self.assertEqual(contract.exact_calls("tell claude: 'don't stop'"),
+                         [call('message_agent', agent='claude', text="don't stop")])
+        self.assertEqual(contract.exact_calls("start codex here with task: 'fix it'"), [call('start_codex', task='fix it')])
+        self.assertEqual(contract.exact_calls("tell codex: 'run it', then wait for codex"),
+                         [call('message_agent', agent='codex', text='run it'), call('wait_for_agent', agent='codex')])
+
+    def test_quote_marks_that_do_not_wrap_the_whole_payload_stay_text(self):
+        for payload in ("'tis done", "it's 'fine'", "fix the 'tests'", "' '", "\u2018a\u2019 or \u2018b\u2019 first"):
+            with self.subTest(payload=payload):
+                self.assertEqual(contract.exact_calls('tell claude: ' + payload),
+                                 [call('message_agent', agent='claude', text=payload)])
+        self.assertIsNone(contract.exact_calls("tell claude: 'a' and 'b'"))
+
 
 if __name__ == '__main__':
     unittest.main()

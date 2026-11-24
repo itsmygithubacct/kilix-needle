@@ -67,6 +67,8 @@ kilix-needle workflows setup --model needle3  # install and select the alternate
 kilix-needle workflows setup --model grammar  # select grammar; no download
 kilix-needle workflows select --model lfm2    # select an already installed model
 kilix-needle workflows status --legacy --json # older Needle2 jobs, separately
+kilix-needle workflows suggest                # how Ask suggests a wording; reads only
+kilix-needle workflows suggest --set d3:2b    # off, model, or a decision model in Ollama
 ```
 
 Only an explicit `--model` is saved, and only after that model is ready.
@@ -79,6 +81,9 @@ that does not, so setup without `--model` never downloads LFM2 unasked.
 nothing and hashes no file.
 An unreadable or invalid saved preference is refused and left as it is; the
 error names the explicit model option and the `workflows select` repair.
+`workflows suggest` prints, and with `--set` saves, where the wording comes
+from that Ask offers for a request it cannot read; see
+[Ask suggestions](docs/ask-suggestions.md). It downloads and installs nothing.
 
 Kilix supplies `KILIX_CONTENT_ROOT`; a standalone call may pass `--root` with
 an absolute Content root. Status emits at most 16 KiB of JSON with schema
@@ -241,11 +246,16 @@ machine when they verify against the new manifest, so moving from
 extracted v9 delivery; it is deterministic and checks every kept file against
 its source.
 
-Experimental: with `KILIX_ASK_SUGGEST=d3:2b`, a request that plans nothing
-may be answered with a wording the command grammar reads ("did you mean:
-start codex in a split below"). A decision model on the local Ollama server
-chooses it from the choices the command tools allow, and the grammar must
-read it back as the same plan. It is offered, never run. See
+A request that plans nothing can be answered with a wording the command
+grammar reads ("did you mean: start codex in a split below"). This is off
+by default; `kilix-needle workflows suggest --set model` takes the wording
+from the selected command model's own proposal, and `--set d3:2b` from a
+decision model on the local Ollama server (with a command model selected as
+well, only when both make the same plan). Every wording is held to the
+request's own words and must be read back by the grammar as the same plan.
+It is offered, never run. On a blind set of 100 requests the grammar alone
+answered 49; with suggestions 87 (LFM2's proposal, 2 wrong of 40), 94
+(`d3:2b`, 1 wrong of 47) and 87 (both agreeing, 0 wrong of 38). See
 [Ask suggestions](docs/ask-suggestions.md) for how it works and what was
 measured.
 

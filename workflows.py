@@ -333,6 +333,30 @@ def select(model, root=None):
     return result
 
 
+def suggestions(value=None) -> dict:
+    """How Ask suggests a wording for a request it cannot read; `value` saves
+    a new setting first. A decision model is looked up on the local Ollama
+    server; nothing is installed or downloaded."""
+    if value is not None:
+        commands_selection.save_suggest(value)
+    chosen, source = commands_selection.suggest_choice()
+    result = {"schema": SCHEMA, "suggest": chosen, "source": source, "available": None}
+    if chosen == "off":
+        result["detail"] = f"Ask suggestions are off ({source})."
+    elif chosen == "model":
+        result["detail"] = (f"Ask suggestions come from the selected command model's own proposal ({source}). "
+                            "With the grammar selected there is none to offer.")
+    else:
+        import commands_suggest
+        result["available"] = commands_suggest.available(chosen)
+        state_ = {True: "is on the local Ollama server", False: "is not on the local Ollama server",
+                  None: "could not be checked: the local Ollama server did not answer"}[result["available"]]
+        result["detail"] = (f"Ask suggestions come from the decision model {chosen} ({source}), which {state_}. "
+                            "With a command model selected, a wording is offered only when both make the same plan. "
+                            "Without the decision model nothing is offered.")
+    return result
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="kilix-needle workflows")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -350,6 +374,11 @@ def main(argv: list[str] | None = None) -> int:
     which = commands.add_parser('choice', help='print the Ask backend and where it came from; '
                                                'no writes, downloads or file hashing')
     which.add_argument('--root', help='absolute Content root (normally supplied by Kilix)')
+    hints = commands.add_parser('suggest', help='print, or with --set save, how Ask suggests a wording for a '
+                                                'request it cannot read; no downloads')
+    hints.add_argument('--set', dest='value', metavar='off|model|NAME',
+                       help='off, model (the command model\'s own proposal) or a decision model in Ollama (d3:2b)')
+    hints.add_argument('--json', action='store_true')
     choose = commands.add_parser('select', help='save a ready Ask backend without downloads')
     choose.add_argument('--model', required=True, choices=commands_selection.BACKENDS)
     choose.add_argument('--root')
@@ -363,6 +392,14 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, ValueError) as error:
             print(f"Workflow setup failed: {str(error)[:4096]}", file=sys.stderr)
             return 1
+        return 0
+    if args.command == 'suggest':
+        try:
+            result = suggestions(args.value)
+        except (OSError, ValueError) as error:
+            print(f"Workflow setup failed: {str(error)[:4096]}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, ensure_ascii=True, sort_keys=True) if args.json else result['detail'])
         return 0
     if args.command == "status":
         result = status(args.root, model=args.model, legacy=args.legacy)

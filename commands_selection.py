@@ -1,6 +1,7 @@
 """Ask backend selection shared by the CLI, workflow setup and model loaders."""
 import json
 import os
+import re
 from pathlib import Path
 import stat
 import tempfile
@@ -114,14 +115,17 @@ def save(backend):
     """Atomically save an explicitly selected backend after readiness checks."""
     if backend not in BACKENDS:
         raise ValueError('Ask model must be lfm2, lfm3, needle3 or grammar')
-    path = preference_path()
+    _write(preference_path(), {'schema': SCHEMA, 'backend': backend})
+
+
+def _write(path, record):
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     if path.parent.is_symlink():
         raise ValueError('Ask preferences need a real state directory')
     fd, temporary = tempfile.mkstemp(prefix='.ask-', dir=path.parent)
     try:
         with os.fdopen(fd, 'w') as stream:
-            json.dump({'schema': SCHEMA, 'backend': backend}, stream)
+            json.dump(record, stream)
             stream.write('\n')
             stream.flush()
             os.fsync(stream.fileno())
@@ -129,6 +133,59 @@ def save(backend):
     finally:
         if os.path.lexists(temporary):
             os.unlink(temporary)
+
+
+# What Ask offers when a request plans nothing: no wording ('off'), one made
+# from the selected command model's own proposal ('model'), or one that a
+# decision model on the local Ollama server chooses (its name); with a command
+# model selected as well, the two must agree.
+SUGGEST_SCHEMA = 'kilix.ask.suggest/v1'
+SUGGEST_DEFAULT = 'off'
+_DECISION_MODEL = re.compile(r'[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}\Z')
+
+
+def suggest_path():
+    return state.home() / 'ask-suggest.json'
+
+
+def _suggest_value(value):
+    value = value.strip() if isinstance(value, str) else ''
+    if value.casefold() in ('off', 'model'):
+        return value.casefold()
+    if not _DECISION_MODEL.match(value):
+        raise ValueError('Ask suggestions take off, model or the name of a decision model in Ollama')
+    return value
+
+
+def suggest_choice():
+    """(value, source): 'off', 'model' or a decision model's name, from the
+    environment, the saved preference or the default. Reading creates
+    nothing and contacts nothing."""
+    value = os.environ.get('KILIX_ASK_SUGGEST', '').strip()
+    if value:
+        return _suggest_value(value), 'environment'
+    path = suggest_path()
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK)
+    except FileNotFoundError:
+        return SUGGEST_DEFAULT, 'default'
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_size > 4096:
+            raise ValueError('Ask suggestion preference must be a small regular file')
+        record = json.loads(os.read(fd, 4097))
+        if not isinstance(record, dict) or record.get('schema') != SUGGEST_SCHEMA:
+            raise ValueError('invalid Ask suggestion preference')
+        return _suggest_value(record.get('suggest')), 'saved'
+    finally:
+        os.close(fd)
+
+
+def save_suggest(value):
+    """Atomically save how Ask suggests wordings; returns the saved value."""
+    value = _suggest_value(value)
+    _write(suggest_path(), {'schema': SUGGEST_SCHEMA, 'suggest': value})
+    return value
 
 
 def release(backend):

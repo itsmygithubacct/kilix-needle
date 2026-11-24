@@ -186,17 +186,43 @@ def _clarify(request: str, candidates: list, note: str = "") -> dict:
                     + "  (two jobs' work goes as two requests)"}
 
 
-def suggester():
-    """The wording suggester, when KILIX_ASK_SUGGEST names a decision model on
-    this computer's Ollama server; otherwise None, and nothing is asked."""
-    model = os.environ.get("KILIX_ASK_SUGGEST", "").strip()
-    if not model:
+_COMMAND_MODELS = ("lfm2", "lfm3", "needle3")
+
+
+def suggester(commands=None):
+    """How Ask suggests a wording for a request that planned nothing, or None
+    when that is off. `commands` is the command session, whose model's own
+    proposal for the request is one source of a wording."""
+    import commands_selection
+    try:
+        value, _source = commands_selection.suggest_choice()
+    except (OSError, ValueError):
+        return None
+    if value == "off":
         return None
 
-    def suggest(request):
+    def suggest(request, record=None):
         import commands_suggest
-        found = commands_suggest.suggest(request, commands_suggest.Decider(model).choose)
-        return found and {**found, "model": model}
+        record = record or {}
+        made = record.get("interpretation") if record.get("interpretation") in _COMMAND_MODELS else None
+        backend = made or (commands.backend if commands is not None and commands.backend in _COMMAND_MODELS else None)
+
+        def propose():
+            if made:
+                return record.get("calls")      # the model was already asked; admission refused its proposal
+            decision = commands.decide(request)
+            return decision.calls if decision.source in _COMMAND_MODELS else None
+
+        choose = None
+        if value != "model":
+            try:
+                choose = commands_suggest.Decider(value).choose
+            except commands_suggest.SuggestError:
+                return None
+        found = commands_suggest.suggest(request, choose, propose=propose if backend else None)
+        if not found:
+            return None
+        return {**found, "model": backend if found["source"] == "proposal" else value}
     return suggest
 
 
@@ -210,7 +236,7 @@ def _suggest(jobs, request: str, record: dict) -> None:
     if named is not None:
         return
     try:
-        found = suggest(text)
+        found = suggest(text, record)
     except Exception:       # noqa: BLE001 - a suggestion never breaks a request
         return
     if found:
@@ -453,7 +479,7 @@ def cli_jobs(args, *, interactive: bool, engines: dict | None = None) -> tuple:
     jobs = Jobs(engine, classify_system, confirm=confirm, agent=args.agent,
                 agents_cwd=cwd, files_cwd=cwd,
                 under_overlay=getattr(args, "under_overlay", False), commands=commands,
-                suggest=None if args.agent else suggester())
+                suggest=None if args.agent else suggester(commands))
     return jobs, stack
 
 

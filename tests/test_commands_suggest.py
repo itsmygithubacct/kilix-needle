@@ -2,14 +2,18 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import os
+from pathlib import Path
+import tempfile
 import threading
 import unittest
 from unittest import mock
 
 import ask
 import commands_contract as contract
+import commands_selection
 import commands_suggest as suggest
 import router
+import workflows
 
 
 def call(name, **args):
@@ -152,7 +156,7 @@ class Suggest(unittest.TestCase):
         self.assertFalse(contract.exact_calls(request))
         found = suggest.suggest(request, Model(*self.MODEL))
         self.assertEqual(found, {"request": "start codex in a split to the right",
-                                 "calls": [call("start_codex", place="right")]})
+                                 "calls": [call("start_codex", place="right")], "source": "walk"})
         self.assertEqual(contract.exact_calls(found["request"]), found["calls"])
 
     def test_a_request_the_grammar_reads_is_never_sent_to_the_model(self):
@@ -215,6 +219,13 @@ class Server:
                 self.end_headers()
                 self.wfile.write(data)
 
+            def do_GET(self):
+                data = json.dumps({"models": [{"name": "d3:test"}, {"name": "other:latest"}]}).encode()
+                self.send_response(200 if self.path == "/api/tags" else 404)
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
             def log_message(self, *_):
                 pass
 
@@ -259,6 +270,236 @@ class Decider(unittest.TestCase):
             suggest.Decider(host="127.0.0.1:1", timeout=2).choose("s", "q?", {"a": "", "b": ""})
 
 
+class Rules(unittest.TestCase):
+    """refusal(): what the request's own words rule out, whichever model made the plan."""
+
+    def test_a_plan_the_request_states_is_allowed(self):
+        cases = {
+            "Bring up the notepad app for me.": [call("open_app", app="kilix-notepad")],
+            "Run Codex in dusk-ferry in a split below": [call("start_codex", directory="dusk-ferry", place="down")],
+            'wait for claude in yarrow-valve to finish, then start codex there in a right split': [
+                call("wait_for_agent", agent="claude", directory="yarrow-valve"),
+                call("start_codex", directory="yarrow-valve", place="right")],
+            'In myrtle-piston there is a Claude session; send it "which migrations are pending"': [
+                call("message_agent", agent="claude", directory="myrtle-piston", text="which migrations are pending")],
+            "Wait till Claude's current turn ends.": [call("wait_for_agent", agent="claude")],
+            "Start codex in an up split and claude in a left split, both in ./walnut-relay": [
+                call("start_codex", directory="./walnut-relay", place="up"),
+                call("start_claude", directory="./walnut-relay", place="left")],
+            "Start both Codex and Claude here": [call("start_codex"), call("start_claude")],
+        }
+        for request, calls in cases.items():
+            with self.subTest(request=request):
+                self.assertIsNone(suggest.refusal(request, calls))
+                self.assertTrue(suggest.possible(request))
+        # An agent's name inside a model's name is not the agent named a second time.
+        self.assertIsNone(suggest.refusal("Kick off Claude with model claude-opus-4-5 in the current directory",
+                                          [call("start_claude", model="claude-opus-4-5")]))
+
+    def test_what_the_words_rule_out(self):
+        cases = [
+            ("Open the editor in /srv/x", [call("open_app", app="kilix-notepad")], "unnamed"),
+            ("Every Monday morning, begin a codex session in ~/work/x", [call("start_codex", directory="~/work/x")],
+             "conditional"),
+            ('once the review is approved, tell claude "merge it"', [call("message_agent", agent="claude", text="merge it")],
+             "conditional"),
+            ("Start Codex in", [call("start_codex")], "cut off"),
+            ("Start Codex here", [call("start_claude")], "unnamed"),
+            ("Open the calculator", [call("open_app", app="kilix-notepad")], "unnamed"),
+            ("Start Codex in /srv/x", [call("start_codex", directory="/srv/y")], "reworded"),
+            ('Tell Claude "fix the tests"', [call("message_agent", agent="claude", text="fix tests")], "reworded"),
+            ("Start Codex here", [call("start_codex", place="right")], "unnamed"),
+            ("Start Codex in a split below", [call("start_codex", place="right")], "unnamed"),
+            ("Start Codex here and Codex here", [call("start_codex"), call("start_codex")], "repeated"),
+            ("Start Codex in /srv/x in a split below", [call("start_codex", place="down")], "unused"),
+            ("Start Codex here, then wait for Claude", [call("start_codex"), call("wait_for_agent", agent="codex")],
+             "unused"),
+            ('Send Codex in crimson-ladder "rerun" and then wait for Codex in crimson-ladder',
+             [call("message_agent", agent="codex", text="rerun"),
+              call("wait_for_agent", agent="codex", directory="crimson-ladder")], "unused"),
+            ("wait for claude in yarrow-valve to finish, then start codex there in a right split",
+             [call("wait_for_agent", agent="claude", directory="yarrow-valve"), call("start_codex", place="right")],
+             "unused"),
+            ('Message claude in ~/src/x "write the changelog", then start codex here in a right split',
+             [call("message_agent", agent="claude", directory="~/src/x", text="write the changelog"),
+              call("start_codex", task="write the changelog", place="right")], "reused"),
+            ('Start Claude here. Task: "fix the files under lib/"',
+             [call("message_agent", agent="claude", text="fix the files under lib/")], "unused"),
+            ('Tell Codex "pause", then wait for Codex', [call("message_agent", agent="codex", text="pause")], "unused"),
+            ("Quit the calculator app.", [call("open_app", app="kilix-calculator")], "unsupported"),
+            ("Start Codex here for every branch", [call("start_codex")], "conditional"),
+            ("Start Codex here once the build is green", [call("start_codex")], "conditional"),
+            ("Stop the Claude session here.", [call("wait_for_agent", agent="claude")], "unsupported"),
+            ('Send claude in aspen-winch "pull" and after that wait for claude in aspen-winch',
+             [call("start_claude", directory="aspen-winch", task="pull"),
+              call("wait_for_agent", agent="claude", directory="aspen-winch")], "unused"),
+            ("Start codex in an up split and claude in a left split, both in ./walnut-relay",
+             [call("start_codex", place="up"), call("start_claude", directory="./walnut-relay", place="left")], "unused"),
+            ('Start Codex here, then wait for Claude, then message Claude "go"',
+             [call("start_codex"), call("wait_for_agent", agent="codex"),
+              call("message_agent", agent="claude", text="go")], "unused"),
+        ]
+        for request, calls, why in cases:
+            with self.subTest(request=request):
+                self.assertEqual(suggest.refusal(request, calls), why)
+
+    def test_no_model_is_needed_to_see_that_nothing_can_be_suggested(self):
+        for request in ("start codex in a split to the right", "what is the weather like", "Start Codex in",
+                        "Start Codex here unless it is busy", "", "open the calculator " + "x" * 2048):
+            with self.subTest(request=request):
+                self.assertFalse(suggest.possible(request))
+
+    def test_a_proposal_is_tidied_or_dropped(self):
+        self.assertEqual(suggest.tidy([call("start_codex", place="tab", directory="here")]), [call("start_codex")])
+        self.assertEqual(suggest.tidy([call("start_codex", place="left", directory=".")]),
+                         [call("start_codex", place="left")])
+        for bad in (None, [], "start", [{"name": "rm", "arguments": {}}], [{"name": "start_codex"}],
+                    [call("start_codex", directory=7)], [None]):
+            with self.subTest(bad=bad):
+                self.assertIsNone(suggest.tidy(bad))
+
+
+class Sources(unittest.TestCase):
+    """suggest(): a decision model's walk, a command model's proposal, or both in agreement."""
+    REQUEST = "Open Codex in a split on the right."
+    PLAN = [call("start_codex", place="right")]
+    FOUND = {"request": "start codex in a split to the right", "calls": [call("start_codex", place="right")]}
+    WALK = (COMMAND, ("Which operation", "start_codex"), ("Where should", "right"), YES)
+    NO_WALK = (COMMAND, ("Which operation", "other"), YES)
+
+    def test_a_command_model_alone_offers_a_proposal_that_passes_the_rules(self):
+        found = suggest.suggest(self.REQUEST, propose=lambda: [call("start_codex", place="right", directory="here")])
+        self.assertEqual(found, {**self.FOUND, "source": "proposal"})
+        for proposal in ([call("start_codex", place="left")], [call("start_claude", place="right")], [],
+                         [call("start_codex", place="right", model="gpt-9-zeta")], None, "nonsense"):
+            with self.subTest(proposal=proposal):
+                self.assertIsNone(suggest.suggest(self.REQUEST, propose=lambda proposal=proposal: proposal))
+        self.assertIsNone(suggest.suggest(self.REQUEST))
+
+    def test_a_decision_model_alone_offers_its_walk_when_every_answer_is_sure(self):
+        self.assertEqual(suggest.suggest(self.REQUEST, Model(*self.WALK)), {**self.FOUND, "source": "walk"})
+        self.assertIsNone(suggest.suggest(self.REQUEST, Model(*self.NO_WALK)))
+        unsure = (COMMAND, ("Which operation", "start_codex"), ("Where should", "right"),
+                  ("Does the plan do exactly", "yes", 0.7))
+        self.assertIsNone(suggest.suggest(self.REQUEST, Model(*unsure)))
+
+    def test_with_both_the_two_plans_must_be_the_same(self):
+        self.assertEqual(suggest.suggest(self.REQUEST, Model(*self.WALK), propose=lambda: self.PLAN),
+                         {**self.FOUND, "source": "agreed"})
+        spelled = [call("start_codex", place="right", directory="here")]     # the same plan, defaults spelled out
+        self.assertEqual(suggest.suggest(self.REQUEST, Model(*self.WALK), propose=lambda: spelled)["source"], "agreed")
+        for proposal in ([call("start_codex")], [call("start_codex", place="left")], [], None,
+                         [call("start_codex", place="right"), call("wait_for_agent", agent="codex")]):
+            with self.subTest(proposal=proposal):
+                self.assertIsNone(suggest.suggest(self.REQUEST, Model(*self.WALK),
+                                                  propose=lambda proposal=proposal: proposal))
+        # Agreement is the check: the walk's own doubt about a plan both made does not refuse it.
+        unsure = (COMMAND, ("Which operation", "start_codex"), ("Where should", "right"),
+                  ("Does the plan do exactly", "yes", 0.7))
+        self.assertEqual(suggest.suggest(self.REQUEST, Model(*unsure), propose=lambda: self.PLAN)["source"], "agreed")
+
+    def test_the_command_model_is_not_asked_when_nothing_can_be_suggested_or_the_walk_gives_no_plan(self):
+        propose = mock.Mock(return_value=self.PLAN)
+        for request in ("start codex in a split to the right", "what is the weather like",
+                        "Open Codex in a split on the right unless it is busy"):
+            self.assertIsNone(suggest.suggest(request, Model(), propose=propose))
+        self.assertIsNone(suggest.suggest(self.REQUEST, Model(*self.NO_WALK), propose=propose))
+        propose.assert_not_called()
+
+    def test_a_walked_plan_is_held_to_the_rules_too(self):
+        request = "Quit Codex in a split on the right."
+        self.assertTrue(suggest.possible(request))
+        calls, steps = suggest.walk(request, Model(*self.WALK))
+        self.assertEqual(calls, self.PLAN)
+        self.assertTrue(all(value >= limit for value, limit in
+                            zip(suggest.signals(steps), (suggest.GATE, suggest.STEP, suggest.VERIFY))))
+        self.assertEqual(suggest.refusal(request, calls), "unsupported")
+        self.assertIsNone(suggest.suggest(request, Model(*self.WALK)))
+        self.assertIsNone(suggest.suggest(request, Model(*self.WALK), propose=lambda: self.PLAN))
+
+    def test_a_decision_model_that_cannot_be_asked_offers_nothing(self):
+        def down(*_):
+            raise suggest.SuggestError("down")
+        self.assertIsNone(suggest.suggest(self.REQUEST, down))
+        self.assertIsNone(suggest.suggest(self.REQUEST, down, propose=lambda: self.PLAN))
+
+    def test_the_listing_says_whether_the_decision_model_is_there(self):
+        server = Server(lambda body: {})
+        self.addCleanup(server.close)
+        self.assertIs(suggest.available("d3:test", server.host), True)
+        self.assertIs(suggest.available("other", server.host), True)
+        self.assertIs(suggest.available("d3:2b", server.host), False)
+        self.assertIsNone(suggest.available("d3:test", "127.0.0.1:1"))
+        self.assertIsNone(suggest.available("d3:test", "example.com:11434"))
+
+
+class Isolated(unittest.TestCase):
+    """No saved preference and no setting from the environment, unless a test makes one."""
+
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.path = Path(folder.name) / "state" / "ask-suggest.json"
+        patches = (mock.patch.object(commands_selection, "suggest_path", return_value=self.path),
+                   mock.patch.dict(os.environ))
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+        os.environ.pop("KILIX_ASK_SUGGEST", None)
+        os.environ.pop("OLLAMA_HOST", None)
+
+
+class Setting(Isolated):
+    def test_the_environment_then_the_saved_choice_then_off(self):
+        self.assertEqual(commands_selection.suggest_choice(), ("off", "default"))
+        self.assertIsNone(ask.suggester())
+        self.assertEqual(commands_selection.save_suggest(" d3:2b "), "d3:2b")
+        self.assertEqual(json.loads(self.path.read_text()), {"schema": "kilix.ask.suggest/v1", "suggest": "d3:2b"})
+        self.assertEqual(commands_selection.suggest_choice(), ("d3:2b", "saved"))
+        os.environ["KILIX_ASK_SUGGEST"] = "OFF"
+        self.assertEqual(commands_selection.suggest_choice(), ("off", "environment"))
+        os.environ["KILIX_ASK_SUGGEST"] = "  "
+        self.assertEqual(commands_selection.suggest_choice(), ("d3:2b", "saved"))
+
+    def test_a_value_that_is_no_model_name_is_refused_and_nothing_is_saved(self):
+        for value in ("", "two words", "-rf", "x" * 129, "d3;2b", None):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                commands_selection.save_suggest(value)
+        self.assertFalse(self.path.exists())
+        os.environ["KILIX_ASK_SUGGEST"] = "two words"
+        with self.assertRaises(ValueError):
+            commands_selection.suggest_choice()
+        self.assertIsNone(ask.suggester())       # an unusable setting offers nothing
+        os.environ.pop("KILIX_ASK_SUGGEST")
+        self.path.parent.mkdir(parents=True)
+        for text in ("{}", '{"schema": "kilix.ask.suggest/v1", "suggest": "two words"}', "[1]", "x" * 5000,
+                     '{"schema": "kilix.ask/v1", "suggest": "off"}'):
+            self.path.write_text(text)
+            with self.subTest(text=text[:20]), self.assertRaises(ValueError):
+                commands_selection.suggest_choice()
+
+    def test_workflows_shows_and_saves_the_setting(self):
+        self.assertEqual(workflows.suggestions()["detail"], "Ask suggestions are off (default).")
+        self.assertIn("command model's own proposal (saved)", workflows.suggestions("model")["detail"])
+        self.assertEqual(workflows.suggestions("off")["detail"], "Ask suggestions are off (saved).")
+        server = Server(lambda body: {})
+        self.addCleanup(server.close)
+        os.environ["OLLAMA_HOST"] = server.host
+        there = workflows.suggestions("d3:test")
+        self.assertEqual((there["suggest"], there["source"], there["available"]), ("d3:test", "saved", True))
+        self.assertIn("is on the local Ollama server", there["detail"])
+        self.assertIs(workflows.suggestions("d3:2b")["available"], False)
+        os.environ["OLLAMA_HOST"] = "127.0.0.1:1"
+        self.assertIn("did not answer", workflows.suggestions()["detail"])
+        with mock.patch("builtins.print") as shown:
+            self.assertEqual(workflows.main(["suggest", "--set", "model", "--json"]), 0)
+            self.assertEqual(json.loads(shown.call_args.args[0])["source"], "saved")
+        with mock.patch("sys.stderr"):
+            self.assertEqual(workflows.main(["suggest", "--set", "two words"]), 1)
+        self.assertEqual(commands_selection.suggest_choice(), ("model", "saved"))
+        self.assertEqual(len(server.bodies), 0)      # looking a model up asks it nothing
+
+
 class Jobs:
     """The jobs double of test_ask: every job answers with one record."""
 
@@ -280,7 +521,7 @@ PLANNED = {"status": 0, "note": "", "items": [{"kind": "k", "outcome": "would"}]
 REFUSED = {"status": 1, "note": "", "items": [{"kind": "k", "outcome": "refused"}]}
 
 
-class Offer(unittest.TestCase):
+class Offer(Isolated):
     REQUEST = "Open Codex in a split on the right."
 
     def ask(self, jobs, routed, **options):
@@ -289,7 +530,7 @@ class Offer(unittest.TestCase):
 
     def test_a_request_that_planned_nothing_gets_the_wording_and_nothing_runs(self):
         seen = []
-        jobs = Jobs(NOTHING, lambda request: seen.append(request) or FOUND)
+        jobs = Jobs(NOTHING, lambda request, record: seen.append(request) or FOUND)
         for routed in (route(0, "agents"), route(0, "none"), route("multi", None, ["panes", "agents"])):
             with self.subTest(stage=routed.stage, job=routed.job):
                 for act in (False, True):
@@ -321,16 +562,65 @@ class Offer(unittest.TestCase):
         for suggester in (mock.Mock(return_value=None), mock.Mock(side_effect=suggest.SuggestError("down")),
                           mock.Mock(side_effect=RuntimeError("anything"))):
             self.assertEqual(self.ask(Jobs(NOTHING, suggester), route(0, "none")), plain)
-            suggester.assert_called_once_with(self.REQUEST)
+            self.assertEqual(suggester.call_args.args[0], self.REQUEST)
 
-    def test_the_suggester_is_off_unless_the_environment_names_a_model(self):
-        with mock.patch.dict(os.environ, {"KILIX_ASK_SUGGEST": ""}):
-            self.assertIsNone(ask.suggester())
-        with mock.patch.dict(os.environ):
-            os.environ.pop("KILIX_ASK_SUGGEST", None)
-            self.assertIsNone(ask.suggester())
-        answers = {"What kind": "command", "Which operation": "start_codex", "Where should": "right", "Does the": "yes"}
+    def test_the_command_line_offers_suggestions_to_a_person_only(self):
+        import argparse
+        for setting, offered in ((None, False), ("off", False), ("model", True), ("d3:test", True)):
+            if setting:
+                os.environ["KILIX_ASK_SUGGEST"] = setting
+            for agent in (False, True):
+                jobs, stack = ask.cli_jobs(argparse.Namespace(agent=agent), interactive=False)
+                with stack:
+                    self.assertEqual(jobs.suggest is not None, offered and not agent)
 
+
+class Session:
+    """The command session's part in a suggestion: its backend and its model's decision."""
+
+    def __init__(self, backend, calls=(), source=None):
+        self.backend, self.calls, self.source, self.asked = backend, list(calls), source or backend, []
+
+    def decide(self, request):
+        self.asked.append(request)
+        return type("Decision", (), {"source": self.source, "calls": self.calls})()
+
+
+class Suggester(Isolated):
+    """ask.suggester(): which sources a setting and a command session give."""
+    REQUEST = "Open Codex in a split on the right."
+    PLAN = [call("start_codex", place="right")]
+
+    def setUp(self):
+        super().setUp()
+        os.environ["KILIX_ASK_SUGGEST"] = "model"
+
+    def test_the_proposal_admission_refused_is_reused_without_asking_the_model_again(self):
+        session = Session("lfm2", self.PLAN)
+        record = {**NOTHING, "interpretation": "lfm2", "calls": self.PLAN}
+        found = ask.suggester(session)(self.REQUEST, record)
+        self.assertEqual(found, {**FOUND, "source": "proposal", "model": "lfm2"})
+        self.assertEqual(session.asked, [])
+
+    def test_the_selected_command_model_is_asked_when_the_request_never_reached_it(self):
+        session = Session("needle3", self.PLAN)
+        self.assertEqual(ask.suggester(session)(self.REQUEST, dict(NOTHING)),
+                         {**FOUND, "source": "proposal", "model": "needle3"})
+        self.assertEqual(session.asked, [self.REQUEST])
+        ask.suggester(session)("what is the weather like", dict(NOTHING))
+        self.assertEqual(session.asked, [self.REQUEST])      # nothing could be suggested, so it was not asked
+        # Calls that did not come from the model (its session fell back to the grammar) are no proposal.
+        fallen = Session("needle3", self.PLAN, source="grammar")
+        self.assertIsNone(ask.suggester(fallen)(self.REQUEST, dict(NOTHING)))
+        self.assertEqual(fallen.asked, [self.REQUEST])
+
+    def test_the_grammar_alone_has_no_proposal_to_offer(self):
+        session = Session("grammar", self.PLAN)
+        self.assertIsNone(ask.suggester(session)(self.REQUEST, {**NOTHING, "interpretation": "grammar", "calls": []}))
+        self.assertIsNone(ask.suggester()(self.REQUEST, dict(NOTHING)))
+        self.assertEqual(session.asked, [])
+
+    def decision_model(self, answers):
         def reply(body):
             question = body["questions"]["q"]
             chosen = next(pick for words, pick in answers.items() if words in question["instructions"])
@@ -338,22 +628,41 @@ class Offer(unittest.TestCase):
                                                         for key in question["criteria"]}}}}
         server = Server(reply)
         self.addCleanup(server.close)
-        with mock.patch.dict(os.environ, {"KILIX_ASK_SUGGEST": " d3:test ", "OLLAMA_HOST": server.host}):
-            found = ask.suggester()(self.REQUEST)
-        self.assertEqual(found, {**FOUND, "model": "d3:test"})
-        self.assertEqual({body["model"] for _, body in server.bodies}, {"d3:test"})
-        self.assertEqual(len(server.bodies), 4)
+        os.environ.update(KILIX_ASK_SUGGEST=" d3:test ", OLLAMA_HOST=server.host)
+        return server
 
-    def test_the_command_line_offers_suggestions_to_a_person_only(self):
-        import argparse
-        with mock.patch.dict(os.environ, {"KILIX_ASK_SUGGEST": "d3:test"}):
-            for agent in (False, True):
-                jobs, stack = ask.cli_jobs(argparse.Namespace(agent=agent), interactive=False)
-                with stack:
-                    self.assertEqual(jobs.suggest is None, agent)
-        jobs, stack = ask.cli_jobs(argparse.Namespace(agent=False), interactive=False)
-        with stack:
-            self.assertIsNone(jobs.suggest)
+    def test_a_decision_model_with_the_grammar_selected_offers_its_walk(self):
+        answers = {"What kind": "command", "Which operation": "start_codex", "Where should": "right", "Does the": "yes"}
+        server = self.decision_model(answers)
+        for session in (None, Session("grammar")):
+            self.assertEqual(ask.suggester(session)(self.REQUEST, dict(NOTHING)),
+                             {**FOUND, "source": "walk", "model": "d3:test"})
+        self.assertEqual(({body["model"] for _, body in server.bodies}, len(server.bodies)), ({"d3:test"}, 8))
+        answers["Which operation"] = "other"
+        self.assertIsNone(ask.suggester()(self.REQUEST, dict(NOTHING)))
+
+    def test_a_decision_model_and_a_command_model_must_agree(self):
+        answers = {"What kind": "command", "Which operation": "start_codex", "Where should": "right", "Does the": "yes"}
+        self.decision_model(answers)
+        session = Session("lfm2", self.PLAN)
+        record = {**NOTHING, "interpretation": "lfm2", "calls": self.PLAN}
+        self.assertEqual(ask.suggester(session)(self.REQUEST, record), {**FOUND, "source": "agreed", "model": "d3:test"})
+        self.assertEqual(ask.suggester(session)(self.REQUEST, dict(NOTHING))["source"], "agreed")
+        self.assertEqual(session.asked, [self.REQUEST])      # asked only because the record held no proposal
+        other = {**NOTHING, "interpretation": "lfm2", "calls": [call("start_codex", place="left")]}
+        self.assertIsNone(ask.suggester(session)(self.REQUEST, other))
+        self.assertIsNone(ask.suggester(session)(self.REQUEST, {**NOTHING, "interpretation": "lfm2", "calls": []}))
+        answers["Which operation"] = "other"         # the walk finds no plan: the proposal alone is not offered
+        self.assertIsNone(ask.suggester(session)(self.REQUEST, record))
+
+    def test_a_decision_model_that_is_not_there_offers_nothing(self):
+        session = Session("lfm2", self.PLAN)
+        record = {**NOTHING, "interpretation": "lfm2", "calls": self.PLAN}
+        for host in ("127.0.0.1:1", "example.com"):      # no server; never another computer
+            os.environ.update(KILIX_ASK_SUGGEST="d3:test", OLLAMA_HOST=host)
+            with self.subTest(host=host):
+                self.assertIsNone(ask.suggester(session)(self.REQUEST, record))
+                self.assertIsNone(ask.suggester()(self.REQUEST, dict(NOTHING)))
 
 
 if __name__ == "__main__":

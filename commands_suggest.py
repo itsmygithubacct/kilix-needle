@@ -72,8 +72,18 @@ NOT_NAMES = {'directory', 'dir', 'folder', 'repo', 'repository', 'project', 'wor
              'each', 'time', 'the', 'my', 'a', 'an', 'this', 'that', 'our', 'your', 'its', 'new', 'fresh',
              'current', 'same', 'working', 'present', 'of', 'kilix', 'cwd'}
 # Words the five tools cannot express: a request that uses one is not a plain command.
-NOT_NOW = re.compile(r'\b(?:if|unless|provided|providing|assuming|in\s+case|as\s+long\s+as|when|whenever|or|'
-                     r'never|later|tomorrow|tonight|should|maybe|how|what|why|which|not)\b', re.I)
+NOT_NOW = re.compile(r'\b(?:if|unless|provided|providing|assuming|in\s+case|as\s+long\s+as|when|whenever|once|or|'
+                     r'never|later|tomorrow|tonight|should|maybe|how|what|why|which|not|every|each|daily|weekly|'
+                     r'nightly|(?:mon|tues|wednes|thurs|fri|satur|sun)days?|mornings?|evenings?|noon|midnight|'
+                     r'minutes?|hours?|o\'clock)\b', re.I)
+# "start codex there", "both in ./x": the directory named is meant once more ("there is a session" names nothing)
+THERE = re.compile(r'\bthere\b(?!\'s|\s+(?:is|are|was|were)\b)|\bboth\b', re.I)
+# Ending something is not an operation; a request that asks for it is refused whole.
+NOT_OFFERED = re.compile(r'\b(?:quit|stop|close|kill|exit|terminate|shut)(?:s|ting|ping|ing)?\b', re.I)
+# An operation the request's own verb asks for must be in the plan.
+VERBS = ((re.compile(r'\b(?:start|launch)\w*', re.I), ('start_claude', 'start_codex', 'open_app')),
+         (re.compile(r'\bwait\w*', re.I), ('wait_for_agent',)),
+         (re.compile(r'\b(?:tell|message|send)(?:s|ing)?\b', re.I), ('message_agent',)))
 MODEL_NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9._/-]*')
 MODEL_CUE = re.compile(r'\b(?:model|using|with|on|use)\s+(?:the\s+)?(?:model\s+)?(' + MODEL_NAME.pattern + ')', re.I)
 NOT_MODELS = {'a', 'an', 'the', 'model', 'claude', 'codex', 'new', 'session', 'tab', 'split', 'right', 'left',
@@ -138,6 +148,19 @@ class Decider:
 _GONE = '\x00'        # stands where a copied span was: neither a space nor part of a word
 
 
+def available(model, host=None, timeout=2):
+    """Whether the local Ollama server lists the decision model: True, False,
+    or None when the server did not answer. Reads only."""
+    try:
+        url = Decider(model, host, timeout).url.rsplit('/v1/', 1)[0] + '/api/tags'
+        with urlopen(Request(url), timeout=timeout) as response:
+            listed = json.load(response).get('models', [])
+        names = {item.get('name') for item in listed if isinstance(item, dict)}
+        return model in names or model + ':latest' in names
+    except (SuggestError, OSError, URLError, ValueError, AttributeError, TypeError):
+        return None
+
+
 def _blank(found):
     return _GONE * len(found.group(0))
 
@@ -173,6 +196,12 @@ def spans(request):
     """(paths, texts, models, masked, plain): the request's copyable spans, the
     request with each quoted text replaced by a placeholder, and its own words
     with texts and paths blanked."""
+    paths, texts, models, masked, plain = _scan(request)
+    return list(dict.fromkeys(paths)), texts, models, masked, plain
+
+
+def _scan(request):
+    """spans(), with a path listed once for each time the request names it."""
     quotes = _quotes(request)
     outside = request
     for start, end, _ in quotes:
@@ -221,7 +250,7 @@ def spans(request):
         name = found.group(0).rstrip('.,:')
         if re.search(r'\d', name) and re.search(r'[A-Za-z]', name) and name not in models:
             models.append(name)
-    return list(dict.fromkeys(paths)), texts, models, masked, plain
+    return paths, texts, models, masked, plain
 
 
 def describe(call, texts=()):
@@ -270,18 +299,130 @@ def _in_order(calls, plain):
     return [call for _, call in sorted(zip(places, calls), key=lambda pair: pair[0])]
 
 
+GATE_QUESTION = 'What kind of request is this?'
+VERIFY_QUESTION = 'Does the plan do exactly what the request asks?'
+VERIFY_OPTIONS = {'yes': 'yes: it does everything asked, with the right details, and nothing else',
+                  'no': 'no: it leaves something out, adds something, gets a detail wrong, or should not be done now'}
+
+
+def _frames(request, masked, texts):
+    """(full, base): the request as the model is shown it, whole and with its quoted texts hidden."""
+    full = f'A user typed this request to a terminal assistant:\n{request}'
+    base = f'A user typed this request to a terminal assistant:\n{masked}'
+    if texts:
+        base += '\n([TEXT 1] and the like stand for text the request quotes, to be passed on word for word.)'
+    return full, base
+
+
+def _named(paths, plain):
+    """(agents, apps, directions) the request's own words name."""
+    agents = [agent for agent, cue in AGENT_CUE.items() if cue.search(plain)]
+    apps = [app for app, cue in APP_CUE.items() if cue.search(plain)
+            or app == 'kilix-pdf' and any(path.lower().endswith('.pdf') for path in paths)]
+    return agents, apps, {place for place, cue in PLACE_WORD.items() if cue.search(plain)}
+
+
+def _left_out(calls, paths, texts, directions):
+    """Whether the plan leaves out a path, a quoted text or a direction the request names."""
+    used = [value for call in calls for key, value in call['arguments'].items()
+            if key in ('directory', 'file_path', 'task', 'text')]
+    return (any(path not in used for path in paths) or any(not any(text in value for value in used) for text in texts)
+            or bool(directions - {call['arguments'].get('place') for call in calls}))
+
+
+# A request that stops on a joining word was cut off.
+CUT_OFF = re.compile(r'\b(?:in|to|with|for|at|from|on|of|the|a|an|and|then)[\s.!]*$', re.I)
+
+
+def refusal(request, calls):
+    """Why the request's own words rule this plan out, or None. Every
+    suggested plan is held to these rules, whichever model made it."""
+    mentions, texts, models, _masked, plain = _scan(request)
+    paths = list(dict.fromkeys(mentions))
+    agents, apps, directions = _named(paths, plain)
+    if not (agents or apps):
+        return 'unnamed'
+    if NOT_NOW.search(plain):
+        return 'conditional'
+    if CUT_OFF.search(plain):
+        return 'cut off'
+    if NOT_OFFERED.search(plain):
+        return 'unsupported'
+    pools = {'directory': paths, 'file_path': paths, 'task': texts, 'text': texts, 'model': models}
+    for call in calls:
+        name, args = call['name'], call['arguments']
+        agent = name.split('_')[1] if name.startswith('start_') else args.get('agent')
+        if agent is not None and agent not in agents or 'app' in args and args['app'] not in apps:
+            return 'unnamed'
+        if any(key in args and args[key] not in pool for key, pool in pools.items()):
+            return 'reworded'       # an argument the request does not hold word for word
+        if args.get('place', 'tab') != 'tab' and directions and args['place'] not in directions:
+            return 'unnamed'
+        if args.get('place', 'tab') != 'tab' and not PLACE_CUE.search(plain):
+            return 'unnamed'
+    if len({_identity(call) for call in calls}) < len(calls):
+        return 'repeated'
+    if _left_out(calls, paths, texts, directions):
+        return 'unused'
+    used = [call['name'].split('_')[1] if call['name'].startswith('start_') else
+            call['arguments'].get('agent') or call['arguments'].get('app') for call in calls]
+    if set(agents + apps) - set(used):
+        return 'unused'     # an agent or application the request names and the plan does not use
+    spoken = [name.casefold() for name in re.findall(r'(?<![\w.-])(?:claude|codex)(?![\w-])', plain, re.I)]
+    if any(used.count(agent) < spoken.count(agent) for agent in agents):
+        return 'unused'     # an agent named twice is meant twice
+    places = [value for call in calls for key, value in call['arguments'].items() if key in ('directory', 'file_path')]
+    again = [found[0].casefold() for found in THERE.finditer(plain)]
+    if (any(places.count(path) < mentions.count(path) for path in paths)
+            or len(places) < len(mentions) + sum(word != 'both' or bool(mentions) for word in again)):
+        return 'unused'     # a directory named twice, or named and then called "there", is meant twice
+    said = [value for call in calls for key, value in call['arguments'].items() if key in ('task', 'text')]
+    if any(said.count(text) > request.count(text) for text in said):
+        return 'reused'     # a quoted text is passed on as often as the request quotes it
+    names = {call['name'] for call in calls}
+    if any(verb.search(plain) and not names & set(operations) for verb, operations in VERBS):
+        return 'unused'
+    return None
+
+
+def possible(request):
+    """Whether any plan could be suggested for the request: the grammar does
+    not read it, it names an agent or an application, and it is a plain,
+    complete instruction for now. Costs no model."""
+    if not isinstance(request, str) or not request.strip() or len(request) > 2048:
+        return False
+    try:
+        if contract.exact_calls(request):
+            return False
+    except ValueError:
+        return False
+    paths, _texts, _models, _masked, plain = spans(request)
+    agents, apps, _directions = _named(paths, plain)
+    return bool(agents or apps) and not NOT_NOW.search(plain) and not CUT_OFF.search(plain)
+
+
+def tidy(calls):
+    """A model's proposal without the defaults it may spell out, or None when it is not a list of calls."""
+    out = []
+    try:
+        for call in calls:
+            args = {key: value for key, value in call['arguments'].items()
+                    if not (key == 'place' and value == 'tab') and not (key == 'directory' and value in ('here', '.'))}
+            if call['name'] not in OPERATIONS or not all(isinstance(value, str) for value in args.values()):
+                return None
+            out.append({'name': call['name'], 'arguments': args})
+    except (TypeError, KeyError, AttributeError):
+        return None
+    return out or None
+
+
 def walk(request, choose):
     """(calls, steps): the plan the model's choices make, and every question's
     answer with its odds. `calls` is empty when a step refuses the request."""
     steps = []
     paths, texts, models, masked, plain = spans(request)
-    full = f'A user typed this request to a terminal assistant:\n{request}'
-    base = f'A user typed this request to a terminal assistant:\n{masked}'
-    if texts:
-        base += '\n([TEXT 1] and the like stand for text the request quotes, to be passed on word for word.)'
-    agents = [agent for agent, cue in AGENT_CUE.items() if cue.search(plain)]
-    apps = [app for app, cue in APP_CUE.items() if cue.search(plain)
-            or app == 'kilix-pdf' and any(path.lower().endswith('.pdf') for path in paths)]
+    full, base = _frames(request, masked, texts)
+    agents, apps, directions = _named(paths, plain)
     offered = {name: text for name, text in OPERATIONS.items() if
                (name.startswith('start_') and name.split('_')[1] in agents)
                or (name == 'wait_for_agent' and agents) or (name == 'message_agent' and agents and texts)
@@ -380,11 +521,7 @@ def walk(request, choose):
         if len({_identity(call) for call in calls}) < len(calls):
             refused('repeated', log)        # the same operation twice is a misread "and", never a plan
             return None, log
-        used = [value for call in calls for key, value in call['arguments'].items()
-                if key in ('directory', 'file_path', 'task', 'text')]
-        named = {place for place, cue in PLACE_WORD.items() if cue.search(plain)}
-        if (any(path not in used for path in paths) or any(not any(text in value for value in used) for text in texts)
-                or named - {call['arguments'].get('place') for call in calls}):
+        if _left_out(calls, paths, texts, directions):
             refused('unused', log)      # the request names something the plan leaves out
             return None, log
         return _in_order(calls, plain), log
@@ -395,7 +532,7 @@ def walk(request, choose):
     if NOT_NOW.search(plain):
         refused('conditional')
         return [], steps
-    ask('gate', base, 'What kind of request is this?', KINDS)
+    ask('gate', base, GATE_QUESTION, KINDS)
     totals = [1]
     if MORE_CUE.search(plain):      # only a request that joins clauses can ask for more than one operation
         ranked = ask('count', base, 'How many separate operations does the request ask the assistant to '
@@ -421,10 +558,7 @@ def walk(request, choose):
         chosen = plans[int(pick) - 1]
     calls, log = chosen
     steps += log
-    ask('verify', full + "\n\nThe assistant's plan:\n" + plan_text(calls),
-        'Does the plan do exactly what the request asks?',
-        {'yes': 'yes: it does everything asked, with the right details, and nothing else',
-         'no': 'no: it leaves something out, adds something, gets a detail wrong, or should not be done now'})
+    ask('verify', full + "\n\nThe assistant's plan:\n" + plan_text(calls), VERIFY_QUESTION, VERIFY_OPTIONS)
     return calls, steps
 
 
@@ -471,24 +605,52 @@ def sentence(calls):
     return '; then '.join(parts)
 
 
-def suggest(request, choose, *, limits=(GATE, STEP, VERIFY)):
-    """{'request': a wording the grammar reads, 'calls': what it reads it as}
-    for a request the grammar cannot read, or None. A model that cannot be
-    asked raises SuggestError."""
-    if not isinstance(request, str) or not request.strip() or len(request) > 2048:
-        return None
-    if contract.exact_calls(request):
-        return None     # the grammar reads it already
-    calls, steps = walk(request, choose)
-    if not calls or any(value < limit for value, limit in zip(signals(steps), limits)):
-        return None
-    wording = sentence(calls)
+def _carried(calls):
+    """{'request', 'calls'}: the plan in the grammar's wording, when the grammar reads it back as that plan."""
     try:
+        wording = sentence(calls)
         read = contract.exact_calls(wording)
         if not read or contract._canonical(read) != contract._canonical(calls):
             return None     # the grammar is the judge of what it supports
-    except ValueError:
-        return None
-    if not contract.admit(wording, read).actions:
+        if not contract.admit(wording, read).actions:
+            return None
+    except (ValueError, KeyError, TypeError):
         return None
     return {'request': wording, 'calls': read}
+
+
+def suggest(request, choose=None, *, propose=None, limits=(GATE, STEP, VERIFY)):
+    """{'request': a wording the grammar reads, 'calls': what it reads it as,
+    'source': where the plan came from} for a request the grammar cannot
+    read, or None.
+
+    `choose` asks a decision model, which walks to a plan of its own.
+    `propose` returns the calls a command model proposes for the request.
+    Every plan is held to refusal() and to the grammar. With a decision model
+    alone, its plan is offered when every answer was sure enough ('walk').
+    With a command model alone, its proposal is offered ('proposal'). With
+    both, a wording is offered only when the two plans are the same
+    ('agreed'); the command model is not asked when the walk gave no plan.
+    A decision model that cannot be asked offers nothing."""
+    if not possible(request):
+        return None
+    walked = None
+    if choose is not None:
+        try:
+            calls, steps = walk(request, choose)
+        except SuggestError:
+            return None
+        walked = _carried(calls) if calls and refusal(request, calls) is None else None
+        if not walked:
+            return None
+        if propose is None:
+            sure = all(value >= limit for value, limit in zip(signals(steps), limits))
+            return {**walked, 'source': 'walk'} if sure else None
+    plan = tidy(propose()) if propose is not None else None
+    found = _carried(plan) if plan and refusal(request, plan) is None else None
+    if not found:
+        return None
+    if walked is None:
+        return {**found, 'source': 'proposal'}
+    same = contract._canonical(found['calls']) == contract._canonical(walked['calls'])
+    return {**found, 'source': 'agreed'} if same else None
