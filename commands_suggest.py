@@ -419,8 +419,8 @@ def refusal(request, calls):
 
 def possible(request):
     """Whether any plan could be suggested for the request: the grammar does
-    not read it, it names an agent or an application, and it is a plain,
-    complete instruction for now. Costs no model."""
+    not read it, it names an agent, an application or a pane, and it is a
+    plain, complete instruction for now. Costs no model."""
     if not isinstance(request, str) or not request.strip() or len(request) > 2048:
         return False
     try:
@@ -430,7 +430,8 @@ def possible(request):
         return False
     paths, _texts, _models, _masked, plain = spans(request)
     agents, apps, _directions = _named(paths, plain)
-    return bool(agents or apps) and not NOT_NOW.search(plain) and not CUT_OFF.search(plain)
+    named = agents or apps or targets(request)       # a pane names a session too
+    return bool(named) and not NOT_NOW.search(plain) and not CUT_OFF.search(plain)
 
 
 def tidy(calls):

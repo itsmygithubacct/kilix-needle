@@ -808,6 +808,10 @@ class Rules(unittest.TestCase):
             with self.subTest(request=request):
                 self.assertFalse(suggest.possible(request))
 
+    def test_a_pane_names_a_session_as_an_agent_does(self):
+        self.assertTrue(suggest.possible('For pane 4, the word is "ship it"'))
+        self.assertFalse(suggest.possible('For the pane on the left, the word is "ship it"'))
+
     def test_a_proposal_is_tidied_or_dropped(self):
         self.assertEqual(suggest.tidy([call("start_codex", place="tab", directory="here")]), [call("start_codex")])
         self.assertEqual(suggest.tidy([call("start_codex", place="left", directory=".")]),
