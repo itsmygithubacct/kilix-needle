@@ -241,6 +241,14 @@ machine when they verify against the new manifest, so moving from
 extracted v9 delivery; it is deterministic and checks every kept file against
 its source.
 
+Experimental: with `KILIX_ASK_SUGGEST=d3:2b`, a request that plans nothing
+may be answered with a wording the command grammar reads ("did you mean:
+start codex in a split below"). A decision model on the local Ollama server
+chooses it from the choices the command tools allow, and the grammar must
+read it back as the same plan. It is offered, never run. See
+[Ask suggestions](docs/ask-suggestions.md) for how it works and what was
+measured.
+
 ### LFM2 benchmark: upstream, V5, .21 and .8
 
 The fresh 160-request comparison uses the same prompt and runtime for every

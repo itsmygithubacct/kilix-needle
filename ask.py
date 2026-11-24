@@ -90,11 +90,11 @@ class Jobs:
 
     def __init__(self, engine, classify_system, *, confirm, agent: bool,
                  agents_cwd=None, files_cwd=None, under_overlay: bool = False,
-                 commands=None):
+                 commands=None, suggest=None):
         self.engine, self.classify_system = engine, classify_system
         self.confirm, self.agent = confirm, agent
         self.agents_cwd, self.files_cwd, self.under_overlay = agents_cwd, files_cwd, under_overlay
-        self.commands = commands
+        self.commands, self.suggest = commands, suggest
 
     def run(self, job: str, request: str, *, dry_run: bool, assume_yes: bool = False) -> dict:
         import needle_cli
@@ -186,9 +186,53 @@ def _clarify(request: str, candidates: list, note: str = "") -> dict:
                     + "  (two jobs' work goes as two requests)"}
 
 
+def suggester():
+    """The wording suggester, when KILIX_ASK_SUGGEST names a decision model on
+    this computer's Ollama server; otherwise None, and nothing is asked."""
+    model = os.environ.get("KILIX_ASK_SUGGEST", "").strip()
+    if not model:
+        return None
+
+    def suggest(request):
+        import commands_suggest
+        found = commands_suggest.suggest(request, commands_suggest.Decider(model).choose)
+        return found and {**found, "model": model}
+    return suggest
+
+
+def _suggest(jobs, request: str, record: dict) -> None:
+    """A request that planned and ran nothing may get a wording the command
+    grammar reads. It is offered, never run: sending it is a new request."""
+    suggest = getattr(jobs, "suggest", None)
+    if suggest is None or not record.get("status") or record.get("items") or record.get("plan"):
+        return
+    named, text = labelled(request)
+    if named is not None:
+        return
+    try:
+        found = suggest(text)
+    except Exception:       # noqa: BLE001 - a suggestion never breaks a request
+        return
+    if found:
+        record["suggestion"] = found
+        record["hint"] = "  |  ".join(part for part in (f"did you mean: {found['request']}", record.get("hint"))
+                                      if part)
+
+
 def ask(request: str, jobs: Jobs, *, act: bool, assume_yes: bool = False,
         job: str | None = None, route: router.Route | None = None,
         default: str | None = None) -> dict:
+    """`_ask`, and for a request that no job was chosen for and that planned
+    nothing, the suggester's wording when one is configured."""
+    record = _ask(request, jobs, act=act, assume_yes=assume_yes, job=job, route=route, default=default)
+    if job is None and route is None:
+        _suggest(jobs, request, record)
+    return record
+
+
+def _ask(request: str, jobs: Jobs, *, act: bool, assume_yes: bool = False,
+         job: str | None = None, route: router.Route | None = None,
+         default: str | None = None) -> dict:
     """One routed request, as the chosen job's record plus a `route` block.
 
     `job` skips routing; `route` reuses one already made (an interactive act
@@ -408,7 +452,8 @@ def cli_jobs(args, *, interactive: bool, engines: dict | None = None) -> tuple:
     cwd = os.getcwd()
     jobs = Jobs(engine, classify_system, confirm=confirm, agent=args.agent,
                 agents_cwd=cwd, files_cwd=cwd,
-                under_overlay=getattr(args, "under_overlay", False), commands=commands)
+                under_overlay=getattr(args, "under_overlay", False), commands=commands,
+                suggest=None if args.agent else suggester())
     return jobs, stack
 
 
