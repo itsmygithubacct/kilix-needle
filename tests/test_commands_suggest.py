@@ -180,6 +180,16 @@ class Suggest(unittest.TestCase):
         # One wording only: nothing to choose, so only the kind of request and the final check are asked.
         self.assertEqual([question for question, _, _ in model.asked], [suggest.GATE_QUESTION, suggest.VERIFY_QUESTION])
 
+    def test_the_walk_can_stand_in_for_the_built_sentence(self):
+        request = "Codex in a split on the right, please."
+        model = Model(COMMAND, ("Which operation", "start_codex"), ("Where should", "right"), YES)
+        found = suggest.suggest(request, model, plan=suggest.walk)
+        self.assertEqual(found, {"request": "start codex in a split to the right",
+                                 "calls": [call("start_codex", place="right")], "source": "walk"})
+        self.assertEqual(len(model.questions("Which operation")), 1)
+        unsure = Model(COMMAND, ("Which operation", "start_codex"), ("Where should", "right", 0.45), YES)
+        self.assertIsNone(suggest.suggest(request, unsure, plan=suggest.walk))
+
     def test_a_request_the_grammar_reads_is_never_sent_to_the_model(self):
         model = Model()
         self.assertIsNone(suggest.suggest("start codex in a split to the right", model))

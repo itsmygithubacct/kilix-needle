@@ -907,13 +907,15 @@ def build(request, choose):
     return greedy, steps
 
 
-def suggest(request, choose=None, *, propose=None, limits=(GATE, STEP, VERIFY)):
+def suggest(request, choose=None, *, propose=None, limits=(GATE, STEP, VERIFY), plan=None):
     """{'request': a wording the grammar reads, 'calls': what it reads it as,
     'source': where the plan came from} for a request the grammar cannot
     read, or None.
 
     `choose` asks a decision model, which builds the grammar's sentence for
-    a plan of its own (build()).
+    a plan of its own (build()). `plan` names another way to get the model's
+    plan: walk, which asks for each operation and argument in turn; its
+    suggestions have the source 'walk'.
     `propose` returns the calls a command model proposes for the request.
     Every plan is held to refusal() and to the grammar. With a decision model
     alone, its plan is offered when every answer was sure enough ('built').
@@ -927,7 +929,7 @@ def suggest(request, choose=None, *, propose=None, limits=(GATE, STEP, VERIFY)):
     built = None
     if choose is not None:
         try:
-            calls, steps = build(request, choose)
+            calls, steps = (plan or build)(request, choose)
         except SuggestError:
             return None
         built = _carried(calls) if calls and refusal(request, calls) is None else None
@@ -935,7 +937,7 @@ def suggest(request, choose=None, *, propose=None, limits=(GATE, STEP, VERIFY)):
             return None
         if propose is None:
             sure = all(value >= limit for value, limit in zip(signals(steps), limits))
-            return {**built, 'source': 'built'} if sure else None
+            return {**built, 'source': 'walk' if plan is walk else 'built'} if sure else None
     plan = tidy(propose()) if propose is not None else None
     found = _carried(plan) if plan and refusal(request, plan) is None else None
     if not found:
