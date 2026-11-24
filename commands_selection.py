@@ -140,7 +140,7 @@ def _write(path, record):
 # decision model on the local Ollama server chooses (its name); with a command
 # model selected as well, the two must agree.
 SUGGEST_SCHEMA = 'kilix.ask.suggest/v1'
-SUGGEST_DEFAULT = 'off'
+SUGGEST_DEFAULT = 'd3:2b'     # used only while the local Ollama server lists it (ask.suggester)
 _DECISION_MODEL = re.compile(r'[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}\Z')
 
 

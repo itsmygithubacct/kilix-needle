@@ -195,7 +195,7 @@ def suggester(commands=None):
     proposal for the request is one source of a wording."""
     import commands_selection
     try:
-        value, _source = commands_selection.suggest_choice()
+        value, source = commands_selection.suggest_choice()
     except (OSError, ValueError):
         return None
     if value == "off":
@@ -216,9 +216,21 @@ def suggester(commands=None):
         choose = None
         if value != "model":
             try:
-                choose = commands_suggest.Decider(value).choose
+                decider = commands_suggest.Decider(value)
             except commands_suggest.SuggestError:
                 return None
+            choose = decider.choose
+            if source == "default":
+                # Nobody chose this model: ask it only where the server lists it, and look
+                # that up only once a question is about to be asked.
+                listed = []
+
+                def choose(state, question, options):
+                    if not listed:
+                        listed.append(commands_suggest.available(value))
+                    if not listed[0]:
+                        raise commands_suggest.SuggestError(f"the decision model {value} is not on the local Ollama server")
+                    return decider.choose(state, question, options)
         found = commands_suggest.suggest(request, choose, propose=propose if backend else None)
         if not found:
             return None

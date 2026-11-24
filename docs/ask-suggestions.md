@@ -1,10 +1,12 @@
 # Ask suggestions
 
-Off by default. When Ask plans nothing for a request, it can offer a wording
-the command grammar reads:
+When Ask plans nothing for a request, it can offer a wording the command
+grammar reads. By default the decision model `d3:2b` builds it, where the
+local Ollama server has that model; elsewhere nothing is offered and nothing
+changes:
 
 ```sh
-kilix-needle workflows suggest --set d3:2b
+kilix-needle workflows suggest            # the setting, and whether the model is there
 kilix-needle ask --plan "Start Claude and Codex, both in ~/work/fig-lantern"
 # the whole request has no supported reading
 #   hint: did you mean: start claude in "~/work/fig-lantern"; then start codex in "~/work/fig-lantern"
@@ -21,14 +23,17 @@ for ("Run Codex in dusk-ferry in a split below" is now planned directly); see
 
 | Setting | A wording comes from |
 |---|---|
-| `off` | nothing (the default) |
+| `off` | nothing |
 | `model` | the selected command model's own proposal for the request (LFM2, LFM3 or Needle3). With the grammar selected there is none. |
-| a decision model, such as `d3:2b` | that model's choices. With a command model selected as well, a wording is offered only when both make the same plan. |
+| a decision model, such as `d3:2b` (the default) | that model's choices. With a command model selected as well, a wording is offered only when both make the same plan. |
 
 A decision model is one on the local Ollama server (`OLLAMA_HOST`, loopback
 only; Ollama 0.40 or newer serves the `d3` family). Nothing is installed or
 downloaded for it, and `workflows suggest` says whether the server lists it.
-If the server or the model is missing, nothing is offered.
+If the server or the model is missing, nothing is offered. While the setting
+is the default, the server is first asked whether it lists the model, and
+only once a question is about to be put: a computer without it is not made to
+wait. `kilix-needle workflows suggest --set off` turns suggestions off.
 
 ## What a suggestion is
 
@@ -482,9 +487,11 @@ has already been made. A decision model adds its questions.
 ## Limits
 
 - No setting made zero wrong suggestions on both the fifth and the sixth
-  blind set. The two later sets had none, but with the grammar reading more
-  they hold only 21 suggestions between them, too few to change the rule: a
-  suggestion is offered and never run, and the setting is off unless chosen.
+  blind set, and on the last blind sets the built sentence made 2 wrong
+  suggestions in 73. A suggestion is therefore offered and never run. Since
+  those sets the decision model is the default where it is installed; with
+  the grammar reading most requests itself, a suggestion is asked for only
+  for what is left, and only for a person at the command line.
 - An unsupported second action joined with `and` can get through a decision
   model alone, as above. Agreement with a command model caught it.
 - A message for an agent started earlier in the same request leaves its

@@ -1,11 +1,13 @@
 kilix-needle (0.20261116+packaging8) UNRELEASED; urgency=medium
 
-  * Offer a wording the command grammar reads when Ask plans nothing. Off
-    by default; "kilix-needle workflows suggest --set model" takes it from
-    the selected command model's own proposal and "--set NAME" from a
-    decision model on the local Ollama server, which must agree with the
-    command model when one is selected. KILIX_ASK_SUGGEST overrides the
-    saved setting. The wording is shown as a hint and never run.
+  * Offer a wording the command grammar reads when Ask plans nothing. By
+    default the decision model d3:2b builds it where the local Ollama
+    server lists that model, and nothing is offered elsewhere; "kilix-needle
+    workflows suggest --set off" turns it off, "--set model" takes it from
+    the selected command model's own proposal and "--set NAME" from another
+    decision model, which must agree with the command model when one is
+    selected. KILIX_ASK_SUGGEST overrides the saved setting. The wording is
+    shown as a hint and never run.
   * A decision model builds the suggested wording from the continuations
     the grammar allows and must pick the same sentence when it ranks the
     complete ones. This asks fewer than half the questions of asking for

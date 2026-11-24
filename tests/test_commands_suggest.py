@@ -1103,16 +1103,17 @@ class Isolated(unittest.TestCase):
 
 
 class Setting(Isolated):
-    def test_the_environment_then_the_saved_choice_then_off(self):
-        self.assertEqual(commands_selection.suggest_choice(), ("off", "default"))
+    def test_the_environment_then_the_saved_choice_then_the_default_decision_model(self):
+        self.assertEqual(commands_selection.suggest_choice(), ("d3:2b", "default"))
+        self.assertIsNotNone(ask.suggester())
+        self.assertEqual(commands_selection.save_suggest(" off "), "off")
+        self.assertEqual(json.loads(self.path.read_text()), {"schema": "kilix.ask.suggest/v1", "suggest": "off"})
+        self.assertEqual(commands_selection.suggest_choice(), ("off", "saved"))
         self.assertIsNone(ask.suggester())
-        self.assertEqual(commands_selection.save_suggest(" d3:2b "), "d3:2b")
-        self.assertEqual(json.loads(self.path.read_text()), {"schema": "kilix.ask.suggest/v1", "suggest": "d3:2b"})
-        self.assertEqual(commands_selection.suggest_choice(), ("d3:2b", "saved"))
-        os.environ["KILIX_ASK_SUGGEST"] = "OFF"
-        self.assertEqual(commands_selection.suggest_choice(), ("off", "environment"))
+        os.environ["KILIX_ASK_SUGGEST"] = "D3:Other"
+        self.assertEqual(commands_selection.suggest_choice(), ("D3:Other", "environment"))
         os.environ["KILIX_ASK_SUGGEST"] = "  "
-        self.assertEqual(commands_selection.suggest_choice(), ("d3:2b", "saved"))
+        self.assertEqual(commands_selection.suggest_choice(), ("off", "saved"))
 
     def test_a_value_that_is_no_model_name_is_refused_and_nothing_is_saved(self):
         for value in ("", "two words", "-rf", "x" * 129, "d3;2b", None):
@@ -1132,7 +1133,10 @@ class Setting(Isolated):
                 commands_selection.suggest_choice()
 
     def test_workflows_shows_and_saves_the_setting(self):
-        self.assertEqual(workflows.suggestions()["detail"], "Ask suggestions are off (default).")
+        os.environ["OLLAMA_HOST"] = "127.0.0.1:1"        # no server: the real one is never asked
+        first = workflows.suggestions()
+        self.assertEqual((first["suggest"], first["source"], first["available"]), ("d3:2b", "default", None))
+        self.assertIn("decision model d3:2b (default)", first["detail"])
         self.assertIn("command model's own proposal (saved)", workflows.suggestions("model")["detail"])
         self.assertEqual(workflows.suggestions("off")["detail"], "Ask suggestions are off (saved).")
         server = Server(lambda body: {})
@@ -1219,7 +1223,7 @@ class Offer(Isolated):
 
     def test_the_command_line_offers_suggestions_to_a_person_only(self):
         import argparse
-        for setting, offered in ((None, False), ("off", False), ("model", True), ("d3:test", True)):
+        for setting, offered in ((None, True), ("off", False), ("model", True), ("d3:test", True)):
             if setting:
                 os.environ["KILIX_ASK_SUGGEST"] = setting
             for agent in (False, True):
@@ -1312,6 +1316,19 @@ class Suggester(Isolated):
             self.assertIsNone(ask.suggester(session)(SPLIT, record))
             answers["Which command"] = "6"
             self.assertIsNone(ask.suggester(session)(SPLIT, record))    # both "wait for codex": not the proposal
+
+    def test_the_default_decision_model_is_asked_only_where_the_server_lists_it(self):
+        server = self.decision_model({"What kind": "command", "Does the": "yes"})
+        os.environ.pop("KILIX_ASK_SUGGEST")
+        self.assertEqual(commands_selection.suggest_choice(), ("d3:2b", "default"))     # the stand-in lists d3:test
+        self.assertIsNone(ask.suggester()(self.REQUEST, dict(NOTHING)))
+        self.assertEqual(server.bodies, [])                                             # not listed: no question
+        with mock.patch.object(commands_selection, "SUGGEST_DEFAULT", "d3:test"):
+            self.assertEqual(ask.suggester()(self.REQUEST, dict(NOTHING)),
+                             {**FOUND, "source": "built", "model": "d3:test"})
+        self.assertEqual({body["model"] for _, body in server.bodies}, {"d3:test"})
+        os.environ["KILIX_ASK_SUGGEST"] = "d3:2b"       # chosen by name: asked without the lookup, and it answers
+        self.assertEqual(ask.suggester()(self.REQUEST, dict(NOTHING))["model"], "d3:2b")
 
     def test_a_decision_model_that_is_not_there_offers_nothing(self):
         session = Session("lfm2", self.PLAN)
