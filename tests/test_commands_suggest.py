@@ -133,7 +133,18 @@ class Walk(unittest.TestCase):
         for request, why in (("Start a coding session in /srv/x", "unnamed"),
                              ("Start Codex in /srv/x unless it is busy", "conditional"),
                              ("Open the notepad or the calculator", "conditional"),
-                             ("Tell claude in pane 4: the build is green", "target"),
+                             ("Tell claude in tab 4: the build is green", "target"),
+                             ("Tell the claude in the pane on the left: x", "target"),
+                             ("message the codex agent in #2207: \"lint is green\"", "target"),
+                             ("Don't start codex in ~/x", "negated"),
+                             ("Refrain from messaging claude 'x'", "negated"),
+                             ("Start codex in ~/x in an hour", "later"),
+                             ("Is the codex in ~/x done?", "question"),
+                             ("Start claude and codex in ~/x, then tell it 'go'", "ambiguous"),
+                             ("Summon claude on haiku in ~/x", "model"),
+                             ("Message codex 'rebase now', then run git push", "unsupported"),
+                             ("Message codex 'go' but install the deps first", "unsupported"),
+                             ("Open notes.txt in the notepad", "unsupported"),
                              ("message codex 0a1b2c3d-1111-2222-3333-444455556666: hi", "target"),
                              ("Start codex in a new window", "target"),
                              ("Start claude in ~/x with high reasoning effort", "effort"),
@@ -177,7 +188,13 @@ class Walk(unittest.TestCase):
                         "pull the file manager up for me, would you", "Start Claude and Codex, both in ~/x",
                         "Hey, let claude in ~/x know: the API key rotated, restart your dev server.",
                         "Ping codex in ~/x: the fixtures moved to tests/data, rerun it.",
-                        "Kick off codex here. Its first job: \"start the dev server\"", "Calculator and notepad, please."):
+                        "Kick off codex here. Its first job: \"start the dev server\"", "Calculator and notepad, please.",
+                        "Hey, could you spin up claude in ~/x, in a split on the left?", "Start codex in ~/later-notes",
+                        "Don't do anything else until codex here is done; just wait for it.",
+                        "The load test finished and p99 is back under 200ms. Message codex: close the ticket",
+                        "Start claude in ~/x, wait for it, then start codex there too",
+                        "launch codex in \"./Gorsedd Pike/server\" below this pane",
+                        "Start codex with gpt-6 in ~/x"):
             with self.subTest(request=request):
                 self.assertIsNone(suggest.walk_refuses(request))
 
@@ -265,9 +282,108 @@ class Walk(unittest.TestCase):
         self.assertEqual(model.questions("Does the plan"), [])
 
     def test_a_weak_yes_refuses(self):
-        model = Model(COMMAND, ("Which operation", "start_codex"), ("Does the plan do exactly", "yes", 0.7))
+        # The walk's own limit for the yes/no check, WALK_VERIFY.
+        model = Model(COMMAND, ("Which operation", "start_codex"),
+                      ("Does the plan do exactly", "yes", suggest.WALK_VERIFY - 0.05))
         calls, steps = suggest.walk("Codex in a split on the right, please.", model)
         self.assertEqual((calls, steps[-1]["pick"]), ([], "verify"))
+        model = Model(COMMAND, ("Which operation", "start_codex"),
+                      ("Does the plan do exactly", "yes", suggest.WALK_VERIFY + 0.05))
+        self.assertEqual(suggest.walk("Codex in a split on the right, please.", model)[0],
+                         [call("start_codex", place="right")])
+
+    def test_a_text_is_a_task_or_a_message_as_the_words_before_it_say(self):
+        model = Model(COMMAND, ("Which operation", "start_claude"), ("What does", "done"), YES)
+        calls, _ = suggest.walk("claude, here, with the task 'read CONTRIBUTING.md, then wait'", model)
+        self.assertEqual(calls, [call("start_claude", task="read CONTRIBUTING.md, then wait")])
+        self.assertNotIn("message_agent", model.questions("Which operation")[0])
+        answers = iter(["start_codex", "message_agent"])
+        plan = [call("start_codex", directory="~/x"),
+                call("message_agent", agent="codex", directory="~/x", text="read AGENTS.md first")]
+        model = Model(COMMAND, ("Which operation", lambda options: next(answers)),
+                      ("What does", lambda options: next(answers, "done")), ("Which directory", "1"),
+                      ("Which plan does exactly", plan_key(plan)), YES)
+        calls, steps = suggest.walk('Start codex in ~/x, then message it "read AGENTS.md first"', model)
+        self.assertEqual(model.questions("Which text is the task"), [])     # the message is no task
+        self.assertEqual(calls, plan)
+
+    def test_right_here_is_no_direction(self):
+        model = Model(COMMAND, ("Which operation", "start_codex"),
+                      ("What does", lambda options: "done" if "done" in options else "other"), YES)
+        calls, steps = suggest.walk("Spawn a codex right here, nothing fancy.", model)
+        self.assertEqual(model.questions("Where should"), [])
+        self.assertEqual(calls, [])     # refusal() still holds "right" to a split: no plan, and no wrong one
+
+
+class WalkPanes(unittest.TestCase):
+    """walk() for a session named by its Kilix pane: copied from targets(), never beside a directory."""
+
+    def test_a_pane_is_the_session_and_its_agent_is_the_one_named_with_it(self):
+        model = Model(COMMAND, ("Which operation", "message_agent"), YES)
+        request = "Get word to the codex agent in pane 8093: the tag is cut, bump the changelog."
+        calls, steps = suggest.walk(request, model)
+        self.assertEqual(calls, [call("message_agent", agent="codex", pane="8093",
+                                      text="the tag is cut, bump the changelog.")])
+        self.assertEqual([step["pick"] for step in steps if step["kind"] == "fixed"],
+                         ["session=pane 8093", "text=the tag is cut, bump the changelog."])
+        self.assertEqual(model.questions("Which directory"), [])
+        self.assertEqual(suggest._carried(calls)["calls"], calls)
+
+    def test_a_pane_without_an_agent_and_its_broker_are_copied(self):
+        model = Model(COMMAND, ("Which operation", "wait_for_agent"), YES)
+        calls, _ = suggest.walk("Hold here till pane 562 (broker c4e8a2f61d0b9573) is done.", model)
+        self.assertEqual(calls, [call("wait_for_agent", pane="562", broker="c4e8a2f61d0b9573")])
+        self.assertNotIn("start_codex", model.questions("Which operation")[0])
+
+    def test_which_session_offers_each_pane_and_each_agent_named_without_one(self):
+        answers = iter(["message_agent", "wait_for_agent", "done"])
+        sessions = iter(["pane 509", "codex"])
+        plan = [call("message_agent", pane="509", text="your branch is stale"),
+                call("wait_for_agent", agent="codex", directory="~/x")]
+        model = Model(COMMAND, ("Which operation", lambda options: next(answers)),
+                      ("What does", lambda options: next(answers)),
+                      ("Which session", lambda options: next(sessions)), ("Which directory", "1"),
+                      ("Which plan does exactly", plan_key(plan)), YES)
+        calls, steps = suggest.walk("First nudge pane 509 with 'your branch is stale', then wait for codex in ~/x",
+                                    model)
+        self.assertEqual(model.questions("Which session")[0],
+                         {"pane 509": "the session in pane 509", "codex": "the Codex session not named by a pane"})
+        self.assertEqual(calls, plan)
+
+    def test_a_pane_named_twice_is_used_twice(self):
+        answers = iter(["wait_for_agent", "message_agent", "done"])
+        sessions = iter(["pane 1186", "pane 2390"])
+        model = Model(COMMAND, ("Which operation", lambda options: next(answers)),
+                      ("What does", lambda options: next(answers)),
+                      ("Which session", lambda options: next(sessions)), YES)
+        calls, steps = suggest.walk("Wait on pane 1186, then on pane 2390, and finally tell pane 2390: merge it.",
+                                    model)
+        self.assertEqual((calls, steps[-1]["pick"]), ([], "unused"))
+
+    def test_the_same_call_again_ends_a_whole_plan(self):
+        model = Model(COMMAND, ("Which operation", "message_agent"), ("What does", "message_agent"), YES)
+        calls, steps = suggest.walk("Pass this along to pane 618. The message is: revert the allocator change.",
+                                    model)
+        self.assertEqual(calls, [call("message_agent", pane="618", text="revert the allocator change.")])
+        self.assertIn("done=repeat", [step["pick"] for step in steps])
+
+    def test_what_a_pane_target_cannot_say_gets_no_plan(self):
+        for request, why in (("from pane 4, tell pane 9: hi", "sender"),
+                             ("message pane 83 on broker A3F09C1E7B2D4658: reload .env", "target"),
+                             ('tell claude in pane 2 "x", then wait for claude', "target"),
+                             ("Tell the grok session in pane 119: hi", "other agent"),
+                             ('Tell pane 12 "hi" in an hour', "later"),
+                             ("Tell the claude in that pane: the build is green", "target")):
+            with self.subTest(request=request):
+                model = Model(COMMAND, ("Which operation", "message_agent"), YES)
+                calls, steps = suggest.walk(request, model)
+                self.assertEqual((calls, steps[-1]["pick"], model.asked), ([], why, []))
+
+    def test_a_pane_has_no_directory(self):
+        model = Model(COMMAND, ("Which operation", "message_agent"), YES)
+        calls, steps = suggest.walk("Tell the codex in pane 5 in ~/x: hi there", model)
+        self.assertEqual((calls, steps[-1]["pick"]), ([], "unused"))      # ~/x has nowhere to go
+        self.assertEqual(model.questions("Which directory"), [])
 
 
 def toward(wording):

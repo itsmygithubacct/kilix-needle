@@ -461,12 +461,13 @@ WALK_LIMITS = (
                           r'|\b(?:claude|codex)\s+#?\d+\b|\b[0-9a-f]{8}-[0-9a-f]{4}-|\b[0-9a-f]{12,}\b', re.I)),
     ('effort', re.compile(r'\b(?:effort|reasoning|thinking)\b'
                           r'|\bmodel\s+[\w.-]+\s+(?:x?high|medium|low|max|maximum|minimal)\b', re.I)),
-    ('unsupported', re.compile(r'\bas\s+(?:root|admin\w*|sudo|another\s+user)\b|\bsudo\b'
+    ('unsupported', re.compile(r'\bas\s+(?:root|admin\w*|sudo|another\s+user)\b|\bsudo\b|\byourself\b'
                                r'|\b(?:memory|ram|cpus?|gpus?|priority)\b', re.I)),
     ('count', re.compile(r'\b(?:five|six|seven|eight|nine|ten|dozen|[5-9]|\d{2,})\s+(?:new\s+|more\s+)?'
                          r'(?:claude\s+|codex\s+)?(?:sessions|instances|agents|copies|panes|tabs|times)\b', re.I)),
     ('title', re.compile(r'\b(?:[Cc]laude|[Cc]odex)\s+session\s+[A-Z]')),       # "codex session Night Owl"
-    ('resume', re.compile(r'\b(?:resum|restart|continu|reopen|re-open|reattach|revive)\w*', re.I)),
+    ('resume', re.compile(r'\b(?:resum|restart|reopen|re-open|reattach|revive)\w*'
+                          r'|(?<!\bi\s)(?<!\bwe\s)(?<!\byou\s)\bcontinu\w*', re.I)),       # not "before I continue"
     ('flag', re.compile(r'(?<![\w-])--[a-z]', re.I)),
     ('title', re.compile(r'\btitled?\b|\b(?:tab|session|agent|pane|window|instance|one)\s+(?:named|called|label+ed)\b',
                          re.I)),
@@ -477,6 +478,13 @@ WALK_LIMITS = (
     ('not meant', re.compile(r'\b(?:suppos\w*|imagin\w*|hypothetical\w*|pretend\w*|theoretical\w*|thought\s+experiment|'
                              r'example|sample|tutorial|documentation|manual|readme|quot\w+|says|said|status)\b',
                              re.I)),
+    ('negated', re.compile(r"\b(?:don'?t|do\s+not|never|refrain\s+from|avoid|no\s+need\s+to)\s+(?:\w+\s+){0,2}?"
+                           r"(?:start|launch|open|messag|tell|send|wait|run|spin|ping|bring|fire|boot|summon|spawn)\w*",
+                           re.I)),     # "don't start codex", not "don't do anything else, just wait"
+    ('later', re.compile(r'\bin\s+(?:an?|one|two|three|five|ten|fifteen|twenty|thirty|a\s+few|a\s+couple\s+of|\d+)\s+'
+                         r'(?:more\s+)?(?:seconds?|secs?|minutes?|mins?|hours?|hrs?|days?|weeks?)\b'
+                         r'|\bafter\s+(?:lunch|dinner|breakfast|the\s+meeting|work|standup)\b'
+                         r'|\bthis\s+(?:afternoon|evening|morning)\b|\b(?:later|soon)\b', re.I)),
     ('past', re.compile(r'\b(?:yesterday|ago|earlier|previously|last\s+(?:week|night|time|month|year|session))\b'
                         r'|\b(?:i|we|they)\s+(?:already\s+|just\s+)?(?:started|launched|opened|messaged|told|sent|waited|'
                         r'kicked|relayed|pinged|ran|asked)\b|\b(?:talked|discussed|spoke|mentioned)\b', re.I)),
@@ -486,7 +494,7 @@ WALK_PLACE = {**PLACE_WORD, 'up': re.compile(PLACE_WORD['up'].pattern + r'|\bupw
               'down': re.compile(PLACE_WORD['down'].pattern + r'|\bdownwards?\b', re.I)}
 WALK_SPLIT = re.compile(r'\b(?:split|pane|beside|side|vertical(?:ly)?|horizontal(?:ly)?)\b', re.I)
 # Each join, list mark or new sentence allows one more operation.
-WALK_JOIN = re.compile(r'(?:[,;:]\s*)?(?:\b(?:and|then|also|plus|afterwards|next|after\s+that|finally|lastly)\b[\s,]*)+'
+WALK_JOIN = re.compile(r'(?:[,;:]\s*)?(?:\b(?:and|then|also|plus|but|afterwards|next|after\s+that|finally|lastly)\b[\s,]*)+'
                        r'|[,;:]|\s-\s|[.!?]\s+(?=\S)|(?<!\S)\(?\d[.)](?=\s)', re.I)
 # A clause that is only courtesy asks for nothing; one that names an agent, an application, a copied span or
 # an operation's verb is expected to be an operation of its own.
@@ -503,7 +511,7 @@ WALK_VERBS = re.compile(r'(?:start|launch|open|run|wait|hold|hang|pause|block|te
                         r'pass|let|give|spin|fire|boot|bring|pull|show|summon|spawn|kick|hand|nudge|loop|check|put|get|'
                         r'begin|notify|inform|ask|have|keep|stand|sit|need|want|like|write|load|view|display|fetch|go|'
                         r'make|create|stay|await|follow|shoot|drop|alert|remind|update|warn|share|leave|hit|fill|'
-                        r'whip|crack|pop)\w*|(?:i|we|i\'\w+|we\'\w+|you|me|my|our|your|us|it|its|it\'s|this|that|these|'
+                        r'whip|crack|pop|post|answer|set|notify|await|relay|ship|tag)\w*|(?:i|we|i\'\w+|we\'\w+|you|me|my|our|your|us|it|its|it\'s|this|that|these|'
                         r'those|the|a|an|and|then|also|plus|so|just|now|kindly|quickly|simply|first|second|third|fourth|'
                         r'next|finally|lastly|after|afterwards|once|one|two|three|four|both|all|each|here|there|over|in|'
                         r'inside|within|at|on|onto|into|with|without|using|under|from|for|to|of|by|as|while|via|split|'
@@ -518,11 +526,11 @@ WALK_ENDED = re.compile(r'\b(?:task|message|text|saying|with|that|this|these|the
 WALK_UNREAD = re.compile(r'(?:^|\s)(?:~/?|\.{1,2}/?|/)(?=[\s.,;!?]|$)|\b(?:in|inside|at|from|under)\s+(?:the\s+)?'
                          r'(?:folder|directory|dir|repo|repository)\s+(?:called\s+|named\s+)?\w+[-._]\w', re.I)
 # The rest after a colon is a text to pass on only when what comes before it says so.
-WALK_TAIL = re.compile(r'\b(?:tell|message|send|ping|say|relay|forward|pass|know|inform|notify|write|ask|nudge|loop|'
+WALK_TAIL = re.compile(r'(?<![\w-])(?:tell|message|send|ping|say|relay|forward|pass|know|inform|notify|write|ask|nudge|loop|'
                        r'remind|update|hear|note|reply|text|dm|word|task|job|start|launch|open|spin|fire|boot|bring|'
-                       r'summon|spawn|kick|hand|give|new|fresh|run|get|put)\w*', re.I)
-WALK_ASKS = re.compile(r'\b(?:tell|message|send|ping|say|relay|forward|pass|know|inform|notify|write|ask|nudge|'
-                       r'remind|reply|text|dm)\w*', re.I)
+                       r'summon|spawn|kick|hand|give|new|fresh|run|get|put|post|answer|heads-up)\w*', re.I)
+WALK_ASKS = re.compile(r'(?<![\w-])(?:tell|message|send|ping|say|relay|forward|pass|know|inform|notify|write|ask|nudge|'
+                       r'remind|reply|text|dm|post|answer)\w*', re.I)
 # "Open codex in x: ...": a request that begins with a launch verb and an agent begins with that launch.
 WALK_LAUNCH = re.compile(r'^\W*(?:please\s+|hey\s+|ok\s+)?(?:open|start|launch|spin\s+up|fire\s+up|boot(?:\s+up)?|bring\s+up|'
                          r'run|summon|spawn|kick\s+off)\s+(?:up\s+)?(?:a\s+|an\s+)?(?:new\s+|fresh\s+)?(?:claude|codex)\b',
@@ -536,7 +544,35 @@ WALK_LATER = re.compile(r'\b\d{1,2}(?::\d\d)?\s*(?:am|pm)\b|\b(?:tonight|tomorro
 WALK_NOT_PLACES = {'other', 'another', 'previous', 'last', 'next', 'usual', 'default', 'original', 'old'}
 WALK_ALONE = re.compile(r'(?:/|~/|\./|\.\./)\S*')       # a colon's rest that is only a path is no message
 WALK_FIELD = re.compile(r'\b(?:directory|dir|folder|path|cwd|location|split|place|side|model)\s*:', re.I)
+# A session named by its pane: the agent named right before it ("the Codex agent in pane 9") is that
+# session's agent. Kilix pane spans are found by targets(); these read only the words around them.
+WALK_BOUND = re.compile(r'\b(claude|codex|grok)\b(?:\'s)?\s+(?:(?:session|agent|instance|cli)\s+)?'
+                        r'(?:(?:that\'s\s+|that\s+is\s+|sitting\s+|running\s+|working\s+)?(?:in|on|at|inside)\s+)?'
+                        r'(?:kilix\s+)?pane\s+([1-9][0-9]{0,8})\b', re.I)
+# "from pane 4, tell pane 9": the request says who sends, which Ask cannot claim.
+WALK_SENDER = re.compile(r'\b(?:from|as|i\'m|i\s+am|this\s+is|we\'re|on\s+behalf\s+of)\s+(?:the\s+\w+\s+)?'
+                         r'(?:(?:session|agent)\s+)?(?:in\s+)?(?:kilix\s+)?pane\s+\d', re.I)
+# "the same pane", "that pane": a reference back to the one pane named; any other pane without its number
+# ("the pane on the left", "my other pane") names no target.
+WALK_SAME_PANE = re.compile(r'\b(?:the\s+same|that|this|the|its|that\s+same)\s+pane\b', re.I)
+# A pane named without its number ("the pane on the left", "my other pane"), unlike a place for a new
+# session ("codex in a pane above").
+WALK_THAT_PANE = re.compile(r'\b(?:the|my|that|this|our|your|its|other|their)\s+(?:(?:left|right|top|bottom|upper|lower|'
+                            r'other|same|last|first|second|next|previous|middle)\s+)?panes?\b', re.I)
+# A text is a task or a message by the words just before it ("with the task '...'", "tell it: ...").
+WALK_AS_TASK = re.compile(r'(?<![\w./~-])(?:task|job|assignment|to-do|todo)\b', re.I)
+WALK_AS_MESSAGE = re.compile(r'(?<![\w./~-])(?:message|tell|telling|told|say|saying|send|sending|post|ping|relay|forward|'
+                             r'note|answer|reply|heads-up|know|word|line|remind|notify|nudge|pass|ask|inform)\w*\b',
+                             re.I)
+# "right here", "right now": no direction.
+WALK_RIGHT_AWAY = re.compile(r'\bright\s+(?=(?:here|now|away|there|then|off|after|before)\b)', re.I)
 WALK_CHECK = 0.5        # the plan must win the ranking against its near misses with at least these odds
+# Model names after "on", "with" or "using" that no tool takes ("summon claude on haiku").
+WALK_MODEL_WORD = re.compile(r'haiku|fable|sonnet\S+|opus\S+|claude-\S+|gpt\S*|o\d\S*|gemini\S*|llama\S*|qwen\S*|'
+                             r'mistral\S*|deepseek\S*|grok\S*|codex-\S+|mini|nano|turbo', re.I)
+WALK_FILE = re.compile(r'\b[\w-]+\.(?:txt|md|csv|json|ya?ml|py|js|ts|log|docx?|rtf|png|jpe?g|html?)\b', re.I)
+WALK_IT = re.compile(r'\b(?:it|its|that\s+one|that\s+session|the\s+session)\b', re.I)
+WALK_VERIFY = 0.7       # the yes/no check, for a plan with no near miss to rank it against
 WALK_NEAR = 7           # near misses ranked against the plan, at most
 WALK_DONE = 'nothing more: the operations already planned are everything the request asks for'
 WALK_OTHER = ('something that none of these can do, such as stopping, closing, deleting, editing, typing, '
@@ -559,6 +595,10 @@ def _unasked(clause):
     if not head or re.search(r'\d', clause[:head.start()]):
         return False
     word = head.group(0)
+    if re.match(r"\s+(?:is|are|was|were|has|have|had|looks|seems|got)\b", clause.replace(_GONE, ' ')[head.end():]):
+        return False        # "p99 is back under 200ms": a statement, not something asked for
+    if word.lower() in ('run', 'execute'):
+        return True         # "run git push": with no agent or application named, a command the tools do not run
     return not (WALK_VERBS.fullmatch(word) or word.lower().endswith(('ing', 'ed')) or WALK_COURTESY.fullmatch(word))
 
 
@@ -567,17 +607,43 @@ def walk_refuses(request):
     mentions, texts, models, masked, plain = _scan(request)
     paths = list(dict.fromkeys(mentions))
     agents, apps, _directions = _named(paths, plain)
-    if not (agents or apps):
+    panes = targets(request)
+    if not (agents or apps or panes):
         return 'unnamed'
     if NOT_NOW.search(plain):
         return 'conditional'
-    why = walk_limit(plain) or ('target' if agents and re.search(r'\bwindows?\b', plain, re.I) else None)
+    why = _walk_panes(request, masked, plain, panes)
     if why:
         return why
+    typed = masked
+    for path in sorted(paths, key=len, reverse=True):
+        if re.search(r'[/~.]', path):       # a path as typed, not a word the copier took for a name
+            typed = typed.replace(path, ' ')
+    why = (walk_limit(plain) or ('target' if agents and re.search(r'\bwindows?\b', plain, re.I) else None)
+           or next((why for why, cue in WALK_LIMITS if why in ('negated', 'later') and cue.search(typed)), None))
+    # (the copier may take "messaging" or "hour" for a name: those two read the words as typed)
+    if why:
+        return why
+    words = plain.replace(_GONE, ' ').strip()
+    polite = re.match(r'\W*(?:(?:hey|hi|hello|ok|okay|so|please|um)\W+)*(?:could|would|can|will|may)\s+(?:you|i|we|u)\b',
+                      words, re.I)
+    if words.endswith('?') and not polite or re.match(r'\W*(?:is|are|was|were|has|had|did|am)\b', words, re.I):
+        return 'question'           # "is the codex in pane 9 done?", not "could you bring up claude ...?"
+    if apps and WALK_FILE.search(plain):
+        return 'unsupported'        # "open notes.txt in the notepad": a file no tool opens there
+    first = WALK_IT.search(plain)
+    if len(agents) == 2 and first and all(cue.search(plain[:first.start()]) for cue in AGENT_CUE.values()):
+        return 'ambiguous'          # "start claude and codex, then tell it ...": which one
     allowed = {model for names in contract._MODELS.values() for model in names}
+    cued = [found.group(1).rstrip('.,:') for found in MODEL_CUE.finditer(plain)]     # "with o3", "using 4o"
+    if any(WALK_MODEL_WORD.fullmatch(name) and name.lower() not in allowed for name in cued):
+        return 'model'      # "claude on haiku": a model outside the four
     if (any(name.rstrip('.,:') not in allowed for name in MODEL_SAID.findall(plain))
-            or any(re.search(r'\d', name) and name not in allowed for name in models)):
+            or any(re.search(r'\d', name) and name not in allowed and (re.match(r'[A-Za-z]{2}', name) or name in cued)
+                   for name in models)):
         return 'model'      # a model the grammar cannot carry, and leaving it out changes the request
+    if any(re.fullmatch(r'#\S*|\d+', path) for path in paths):
+        return 'target'     # "the codex agent in #2207": a number, not a directory
     if WALK_LATER.search(masked) or any(path.lower() in WALK_NOT_PLACES for path in paths):
         return 'later' if WALK_LATER.search(masked) else 'unnamed place'
     rest = request[request.find(':') + 1:].strip() if ':' in request else ''
@@ -586,14 +652,78 @@ def walk_refuses(request):
     before = request[:request.find(':')] if rest in texts else ''
     if before and (not WALK_TAIL.search(before) or rest.endswith('?') and not WALK_ASKS.search(before)):
         return 'unread text'        # nothing before the colon says the rest is a message or a task
-    directions = {place for place, cue in WALK_PLACE.items() if cue.search(plain)}
-    if WALK_SPLIT.search(plain) and not directions and agents:
+    directions = _walk_directions(plain)
+    if WALK_SPLIT.search(WALK_SAME_PANE.sub(' ', plain) if panes else plain) and not directions and agents:
         return 'unplaced'   # a split, but not on which side
     if WALK_ENDED.search(request) or WALK_UNREAD.search(plain):
         return 'cut off'
     if any(_unasked(clause) for clause in WALK_JOIN.split(plain) if clause):
         return 'unsupported'
     return None
+
+
+def _walk_bound(masked):
+    """{pane: agent} for each pane the request names together with its agent ("codex in pane 9"),
+    and the spans of those mentions; None when one pane is given two agents."""
+    bound, at = {}, []
+    for found in WALK_BOUND.finditer(masked):
+        agent, pane = found.group(1).lower(), found.group(2)
+        if bound.setdefault(pane, agent) != agent:
+            return None, at
+        at.append(found.span())
+    return bound, at
+
+
+def _walk_panes(request, masked, plain, panes):
+    """Why a request that names a pane, or a pane without its number, gets no plan from the walk, or None."""
+    if not panes:
+        beside = re.sub(r'\b(?:below|above|beside|under|over|next\s+to|(?:right|left)\s+of)\s+this\s+pane\b', ' ', plain,
+                        flags=re.I)        # "below this pane" is a place for a new session
+        return 'target' if WALK_THAT_PANE.search(beside) or re.search(r'\bbroker\b', plain, re.I) else None      # "the pane on the left", "my other pane"
+    if WALK_SENDER.search(masked):
+        return 'sender'     # "from pane 4, tell pane 9": the pane that sends is no target
+    if re.search(r'\bbroker\b', masked, re.I) and any(found['broker'] is None for found in panes):
+        return 'target'     # a broker the copier cannot take as written (not lowercase hex)
+    unique = {(found['pane'], found['broker']) for found in panes}
+    if len({pane for pane, _ in unique}) < len(unique):
+        return 'target'     # one pane with two brokers, or with and without one
+    if re.search(r'\bpanes?\b', WALK_SAME_PANE.sub(' ', plain), re.I) or len(unique) > 1 and WALK_SAME_PANE.search(plain):
+        return 'target'     # a pane not named by its number, or "the same pane" with two to choose from
+    bound, at = _walk_bound(masked)
+    if bound is None:
+        return 'target'
+    free = masked
+    for start, end in reversed(at):
+        free = free[:start] + ' ' * (end - start) + free[end:]
+    if any(cue.search(free) for agent, cue in AGENT_CUE.items() if agent in bound.values()):
+        return 'target'     # "tell claude in pane 2: x; then wait for claude": the second may be the first
+    if 'grok' in bound.values():
+        return 'other agent'        # the rules hold an agent to claude or codex
+    return None
+
+
+def _walk_directions(plain):
+    """The directions the request says, without the "right" of "right here" or "right now"."""
+    directions = {place for place, cue in WALK_PLACE.items() if cue.search(plain)}
+    if 'right' in directions and not WALK_PLACE['right'].search(WALK_RIGHT_AWAY.sub(' ', plain)):
+        directions.discard('right')
+    return directions
+
+
+def _walk_role(request, text):
+    """'task' or 'message' when the words just before a text say which it is, else None."""
+    at = request.find(text)
+    before = request[max(0, at - 48):max(at, 0)]
+    task = [found.end() for found in WALK_AS_TASK.finditer(before)]
+    message = [found.end() for found in WALK_AS_MESSAGE.finditer(before)]
+    if not (task or message):
+        return None
+    return 'task' if (task[-1] if task else -1) > (message[-1] if message else -1) else 'message'
+
+
+def _walk_order(calls, plain):
+    """_in_order(), except that a plan naming a pane keeps the order it was asked in."""
+    return calls if any('pane' in call['arguments'] for call in calls) else _in_order(calls, plain)
 
 
 def _walk_clauses(plain):
@@ -616,10 +746,10 @@ def _walk_owed(calls, paths, mentions, again):
     return owed, max(extra, 0)
 
 
-def _variants(calls, paths=(), directions=()):
+def _variants(calls, paths=(), directions=(), panes=()):
     """Near misses of a plan: one operation fewer, one argument dropped, the
-    other agent, two operations swapped, a directory or direction moved or
-    exchanged. Each is a list of calls."""
+    other agent, two operations swapped, a directory, direction or pane moved
+    or exchanged. Each is a list of calls."""
     out = []
     def with_arg(number, key, value):
         args = {name: item for name, item in calls[number]['arguments'].items() if name != key}
@@ -627,7 +757,13 @@ def _variants(calls, paths=(), directions=()):
             args[key] = value
         return calls[:number] + [{'name': calls[number]['name'], 'arguments': args}] + calls[number + 1:]
     for number, call in enumerate(calls):
-        if call['name'] != 'open_app':
+        if 'pane' in call['arguments']:
+            for target in panes:
+                if target['pane'] != call['arguments']['pane']:
+                    args = {key: value for key, value in call['arguments'].items() if key not in ('pane', 'broker')}
+                    args.update({key: value for key, value in target.items() if value is not None})
+                    out.append(calls[:number] + [{'name': call['name'], 'arguments': args}] + calls[number + 1:])
+        elif call['name'] != 'open_app':
             for path in paths:
                 if call['arguments'].get('directory') != path:
                     out.append(with_arg(number, 'directory', path))
@@ -676,10 +812,18 @@ def walk(request, choose):
     paths = list(dict.fromkeys(mentions))
     full, base = _frames(request, masked, texts)
     agents, apps, _directions = _named(paths, plain)
-    directions = {place for place, cue in WALK_PLACE.items() if cue.search(plain)}
+    directions = _walk_directions(plain)
+    panes = []      # each pane named, once, as targets() gives it
+    for found in targets(request):
+        if found not in panes:
+            panes.append(found)
+    bound = _walk_bound(masked)[0] or {} if panes else {}
+    free = [agent for agent in agents if agent not in bound.values()]     # agents not named by a pane
+    roles = {text: _walk_role(request, text) for text in texts}
     offered = {name: text for name, text in OPERATIONS.items() if
-               (name.startswith('start_') and name.split('_')[1] in agents)
-               or (name == 'wait_for_agent' and agents) or (name == 'message_agent' and agents and texts)
+               (name.startswith('start_') and name.split('_')[1] in free)
+               or (name == 'wait_for_agent' and (free or panes))
+               or (name == 'message_agent' and (free or panes) and any(roles[text] != 'task' for text in texts))
                or (name == 'open_app' and apps)}
     allowed = {model for names in contract._MODELS.values() for model in names}
     said = [name.rstrip('.,:') for name in MODEL_SAID.findall(plain)]
@@ -744,7 +888,24 @@ def walk(request, choose):
             return refused('operation')     # an unsupported action refuses the whole request
         this = f'the {ORDINALS[number]} operation, to {OPERATIONS[name]}'
         args = {}
-        if name in ('wait_for_agent', 'message_agent'):
+        if name in ('wait_for_agent', 'message_agent') and panes:
+            # "Which session": each pane named, and each agent named without one.
+            sessions = {f"pane {found['pane']}": f"the session in pane {found['pane']}"
+                        + (f", a {AGENTS[bound[found['pane']]]} session" if bound.get(found['pane']) in AGENTS else '')
+                        for found in panes}
+            sessions.update({agent: f'the {AGENTS[agent]} session not named by a pane' for agent in free})
+            key = (fixed('session', next(iter(sessions))) if len(sessions) == 1 else
+                   ask('session', state, f'Which session is {this} about?', sessions))
+            if key in AGENTS:
+                args['agent'] = key
+            else:
+                target = next(found for found in panes if f"pane {found['pane']}" == key)
+                if bound.get(target['pane']):
+                    args['agent'] = bound[target['pane']]
+                args['pane'] = target['pane']
+                if target['broker']:
+                    args['broker'] = target['broker']
+        elif name in ('wait_for_agent', 'message_agent'):
             args['agent'] = (fixed('agent', agents[0]) if len(agents) == 1 else
                              ask('agent', state, f"Which agent's session is {this} about?",
                                  {agent: AGENTS[agent] for agent in agents}))
@@ -761,7 +922,7 @@ def walk(request, choose):
                             owed[0][0] if last and len(owed) == 1 else None)
                 if path:
                     args['file_path'] = path
-        else:
+        elif 'pane' not in args:        # a session named by its pane has no directory
             owed, extra = _walk_owed(calls, dirs, mentions, again)
             fix = owed[0][0] if len(dirs) == 1 and owed and last else None
             if fix is None and len(dirs) == 1 and extra and last:
@@ -787,18 +948,29 @@ def walk(request, choose):
                          mine[0] if len(mine) == 1 and last else None)      # a model named is always used
             if model:
                 args['model'] = model
+            tasks = [text for text in left if roles[text] != 'message']     # never a text said to be a message
             task = span('task', whole, f'Which text is the task that the new session of {this} should be given?',
-                        left, 'none: the request gives it no task',
-                        left[0] if len(left) == 1 and last else None)
+                        tasks, 'none: the request gives it no task',
+                        tasks[0] if len(tasks) == 1 and len(left) == 1 and last else None)
             if task:
                 args['task'] = task
         if name == 'message_agent':
-            args['text'] = span('text', whole, f'Which text is the message for {this}?', left or texts, None, None)
-        calls.append({'name': name, 'arguments': args})
+            said_ = [text for text in left or texts if roles[text] != 'task']     # never a text said to be a task
+            if not said_:
+                return refused('text')
+            args['text'] = span('text', whole, f'Which text is the message for {this}?', said_, None, None)
+        call = {'name': name, 'arguments': args}
+        if call in calls and refusal(request, calls) is None:
+            steps.append({'kind': 'fixed', 'pick': 'done=repeat', 'p': 1.0, 'odds': {}})
+            break       # the same call again, once the plan is whole: nothing more was asked
+        calls.append(call)
     if len({_identity(call) for call in calls}) < len(calls):
         return refused('repeated')      # the same operation twice is a misread "and", never a plan
     if _left_out(calls, paths, texts, directions):
         return refused('unused')        # the request names something the plan leaves out
+    mentioned = [found['pane'] for found in targets(request)]
+    if any([call['arguments'].get('pane') for call in calls].count(pane) < mentioned.count(pane) for pane in mentioned):
+        return refused('unused')        # a pane named twice is meant twice ("wait on pane 7, then tell pane 7 ...")
     if any(name not in [call['arguments'].get('model') for call in calls] for name in said + models
            if name in allowed):
         return refused('unused')        # a model the request names is never left out
@@ -806,12 +978,12 @@ def walk(request, choose):
            for call in calls]
     if len(agents) == 2 and WALK_BOTH.search(plain) and min(map(who.count, agents)) < 2:
         return refused('unused')        # "both" asks for one more operation on each of the two agents
-    calls = _in_order(calls, plain)
+    calls = _walk_order(calls, plain)
     if refusal(request, calls):
         return refused('rules')         # suggest() would refuse it: no need to ask about it
     # The near misses that are plans in their own right (the rules allow them too) compete with it.
-    near = [plan for plan in _variants(calls, dirs, sorted(directions))
-            if _in_order(plan, plain) == plan and refusal(request, plan) is None][:WALK_NEAR]
+    near = [plan for plan in _variants(calls, dirs, sorted(directions), panes)
+            if _walk_order(plan, plain) == plan and refusal(request, plan) is None][:WALK_NEAR]
     if near:
         ranked = sorted([calls] + near, key=lambda plan: '; then '.join(describe(call) for call in plan))
         options = {str(number): '; then '.join(describe(call) for call in plan)
@@ -824,7 +996,7 @@ def walk(request, choose):
             return refused('check')
     else:       # nothing to rank it against: the yes/no check
         ask('verify', full + "\n\nThe assistant's plan:\n" + plan_text(calls), VERIFY_QUESTION, VERIFY_OPTIONS)
-        if steps[-1]['odds'].get('yes', 0.0) < VERIFY:
+        if steps[-1]['odds'].get('yes', 0.0) < WALK_VERIFY:
             return refused('verify')
     return calls, steps
 
