@@ -235,3 +235,17 @@ A red-team set of 150 must-not-act requests in this style found 7 wrong
 actions, all of them in the fixed shapes before this change: 6 client
 commands sent as messages and 1 question sent as a launch task. All 150 are
 now refused.
+
+## Measured blind, with pane targets, 2026-11-24
+
+With unquoted payloads and pane targets together, frozen, on three sets
+nobody working on the grammar had seen (a ninth set of 100; 300 harder
+requests from three authors; 124 real requests set aside beforehand and
+labelled by two readers), each run once: the grammar acted on 186 of 342
+supported requests, none wrongly, and on none of the 182 that must not act.
+On the same requests the grammar before these two changes acted on 118, three
+of them wrongly (`exit` and `!make clean` sent as messages). Of the 60 real
+requests the tools can express it reads 58, where it read 47. What it leaves
+unread on the harder set is mostly what that set was written for: no verb,
+references, lists, steps sharing one directory. See
+[ask-suggestions.md](ask-suggestions.md) for what a suggestion adds there.

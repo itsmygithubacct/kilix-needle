@@ -311,6 +311,48 @@ two:
 
 ## Measured, 2026-11-24
 
+### Both plan sources behind the grown grammar, blind
+
+After the grammar learned unquoted payloads and pane targets, and both plan
+sources were reworked for what it leaves unread, the code was frozen and
+three sets were made that nobody working on it had seen: a ninth set of 100
+requests like the seventh and eighth (12 of its supported requests name a
+pane); 300 harder requests from three authors (no verb, references, one
+directory for several steps, three and four steps, lists, long unquoted
+messages, panes), 210 supported and 90 that must not act, each author's labels
+checked by a second reader; and 124 real requests set aside beforehand,
+labelled by two readers who agreed on them (4 more that every reader called
+ambiguous were dropped). Each workflow ran once. "Before" is the code of the
+eighth set.
+
+| Set | Before: grammar | with built sentence | Now: grammar | with built sentence | with walk |
+|---|---|---|---|---|---|
+| ninth, 100 | 78 | 80 | 86 | 93 | 92 |
+| harder, 300 | 105 | 145 | 160 | 223 | 204 |
+| real, 124 | 111 | 105 | 122 | 121 | 121 |
+| all, 524 | 294 | 330 | 368 | 437 | 417 |
+
+- The grammar now acted on 186 requests, none wrongly, and left all 182
+  must-not-act requests alone. The earlier grammar sent `exit` and `!make
+  clean` as messages (3 wrong actions on the harder set); the rule against
+  client commands stops those.
+- On the 338 requests the grammar does not read, the built sentence offered
+  73 suggestions (71 right) at 0.53 questions per request, the walk 52 (50
+  right) at 1.87. Each made 2 wrong suggestions. The built sentence was right
+  on 26 requests where the walk was not, the walk on 6 where the built
+  sentence was not (exact McNemar, p = 0.0005). The built sentence stays the
+  default plan source; the walk can still be chosen (`plan=walk`).
+- The wrong suggestions: the built sentence offered a message for a report of
+  one already sent ("I have already told pane 839 on broker ...: ..."); the
+  walk left out a model given in brackets ("claude (sonnet)"); and both
+  offered one real request whose pane was written without a space, which the
+  copier took for a directory name.
+- On the real requests the earlier code made 12 suggestions, all wrong (a
+  pane, an effort or a model dropped). Now the grammar reads 58 of the 60 the
+  tools can express, and one suggestion is made.
+- Seven requests of the ninth set and two of the harder set equal an earlier
+  request word for word (short ones such as "open the calculator").
+
 ### The grammar and the built sentence together, blind
 
 Two sets of 100 requests (72 supported, 28 that must not act), each written

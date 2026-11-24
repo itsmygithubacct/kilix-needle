@@ -51,6 +51,13 @@ kilix-needle (0.20261116+packaging8) UNRELEASED; urgency=medium
     ... in pane N to finish what it's doing".
   * Refuse "start codex in DIR, then wait for the codex": the wait may mean
     the new session or another one here.
+  * Suggestions: the built sentence gives no plan to a request whose words
+    the tools cannot say (a tab or session number, an effort, another agent,
+    a time, a negation, an extra action), counts the steps a request states,
+    keeps each directory with its own clause, and can name a session by its
+    pane. The walk asks step by step until nothing is left, skips a question
+    the request's words already answer, and ranks its plan against near
+    misses; it stays selectable. See docs/ask-suggestions.md.
 
  -- itsmygithubacct <itsmygithubacct@users.noreply.github.com>  Tue, 24 Nov 2026 08:50:00 +0000
 
