@@ -106,3 +106,10 @@ requests it misses, 4 name a model outside the contract and 7 use wordings
 no frame has yet: a request with no verb ("Codex please, left split, in
 x-y"), "would you kindly", "sit and wait until", "reply to", "show me ... in
 the PDF viewer", and "that same Claude".
+
+On two further sets, each written after the code was frozen and run once
+(100 requests, 72 supported, 28 must not act): 20 read before and 55 after on
+the first, 20 and 53 on the second, no wrong action, and all 56 must-not-act
+requests refused. Of the 19 supported requests still unread on the second, a
+[suggestion](ask-suggestions.md) covers 12, and the other 7 name a model
+outside the contract or give a PDF by a relative path.

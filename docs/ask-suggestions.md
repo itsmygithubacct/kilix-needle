@@ -12,8 +12,7 @@ kilix-needle ask --plan "Start Claude and Codex, both in ~/work/fig-lantern"
 
 The grammar itself reads most of the wordings a suggestion used to be needed
 for ("Run Codex in dusk-ferry in a split below" is now planned directly); see
-[Ask phrasing](ask-phrasing.md). The measurements below were made before that
-and describe the suggestions alone.
+[Ask phrasing](ask-phrasing.md). A suggestion is now for what is left.
 
 ## The setting
 
@@ -121,6 +120,31 @@ sets.
 
 ## Measured, 2026-11-24
 
+### The grammar and the built sentence together, blind
+
+Two sets of 100 requests (72 supported, 28 that must not act), each written
+by an author who saw only the tool schema and the scorer, with labels checked
+by a second reader, after the code was frozen; each was run once. "Before" is
+the grammar as it was, alone and with `d3:2b`'s walk; "now" is the grammar
+with frames, alone and with `d3:2b` building the sentence. For the seventh
+set the two halves were still separate and their recorded runs were put
+together; the eighth ran this code as it is.
+
+| Set | Before: grammar | with `d3:2b` | Now: grammar | with `d3:2b` | Suggestions | Wrong | Questions per request |
+|---|---|---|---|---|---|---|---|
+| seventh | 48 | 91 | 83 | 92 | 9 | 0 | 0.57 |
+| eighth | 48 | 86 | 81 | 93 | 12 | 0 | 0.51 |
+
+No wrong action and no wrong suggestion on either set, and all 56
+must-not-act requests left alone. The walk asked 3.9 and 3.6 questions per
+request on the same sets. On the eighth set the present code answers 7
+requests the earlier one did not and loses none (exact McNemar, p = 0.016).
+All 7 supported requests it still misses there name a model the contract does
+not admit or give a PDF by a relative path.
+
+The sections below were measured before the grammar grew and describe the
+suggestions alone.
+
 ### The built sentence against the walk
 
 Not blind: the six sets below shaped the rules of both, and the walk's
@@ -154,7 +178,7 @@ and Needle3 command models.
 
 These are the walk's results, before the built sentence replaced it. Sixth
 set, blind: the code was frozen before the set was written and it was run
-once. The built sentence has not had a blind set yet.
+once.
 
 | Setting | Selected model | Answered | Suggestions | Right | Wrong |
 |---|---|---|---|---|---|
@@ -201,9 +225,10 @@ has already been made. A decision model adds its questions.
 
 ## Limits
 
-- No setting made zero wrong suggestions on both blind sets. That is why a
-  suggestion is offered and never run, and why the setting is off unless
-  chosen.
+- No setting made zero wrong suggestions on both the fifth and the sixth
+  blind set. The two later sets had none, but with the grammar reading more
+  they hold only 21 suggestions between them, too few to change the rule: a
+  suggestion is offered and never run, and the setting is off unless chosen.
 - An unsupported second action joined with `and` can get through a decision
   model alone, as above. Agreement with a command model caught it.
 - `it` for an agent's session in a directory named earlier is not followed
