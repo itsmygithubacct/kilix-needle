@@ -21,6 +21,14 @@ kilix-needle (0.20261116+packaging8) UNRELEASED; urgency=medium
     A message or task read this way must be quoted, and the whole request
     must also pass the rules suggestions are held to. See
     docs/ask-phrasing.md.
+  * Let Ask wait for or message a session named by its Kilix pane ("tell
+    pane 143: ...", "the Codex session in pane 9", "pane 32 on broker
+    <id>"). Before anything is typed the pane must exist, have the broker
+    the request names, and hold a live coding-agent session of the named
+    agent in a state that takes the message; a shell, an editor or a tmux
+    client is refused. The tool schema the command models use is
+    unchanged, and their proposals cannot carry a pane. See
+    docs/ask-pane-targets.md.
 
  -- itsmygithubacct <itsmygithubacct@users.noreply.github.com>  Tue, 24 Nov 2026 08:50:00 +0000
 

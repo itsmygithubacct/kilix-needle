@@ -506,3 +506,125 @@ class CommandGrammar(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class PaneTargets(unittest.TestCase):
+    """A wait or message may name its session by Kilix pane (grammar-only
+    arguments); the runner verifies the pane before anything is typed."""
+    BROKER = '0c9e1f2a3b4d5e6f'
+
+    def check(self, request, wanted):
+        self.assertEqual(contract.exact_calls(request), wanted, request)
+        self.assertTrue(contract.admit(request, wanted).actions, request)
+
+    def test_pane_messages_said_the_ways_agents_say_them(self):
+        text = 'the fixture rebuild is done; rerun step 4 in /tmp/sandpiper-bay and report.'
+        for head, target in (
+                ('Tell pane 812', {'pane': '812'}),
+                ('Send this message to the Codex session in Kilix pane 77', {'agent': 'codex', 'pane': '77'}),
+                ('Send a message to the existing Codex agent in pane 39', {'agent': 'codex', 'pane': '39'}),
+                ('Message the session in pane 7', {'pane': '7'}),
+                ('tell the coding agent in pane 31', {'pane': '31'}),
+                ('Tell Claude in pane 2', {'agent': 'claude', 'pane': '2'}),
+                ('tell claude code in pane 2', {'agent': 'claude', 'pane': '2'}),
+                ('Tell the grok session in pane 119', {'agent': 'grok', 'pane': '119'}),
+                ('Message existing agent pane 32 broker ' + self.BROKER, {'pane': '32', 'broker': self.BROKER}),
+                ('Tell existing Codex pane 544 broker ' + self.BROKER, {'agent': 'codex', 'pane': '544', 'broker': self.BROKER}),
+                ('tell pane 32 on broker ' + self.BROKER, {'pane': '32', 'broker': self.BROKER}),
+                ('Send this message to the existing agent in pane 32, broker ' + self.BROKER, {'pane': '32', 'broker': self.BROKER}),
+                ('message the claude session in pane 4 (broker ' + self.BROKER + ')',
+                 {'agent': 'claude', 'pane': '4', 'broker': self.BROKER}),
+                ('tell the agent in pane 32 with broker session ' + self.BROKER, {'pane': '32', 'broker': self.BROKER})):
+            with self.subTest(head=head):
+                self.check(head + ': ' + text, [call('message_agent', **target, text=text)])
+        self.check('Send a message to the existing agent in pane 32 with broker session ' + self.BROKER + '. Message: ' + text,
+                   [call('message_agent', pane='32', broker=self.BROKER, text=text)])
+
+    def test_quoted_and_short_forms(self):
+        self.check("message pane 59 'hello'", [call('message_agent', pane='59', text='hello')])
+        self.check('Tell pane 498: "Source INCOMPLETE, keep the reader."',
+                   [call('message_agent', pane='498', text='Source INCOMPLETE, keep the reader.')])
+        self.check('tell the codex session in pane 9 "run the tests"',
+                   [call('message_agent', agent='codex', pane='9', text='run the tests')])
+        self.check('send "x" to the session in pane 4', [call('message_agent', pane='4', text='x')])
+        self.check('tell pane 5 to rerun the linter', [call('message_agent', pane='5', text='rerun the linter')])
+
+    def test_pane_waits(self):
+        self.check('wait for pane 5 to finish', [call('wait_for_agent', pane='5')])
+        self.check('wait for the codex session in pane 9', [call('wait_for_agent', agent='codex', pane='9')])
+        self.check('wait until the claude in pane 2 is idle', [call('wait_for_agent', agent='claude', pane='2')])
+        self.check('wait for grok in pane 4 to finish', [call('wait_for_agent', agent='grok', pane='4')])
+        self.check('wait for pane 31 to finish, then tell it "next batch"',
+                   [call('wait_for_agent', pane='31'), call('message_agent', pane='31', text='next batch')])
+        self.check('wait for the codex session in pane 3, then tell it "go"',
+                   [call('wait_for_agent', agent='codex', pane='3'), call('message_agent', agent='codex', pane='3', text='go')])
+
+    def test_what_is_no_pane_target(self):
+        for request in (
+                'tell codex in pane 5 in /tmp/sandpiper-bay: hi',        # a pane and a directory
+                'tell the codex session here in pane 4 "x"',
+                'tell pane 4 "x" in ./sandpiper-bay', 'tell pane 4 "x" here',
+                "wait for pane 4 that's working in ./sandpiper-bay to finish",
+                'tell pane 5 "x" and pane 6 "y"',
+                'tell the grok session in pane 18 and the grok session in pane 19 to say hello',
+                'Tell pane503: hi', 'Tell session 518: hi', 'tell tab 7: hi', 'tell window 3: hi',
+                'tell the codex session in the pane on the left: hi', 'tell my other pane: hi',
+                'Tell pane 503 broker 0C9E1F2A3B4D5E6F: hi',             # a broker id is lowercase hex
+                'Tell pane 503 broker 0c9e1f2a: hi',                     # too short to be one
+                'Tell pane503 broker' + self.BROKER + ' from pane493: hi',
+                'Tell pane 3 from pane 9: hi', 'tell pane 0: hi',
+                'if it is idle, tell pane 4 "x"', 'is pane 7 idle?', 'close pane 7', 'run ls in pane 5',
+                'tell the supervisor in pane 4 to go on',
+                'Message existing Grok pane 377 only. Do not open a new agent. Read the brief.',
+                'tell pane 5:', 'wait for pane 5 for ten minutes', 'wait for pane 5 to ask for approval',
+                'tell pane 5: ' + 'x' * 1025):
+            with self.subTest(request=request):
+                self.assertIsNone(contract.exact_calls(request))
+
+    def test_a_pane_and_an_unpaned_session_of_that_agent_have_no_reading(self):
+        # "wait for claude" may mean the claude in pane 2.
+        self.assertIsNone(contract.exact_calls('tell claude in pane 2: "x"; then wait for claude'))
+        self.assertIsNone(contract.exact_calls('tell pane 2: "x"; then wait for codex'))
+        self.check('start claude here, then tell claude in pane 5: "x"',
+                   [call('start_claude'), call('message_agent', agent='claude', pane='5', text='x')])
+
+    def test_admission_is_complete_and_held_to_the_request(self):
+        request = 'Tell existing Codex pane 544 broker ' + self.BROKER + ': waiters deferred'
+        wanted = contract.exact_calls(request)
+        for changed in ({'pane': '545'}, {'broker': 'f' * 16}, {'agent': 'claude'}, {'text': 'waiters deferred.'}):
+            proposal = [call('message_agent', **{**wanted[0]['arguments'], **changed})]
+            self.assertFalse(contract.admit(request, proposal).actions, changed)
+        dropped = {key: value for key, value in wanted[0]['arguments'].items() if key != 'broker'}
+        self.assertFalse(contract.admit(request, [call('message_agent', **dropped)]).actions)
+        action = contract.admit(request, wanted).actions[0]
+        self.assertEqual((action.kind, action.args),
+                         ('tell', {'pane': '544', 'broker': self.BROKER, 'agent': 'codex', 'text': 'waiters deferred'}))
+        wait = contract.admit('wait for pane 5', [call('wait_for_agent', pane='5')]).actions[0]
+        self.assertEqual((wait.kind, wait.args), ('wait', {'pane': '5', 'for': 'idle'}))
+
+    def test_a_command_model_is_held_to_the_published_tools(self):
+        request = 'tell codex in pane 179: test'
+        wanted = contract.exact_calls(request)
+        self.assertTrue(contract.admit(request, wanted).actions)
+        refused = contract.admit(request, wanted, published=True)
+        self.assertFalse(refused.actions)
+        self.assertEqual(refused.reason, 'unexpected, missing or non-string arguments')
+        # a five-tool proposal is no reading of a pane request
+        self.assertFalse(contract.admit(request, [call('message_agent', agent='codex', text='test')], published=True).actions)
+        # and the published path admits exactly what it did before
+        self.assertTrue(contract.admit('tell codex here: run it', [call('message_agent', agent='codex', text='run it')],
+                                       published=True).actions)
+
+    def test_canonical_form_of_a_pane_target(self):
+        good = [call('message_agent', pane='5', text='x')]
+        self.assertEqual(contract._canonical(good), good)
+        for args in ({'pane': '5', 'directory': '/x', 'text': 'x'}, {'pane': '05', 'text': 'x'},
+                     {'pane': 'five', 'text': 'x'}, {'pane': '5', 'broker': 'XYZ', 'text': 'x'},
+                     {'pane': '5', 'agent': 'kimi', 'text': 'x'}, {'agent': 'grok', 'text': 'x'},
+                     {'agent': 'codex', 'broker': self.BROKER, 'text': 'x'}):
+            with self.subTest(args=args), self.assertRaises(ValueError):
+                contract._canonical([call('message_agent', **args)])
+        with self.assertRaises(ValueError):
+            contract._canonical([call('start_codex', pane='5')])
+        with self.assertRaises(ValueError):
+            contract._canonical(good, published=True)

@@ -88,3 +88,22 @@ class CommandPolicyTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PublishedToolsForModels(unittest.TestCase):
+    """A command model knows only commands-tools.json: a grammar-only pane
+    argument is never admitted from it, so what it proposes is admitted
+    exactly as before the pane target existed."""
+
+    def test_a_model_proposal_with_a_pane_is_refused(self):
+        request = "tell codex in pane 179: test"
+        exact = contract.exact_calls(request)
+        for proposal in (exact, [call("message_agent", agent="codex", text="test")]):
+            for backend in ("needle3", "lfm2"):
+                with self.subTest(backend=backend, proposal=proposal):
+                    model = Mock()
+                    model.decide.return_value = {"calls": proposal}
+                    result = decide(request, backend=backend, grammar_first=False, provider=lambda: model)
+                    self.assertFalse(result.admission.actions)
+        self.assertTrue(decide(request).admission.actions)     # the grammar itself reads it
+

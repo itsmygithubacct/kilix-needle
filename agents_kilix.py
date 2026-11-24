@@ -475,6 +475,67 @@ def find_session(agent: str, directory: Path, *, caller_pane: int | None = None)
     return matches[0]
 
 
+def _foreground(pane: dict) -> str:
+    """The pane's foreground program names, for a refusal's reason."""
+    process = pane.get("process") if isinstance(pane.get("process"), dict) else {}
+    names = [os.path.basename(str(item["argv"][0])) for item in process.get("foreground") or []
+             if isinstance(item, dict) and isinstance(item.get("argv"), list) and item["argv"]]
+    return ", ".join(dict.fromkeys(names)) or str(process.get("name") or "nothing Kilix can name")
+
+
+def find_pane(pane: str, *, agent: str | None = None, broker: str | None = None,
+              caller_pane: int | None = None, snapshot: list | None = None) -> dict:
+    """The coding-agent pane a request names by number, verified; never a guess.
+
+    The pane must exist and not be the caller's own; when the request names a
+    broker, the pane must have exactly that broker; it must hold a live
+    coding-agent session that Kilix reads (`coding_session` with a provider
+    the agents job messages), of the agent the request names when it names
+    one, reporting an absolute working directory and a readable state. A
+    shell, an editor, a tmux client or anything else is refused here, before
+    anything is typed. The caller still checks the state it may send in and
+    binds the broker it observed, as for a session found by directory.
+    """
+    if not isinstance(pane, str) or not re.fullmatch(r"[1-9][0-9]{0,8}", pane):
+        raise AgentsError(f"{pane!r} is not a Kilix pane number")
+    number = int(pane)
+    if caller_pane is None:
+        caller_pane = caller_info()[0]
+    if number == caller_pane:
+        raise AgentsError(f"pane {number} is the pane this request comes from; nothing is typed into it")
+    if snapshot is None:
+        snapshot = _listing(["panes", "list", "--json"]).get("panes", [])
+    found = [item for item in snapshot if isinstance(item, dict) and item.get("pane_id") == number]
+    if not found:
+        raise AgentsError(f"pane {number} is gone: Kilix lists no such pane, so nothing is sent")
+    if len(found) != 1:
+        raise AgentsError(f"Kilix lists pane {number} more than once; nothing is sent")
+    item = found[0]
+    observed = _broker_id(item)
+    if broker is not None and observed != broker:
+        raise AgentsError(f"pane {number} has broker {observed}, not {broker}: it was replaced or the "
+                          "broker id is wrong, so nothing is sent")
+    coding = item.get("coding_session")
+    if not isinstance(coding, dict) or coding.get("state", "live") != "live":
+        program = _foreground(item)
+        extra = ("; an agent inside tmux cannot be read, and nothing is sent into tmux"
+                 if "tmux" in program.split(", ") else "")
+        raise AgentsError(f"pane {number} holds no live coding-agent session that Kilix reads (it runs "
+                          f"{program}){extra}; nothing is typed into it")
+    provider = PROVIDER_AGENT.get(str(coding.get("provider") or ""))
+    if provider is None:
+        raise AgentsError(f"pane {number} runs a coding agent this job does not message "
+                          f"({coding.get('provider')!r}); nothing is sent")
+    if agent is not None and provider != agent:
+        raise AgentsError(f"pane {number} holds a {provider} session, not {agent}; nothing is sent")
+    cwd = coding.get("cwd") or item.get("cwd")
+    if not isinstance(cwd, str) or not Path(cwd).is_absolute():
+        raise AgentsError(f"the session in pane {number} reports no working directory; nothing is sent")
+    if item.get("activity") == "agent":
+        raise AgentsError(_unreadable(provider))
+    return item
+
+
 def _broker_id(pane: dict) -> str:
     broker = pane.get("broker")
     if isinstance(broker, dict):

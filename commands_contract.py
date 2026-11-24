@@ -28,6 +28,28 @@ TOOLS = json.loads(Path(__file__).with_name('commands-tools.json').read_text())
 _SCHEMAS = {tool['name']: tool['parameters'] for tool in TOOLS}
 _PROPERTIES = {name: set(schema['properties']) for name, schema in _SCHEMAS.items()}
 _REQUIRED = {name: set(schema.get('required', ())) for name, schema in _SCHEMAS.items()}
+# Grammar-only arguments (2026-11-24): a wait or a message may name its session
+# by Kilix pane number, optionally with the pane's broker id. commands-tools.json
+# is pinned (compact_model.TOOLS_SHA256, the Needle3 manifest) and is what the
+# command models are prompted with, so it does not change: these arguments exist
+# only in what the grammar itself reads, and a command model's proposal is held
+# to the published tools (admit(published=True)). With a pane, "agent" is
+# optional (the runner names the agent it finds there and checks a named one)
+# and "directory" is not allowed. The runner verifies the pane before anything
+# is typed (agents_kilix.find_pane).
+GRAMMAR_ONLY = {'wait_for_agent': frozenset({'pane', 'broker'}),
+                'message_agent': frozenset({'pane', 'broker'})}
+PANE_AGENTS = ('claude', 'codex', 'grok')
+_PANE_NUMBER = re.compile(r'[1-9][0-9]{0,8}')
+_BROKER_ID = re.compile(r'[0-9a-f]{16,64}')     # Kilix's own agent-control accepts these
+# "pane 143", "Kilix pane 9", with its broker: "pane 32 broker <id>", "on broker
+# <id>", ", broker <id>", "with broker session <id>", "(broker <id>)". The number
+# is copied, never inferred: "pane503", "session 518" or "the pane on the left"
+# is no target. Matched without case, so a broker id is checked again by
+# _BROKER_ID, which takes lowercase hex only.
+PANE_SPAN = (r'\b(?:kilix\s+)?pane\s+(?P<pane>[1-9][0-9]{0,8})(?![\w-]|\.[\w-])'
+             r'(?:\s*,?\s*(?:(?:on|with)\s+)?(?:the\s+)?broker(?:\s+session)?(?:\s+id)?\s+(?P<broker>[0-9a-fA-F]{16,64})(?![\w-]|\.[\w-])'
+             r'|\s*\(\s*broker\s+(?P<paren>[0-9a-fA-F]{16,64})\s*\))?')
 _APPS = set(_SCHEMAS['open_app']['properties']['app']['enum'])
 _APP_WORDS = {"pdf viewer":"kilix-pdf", "pdf reader":"kilix-pdf",
               "calculator":"kilix-calculator", "notepad":"kilix-notepad",
@@ -208,6 +230,74 @@ def _payload(text, *, closed=False):
     return text
 
 
+# A session named by its pane: "the Codex session in Kilix pane 9", "claude in
+# pane 2", "existing agent pane 32 broker <id>", "pane 143". An agent or a noun
+# may come first; with neither, the pane alone is the target.
+_P_AGENT = r'(?P<agent>claude(?:\s+code)?|codex|grok)'
+_P_NOUN = r'(?:coding[\s-]+agent(?:\s+session)?|coding\s+session|agent|session|instance)'
+_P_TARGET = (r'(?:the\s+)?(?:(?:existing|running|current|live)\s+)?'
+             r'(?:(?:' + _P_AGENT + r'(?:\s+' + _P_NOUN + r')?|' + _P_NOUN + r')\s+(?:(?:in|on|at)\s+)?)?'
+             + PANE_SPAN)
+_P_TELL = re.compile(r'(?:tell|message|ping|ask|instruct|send|relay|pass)'
+                     r'(?:\s+(?:this|the|following|exact|message|text|instruction|a|along))*(?:\s+to)?\s+'
+                     + _P_TARGET, re.I)
+# The payload starts directly after the target: the message readers' markers.
+_P_MARKER = re.compile(r'\s*,?\s*(?:with\s+this\s+exact\s+(?:text|message|instruction)\s*:'
+                       r'|(?:with|saying|the\s+following(?:\s+instruction|\s+text|\s+message)?'
+                       r'|this(?:\s+exact)?(?:\s+message|\s+text|\s+instruction)?)\s*:'
+                       r'|(?P<named>(?:the|this)(?:\s+exact)?\s+(?:message|text|instruction))(?=\s+")'
+                       r'|\.\s+message\s*:|:|(?<=\s)to(?=\s))\s*', re.I)
+_P_WAIT = re.compile(r'(?:wait(?:\s+(?:for|until|on))?|block\s+until|hold(?:\s+(?:on|off))?\s+until|pause\s+until)\s+'
+                     + _P_TARGET + r'(?P<tail>.*)', re.I | re.S)
+_P_WAIT_TAILS = ('', 'to finish', 'finishes', 'is idle', 'is done', 'is finished', 'becomes idle', 'to be idle',
+                 'to become idle', 'to finish its turn', 'finishes its turn', 'to finish its current turn',
+                 'finishes its current turn', 'to complete its turn', 'completes its turn')
+
+
+def _pane_args(found):
+    """The target's arguments, or None when a broker id is not lowercase hex."""
+    broker = found['broker'] or found['paren']
+    if broker is not None and not _BROKER_ID.fullmatch(broker):
+        return None
+    args = {'agent': found['agent'].split()[0].casefold()} if found['agent'] else {}
+    args['pane'] = found['pane']
+    if broker:
+        args['broker'] = broker
+    return args
+
+
+def pane_words(args):
+    """A pane target in the grammar's plain wording: "codex in pane 9 with broker <id>"."""
+    words = (args['agent'] if 'agent' in args else 'the session') + ' in pane ' + args['pane']
+    return words + (' with broker ' + args['broker'] if 'broker' in args else '')
+
+
+def _pane_calls(text, closed_payload=False):
+    """(addressed, calls): whether the text messages or waits for a session
+    named by its pane, and its reading (None when it has none). A request that
+    addresses a pane is read only here."""
+    told = _P_TELL.match(text)
+    if told:
+        args = _pane_args(told)
+        rest = text[told.end():]
+        marker = _P_MARKER.match(rest)
+        if args is None or not marker:
+            return True, None
+        payload = rest[marker.end():]
+        payload = _quoted_payload(payload) if marker['named'] else _payload(payload, closed=closed_payload)
+        if not payload or len(payload.encode()) > 1024:
+            return True, None
+        return True, [_call('message_agent', **args, text=payload)]
+    waiting = _P_WAIT.fullmatch(text)
+    if waiting:
+        args = _pane_args(waiting)
+        tail = ' '.join(_without_courtesy(waiting['tail']).strip(' .!').casefold().split())
+        if args is None or tail not in _P_WAIT_TAILS:
+            return True, None
+        return True, [_call('wait_for_agent', **args)]
+    return False, None
+
+
 def _extended_agent_calls(request, *, closed_payload=False, _meta=None):
     """Parse explicit fields without normalizing the literal task or message.
 
@@ -338,6 +428,10 @@ def _extended_agent_calls(request, *, closed_payload=False, _meta=None):
 
     # A fronted location scopes one explicit launch, never an implicit action.
     if front:return None
+
+    addressed, paned = _pane_calls(text, closed_payload)
+    if addressed:
+        return paned
 
     # Messages require a named agent; no pronoun or unnamed-session fallback.
     front = re.match(r'^(?:for|to)\s+(?:the\s+)?(?:running\s+|existing\s+)?(?P<agent>claude|codex)(?:\s+session)?\s+(?P<location>.+?),\s*send(?:\s+this\s+message)?:\s*',text,re.I)
@@ -599,6 +693,40 @@ _F_MESSAGE = re.compile(
     r'|(?:send|pass)\s+' + _A + r'\s+(?:this|the)\s+(?:message|text|note)\s+' + _D + r'\s*:?\s*' + _T)
 
 
+# A pane target in a frame (grammar-only, see GRAMMAR_ONLY): \0n<n>\0 stands for
+# "in Kilix pane 9 broker <id>", and the message and wait shapes take it where
+# they take an agent ("tell the codex session in pane 9 'x'", "wait for pane 9
+# to finish"). Built from the shapes above, so they stay one set of words.
+_F_PANE = re.compile(r'(?:\b(?:in|on|at)\s+)?' + PANE_SPAN, re.I)
+_N = r'\0n\d+\0'
+_F_PANE_REF = (r'(?:the\s+)?(?:(?:running|current|existing)\s+)?'
+               r'(?:' + _A + r'(?:\s+(?:session|agent|instance))?\s*|(?:coding\s+)?(?:session|agent|instance)\s*)?' + _N)
+_F_MESSAGE_PANE = re.compile(_F_MESSAGE.pattern.replace(_F_AR, r'(?:' + _F_PANE_REF + r')'))
+_F_WAIT_PANE = re.compile(_F_WAIT.pattern.replace(_F_WAIT_SUBJ, r'(?:' + _F_PANE_REF + r'(?:\s+(?:(?:current|active)\s+)?turn)?)'))
+
+
+def _frame_pane(folded, tokens, values, agents, kinds, meta):
+    """(calls, meta) for a frame whose target is a pane, or None."""
+    if (kinds.count('n') != 1 or len(agents) > 1 or 'grok' in agents
+            or {'d', 'x', 'f', 'm', 'p'} & set(kinds)):
+        return None     # a pane and a directory, two panes, or a launch's words
+    pane, broker = values[int(next(value for kind, value in tokens if kind == 'n'))]
+    if broker is not None and not _BROKER_ID.fullmatch(broker):
+        return None
+    args = {'agent': agents[0]} if agents else {}
+    args['pane'] = pane
+    if broker:
+        args['broker'] = broker
+    if 't' not in kinds and _F_WAIT_PANE.fullmatch(folded):
+        return [_call('wait_for_agent', **args)], meta
+    if 't' in kinds and _F_MESSAGE_PANE.fullmatch(folded):
+        message = next(values[int(value)] for kind, value in tokens if kind == 't')
+        if len(message.encode()) > 1024:
+            return None
+        return [_call('message_agent', **args, text=message)], meta
+    return None
+
+
 def _f_quotes(text):
     """[(start, end, inner)] for each outermost quoted span, or None when a
     quote mark is left open. An apostrophe inside a word is not a quote."""
@@ -671,6 +799,12 @@ def _frame_calls(clause):
         return token('f' if raw.casefold().endswith('.pdf') else 'L', raw) + (':' if colon else '')
     words = _F_PATH.sub(unquoted, words)
 
+    # 2b. A pane target, before a word of place can take "in pane".
+    def paned(found):
+        values.append((found['pane'], found['broker'] or found['paren']))
+        return f' \0n{len(values) - 1}\0 '
+    words = _F_PANE.sub(paned, words)
+
     # 3. Directories: a path or bare name after a word of place, or "here".
     def located(found):
         if found.groupdict().get('index') is not None:
@@ -726,6 +860,8 @@ def _frame_calls(clause):
     for kind, value in tokens:
         if kind == 'd' and values[int(value)] != 'here':
             args['directory'] = values[int(value)]
+    if 'n' in kinds:
+        return _frame_pane(folded, tokens, values, agents, kinds, meta)
     if len(agents) == 1 and not {'x', 'f'} & set(kinds) and _F_LAUNCH.fullmatch(folded):
         for kind, value in tokens:
             if kind == 'p':
@@ -808,7 +944,20 @@ def _read_calls(request, *, _depth=0, _bare=False):
         import commands_suggest
         if commands_suggest.refusal(request, calls) is not None or _two_sessions(calls):
             return None
+    if _depth == 0 and _pane_mixed(calls):
+        return None
     return calls
+
+
+def _pane_mixed(calls):
+    """Whether a session named by its pane shares the request with a wait or
+    message naming an agent without a pane: in "tell claude in pane 2: x;
+    then wait for claude" the second claude may be the one in pane 2."""
+    paned = [call['arguments'] for call in calls if 'pane' in call['arguments']]
+    return bool(paned) and any(
+        call['name'] in ('wait_for_agent', 'message_agent') and 'pane' not in call['arguments']
+        and any(args.get('agent', call['arguments']['agent']) == call['arguments']['agent'] for args in paned)
+        for call in calls)
 
 
 def _two_sessions(calls):
@@ -816,10 +965,14 @@ def _two_sessions(calls):
     another directory: "start claude here and claude in /b, then tell the
     claude ..." leaves open which session is meant."""
     def where(call):
+        if 'pane' in call['arguments']:
+            return 'pane ' + call['arguments']['pane']
         return call['arguments'].get('directory', 'here')
     def agent(call):
         return call['name'].removeprefix('start_') if call['name'].startswith('start_') else call['arguments'].get('agent')
-    return any(call['name'] in ('wait_for_agent', 'message_agent')
+    # A pane names exactly one session; an earlier pane step still makes a
+    # later "claude" ambiguous.
+    return any(call['name'] in ('wait_for_agent', 'message_agent') and 'pane' not in call['arguments']
                and any(agent(earlier) == agent(call) and where(earlier) != where(call) for earlier in calls[:index])
                for index, call in enumerate(calls))
 
@@ -1009,7 +1162,8 @@ def _referred(right, first):
         it = re.match(r'((?:(?:then|also|after\s+that)\s*,?\s+)?(?:tell|message|send|ping|wait\s+(?:for|on|till|until)))'
                       r'\s+it\b', right, re.I)
         if it:
-            return it[1] + ' ' + args['agent'] + where + right[it.end():]
+            target = pane_words(args) if 'pane' in args else args['agent'] + where
+            return it[1] + ' ' + target + right[it.end():]
     there = [m for m in re.finditer(r'\bthere\b', right, re.I) if _outside_quotes(right, m.start())]
     if (len(there) == 1 and where
             and not re.match(r'\s*(?:is|are|was|were)\b|[\'’]s\b', right[there[0].end():], re.I)):
@@ -1048,7 +1202,9 @@ def _enumerated(request):
     return '; then '.join(steps), count
 
 
-def _canonical(calls, cwd=None):
+def _canonical(calls, cwd=None, *, published=False):
+    """The calls with host-owned defaults filled in. published: hold them to
+    commands-tools.json alone, without the grammar-only pane arguments."""
     if not isinstance(calls,list) or not 1<=len(calls)<=4:
         raise ValueError('calls must contain one to four operations')
     out=[]
@@ -1058,7 +1214,9 @@ def _canonical(calls, cwd=None):
         name,args=call['name'],call['arguments']
         if not isinstance(name,str) or name not in _PROPERTIES or not isinstance(args,dict):
             raise ValueError('unknown operation or arguments')
-        if (set(args)-_PROPERTIES[name] or _REQUIRED.get(name,set())-set(args)
+        extension=frozenset() if published else GRAMMAR_ONLY.get(name,frozenset())
+        required=_REQUIRED.get(name,set())-({'agent'} if 'pane' in args and 'pane' in extension else set())
+        if (set(args)-_PROPERTIES[name]-extension or required-set(args)
                 or any(not isinstance(v,str) or not v for v in args.values())):
             raise ValueError('unexpected, missing or non-string arguments')
         if any(unicodedata.category(ch) in ('Cc','Cf','Zl','Zp') for value in args.values() for ch in value):
@@ -1067,6 +1225,13 @@ def _canonical(calls, cwd=None):
         if name=='open_app':
             if args['app'] not in _APPS or ('file_path' in args and args['app']!='kilix-pdf'):
                 raise ValueError('unknown application or incompatible file path')
+        elif 'pane' in args:
+            if ('directory' in args or not _PANE_NUMBER.fullmatch(args['pane'])
+                    or 'broker' in args and not _BROKER_ID.fullmatch(args['broker'])
+                    or args.get('agent','claude') not in PANE_AGENTS):
+                raise ValueError('invalid pane target')
+        elif 'broker' in args:
+            raise ValueError('a broker id belongs to a pane target')
         else:
             args.setdefault('directory','here')
             if args['directory']=='.':args['directory']='here'
@@ -1083,11 +1248,15 @@ def _canonical(calls, cwd=None):
     return out
 
 
-def admit(request, calls, *, cwd=None):
+def admit(request, calls, *, cwd=None, published=False):
+    """Admit calls that are exactly the grammar's reading of the whole request.
+    published: the calls come from a command model, which knows only
+    commands-tools.json, so a grammar-only argument in them is refused and
+    what a released model proposes is admitted exactly as before."""
     wanted=exact_calls(request)
     if not wanted:return Admission(None,reason='the whole request has no supported reading')
     try:
-        if _canonical(calls,cwd)!=_canonical(wanted,cwd):
+        if _canonical(calls,cwd,published=published)!=_canonical(wanted,cwd):
             return Admission(None,reason='the operations or literal arguments differ from the request')
     except ValueError as error:return Admission(None,reason=str(error))
     actions=[];jobs=set()
@@ -1100,6 +1269,12 @@ def admit(request, calls, *, cwd=None):
             translated={'agent':name.removeprefix('start_'),'dir':args.get('directory','here')}
             translated.update({new:args[old] for old,new in [('place','place'),('task','prompt'),('model','model')] if old in args})
             actions.append(agents.Action('agent',translated))
+        elif 'pane' in args:
+            # The runner resolves and verifies the pane (agents_kilix.find_pane).
+            jobs.add('agents');translated={key:args[key] for key in ('pane','broker','agent') if key in args}
+            if name=='wait_for_agent':translated['for']='idle';kind='wait'
+            else:translated['text']=args['text'];kind='tell'
+            actions.append(agents.Action(kind,translated))
         else:
             jobs.add('agents');translated={'session':args['agent']+'@'+args.get('directory','here')}
             if name=='wait_for_agent':translated['for']='idle';kind='wait'
