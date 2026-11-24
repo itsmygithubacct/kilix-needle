@@ -672,27 +672,177 @@ MODEL_SAID = re.compile(r'\bmodel\s+(?:to\s+|is\s+|=\s*)?(' + MODEL_NAME.pattern
 # Each join ("and then", a comma, a semicolon) allows one more operation.
 JOIN = re.compile(r'(?:[,;]\s*)?(?:\b(?:and|then|also|plus|afterwards|next)\b[\s,]*)+|[,;]', re.I)
 MOST_PLANS = 4000       # a request with more possible plans than this gets none
+MOST_STEPS = 20000      # nor does one whose search tries more partial plans than this
 ENDING = '(complete)'
+# A numbered or bulleted list item, or an ordinal that opens one, allows one more operation like a join.
+LIST_MARK = re.compile(r'(?:^|(?<=[\s(]))(?:\(?\d[.):]|\(?[a-d]\)|[-*•])(?=\s)|\b(?:second|third|fourth|finally|'
+                       r'lastly)\b', re.I)
+# Details no plan's wording can say. A plan for a request that names one would quietly drop it, which changes
+# the request ("tell codex in pane 9: ...", "resume claude ...", "with high effort", "codex --yolo"), so such a
+# request gets no plan unless the plan's own sentence says the detail too (outside the text it copies).
+UNSAID = re.compile(
+    r'\b(?:pane|tab|session|window|thread)\s*#?\s*\d+\b|\bpane\d+'      # an address by number
+    r'|\b(?:claude|codex)\s+\d+\b'
+    r'|\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-|\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{12,}\b'     # an id
+    r'|\b(?:session|pane|tab|thread|id)\s*#?\s*(?=[\w-]*\d)[0-9a-f][\w-]*'      # "session 0b7e-44c1", "id 7f3c2a9e"
+    r'|\bbroker\b|\bresum\w*|\b(?:effort|reasoning|thinking)\b|\bwindow\b|\bthe\s+other\b'
+    r'|\b(?:(?<!directory )(?<!dir )(?<!folder )(?<!repo )(?<!repository )(?<!project )(?:titled|named|called)'
+    r'|title)\b'
+    r'|(?<!\S)--?[a-z][\w-]*|\bssh\b|\bhost\b|\bremote\b'
+    r'|(?<!\S)(?:~|\.\.?)/?(?=[\s,;:!?]|\.?$)', re.I)       # a home or parent directory spans() cannot copy
+# A model's own name, said without "model" or "with": "opus model", "claude, opus, ~/x". One spans() does not
+# copy cannot be carried, so the request gets no plan rather than one without it.
+MODEL_WORD = re.compile(r'(?<![\w.-])(?:opus|sonnet|haiku|fable|gpt-[\w.-]+|o\d(?:-mini)?)(?![\w-])', re.I)
+# A session addressed by a title: "tell codex session Nightly Build: ...", "the claude agent rc-7".
+TITLED = re.compile(r'\b(?i:claude|codex)\s+(?i:session|agent|instance)\s+(?!(?i:in|at|on|here|there|that|which|'
+                    r'who|to|with|and|for|from|running|now|is|was|you|again|already|first|too|as|by|of|so|then|'
+                    r'but|or|if)\b)'
+                    r'(?:[A-Z][\w-]*|[a-z][\w-]*[\d-][\w-]*)')
+# A level of effort said straight after a model's name: "with model gpt-5.5-mint high"
+LEVEL = re.compile(r'\b(?:low|medium|high|xhigh|max|minimal)\b', re.I)
+# A question asked with an auxiliary verb first is never a command: "is claude running in ~/x".
+ASKED = re.compile(r'^\W*(?:is|are|was|were|do|does|did|has|have|had|isn\'t|aren\'t|doesn\'t|didn\'t)\b', re.I)
+# A clause that opens with a verb none of the five tools does: "..., then delete the build folder".
+EXTRA = re.compile(r'(?:^|[,;:.)\u2022]|(?<!\S)[-*]|\b(?:and|then|also|plus|next|afterwards|after\s+that|'
+                   r'before\s+that|but|first)\b)\s*'
+                   r'(?:(?:please|also|then|and|just|go\s+ahead\s+and|quickly)\s+)*'
+                   r'(?:delete|remove|edit|commit|push|merge|rebase|deploy|build|compile|install|uninstall|rename|'
+                   r'move|copy|fix|print|show\s+me\s+(?:the\s+)?(?:output|log|transcript|error|reply|status)|'
+                   r'read\s+me|list|find|'
+                   r'search|play|save|restart|reboot|work\s+out|calculate|compute|figure\s+out|check|test|tag|type|'
+                   r'email|mail|ping\s+me|give\s+me\s+(?:a|the)\s+(?:status|last|output|log|reply|error)|'
+                   r'pull\s+up\s+the\s+(?:log|output|transcript)|summari[sz]e|explain|translate|download|upload|'
+                   r'switch|empty|clear|run\s+(?:the\s+)?(?:tests?|make|npm|pytest|build|suite|linter|script))\b',
+                   re.I)
+# Saying not to, or telling what happened before, is not a request to act now.
+NEGATED = re.compile(r"\b(?:don'?t|doesn'?t|didn'?t|no\s+need|yesterday|earlier|ago|"
+                     r"last\s+(?:week|night|month|time)|refrain|avoid|never|previously)\b"
+                     r"|\b(?:i|we)\s+(?:did|already)\b|\b(?:i|we)'d\s+(?:started|opened|asked|told)\b", re.I)
+# A time to act other than now, or a limit no tool keeps: "in an hour", "after lunch", "no longer than 30 s".
+TIMED = re.compile(r'\bin\s+(?:an?|one|two|five|ten|\d+)\s+(?:hours?|minutes?|mins?|seconds?|secs?)\b|'
+                   r'\bafter\s+(?:lunch|dinner|breakfast|the\s+meeting)\b|\btomorrow\b|\btonight\b|'
+                   r'\blater\s+(?:on|today)\b|\bno\s+(?:longer|more)\s+than\b|\bat\s+most\b|\btimeout\b', re.I)
+# Something no tool does to a session or the desktop: "as root", "take a screenshot", "resize it", "post it to
+# Slack", "set the brightness"; or an application Kilix does not have.
+BEYOND = re.compile(r'\b(?:as\s+root|sudo|screenshots?|resiz\w+|full[\s-]?screen|maximi[sz]\w*|minimi[sz]\w*|'
+                    r'half\s+the\s+screen|brightness|volume|memory|slack|git|close|kill|quit|exit|'
+                    r'spreadsheet|calendar|(?<!file\s)browser|chrome|firefox|terminal|e-?mail|music|spotify|settings|camera|'
+                    r'clock|photos)\b', re.I)
+# A file's name left in the request's own words: "open notes.txt in the calculator".
+FILE_NAME = re.compile(r'(?<![\w./-])[\w-]+\.(?:txt|md|py|json|csv|log|pdf|docx?|xlsx?|png|jpe?g|html?|js|ts|ya?ml|toml|'
+                       r'sh|ini|cfg)\b', re.I)
+# Many sessions at once: "five claude sessions".
+MANY = re.compile(r'\b(?:three|four|five|six|seven|eight|nine|ten|dozen|[3-9]|\d\d+)\s+(?:\w+\s+)?'
+                  r'(?:sessions|instances|agents|copies|claudes|codexes|tabs|splits|panes)\b', re.I)
+# A split or pane said without its direction: "start codex in a split" leaves where open, which no plan may decide.
+UNPLACED = re.compile(r'\b(?:split|panes?)\b', re.I)
+DIRECTION = re.compile(r'\b(?:right|left|above|below|beneath|under|underneath|top|bottom|upper|lower|down|upwards?|'
+                       r'downwards?|vertical\w*|horizontal\w*|side)\b|\bup\s+(?:split|pane)|\b(?:split|pane)\s+up\b',
+                       re.I)      # "bring up codex in a split" names no direction
+# A time of day, or "the other one", which spans() may take for a directory's name, so it is looked for in the
+# request with only its texts hidden: "At 6pm, start codex", "wait for the one in the other directory".
+LOOSE = re.compile(r'\b\d{1,2}(?::\d\d)?\s*(?:am|pm)\b|\bthe\s+other\b', re.I)
+# "then wait for it" after two sessions are named: which one is meant is left open.
+SINGLE = re.compile(r'\b(?:for|tell|message|ping|ask|to|let)\s+(?:it|that\s+session|that\s+agent)\b'
+                    r'|\b(?:to|for|tell|message|ping)\s+the\s+(claude|codex)\b', re.I)
+# "start codex here and in ~/x": one more operation like the one before, in another directory.
+AND_IN = re.compile(r'\b(?:and|then)\s+(?:also\s+)?(?:in|inside|under|at)\s+\x00', re.I)
+# Another agent than the two: "start claude here and gemini in ~/x" asks for something no tool does.
+OTHER_AGENT = re.compile(r'\b(?:gemini|grok|aider|copilot|cursor|chatgpt|llama|cline|devin|goose|opencode)\b', re.I)
+# "it", "them", "that session": a later wait or message for an agent named earlier means the same session.
+BACK = re.compile(r'\b(?:it|its|them|their|both)\b'
+                  r'|\b(?:that|this|the\s+same)\s+(?:same\s+)?(?:session|one|agent|claude|codex)\b', re.I)
+# "In ~/x, start codex ... and claude ...": a directory said before the first operation is meant for every agent.
+FRONTED = re.compile(r'^\W*(?:in|inside|within|from|under|for)\s+(?:the\s+)?(?:directory\s+|folder\s+|repo\s+)?'
+                     r'\x00+\s*,', re.I)
+# A split is offered only when the request says split, pane or side, or names a direction: "bring codex up" does not.
+SPLIT_SAID = re.compile(r'\b(?:split|pane|side|beside)\b', re.I)
+# Each operation verb outside the copied text asks for an operation of its kind, so a plan has at least as
+# many operations as the request has such verbs: "wait for claude, tell it 'x', then wait for it again" is three.
+OPERATION_VERBS = (
+    (re.compile(r'(?<!it )(?<!them )(?<!to )'      # "have it start with ...", "ask it to open ..." is its task
+                r'(?:\b(?:start|launch|open|load|view|boot)(?:s|ed|ing)?\b|\b(?:run|spin\s+up|fire\s+(?:up|off)|'
+                r'kick\s+off|bring\s+up|pull\s+up|set\s+up)\b|\bget\s+(?:[\w\x00]+\s+){1,4}going\b)', re.I),
+     ('start_claude', 'start_codex', 'open_app')),
+    (re.compile(r'(?<!it )(?<!them )(?<!to )(?:\b(?:wait|await|hold\s+on|hold\s+off|hang\s+on|sit\s+tight)'
+                r'(?:s|ed|ing)?\b|\blet\s+\w+\s+(?:finish|wrap))', re.I),
+     ('wait_for_agent',)),
+    (re.compile(r'(?<!the )(?<!a )(?<!this )(?<!that )(?<!its )(?<!my )(?<!your )'      # "the message" is a noun
+                r'(?<!it )(?<!them )(?<!to )'
+                r'\b(?:tell|message|send|say|ask|ping|relay|reply|forward|notify)(?:s|ed|ing|ged)?\b|'
+                r'\bpass\s+(?:it\s+)?along\b|\blet\s+(?:[\w\x00]+\s+){1,4}know\b', re.I), ('message_agent',)))
+# "wait for it", "tell that session": a back-reference is one more operation on an agent already named.
+REFERRED = re.compile(r'\b(?:for|tell|message|ping|ask|to|let)\s+(?:it|them|that\s+(?:one|session|agent)'
+                      r'|the\s+same\s+(?:one|session|agent)|that\s+same\s+(?:session|one))\b', re.I)
+# "then wait for both": two more operations, one on each agent named.
+BOTH = re.compile(r'\b(?:for|tell|message|ping|ask|to)\s+(?:both|them\s+both|both\s+of\s+them)\b'
+                  r'(?!\s+(?:of\s+)?(?:the\s+)?(?:claude|codex|sessions|agents))', re.I)
+# A join that makes a back-reference an operation of its own; a comma alone ("codex in ~/x, tell it") does not.
+REFERRAL_JOIN = re.compile(r'\b(?:and|then|also|afterwards|next)\b|;|[.!]\s', re.I)
+# A sentence break joins operations too: "Start codex in ~/a. Start claude in ~/b."
+SENTENCE = re.compile(r'(?:[.!?]|\x00)\s+(?=[A-Z])')     # a copied path may end the sentence
+# "there is a claude session in ~/x; tell it ...": an agent said to exist is not an operation of its own.
+EXISTS = re.compile(r'\b(?:there\s+is|there\'s|there\s+are)\s+(?:a|an|one|the)?\s*(?:\w+\s+)?(?:claude|codex)\b',
+                    re.I)
+# "here" names the current directory as a place of its own: "start codex here and in ~/x" is two sessions.
+HERE = re.compile(r'\bhere\b|\b(?:this|the\s+current)\s+(?:directory|folder|dir)\b', re.I)
+# The text is a task ("Task: ...", "with this as its job") or a message ("tell", "ask"): only plans that use it so.
+TASKED = re.compile(r'\b(?:tasks?|job|assignment|instructions?|prompt|brief)\b', re.I)
+# Hypotheticals, examples and reports are not requests to act now.
+UNREAL = re.compile(r'\b(?:suppose|supposing|imagine|imagining|hypothetical\w*|pretend\w*|theoretical\w*|thought\s+'
+                    r'experiment|example|sample|tutorial|docs|documentation|quotes?|quoted|wrote|might|wish|wished|'
+                    r'would(?!\s+(?:you|i|we|like|love))|could(?!\s+(?:you|i|we)))\b', re.I)
+# A field label before a colon ("Directory: ~/x. Model: gpt-6.") is not a text to pass on.
+FIELD = re.compile(r'\b(?:directory|dir|folder|cwd|path|location|model|placement|place|split|where)\s*:\s', re.I)
+# "that folder we talked about": a directory referred to that the request never names.
+UNNAMED_PLACE = re.compile(r'\b(?:that|the\s+same|the\s+usual|the\s+other)\s+(?:folder|directory|dir|repo|'
+                           r'repository|project|place|path)\b', re.I)
 
 
 def _context(request):
-    mentions, texts, models, _masked, plain = _scan(request)
+    mentions, texts, models, masked, plain = _scan(request)
     paths = list(dict.fromkeys(mentions))
     agents, apps, directions = _named(paths, plain)
     spoken = [name.casefold() for name in re.findall(r'(?<![\w.-])(?:claude|codex)(?![\w-])', plain, re.I)]
     again = sum(found[0].casefold() != 'both' or bool(mentions) for found in THERE.finditer(plain))
     again += len(SAME.findall(plain)) if mentions else 0
-    return {'request': request, 'paths': paths, 'mentions': mentions, 'texts': texts, 'models': models,
+    return {'request': request, 'masked': masked, 'paths': paths, 'mentions': mentions, 'texts': texts,
+            'models': models,
             'plain': plain, 'agents': agents, 'apps': apps, 'directions': directions, 'spoken': spoken,
             'owed': len(mentions) + again, 'verbs': [ops for verb, ops in VERBS if verb.search(plain)],
-            'said_models': [name.rstrip('.,:') for name in MODEL_SAID.findall(plain)]}
+            'said_models': _said_models(models, plain),
+            'counts': [(ops, len(verb.findall(plain))) for verb, ops in OPERATION_VERBS],
+            'occasions': len(spoken) - len(EXISTS.findall(plain)) + _referrals(plain),
+            'here': bool(HERE.search(plain))}
+
+
+def _said_models(models, plain):
+    """The models no plan may leave out: one named as a model ("model gpt-6"), one of the grammar's own
+    ("with opus"), anything spans() copies that looks like a version ("with gpt-5.5"), and a model's own name
+    said bare ("opus model"), which a plan cannot carry when spans() does not copy it."""
+    known = [model for allowed in contract._MODELS.values() for model in allowed]
+    said = [name.rstrip('.,:') for name in MODEL_SAID.findall(plain)]
+    said += [model for model in models if model in known or re.search(r'\d', model) and re.search(r'[A-Za-z]', model)]
+    said += [found.group(0).rstrip('.,:') for found in MODEL_WORD.finditer(plain)]
+    return list(dict.fromkeys(said))
+
+
+def _referrals(plain):
+    """How many back-references ("wait for it") follow a join after the agent they refer to: each is one
+    more operation. "Codex in ~/x - wait for it" names one."""
+    count = 0
+    for found in REFERRED.finditer(plain):
+        named = list(re.finditer(r'\b(?:claude|codex)\b', plain[:found.start()], re.I))
+        if named and REFERRAL_JOIN.search(plain[named[-1].end():found.start()]):
+            count += 1
+    return count + 2 * len(BOTH.findall(plain))
 
 
 def _clauses(context):
     """Every single call the request's spans allow that the grammar reads alone."""
     out, dirs = [], [None] + [path for path in context['paths'] if not path.lower().endswith('.pdf')]
     places = ['tab']
-    if SPLIT_CUE.search(context['plain']):
+    if SPLIT_CUE.search(context['plain']) and (context['directions'] or SPLIT_SAID.search(context['plain'])):
         places += sorted(context['directions']) or ['right', 'left', 'down', 'up']
     for agent in context['agents']:
         name = 'start_' + agent
@@ -742,7 +892,15 @@ def _gains(context, calls, call):
         return True
     if args.get('place', 'tab') != 'tab' and args['place'] not in dirs:
         return True
-    return any(call['name'] in ops and not names & set(ops) for ops in context['verbs'])
+    if any(call['name'] in ops and not names & set(ops) for ops in context['verbs']):
+        return True
+    kinds = [item['name'] for item in calls]
+    if any(call['name'] in ops and sum(kind in ops for kind in kinds) < count for ops, count in context['counts']):
+        return True     # a verb asks for one more operation of this kind
+    if name in context['agents'] and sum(who.count(agent) for agent in context['agents']) < context['occasions']:
+        return True     # "wait for it": one more operation on an agent already named
+    return (context['here'] and 'directory' not in args and name in context['agents']
+            and all('directory' in item['arguments'] for item in calls if 'app' not in item['arguments']))
 
 
 def _owing(context, calls):
@@ -754,22 +912,359 @@ def _owing(context, calls):
     texts = sum(1 for text in context['texts'] if not any(text in value for value in said))
     named = max(len(set(context['agents'] + context['apps']) - set(who)),
                 sum(max(0, context['spoken'].count(agent) - who.count(agent)) for agent in context['agents']))
-    return max(paths, texts, named, len(context['directions'] - dirs))
+    kinds = [call['name'] for call in calls]
+    verbs = sum(max(0, count - sum(kind in ops for kind in kinds)) for ops, count in context['counts'])
+    occasions = context['occasions'] - sum(who.count(agent) for agent in context['agents'])
+    here = context['here'] and bool(context['paths']) and all(
+        'directory' in call['arguments'] for call in calls if 'app' not in call['arguments'])
+    return max(paths, texts, named, len(context['directions'] - dirs), verbs, occasions, here + paths)
+
+
+def _unsaid(context):
+    """The details the request names that a plan's wording would have to say: an address by pane, tab or
+    session number or id, a broker, resuming, an effort or level, a title, a flag, a host, a home or parent
+    directory spans() does not copy."""
+    plain = context['plain']
+    found = [match.group(0) for pattern in (UNSAID, TITLED) for match in pattern.finditer(plain)]
+    for model in context['models']:
+        at = plain.find(model)
+        after = LEVEL.match(plain[at + len(model):].lstrip(' ,')) if at >= 0 else None
+        if after:
+            found.append(after.group(0))
+    return found
+
+
+def _consistent(calls):
+    """Whether the waits and messages for one agent name its directory alike: "start claude in ~/x; tell it
+    ...; wait for it; tell it ..." never names ~/x for one of them and leaves it out for another. Two
+    directories are two sessions, and may both be named."""
+    named = {}
+    for call in calls:
+        agent = call['arguments'].get('agent')
+        if agent:
+            named.setdefault(agent, set()).add(call['arguments'].get('directory') is None)
+            if len(named[agent]) > 1:
+                return False
+    return True
+
+
+def _keeps(context, calls):
+    """Whether the plan uses every directory, file and text the request copies: "open notes.txt in the
+    calculator" has no plan that drops the file."""
+    used = {value for call in calls for key, value in call['arguments'].items()
+            if key in ('directory', 'file_path', 'task', 'text')}
+    return all(value in used for value in context['paths'] + context['texts'])
+
+
+def _says(calls, detail, texts):
+    """Whether the plan's sentence says the detail itself, outside the texts it copies."""
+    wording = sentence(calls)
+    for text in texts:
+        wording = wording.replace(_quote(text), '')
+    return re.sub(r'\s+', ' ', detail).casefold() in wording.casefold()
+
+
+def _ruled_out(context):
+    """Why the request's words leave no plan the generator may offer, beyond refusal(): a detail no wording
+    says is checked per plan, so this covers a question asked with an auxiliary verb first and an extra
+    action the five tools do not have."""
+    if ASKED.search(context['plain']):
+        return 'question'
+    if re.fullmatch(r'\W*(?:claude|codex)\W*', context['plain'], re.I):
+        return 'incomplete'     # an agent's name alone could mean starting it or waiting for it
+    if EXTRA.search(context['plain']):
+        return 'unsupported'
+    if UNREAL.search(context['plain']) or NEGATED.search(context['plain']) or LOOSE.search(context['masked']) \
+            or TIMED.search(context['masked']):
+        return 'not now'
+    if BEYOND.search(context['plain']) or MANY.search(context['plain']):
+        return 'unsupported'
+    if re.search(r'(?:[,;:]|\b(?:and|then|also|next|second|third|finally))[\s.!?]*$', context['masked'], re.I):
+        return 'incomplete'     # "start claude in ~/x; second," and nothing after it
+    if OTHER_AGENT.search(context['plain']):
+        return 'unnamed'
+    for found in SINGLE.finditer(context['plain']):
+        before = context['plain'][:found.start()]
+        named = [name.casefold() for name in re.findall(r'\b(?:claude|codex)\b', before, re.I)]
+        places = {path for path in context['paths'] if 0 <= context['masked'].find(path)
+                  < context['masked'].find(found.group(0)) if found.group(0) in context['masked']}
+        if found.group(1):      # "the claude": two claudes named before it
+            if named.count(found.group(1).casefold()) > 1:
+                return 'ambiguous'
+        elif len(named) > 1 or len(places) > 1:
+            return 'ambiguous'      # "it" after two sessions, by agent or by directory
+    if FIELD.search(context['plain']) or TASKED.search(context['plain']) and not context['texts']:
+        return 'unsaid'     # a labelled field the colon rule reads as text, or a task with no text to give
+    if FILE_NAME.search(context['plain']):
+        return 'unsaid'     # a file named that spans() does not copy, so no plan can carry it
+    if context['request'].rstrip().endswith(':'):
+        return 'unsaid'     # "let claude know:" and nothing after it
+    if UNPLACED.search(context['masked']) and not DIRECTION.search(context['masked']):
+        return 'unsaid'
+    if UNNAMED_PLACE.search(context['plain']) and not context['mentions']:
+        return 'unnamed'
+    if (re.search(r'\?["\'\u201d]?\s*$', context['request']) and context['texts'] and not TASKED.search(context['plain'])
+            and not dict(context['counts']).get(('message_agent',))):
+        return 'question'       # "start codex in ../x: would that pick the parent?" asks; it gives no task
+    return None
+
+
+def _referred(context, calls):
+    """Whether the plan follows the request's references: with "it" or "that session" in the request, a
+    wait or message for an agent already in the plan is for that agent's session, in its directory; with a
+    directory fronted before the first operation ("In ~/x, ..."), every agent's call names a directory."""
+    if FRONTED.search(context['plain']):
+        if any('agent' in call['arguments'] or call['name'].startswith('start_') for call in calls
+               if 'directory' not in call['arguments']):
+            return False
+    if BACK.search(context['plain']):
+        last = {}
+        for call in calls:
+            name, args = call['name'], call['arguments']
+            agent = name.split('_')[1] if name.startswith('start_') else args.get('agent')
+            if agent is None:
+                continue
+            if name in ('wait_for_agent', 'message_agent') and agent in last and args.get('directory') != last[agent]:
+                return False
+            last[agent] = args.get('directory')
+    return True
+
+
+# "Claude and codex in ./x": a clause that is only a name and "and" shares the next clause's directory.
+BARE = re.compile(r'\W*(?:\w+\s+){0,2}?(?:the\s+)?(?:claude|codex)\s*,?\s*(?:and|&)\s*', re.I)
+# Words that carry a directory named elsewhere to this clause: "the same folder", "there", "both in ~/x".
+CARRY = re.compile(r'\b(?:same|there|both|each|all)\b', re.I)
+# "wait for it", "tell that one": the operation is on the agent named last before it.
+PRONOUN = re.compile(r'\s*(?:for\s+|to\s+)?(?:it|that\s+one|that\s+session|that\s+agent|the\s+same\s+'
+                     r'(?:one|session))\b', re.I)
+
+
+def _places(context):
+    """[(position, kinds of call, name or None)] in the request that an operation can be matched to, in
+    order. Each operation verb is one, for calls of its kind on the agent or application it names before the
+    next verb ("open the file manager"), on the agent named last before it when it says "it" ("wait for
+    it"), or on any. "For both" is one more of its verb's kind. A name no verb took is one for calls on it,
+    where a verb of that kind comes before it ("start codex and claude") or the request has none ("notepad,
+    then codex in ~/x")."""
+    if '_places' in context:
+        return context['_places']
+    plain, first = context['plain'], {}
+    names = sorted((found.start(), found.end(), name) for name, cue in {**AGENT_CUE, **APP_CUE}.items()
+                   for found in cue.finditer(plain))
+    verbs = sorted((found.start(), found.end(), ops) for verb, ops in OPERATION_VERBS for found in verb.finditer(plain))
+    for ops in [ops for _verb, ops in OPERATION_VERBS]:
+        first[ops] = next((where for where, _end, kind in verbs if kind == ops), None)
+    places, taken = [], set()
+    for number, (where, end, ops) in enumerate(verbs):
+        until = verbs[number + 1][0] if number + 1 < len(verbs) else len(plain)
+        named = next(((at, name) for at, _end, name in names if end <= at < until), None)
+        if named:
+            taken.add(named[0])
+            name = named[1]
+        elif PRONOUN.match(plain, end):
+            name = next((name for at, _end, name in reversed(names) if at < where and name in AGENT_CUE), None)
+        else:
+            name = None
+        places.append((where, set(ops), name))
+    places += [(found.start(), {'wait_for_agent' if found.group(0).lower().startswith('for') else 'message_agent'},
+                None) for found in BOTH.finditer(plain)]     # "wait for both" is two waits, "tell both" two
+    for found in AND_IN.finditer(plain):
+        before = [place for place in places if place[0] < found.start()]
+        if before:
+            places.append((found.start(), *max(before, key=lambda place: place[0])[1:]))
+    for at, _end, name in names:
+        if at in taken:
+            continue
+        before = [ops for where, _end, ops in verbs if where < at]
+        if before:
+            kinds = set(before[-1])     # "start codex and claude", "wait for codex, then for claude"
+        else:
+            kinds = {op for ops, verb in first.items() if verb is None for op in ops}     # "notepad, then codex"
+        places.append((at, kinds, name))
+    context['_places'] = sorted(places, key=lambda place: place[0])
+    return context['_places']
+
+
+def _stated(context, calls):
+    """Whether the plan's calls come in the order the request states them: each call, in turn, can be matched
+    to a later place in the request than the call before it (_places()). "Start codex in ~/x, then wait for
+    it" is not "wait; then start"."""
+    return _slots(context, calls) is not None
+
+
+def _slots(context, calls):
+    """The positions _stated() matches the calls to, or None."""
+    places, used, last, out = _places(context), set(), -1, []
+    for call in calls:
+        args = call['arguments']
+        who = args.get('agent') or args.get('app') or call['name'].split('_')[1]
+        at = next((number for number, (where, kinds, name) in enumerate(places) if number not in used
+                   and where > last and call['name'] in kinds and name in (None, who)), None)
+        if at is None:
+            return None
+        used.add(at)
+        last = places[at][0]
+        out.append(last)
+    return out
+
+
+def _occurs(request, value, others=()):
+    """Where the request says a copied value whole, not as part of a longer path ("~/x" in "~/x/y") or of
+    a longer text among others ("done" in "also done")."""
+    inside = [(found.start(), found.end()) for other in others if other != value and value in other
+              for found in re.finditer(re.escape(other), request)]
+    return [found.start() for found in re.finditer(re.escape(value), request)
+            if not re.match(r'[\w/-]|\.[\w/]', request[found.end():found.end() + 2])
+            and not re.match(r'[\w/.~-]', request[found.start() - 1:found.start()] or ' ')
+            and not any(start <= found.start() < end for start, end in inside)]
+
+
+def _attached(context, calls):
+    """Whether each call takes what the request says in its own clause, from its place to the next call's
+    (_slots()): the directories, texts and directions said there, and no others. What is said before the
+    first operation is for any; a directory said in another clause is the same agent's directory again
+    for a wait or message ("wait for it"), or one carried to this clause ("in the same folder", "there",
+    "both in ~/x"); a direction said in another clause is carried by "both", "each" or "all"; and a clause
+    that is only an agent's name and "and" shares the next one's directory ("claude and codex in ./x")."""
+    slots, request, plain = _slots(context, calls), context['request'], context['plain']
+    if slots is None:
+        return False
+    bounds = list(zip(slots, slots[1:] + [len(request)]))
+    for number, ((start, end), call) in enumerate(zip(bounds, calls)):
+        args, clause = call['arguments'], plain[start:end]
+        carries = bool(CARRY.search(clause) or THERE.search(clause) or SAME.search(clause))
+        if BARE.fullmatch(clause) and number + 1 < len(calls):
+            following = calls[number + 1]
+            if args.get('directory') != following['arguments'].get('directory') or \
+                    call['name'].split('_')[0] != following['name'].split('_')[0]:
+                return False        # "claude and codex in ./x": both started, or both waited for, in ./x
+            continue
+        again = {(earlier['arguments'].get('agent') or earlier['name'].split('_')[1],
+                  earlier['arguments'].get('directory')) for earlier in calls[:number]}
+        who = args.get('agent') or call['name'].split('_')[1]
+        for path in context['paths']:
+            said = _occurs(request, path)
+            here = [at for at in said if start <= at < end]
+            used = path in (args.get('directory'), args.get('file_path'))
+            takes = 'agent' in args or call['name'].startswith('start_') or args.get('app') == 'kilix-pdf'
+            if here and takes and not used:
+                return False        # a directory said in this clause belongs to this call
+            back = call['name'] in ('wait_for_agent', 'message_agent') and (who, path) in again
+            if used and not here and not any(at < slots[0] for at in said) and not back:
+                later = any(CARRY.search(plain[other:stop]) and any(other <= at < stop for at in said)
+                            for other, stop in bounds)
+                if not (carries or later):
+                    return False    # nor is one said in another clause, unless it is carried here
+        if (SAME.search(clause) or THERE.search(clause)) and context['paths'] and 'directory' not in args \
+                and 'app' not in args:
+            return False            # "in the same folder": the directory named before
+        for text in context['texts']:
+            said = _occurs(request, text, context['texts'])
+            here = [at for at in said if start <= at < end]
+            used = text in (args.get('task'), args.get('text'))
+            if here and not used and (call['name'].startswith('start_') or call['name'] == 'message_agent'):
+                return False        # a text said in this clause is this call's task or message
+            if used and not here and not any(at < slots[0] for at in said):
+                return False
+        place = args.get('place', 'tab')
+        said = {direction for direction, cue in PLACE_WORD.items() if cue.search(clause)}
+        fronted = {direction for direction, cue in PLACE_WORD.items() if cue.search(plain[:slots[0]])}
+        shared = re.search(r'\b(?:both|each|all)\b', plain[slots[0]:], re.I)
+        if place != 'tab' and said and place not in said:
+            return False        # "claude on the left": not a split to the right
+        if place != 'tab' and not said and len(calls) > 1 and place not in fronted and not shared:
+            return False        # nor one said for another call
+        if call['name'].startswith('start_') and said and place == 'tab':
+            return False
+    return _named_order(context, calls)
+
+
+def _named_order(context, calls):
+    """Whether calls of one kind that "for both" or "and" share go in the order their agents are named:
+    "start claude and codex, then wait for both" waits for claude first."""
+    plain = context['plain']
+    first = {name: found.start() for name, cue in AGENT_CUE.items() for found in [cue.search(plain)] if found}
+    for one, two in zip(calls, calls[1:]):
+        if one['name'] == two['name'] and one['name'] in ('wait_for_agent', 'message_agent'):
+            a, b = one['arguments'].get('agent'), two['arguments'].get('agent')
+            if a != b and a in first and b in first and BOTH.search(plain) and first[a] > first[b]:
+                return False
+    return True
+
+
+def _as_said(context, calls):
+    """Whether the plan uses the request's texts as it says: as a task when it speaks of a task and no verb
+    asks for a message, as a message when a verb asks for one and it speaks of no task; and whether it has a
+    session in the current directory when the request says "here" besides naming directories."""
+    tasks = [call['arguments']['task'] for call in calls if 'task' in call['arguments']]
+    sent = [call['arguments']['text'] for call in calls if 'text' in call['arguments']]
+    messages = dict(context['counts']).get(('message_agent',), 0)
+    if TASKED.search(context['plain']) and not messages and sent:
+        return False
+    if messages and not TASKED.search(context['plain']) and tasks:
+        return False
+    return not (context['here'] and context['paths']
+                and all('directory' in call['arguments'] for call in calls if 'app' not in call['arguments']))
 
 
 def plans(request):
     """Every plan the request's own words allow (refusal() finds nothing
     against it) that the grammar reads back from its wording, with the fewest
-    operations any such plan needs. Calls that each name a different agent or
-    application keep the order the request names them in. [] when there is
-    none or too many."""
+    operations any such plan needs. Stricter than refusal():
+
+    - a request _ruled_out() (a question, a time other than now, an action or
+      agent no tool has, a split without a direction, "it" after two
+      sessions, ...) or one naming a detail no plan's wording says
+      (_unsaid()) has none;
+    - each operation verb asks for an operation of its kind, "it" after a
+      join and "for both" for more, and the calls come in the order the
+      request states them (_stated());
+    - a plan uses every directory and text the request copies (_keeps()) and
+      names one agent's directory alike in all its waits and messages
+      (_consistent());
+    - where some plans follow the request's references ("it", a fronted
+      directory), use the text as said (task or message), and give each call
+      what its own clause says (_attached()), only those are kept.
+
+    [] when there is none or the search grows too large."""
     if not possible(request):
         return []
     context = _context(request)
     if any(not any(model in allowed for allowed in contract._MODELS.values()) for model in context['said_models']):
         return []       # the grammar cannot carry a model the request names, and leaving it out changes the request
+    if _ruled_out(context):
+        return []
+    carried = {}
+
+    def read_back(calls):       # the grammar's reading is the slowest check, so it is made last and once
+        key = json.dumps(calls, sort_keys=True)
+        if key not in carried:
+            carried[key] = bool(_carried(calls))
+        return carried[key]
+
+    for found in _search(request, context):     # by size: the fewest operations the grammar reads back
+        if not any(read_back(calls) for calls in found):
+            continue
+        unsaid = _unsaid(context)
+        found = [calls for calls in found if all(_says(calls, detail, context['texts']) for detail in unsaid)
+                 and _keeps(context, calls) and _consistent(calls)]
+        for prefer in (lambda calls: _referred(context, calls), lambda calls: _as_said(context, calls),
+                       lambda calls: _attached(context, calls)):
+            preferred = [calls for calls in found if prefer(calls)]
+            if any(read_back(calls) for calls in preferred):
+                found = preferred
+        return [calls for calls in found if read_back(calls)]
+    return []
+
+
+def _search(request, context):
+    """For each number of operations in turn, the plans the request's words allow with that many, before
+    the grammar reads them back and before the rules that read whole plans; nothing more once a search is
+    too large."""
     clauses = _clauses(context)
-    most = min(4, 1 + len(JOIN.findall(context['plain'])))
+    plain = context['plain']
+    most = min(4, 1 + len(JOIN.findall(plain)) + len(LIST_MARK.findall(plain)) + len(SENTENCE.findall(plain))
+               + len(BOTH.findall(plain)))
     judged = {}
 
     def allowed(calls):     # refusal() does not depend on order, so each set of calls is judged once
@@ -778,11 +1273,16 @@ def plans(request):
             judged[key] = refusal(request, calls) is None
         return judged[key]
 
+    steps = [0]
+
     def grow(calls, size, found):
+        steps[0] += 1
+        if steps[0] > MOST_STEPS:
+            raise OverflowError
         if len(calls) == size:
             used = {call['arguments'].get('model') for call in calls}
             if (_owing(context, calls) == 0 and all(model in used for model in context['said_models'])
-                    and _in_order(calls, context['plain']) == calls and allowed(calls) and _carried(calls)):
+                    and _in_order(calls, context['plain']) == calls and allowed(calls)):
                 found.append(list(calls))
                 if len(found) > MOST_PLANS:
                     raise OverflowError
@@ -797,7 +1297,8 @@ def plans(request):
                     or text is not None and said.count(text) >= request.count(text)):
                 continue
             calls.append(call)
-            grow(calls, size, found)
+            if _stated(context, calls):     # a prefix out of the request's order never becomes a plan in it
+                grow(calls, size, found)
             calls.pop()
 
     for size in range(1, most + 1):     # the fewest operations that say everything the request names
@@ -805,10 +1306,9 @@ def plans(request):
         try:
             grow([], size, found)
         except OverflowError:
-            return []
+            return
         if found:
-            return found
-    return []
+            yield found
 
 
 def _clause_pieces(call):
