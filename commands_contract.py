@@ -471,6 +471,296 @@ def _outside_quotes(text, position):
     return quote is None
 
 
+# ---------------------------------------------------------------------------
+# Frames: more ways to say one action, read by slots (grown 2026-11-24).
+#
+# The readers above take each operation in a few fixed shapes. A frame reads
+# the request's copyable parts first (quoted text, paths, a name after a word
+# of place, a split direction, a model, the agent or application named), puts
+# a token where each one was, and then requires what is left, the request's
+# own words, to be one of a closed set of shapes for that operation. Every
+# word outside the parts must be in the shape: a condition, a time, a
+# negation, a question, a second agent or an unsupported verb is no reading.
+#
+# A frame never reads an unquoted message or task: a payload must be inside
+# quotes, so its end is not a guess. Frames are tried only when the readers
+# above read nothing, and a reading that uses one must also pass
+# commands_suggest.refusal() on the whole request (see _read_calls).
+# ---------------------------------------------------------------------------
+_F_QUOTES = {'"': '"', "'": "'", '“': '”', '‘': '’'}
+# A word of place directly before a quoted or bare name makes it a directory.
+_F_PLACE_CUE = re.compile(r'(?:\b(?:in|inside|within|at)\s+(?:the\s+)?(?:(?:directory|folder|dir|repo|repository)\s+)?'
+                          r'|\b(?:directory|dir|folder)\s+(?:called\s+|named\s+)?)$', re.I)
+_F_PATH = re.compile(r'(?<![^\s(])((?:~|\.\.?)?/[^\s;,?"\'“”‘’]+)')
+# A bare directory name: words joined by "-" or ".", starting with a letter
+# ("pewter-anchor", "topaz-kiln.v7", "桜-工房"). A single plain word after
+# "in" is not taken ("in parallel", "in order").
+_F_BARE = r'[^\W\d_][\w]*(?:[-.][\w]+)+'
+# Hyphenated words that say how, not where ("start codex in read-only"), and
+# names that are a model or a place word.
+_F_NOT_BARE = re.compile(r'(?:read|write)-only|full-auto|auto-(?:edit|approve)|dry-run|real-time|(?:full|split|half)-screen|'
+                         r'side-by-side|follow-up|step-by-step|one-shot|non-interactive|(?:high|low)-priority|'
+                         r'claude-code|(?:gpt|o\d|claude|sonnet|opus|haiku)\b.*|.*-(?:mode|only|split|pane|tab|window|screen)'
+                         r'|e\.g|i\.e|etc|[ap]\.m|vs'
+                         # a time is not a place: "in mid-december", "at half-past"
+                         r'|(?:.*[-.])?(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|june|july'
+                         r'|august|september|october|november|december|mon|tue|wed|thu|fri|sat|sun|(?:mon|tues|wednes|thurs|fri|satur|sun)day'
+                         r'|today|tomorrow|tonight|yesterday|morning|afternoon|evening|night|noon|midnight|mid|half|quarter|past'
+                         r'|minutes?|hours?|days?|weeks?|months?|years?|now|later|soon|eod)(?:[-.].*)?', re.I)
+# Words of their own that a bare name never is: an application, a side.
+_F_OWN_WORDS = re.compile(r'(?:right|left)-hand|kilix-(?:pdf|calculator|notepad|file)', re.I)
+_F_LOC_INTRO = (r'(?:\b(?:working\s+)?(?:in|inside|within|at)\s+(?:the\s+)?(?:(?:directory|folder|dir|repo|repository)\s+)?'
+                r'|\b(?:(?:working|the)\s+)?(?:directory|dir|folder)\s+(?:called\s+|named\s+)?)')
+_F_LOC_NOUN = r'(?:\s+(?:directory|folder|dir|repo|repository))?'
+_F_HERE = re.compile(r'\bin\s+(?:this|the\s+current|my\s+current)\s+(?:directory|folder)\b'
+                     r'|(?:\b(?:working\s+)?(?:directory|folder)\s+)?\bhere\b(?![\'’])'
+                     r'|\b(?:the\s+)?current\s+(?:working\s+)?(?:directory|folder)\b', re.I)
+_F_SIDE = {'right': 'right', 'right-hand': 'right', 'left': 'left', 'left-hand': 'left', 'up': 'up', 'upper': 'up',
+           'top': 'up', 'above': 'up', 'down': 'down', 'lower': 'down', 'bottom': 'down', 'below': 'down',
+           'underneath': 'down', 'beneath': 'down'}
+_F_PLACE = re.compile(
+    r'(?:(?:and\s+)?put\s+it\s+)?(?:(?:in|into|as|using|use|with|on|open\s+it\s+in)\s+)?(?:(?:a|an|the)\s+)?(?:new\s+)?'
+    r'(?:(?P<adj>right-hand|left-hand|right|left|up|down|upper|lower|top|bottom)\s+(?:split|pane)'
+    r'|(?:split|pane)\s+(?:(?:to|on)\s+(?:the\s+|my\s+)?)?(?P<after>right|left|above|below|underneath|beneath|up|down)'
+    r'(?:\s+(?:me|this\s+(?:pane|one)|the\s+current\s+(?:pane|one)))?)\b'
+    r'|\b(?:on|to)\s+(?:the\s+|my\s+)(?P<side>right|left)\b'
+    r'|\b(?P<tab>(?:in\s+)?(?:a\s+)?(?:(?:new|fresh)\s+)?tab)\b', re.I)
+_F_MODEL = re.compile(r'(?:\b(?:with|using|on)\s+(?:the\s+)?model\s+|\b(?:and\s+)?(?:set|switch)\s+the\s+model\s+to\s+'
+                      r'|\b(?:and\s+)?use\s+(?:the\s+)?model\s+|\bmodel\s+)(' + _MODEL_NAME + r')', re.I)
+_F_AGENT = re.compile(r'\b(claude)(?:\s+code)?\b|\b(codex)\b', re.I)
+_F_APP = re.compile(r'\b(?:kilix[\s-])?(?:(?P<pdf>pdf\s+(?:viewer|reader)|kilix-pdf(?:\s+(?:viewer|reader))?)'
+                    r'|(?P<calc>calculator|kilix-calculator)|(?P<note>notepad|kilix-notepad)'
+                    r'|(?P<file>file\s+(?:manager|browser)|kilix-file(?:\s+manager)?))'
+                    r'(?:\s+(?:app|application|window))?\b', re.I)
+_F_APPS = {'pdf': 'kilix-pdf', 'calc': 'kilix-calculator', 'note': 'kilix-notepad', 'file': 'kilix-file'}
+_F_GERUND = {'starting': 'start', 'launching': 'launch', 'opening': 'open', 'waiting': 'wait', 'sending': 'send',
+             'telling': 'tell', 'messaging': 'message', 'bringing': 'bring', 'firing': 'fire', 'spinning': 'spin',
+             'kicking': 'kick', 'running': 'run', 'popping': 'pop', 'pulling': 'pull', 'relaying': 'relay',
+             'passing': 'pass', 'forwarding': 'forward'}
+_F_LEAD = re.compile(r'^(?:(?:hey|ok|okay|so|alright)\s*,?\s+)?(?:(?:first|then|also|next|and|after\s+that|afterwards)\s*,?\s+)?(?:go\s+ahead\s+and\s+)?'
+                     r'(?:just\s+)?(?:please\s+)?(?:(?P<mind>would\s+you\s+mind\s+)|(?P<polite>(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:just\s+)?)'
+                     r'|i\s+(?:want|need|would\s+like)\s+you\s+to\s+|i[\'’](?:d\s+like|ll\s+need)\s+you\s+to\s+)?'
+                     r'(?:please\s+)?(?:just\s+)?(?:also\s+)?')
+_F_TAIL = re.compile(r'(?:\s*,?\s+(?:please|thanks|thank\s+you|for\s+me|now|would\s+you|too))*\s*(?P<end>[.!?]*)$')
+
+# Shapes over the tokenized words. \0a<agent>\0, \0d<n>\0 (directory), \0p<side>\0,
+# \0m<n>\0 (model), \0t<n>\0 (quoted text), \0x<app>\0, \0f<n>\0 (a PDF path).
+_A = r'\0a(?:claude|codex)\0'
+_D = r'\0d\d+\0'
+_T = r'\0t\d+\0'
+_X = r'\0x[\w-]+\0'
+_F_ART = r'(?:(?:a|an|the|one)\s+)?(?:(?:new|fresh)\s+)?'
+_F_NOUN = r'(?:\s+(?:coding\s+)?(?:session|agent|instance|client|worker))?'
+_F_LAUNCH_HEAD = (r'(?:(?:start(?:\s+up)?|launch|open(?:\s+up)?|run|begin|bring\s+up|fire\s+up|spin\s+up|kick\s+off|boot\s+up'
+                  r'|give\s+me|get\s+me|put|create|i\s+need|i\s+want|i\s+would\s+like|i[\'’]d\s+like)\s+' + _F_ART + _A + _F_NOUN +
+                  r'|(?:get|let[\'’]?s\s+get|have|i\s+need|i\s+want|i\s+would\s+like|i[\'’]d\s+like)\s+' + _F_ART + _A
+                  + _F_NOUN + r'\s+(?:going|running|started|up\s+and\s+running)'
+                  r'|(?:a\s+)?(?:new|fresh)\s+' + _A + _F_NOUN + r')')
+_F_TASK = (r'(?:(?:(?:with|and\s+give\s+it|give\s+it|and\s+hand\s+it|hand\s+it|and)\s+)?(?:(?:the|a|this)\s+)?'
+           r'(?:(?:first|initial)\s+)?task(?:\s*:)?\s*' + _T + r'|\.\s*task\s*:\s*' + _T + r')')
+_F_SLOT = r'(?:' + _D + r'|\0p\w+\0|\0m\d+\0|' + _F_TASK + r')'
+_F_SEP = r'(?:\s*,?\s*(?:please|for\s+me)\s*,?\s*|\s*,\s*(?:and\s+)?|\s+and\s+|\s*)'
+_F_LAUNCH = re.compile(_F_LAUNCH_HEAD + r'(?:' + _F_SEP + _F_SLOT + r')*')
+_F_APP_OPEN = r'(?:open(?:\s+up)?|launch|start(?:\s+up)?|run|bring\s+up|fire\s+up|pull\s+up|pop\s+open|get\s+me|get|show)'
+_F_ONE_APP = r'(?:(?:the|a|an)\s+)?' + _X
+_F_APP_LIST = _F_ONE_APP + r'(?:(?:\s*,\s*(?:and\s+)?|\s+and\s+)' + _F_ONE_APP + r')*'
+_F_APP_SHAPES = re.compile(
+    _F_APP_OPEN + r'\s+' + _F_APP_LIST +
+    r'|(?:pull|bring|get)\s+' + _F_ONE_APP + r'\s+up'
+    r'|(?:i\s+need\s+)?' + _F_ONE_APP + r'\s*,?\s*(?:please\s+)?open\s+it')
+_F_PDF_SHAPES = re.compile(
+    r'(?:open|load|view|display|show|pull\s+up)\s+\0f\d+\0\s+(?:in|with|using|into|on)\s+' + _F_ONE_APP +
+    r'|(?:open(?:\s+up)?|launch|start|pull\s+up|bring\s+up|fire\s+up)\s+' + _F_ONE_APP + r'\s+(?:with|on|for)\s+\0f\d+\0'
+    r'|open\s+this\s+pdf\s+in\s+' + _F_ONE_APP + r'\s*:\s*\0f\d+\0')
+_F_WAIT_OPEN = (r'(?:wait(?:\s+it\s+out)?(?:\s+(?:for|on|till|until))?|(?:pause|block|hold(?:\s+on|\s+off)?|hang\s+(?:on|tight)'
+                r'|sit\s+tight|stand\s+by)\s+(?:until|till)|stand\s+by\s+for)')
+_F_WAIT_SUBJ = (r'(?:(?:the|my)\s+)?(?:(?:current|active|running|existing)\s+)?' + _A + r'(?:[\'’]s)?'
+                r'(?:\s+(?:session|agent|instance))?(?:\s+(?:(?:current|active)\s+)?turn)?')
+_F_DESC = (r'(?:\s*(?:,|—|-)?\s*(?:the\s+one\s+)?(?:(?:that[\'’]?s|that\s+is|who[\'’]?s|which\s+is)\s+)?(?:already\s+)?'
+           r'(?:(?:working|running|over)\s+)?' + _D + r'(?:\s*(?:,|—|-))?)')
+_F_END = (r'(?:\s+(?:until\s+it\s+|to\s+|is\s+|has\s+)?(?:be\s+)?(?:finish(?:es|ed)?(?:\s+(?:up|responding|replying|working))?|complete[sd]?|end(?:s|ed)?'
+          r'|done|finished|over|idle|wrap(?:s|ped)?\s+up)(?:\s+(?:with\s+)?(?:its|the)\s+(?:(?:current|active)\s+)?turn)?)')
+_F_WAIT = re.compile(_F_WAIT_OPEN + r'\s+' + _F_WAIT_SUBJ + r'(?:' + _F_DESC + r'?' + _F_END + r'?|' + _F_END + _F_DESC + r')')
+_F_AR = (r'(?:the\s+)?(?:(?:running|current|existing)\s+)?' + _A + r'(?:\s+(?:session|agent|instance))?'
+         r'(?:\s+(?:(?:that[\'’]?s|that\s+is|who[\'’]?s)\s+)?(?:already\s+)?(?:(?:working|running|over)\s+)?' + _D + r')?')
+_F_INTRO = (r'(?:exactly\s+this\s*:|exactly\s*:|exactly|verbatim\s*,?|with|saying\s*:?|this\s*:|:|text\s*:|'
+            r'(?:the|this|a)\s+(?:message|text|note)(?:\s+saying)?\s*:?|the\s+following\s*:?)')
+_F_MESSAGE = re.compile(
+    r'(?:tell|message|ping|text|ask|send|write\s+to|instruct)\s+' + _F_AR + r'\s*,?\s*(?:' + _F_INTRO + r'\s*)?' + _T
+    + r'(?:\s*' + _D + r')?(?:\s*,?\s*(?:verbatim|word\s+for\s+word|exactly))?'
+    r'|(?:say|send|relay|forward|pass|write)\s+(?:(?:the\s+(?:text|message|following)|this\s+message)\s+)?' + _T +
+    r'\s+(?:along\s+)?to\s+' + _F_AR + r'(?:\s*,?\s*(?:verbatim|word\s+for\s+word|exactly))?'
+    r'|let\s+' + _F_AR + r'\s+know\s*:?\s*' + _T +
+    r'|shoot\s+' + _F_AR + r'\s+a\s+(?:message|note)(?:\s+saying)?\s*:?\s*' + _T +
+    r'|(?:(?:relay|forward|pass|send)\s+(?:this|the\s+following)(?:\s+(?:note|text|message))?(?:\s+along)?|have\s+this\s+sent)\s+to\s+'
+    + _F_AR + r'\s*(?::|—|-)?\s*' + _T +
+    r'|' + _D + r'\s*,\s*(?:send|tell|message)\s+' + _A + r'(?:\s+this)?\s*:?\s*' + _T +
+    r'|to\s+' + _F_AR + r'\s*,\s*send(?:\s+this)?\s*:?\s*' + _T +
+    r'|(?:send|pass)\s+' + _A + r'\s+(?:this|the)\s+(?:message|text|note)\s+' + _D + r'\s*:?\s*' + _T)
+
+
+def _f_quotes(text):
+    """[(start, end, inner)] for each outermost quoted span, or None when a
+    quote mark is left open. An apostrophe inside a word is not a quote."""
+    found, at = [], 0
+    while at < len(text):
+        mark = text[at]
+        close = _F_QUOTES.get(mark)
+        if mark in '”’' and not (mark == '’' and at and text[at - 1].isalnum()):
+            return None     # a closing mark with no opening one
+        if not close or (mark == "'" and at and text[at - 1].isalnum()):
+            at += 1
+            continue
+        end = at + 1
+        while True:
+            end = text.find(close, end)
+            if end < 0:
+                return None
+            if close in "'’" and text[end + 1:end + 2].isalnum():
+                end += 1
+                continue
+            break
+        found.append((at, end + 1, text[at + 1:end]))
+        at = end + 1
+    return found
+
+
+def _frame_calls(clause):
+    """(calls, meta) for one clause read by a frame, or None."""
+    text = clause.strip()
+    quotes = _f_quotes(text)
+    if quotes is None:
+        return None
+    values = []
+
+    def token(kind, value):
+        values.append(value)
+        return f' \0{kind}{len(values) - 1}\0 '
+
+    # 1. Quoted spans: a directory after a word of place, a PDF, or text.
+    words, at = '', 0
+    for start, end, inner in quotes:
+        if not inner.strip() or '\\' in inner:
+            return None     # escapes inside quotes are not guessed at
+        words += text[at:start]
+        kind = 'L' if _F_PLACE_CUE.search(words) else 'f' if inner.casefold().endswith('.pdf') else 't'
+        words += token(kind, inner)
+        at = end
+    words += text[at:]
+
+    # 2. Unquoted paths. A final full stop or "!" is the sentence's, and is
+    # dropped only at the end of the clause. A path that a following word could
+    # extend to an existing spaced path is left to the readers above.
+    refused = []
+
+    def unquoted(found):
+        raw, rest = found.group(1), found.string[found.end(1):]
+        if raw.endswith(')') and '(' not in raw:
+            refused.append(raw)     # "(in ~/x)": the bracket is not the path's
+        colon = raw.endswith(':')
+        raw = raw[:-1] if colon else raw
+        if raw[-1:] in ('.', '!'):
+            if rest.strip():
+                refused.append(raw)
+            raw = raw.rstrip('.!')
+        spaced = _spaced_words(rest)
+        if (raw in ('', '/', '~', '~/', '.', './', '..', '../')
+                or any(_path_exists(raw + ''.join(spaced[:count]), directory=directory)
+                       for count in range(1, len(spaced) + 1) for directory in (True, False))):
+            refused.append(raw)
+        return token('f' if raw.casefold().endswith('.pdf') else 'L', raw) + (':' if colon else '')
+    words = _F_PATH.sub(unquoted, words)
+
+    # 3. Directories: a path or bare name after a word of place, or "here".
+    def located(found):
+        if found.groupdict().get('index') is not None:
+            return token('d', values[int(found.group('index'))])
+        if _F_OWN_WORDS.fullmatch(found['bare']):
+            return found[0]
+        if _F_NOT_BARE.fullmatch(found['bare']):
+            refused.append(found.group('bare'))
+        return token('d', found.group('bare'))
+    words = re.sub(_F_LOC_INTRO + r'(?:\0L(?P<index>\d+)\0|(?P<bare>' + _F_BARE + r'))' + _F_LOC_NOUN + r'(?![\w-])',
+                   located, words, flags=re.I)
+    words = re.sub(r'\bwith\s+\0L(?P<index>\d+)\0\s+as\s+(?:its|the)\s+working\s+directory\b',
+                   located, words, flags=re.I)
+    # "a codex tab for ../x": "for" places only a written path, never a bare name.
+    words = re.sub(r'\bfor\s+\0L(?P<index>\d+)\0', located, words, flags=re.I)
+    if refused or re.search(r'\0L\d+\0', words):
+        return None
+    words = _F_HERE.sub(lambda found: token('d', 'here'), words)
+
+    # 4. Placement, model, agent and application.
+    def placed(found):
+        if found.group('tab'):
+            return ' \0ptab\0 '
+        side = found.group('adj') or found.group('after') or found.group('side')
+        return f' \0p{_F_SIDE[side.casefold()]}\0 '
+    words = _F_PLACE.sub(placed, words)
+    words = _F_MODEL.sub(lambda found: token('m', found.group(1)), words)
+    words = _F_AGENT.sub(lambda found: f" \0a{(found.group(1) or found.group(2)).casefold()}\0 ", words)
+    words = _F_APP.sub(lambda found: f" \0x{next(_F_APPS[key] for key in _F_APPS if found.group(key))}\0 ", words)
+
+    # 5. The words left: one space apart, no space before punctuation.
+    words = ' '.join(words.split())
+    words = re.sub(r'\s+([,:.!?]|[\'’]s\b)', r'\1', words)
+    lead = _F_LEAD.match(words.casefold())
+    polite = bool(lead['polite'] or lead['mind'])
+    body = words[lead.end():]
+    if lead['mind']:
+        verb = re.match(r'\w+', body)
+        if not verb or verb[0].casefold() not in _F_GERUND:
+            return None
+        body = _F_GERUND[verb[0].casefold()] + body[verb.end():]
+    tail = _F_TAIL.search(body)
+    end, body = tail['end'], body[:tail.start()].strip()
+    if len(end) > 1 or end == '?' and not polite:
+        return None
+    folded = body.casefold()
+    tokens = re.findall(r'\0([a-z])([\w-]+)\0', body)
+    kinds = [kind for kind, _ in tokens]
+    if any(kinds.count(kind) > 1 for kind in 'dpmtf'):
+        return None
+    agents = [value for kind, value in tokens if kind == 'a']
+    args, meta = {}, {'frame': True}
+    for kind, value in tokens:
+        if kind == 'd' and values[int(value)] != 'here':
+            args['directory'] = values[int(value)]
+    if len(agents) == 1 and not {'x', 'f'} & set(kinds) and _F_LAUNCH.fullmatch(folded):
+        for kind, value in tokens:
+            if kind == 'p':
+                args['place'] = value
+            elif kind in 'mt':
+                args['model' if kind == 'm' else 'task'] = values[int(value)]
+        order = ''.join(kinds)
+        inside = 'm' in order and bool({'d', 'p'} & set(order[order.find('m'):]))
+        comma = bool(re.search(r',\s*\0m', body))
+        meta.update(located='d' in kinds, inside=inside, comma_model=comma and not inside, front=False)
+        if len(args.get('task', '').encode()) > 1024:
+            return None
+        return [_call('start_' + agents[0], **args)], meta
+    if not agents and not {'d', 'p', 'm', 't'} & set(kinds):
+        if 'f' not in kinds and _F_APP_SHAPES.fullmatch(folded):
+            return [_call('open_app', app=value) for kind, value in tokens if kind == 'x'], meta
+        if 'f' in kinds and _F_PDF_SHAPES.fullmatch(folded):
+            named = [value for kind, value in tokens if kind == 'x']
+            path = next(values[int(value)] for kind, value in tokens if kind == 'f')
+            if named != ['kilix-pdf'] or not path.startswith(('/', '~/')) or len(path.encode()) > 4096:
+                return None
+            return [_call('open_app', app='kilix-pdf', file_path=path)], meta
+        return None
+    if len(agents) != 1 or {'x', 'f', 'm', 'p'} & set(kinds):
+        return None
+    if 't' not in kinds and _F_WAIT.fullmatch(folded):
+        return [_call('wait_for_agent', agent=agents[0], **args)], meta
+    if 't' in kinds and _F_MESSAGE.fullmatch(folded):
+        message = next(values[int(value)] for kind, value in tokens if kind == 't')
+        if len(message.encode()) > 1024:
+            return None
+        return [_call('message_agent', agent=agents[0], text=message, **args)], meta
+    return None
+
+
 def exact_calls(request, *, _depth=0, _bare=False):
     """A complete reading of supported actions, or None; no partial match.
 
@@ -499,7 +789,39 @@ def exact_calls(request, *, _depth=0, _bare=False):
 
 def _read_calls(request, *, _depth=0, _bare=False):
     parts = _read_parts(request, _depth=_depth, _bare=_bare)
-    return [call for call, _meta in parts] if parts else None
+    if not parts and _depth == 0:
+        listed = _enumerated(request)
+        if listed:
+            steps, count = listed
+            parts = _read_parts(steps)
+            if not parts or count is not None and len(parts) != count:
+                return None
+            parts = [(call, {**m, 'frame': True}) for call, m in parts]
+    if not parts:
+        return None
+    calls = [call for call, _meta in parts]
+    if _depth == 0 and any(meta.get('frame') for _call_, meta in parts):
+        # A frame reads words by slots; the whole request must also pass the
+        # rules every suggested plan passes: no word the tools cannot express,
+        # and nothing it names left unused. Imported here: commands_suggest
+        # imports this module.
+        import commands_suggest
+        if commands_suggest.refusal(request, calls) is not None or _two_sessions(calls):
+            return None
+    return calls
+
+
+def _two_sessions(calls):
+    """Whether a wait or message names an agent that an earlier step has in
+    another directory: "start claude here and claude in /b, then tell the
+    claude ..." leaves open which session is meant."""
+    def where(call):
+        return call['arguments'].get('directory', 'here')
+    def agent(call):
+        return call['name'].removeprefix('start_') if call['name'].startswith('start_') else call['arguments'].get('agent')
+    return any(call['name'] in ('wait_for_agent', 'message_agent')
+               and any(agent(earlier) == agent(call) and where(earlier) != where(call) for earlier in calls[:index])
+               for index, call in enumerate(calls))
 
 
 # A separator that ends a sentence or a step (";", "then") rather than joining
@@ -538,6 +860,9 @@ def _read_parts(request, *, _depth=0, _bare=False, _list_bare=False):
     if found and (not any('task' in c['arguments'] or 'text' in c['arguments'] for c in found)
                   or _extended_agent_calls(request, closed_payload=True)):
         return _leaf(found, meta if len(found) == 1 else None)
+    framed = None if found else _frame_calls(request)
+    if framed:
+        return _leaf(*framed)
     pair=re.fullmatch(r'give me\s+(claude|codex)\s+in\s+('+_DIRECTORY+r')\s+plus\s+(claude|codex)\s+in\s+('+_DIRECTORY+r')',request,re.I)
     if pair:
         first,second=_literal(pair[2]),_literal(pair[4], sentence_end=True)
@@ -549,13 +874,16 @@ def _read_parts(request, *, _depth=0, _bare=False, _list_bare=False):
         left,right=request[:separator.start()].strip(),request[separator.end():].strip()
         left_meta = {}
         first=_extended_agent_calls(left, _meta=left_meta) or _app_calls(left)
-        if not first:continue
+        if not first:
+            framed = _frame_calls(left)
+            if not framed:continue
+            first, left_meta = framed[0], dict(framed[1])
         word = separator[0].strip(' ,').casefold()
         if (word=='and'
                 and all(c['name'].startswith('start_') for c in first)
                 and re.match(r'^(?:ask it to|give it this task:)\s+',right,re.I)):
             continue  # A task delimiter belonging to this launch, not a second action.
-        if any('task' in x['arguments'] or 'text' in x['arguments'] for x in first):
+        if not left_meta.get('frame') and any('task' in x['arguments'] or 'text' in x['arguments'] for x in first):
             if not _extended_agent_calls(left, closed_payload=True):
                 # A bare "wait" names no session and is not a Kilix action.
                 # Keep it in literal messages such as 'say "ready" and wait'.
@@ -581,6 +909,20 @@ def _read_parts(request, *, _depth=0, _bare=False, _list_bare=False):
         if (not rest and word in ('and', 'and then') and launches
                 and re.match(r'^(?:claude|codex)\b', right, re.I)):
             rest=_read_parts('start '+right,_depth=_depth+1,_bare=bare,_list_bare=list_bare)
+        if (not rest and word in ('and', 'then', 'and then') and all(c['name'] == 'open_app' for c in first)
+                and _F_APP.match(re.sub(r'^(?:the|a|an)\s+', '', right, flags=re.I))):
+            # "open the notepad, then the calculator": the verb is shared.
+            rest=_read_parts('open '+right,_depth=_depth+1,_bare=bare,_list_bare=list_bare)
+        if not rest:
+            referred = _referred(right, first)
+            if referred:
+                rest = _read_parts(referred,_depth=_depth+1,_bare=bare,_list_bare=list_bare)
+                quoted = [inner for _a, _b, inner in _f_quotes(right) or ()]
+                if rest and all(value in quoted for call, _m in rest for key, value in call['arguments'].items()
+                                if key in ('task', 'text')):
+                    rest = [(call, {**m, 'frame': True}) for call, m in rest]
+                else:
+                    rest = None     # as in a frame, a payload after "it" must be quoted
         if not rest or len(first)+len(rest)>4:
             return None
         rest = [(rest[0][0], {**rest[0][1], 'shares': bool(shared_verb)})] + rest[1:]
@@ -653,6 +995,57 @@ def _read_parts(request, *, _depth=0, _bare=False, _list_bare=False):
                     if index < group else (call, m) for index, (call, m) in enumerate(rest)]
         return _leaf(first, left_meta) + rest
     return _leaf(found, meta if len(found) == 1 else None) if found else None
+
+
+def _referred(right, first):
+    """The clause after a single call with "it" or "there" written out: "it"
+    as the session that call waited for or messaged, "there" as its
+    directory. None when the clause refers to nothing that way."""
+    if len(first) != 1:
+        return None
+    call, args = first[0], first[0]['arguments']
+    where = ' in ' + json.dumps(args['directory'], ensure_ascii=False) if 'directory' in args else ''
+    if call['name'] in ('wait_for_agent', 'message_agent'):
+        it = re.match(r'((?:(?:then|also|after\s+that)\s*,?\s+)?(?:tell|message|send|ping|wait\s+(?:for|on|till|until)))'
+                      r'\s+it\b', right, re.I)
+        if it:
+            return it[1] + ' ' + args['agent'] + where + right[it.end():]
+    there = [m for m in re.finditer(r'\bthere\b', right, re.I) if _outside_quotes(right, m.start())]
+    if (len(there) == 1 and where
+            and not re.match(r'\s*(?:is|are|was|were)\b|[\'’]s\b', right[there[0].end():], re.I)):
+        return right[:there[0].start()] + where.strip() + right[there[0].end():]
+    return None
+
+
+_ORDINALS = ('first', 'second', 'third', 'fourth')
+_COUNT_WORDS = {'two': 2, 'three': 3, 'four': 4}
+
+
+def _enumerated(request):
+    """(steps joined by "; then ", count or None) for a request that lists its
+    steps as "first ..., second ...", "1) ... 2) ..." or "Three things: ...".
+    The markers must run in order from the start, each opening a clause."""
+    text = request.strip()
+    count = None
+    head = re.match(r'(two|three|four)\s+things\s*:\s*', text, re.I)
+    if head:
+        count, text = _COUNT_WORDS[head[1].casefold()], text[head.end():]
+    marks = [m for m in re.finditer(r'(?:^|(?<=[,;])\s*|\s+)(?:and\s+)?(?:(first|second|third|fourth)\b\s*,?|([1-4])\))\s*',
+                                    text, re.I) if _outside_quotes(text, m.start())]
+    marks = [m for m in marks if m.start() == 0 or text[:m.start()].rstrip().endswith((',', ';')) or m[2]]
+    if len(marks) < 2:
+        return (text, count) if head else None
+    numbered = [m[2] for m in marks]
+    if any(numbered) and not all(numbered):
+        return None
+    wanted = [str(n) for n in range(1, len(marks) + 1)] if all(numbered) else list(_ORDINALS[:len(marks)])
+    if [(m[1] or m[2]).casefold() for m in marks] != wanted or marks[0].start() != 0:
+        return None
+    steps = [text[m.end():(marks[i + 1].start() if i + 1 < len(marks) else len(text))].strip().rstrip(',;').strip()
+             for i, m in enumerate(marks)]
+    if not all(steps):
+        return None
+    return '; then '.join(steps), count
 
 
 def _canonical(calls, cwd=None):

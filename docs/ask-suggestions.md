@@ -5,10 +5,15 @@ the command grammar reads:
 
 ```sh
 kilix-needle workflows suggest --set d3:2b
-kilix-needle ask --plan "Run Codex in dusk-ferry in a split below"
+kilix-needle ask --plan "Start Claude and Codex, both in ~/work/fig-lantern"
 # the whole request has no supported reading
-#   hint: did you mean: start codex in "dusk-ferry" in a split below
+#   hint: did you mean: start claude in "~/work/fig-lantern"; then start codex in "~/work/fig-lantern"
 ```
+
+The grammar itself reads most of the wordings a suggestion used to be needed
+for ("Run Codex in dusk-ferry in a split below" is now planned directly); see
+[Ask phrasing](ask-phrasing.md). The measurements below were made before that
+and describe the suggestions alone.
 
 ## The setting
 
@@ -32,7 +37,7 @@ A suggestion is a sentence. It is never run, and it changes neither the
 status nor the exit code of the request it answers. Sending it is a new
 request, which the grammar reads, plans and asks consent for like any other.
 The JSON record carries it as `suggestion` (`request`, `calls`, `source`,
-`model`), and the hint line shows it. `source` is `walk` (the decision model
+`model`), and the hint line shows it. `source` is `built` (the decision model
 alone), `proposal` (the command model alone) or `agreed` (both).
 
 Only a request that planned nothing gets one. A request that a job planned,
@@ -73,16 +78,71 @@ only the request's own words:
 5. The plan is put into the grammar's plain wording. The suggestion exists
    only if the grammar reads that wording back as exactly that plan.
 
+## How a decision model builds the sentence
+
 A decision model answers multiple-choice questions and writes nothing, so it
-is given only choices these rules allow: the kind of request, the number of
-operations when clauses are joined, each operation (or "something these
-cannot do", which refuses the whole request) and each argument from the
-spans of step 1. Last it is asked whether the plan does exactly what the
-request asks. On its own, its plan is offered only when every answer was
-sure enough. A request takes about five questions and 950 prompt tokens: at
-the cost measured for `d3:2b` on a 6 GB laptop GPU, about 0.4 seconds.
+is never asked for words. Before any question, every plan the rules above
+allow is listed, using only the spans of step 1, and each is kept only if the
+grammar reads its plain wording back as that plan. Of those, only the plans
+with the fewest operations that still use everything the request names are
+kept, and operations that each name a different agent or application keep
+the order the request names them in. The wordings of what is left form a tree
+of pieces: a fixed phrase (`start codex`, ` in a split below`,
+`; then wait for claude`) or a copied span (` in "dusk-ferry"`,
+`: "run the tests"`). Every complete path through the tree is a sentence the
+grammar reads. A request with no such plan gets no question at all.
+
+Three more rules shape the list: a split is offered only when the request
+says split, pane, side or a direction (`a new tab` says none); `the same
+directory` names the directory again; and a model named as one (`model o3`)
+must be in the plan, so a model the grammar cannot carry means no suggestion
+rather than a plan without it.
+
+The model is then asked:
+
+1. what kind of request this is (a plain command, a question, a condition, ...);
+2. at each point where the tree branches, which continuation keeps the
+   command true to the request, each shown as the whole sentence so far plus
+   the piece, with "complete" where a plan ends;
+3. which of the complete sentences does exactly what the request asks, as
+   wholes, up to 24 in one question;
+4. if 2 and 3 chose the same sentence, whether that plan does exactly what the
+   request asks.
+
+Its plan is offered only when 2 and 3 agree and every answer was sure
+enough. Where the tree has a single sentence, only 1 and 4 are asked. A
+request takes about 1.4 questions and 460 prompt tokens on average: at the
+cost measured for `d3:2b` on a 6 GB laptop GPU, about 0.16 seconds.
+
+The earlier way, a walk that asked for the kind, the number of operations,
+each operation and each argument, is still in the module (`walk()`) for
+comparison; it took about 3.4 questions and 665 tokens per request on the same
+sets.
 
 ## Measured, 2026-11-24
+
+### The built sentence against the walk
+
+Not blind: the six sets below shaped the rules of both, and the walk's
+numbers on them are with today's rules. The seventh, `fresh1`, was written
+for this comparison by a fresh author (and its labels checked by a second
+reader) after the built sentence's rules were fixed, and was run once; it is
+development data, not a qualification. Per 100 requests, the decision model
+alone with the grammar selected:
+
+| Set | Walk: answered | wrong | questions | Built: answered | wrong | questions |
+|---|---|---|---|---|---|---|
+| v1-v6 pooled (600) | 542 | 1 | 3.44 | 547 | 1 | 1.42 |
+| fresh1 (100) | 88 | 0 | 2.67 | 92 | 0 | 1.22 |
+
+The one wrong suggestion in each is the same request ("Open the calculator
+and work out 18% of 2,350", below). Prompt tokens per request: 665 for the
+walk and 460 built on v1-v6, 508 and 254 on fresh1. With a command model
+selected, agreement answered 495 (LFM2) and 483 (Needle3) of the 600 with the
+built plan, against 494 and 480 with the walk, with the same wrong
+suggestions (0 and 1).
+
+### The walk, blind
 
 Each set has 100 requests, 72 supported and 28 that must not act, written by
 an author who saw only the tool schema and the scorer, with labels checked by
@@ -92,8 +152,9 @@ wrong suggestion is a wording that, if accepted, would do something other
 than what the request expected. The models are `d3:2b` and the release LFM2
 and Needle3 command models.
 
-Sixth set, blind: the code was frozen before the set was written and it was
-run once.
+These are the walk's results, before the built sentence replaced it. Sixth
+set, blind: the code was frozen before the set was written and it was run
+once. The built sentence has not had a blind set yet.
 
 | Setting | Selected model | Answered | Suggestions | Right | Wrong |
 |---|---|---|---|---|---|
@@ -131,7 +192,9 @@ makes 191 suggestions with `d3:2b` alone and 143 where LFM2 agrees, none of
 them wrong, and 153 from LFM2's proposal alone, none wrong. Those are not
 blind results.
 
-Time: the command models take 1.0 to 1.9 seconds per request on a CPU once
+Time: the built sentence's list of plans takes a few milliseconds to make,
+and up to about 3 seconds for a request of four operations with long quoted
+texts. The command models take 1.0 to 1.9 seconds per request on a CPU once
 loaded, and 8 to 11 seconds in a fresh `kilix-needle ask` process, which
 loads the model first. `model` adds nothing to that, because the proposal
 has already been made. A decision model adds its questions.
@@ -144,7 +207,12 @@ has already been made. A decision model adds its questions.
 - An unsupported second action joined with `and` can get through a decision
   model alone, as above. Agreement with a command model caught it.
 - `it` for an agent's session in a directory named earlier is not followed
-  by the rules.
+  by the rules, and a directory named once in front of several operations
+  ("In ~/x, start codex ..., then start claude ...") can go to one of them
+  only. Both leave a choice to the model, which then often withholds the
+  suggestion.
+- A request whose operations exceed its joins (`and`, `then`, commas) by more
+  than one, such as a numbered list without them, gets no suggestion.
 - A plan the grammar's wording cannot carry gets no suggestion: a model name
   the grammar does not list, or a PDF given by a relative path.
 - Requests for the other jobs (panes, files, system) are not suggested.

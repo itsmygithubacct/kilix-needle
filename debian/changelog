@@ -6,8 +6,21 @@ kilix-needle (0.20261116+packaging8) UNRELEASED; urgency=medium
     decision model on the local Ollama server, which must agree with the
     command model when one is selected. KILIX_ASK_SUGGEST overrides the
     saved setting. The wording is shown as a hint and never run.
+  * A decision model builds the suggested wording from the continuations
+    the grammar allows and must pick the same sentence when it ranks the
+    complete ones. This asks fewer than half the questions of asking for
+    each operation and argument in turn.
   * Read a message or task wholly inside single or typographic quotes
     without the quote marks: "tell claude: 'fix it'" sent the quotes.
+  * Read many more ways of saying a supported Ask request, with no model:
+    other openers ("kick off", "spin up", "get ... going", "pop open"),
+    a bare directory name after "in", ./ and ../ paths, splits and waits
+    said many ways, quoted messages introduced by "say", "relay", "ping",
+    "let ... know", lists of applications, "it" and "there" for the step
+    before, and steps listed as "first ..., second ..." or "1) ... 2) ...".
+    A message or task read this way must be quoted, and the whole request
+    must also pass the rules suggestions are held to. See
+    docs/ask-phrasing.md.
 
  -- itsmygithubacct <itsmygithubacct@users.noreply.github.com>  Tue, 24 Nov 2026 08:50:00 +0000
 

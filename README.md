@@ -83,7 +83,8 @@ An unreadable or invalid saved preference is refused and left as it is; the
 error names the explicit model option and the `workflows select` repair.
 `workflows suggest` prints, and with `--set` saves, where the wording comes
 from that Ask offers for a request it cannot read; see
-[Ask suggestions](docs/ask-suggestions.md). It downloads and installs nothing.
+[Ask suggestions](docs/ask-suggestions.md). What the grammar reads without any
+model is in [Ask phrasing](docs/ask-phrasing.md). It downloads and installs nothing.
 
 Kilix supplies `KILIX_CONTENT_ROOT`; a standalone call may pass `--root` with
 an absolute Content root. Status emits at most 16 KiB of JSON with schema

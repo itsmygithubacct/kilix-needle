@@ -1,11 +1,12 @@
 """Suggest a supported wording for a command the grammar cannot read.
 
 A decision model (Ollama's d3 family) answers multiple-choice questions and
-writes nothing. Each step here offers it only what the five-tool contract
-allows at that point: the kind of request, the operation, an enum value, or a
-span the request's own lexical rules find (a path, quoted text, a model name).
-The finished plan is put into the grammar's plain wording, and the suggestion
-exists only if the grammar reads that wording back as exactly that plan.
+writes nothing. It is offered only continuations of the grammar's own plain
+wording: every plan the request's words allow is listed first, using only
+spans the request's lexical rules find (a path, quoted text, a model name),
+and the model builds the sentence of one of them piece by piece. The
+suggestion exists only if the grammar reads that sentence back as exactly
+that plan.
 
 Nothing here admits or runs anything. The suggestion is a sentence for the
 user to accept; the grammar then reads it like any other request. Importing
@@ -418,7 +419,12 @@ def tidy(calls):
 
 def walk(request, choose):
     """(calls, steps): the plan the model's choices make, and every question's
-    answer with its odds. `calls` is empty when a step refuses the request."""
+    answer with its odds. `calls` is empty when a step refuses the request.
+
+    The earlier plan source, question by question: kind, count, operation,
+    each argument. suggest() now uses build(), which asked fewer questions and
+    answered more on the measured sets (docs/ask-suggestions.md); this stays
+    for comparison runs."""
     steps = []
     paths, texts, models, masked, plain = spans(request)
     full, base = _frames(request, masked, texts)
@@ -563,11 +569,11 @@ def walk(request, choose):
 
 
 def signals(steps):
-    """(gate, least sure choice, verify) for a walk."""
+    """(gate, least sure choice, verify) for a walk or a build."""
     gate = next((step['odds'].get('command', 0.0) for step in steps if step['kind'] == 'gate'), 0.0)
     verify = next((step['odds'].get('yes', 0.0) for step in steps if step['kind'] == 'verify'), 0.0)
     inner = [step['p'] for step in steps if step['kind'] not in ('gate', 'verify', 'count')]
-    return gate, min(inner) if inner else 0.0, verify
+    return gate, min(inner) if inner else 1.0, verify     # a plan with only one possible wording asks no choice
 
 
 def _quote(text):
@@ -619,38 +625,322 @@ def _carried(calls):
     return {'request': wording, 'calls': read}
 
 
+# The grammar's sentence, built piece by piece. plans() lists every plan the
+# request's own words allow and the grammar carries; their wordings form a tree
+# of pieces ("start codex", ' in "dusk-ferry"', " in a split below", "; then
+# wait for codex"), and the decision model only ever chooses among a node's
+# children. Every complete path is a sentence the grammar reads as its plan.
+
+# A split is offered only when the request says split, pane, side or a direction: "a new tab" says none.
+SPLIT_CUE = re.compile(r'\b(?:split|pane|right|left|above|below|beneath|under|underneath|over|up|down|top|'
+                       r'bottom|upper|lower|beside|side|vertical|vertically|horizontal|horizontally)\b', re.I)
+# "in the same directory": the directory named earlier is meant again
+SAME = re.compile(r'\b(?:the\s+)?same\s+(?:directory|dir|folder|repo|repository|project|place|path)\b', re.I)
+# "model gpt-6", "with the model opus": a model named as one, which no plan may leave out
+MODEL_SAID = re.compile(r'\bmodel\s+(?:to\s+|is\s+|=\s*)?(' + MODEL_NAME.pattern + ')', re.I)
+# Each join ("and then", a comma, a semicolon) allows one more operation.
+JOIN = re.compile(r'(?:[,;]\s*)?(?:\b(?:and|then|also|plus|afterwards|next)\b[\s,]*)+|[,;]', re.I)
+MOST_PLANS = 4000       # a request with more possible plans than this gets none
+ENDING = '(complete)'
+
+
+def _context(request):
+    mentions, texts, models, _masked, plain = _scan(request)
+    paths = list(dict.fromkeys(mentions))
+    agents, apps, directions = _named(paths, plain)
+    spoken = [name.casefold() for name in re.findall(r'(?<![\w.-])(?:claude|codex)(?![\w-])', plain, re.I)]
+    again = sum(found[0].casefold() != 'both' or bool(mentions) for found in THERE.finditer(plain))
+    again += len(SAME.findall(plain)) if mentions else 0
+    return {'request': request, 'paths': paths, 'mentions': mentions, 'texts': texts, 'models': models,
+            'plain': plain, 'agents': agents, 'apps': apps, 'directions': directions, 'spoken': spoken,
+            'owed': len(mentions) + again, 'verbs': [ops for verb, ops in VERBS if verb.search(plain)],
+            'said_models': [name.rstrip('.,:') for name in MODEL_SAID.findall(plain)]}
+
+
+def _clauses(context):
+    """Every single call the request's spans allow that the grammar reads alone."""
+    out, dirs = [], [None] + [path for path in context['paths'] if not path.lower().endswith('.pdf')]
+    places = ['tab']
+    if SPLIT_CUE.search(context['plain']):
+        places += sorted(context['directions']) or ['right', 'left', 'down', 'up']
+    for agent in context['agents']:
+        name = 'start_' + agent
+        models = [None] + [model for model in context['models'] if model in contract._MODELS[name]]
+        for directory in dirs:
+            for place in places:
+                for model in models:
+                    for task in [None] + context['texts']:
+                        args = {key: value for key, value in (('directory', directory), ('place', place),
+                                                              ('model', model), ('task', task))
+                                if value is not None and value != 'tab'}
+                        out.append({'name': name, 'arguments': args})
+            where = {'directory': directory} if directory else {}
+            out.append({'name': 'wait_for_agent', 'arguments': {'agent': agent, **where}})
+            out += [{'name': 'message_agent', 'arguments': {'agent': agent, **where, 'text': text}}
+                    for text in context['texts']]
+    for app in context['apps']:
+        out.append({'name': 'open_app', 'arguments': {'app': app}})
+        if app == 'kilix-pdf':
+            out += [{'name': 'open_app', 'arguments': {'app': app, 'file_path': path}}
+                    for path in context['paths'] if path.lower().endswith('.pdf')]
+    return [call for call in out if _carried([call])]
+
+
+def _uses(calls):
+    places = [value for call in calls for key, value in call['arguments'].items() if key in ('directory', 'file_path')]
+    said = [value for call in calls for key, value in call['arguments'].items() if key in ('task', 'text')]
+    who = [call['name'].split('_')[1] if call['name'].startswith('start_') else
+           call['arguments'].get('agent') or call['arguments'].get('app') for call in calls]
+    return places, said, who, {call['arguments'].get('place') for call in calls}, {call['name'] for call in calls}
+
+
+def _gains(context, calls, call):
+    """Whether `call` covers something the plan so far does not: a directory still
+    owed, a quoted text, an agent or application as often as it is named, a
+    direction, or an operation a verb of the request asks for."""
+    places, said, who, dirs, names = _uses(calls)
+    args = call['arguments']
+    for key in ('directory', 'file_path'):
+        if key in args and (len(places) < context['owed']
+                            or places.count(args[key]) < context['mentions'].count(args[key])):
+            return True
+    if any(key in args and not any(args[key] in value for value in said) for key in ('task', 'text')):
+        return True
+    name = call['name'].split('_')[1] if call['name'].startswith('start_') else args.get('agent') or args.get('app')
+    if name not in who or who.count(name) < context['spoken'].count(name):
+        return True
+    if args.get('place', 'tab') != 'tab' and args['place'] not in dirs:
+        return True
+    return any(call['name'] in ops and not names & set(ops) for ops in context['verbs'])
+
+
+def _owing(context, calls):
+    """A lower bound on the operations still needed: each adds at most one
+    directory, text, agent or application, and direction."""
+    places, said, who, dirs, _names = _uses(calls)
+    paths = max(context['owed'] - len(places),
+                sum(max(0, context['mentions'].count(path) - places.count(path)) for path in context['paths']))
+    texts = sum(1 for text in context['texts'] if not any(text in value for value in said))
+    named = max(len(set(context['agents'] + context['apps']) - set(who)),
+                sum(max(0, context['spoken'].count(agent) - who.count(agent)) for agent in context['agents']))
+    return max(paths, texts, named, len(context['directions'] - dirs))
+
+
+def plans(request):
+    """Every plan the request's own words allow (refusal() finds nothing
+    against it) that the grammar reads back from its wording, with the fewest
+    operations any such plan needs. Calls that each name a different agent or
+    application keep the order the request names them in. [] when there is
+    none or too many."""
+    if not possible(request):
+        return []
+    context = _context(request)
+    if any(not any(model in allowed for allowed in contract._MODELS.values()) for model in context['said_models']):
+        return []       # the grammar cannot carry a model the request names, and leaving it out changes the request
+    clauses = _clauses(context)
+    most = min(4, 1 + len(JOIN.findall(context['plain'])))
+    judged = {}
+
+    def allowed(calls):     # refusal() does not depend on order, so each set of calls is judged once
+        key = tuple(sorted(json.dumps(call, sort_keys=True) for call in calls))
+        if key not in judged:
+            judged[key] = refusal(request, calls) is None
+        return judged[key]
+
+    def grow(calls, size, found):
+        if len(calls) == size:
+            used = {call['arguments'].get('model') for call in calls}
+            if (_owing(context, calls) == 0 and all(model in used for model in context['said_models'])
+                    and _in_order(calls, context['plain']) == calls and allowed(calls) and _carried(calls)):
+                found.append(list(calls))
+                if len(found) > MOST_PLANS:
+                    raise OverflowError
+            return
+        if _owing(context, calls) > size - len(calls):
+            return
+        seen = {_identity(call) for call in calls}
+        said = [value for call in calls for key, value in call['arguments'].items() if key in ('task', 'text')]
+        for call in clauses:
+            text = call['arguments'].get('task') or call['arguments'].get('text')
+            if (_identity(call) in seen or not _gains(context, calls, call)
+                    or text is not None and said.count(text) >= request.count(text)):
+                continue
+            calls.append(call)
+            grow(calls, size, found)
+            calls.pop()
+
+    for size in range(1, most + 1):     # the fewest operations that say everything the request names
+        found = []
+        try:
+            grow([], size, found)
+        except OverflowError:
+            return []
+        if found:
+            return found
+    return []
+
+
+def _clause_pieces(call):
+    """The pieces whose concatenation is sentence([call])."""
+    name, args = call['name'], call['arguments']
+    where = [f" in {_quote(args['directory'])}"] if 'directory' in args else []
+    if name.startswith('start_'):
+        out = ['start ' + name.split('_')[1]] + where
+        if args.get('place', 'tab') != 'tab':
+            out.append(_PLACE_WORDS[args['place']])
+        if 'model' in args:
+            out.append(f" with model {args['model']}")
+        if 'task' in args:
+            out.append(f" with task {_quote(args['task'])}")
+        return out
+    if name == 'wait_for_agent':
+        return [f"wait for {args['agent']}"] + where
+    if name == 'message_agent':
+        return [f"message {args['agent']}"] + where + [f": {_quote(args['text'])}"]
+    return [sentence([call])]
+
+
+def pieces(calls):
+    """sentence(calls), cut where the plans of one request can part."""
+    out = []
+    for number, call in enumerate(calls):
+        part = _clause_pieces(call)
+        out += (['; then ' + part[0]] + part[1:]) if number else part
+    return out
+
+
+class Node:
+    """A partial sentence: the text so far, its continuations and the plan it completes, if any."""
+    __slots__ = ('text', 'children', 'plan')
+
+    def __init__(self, text=''):
+        self.text, self.children, self.plan = text, {}, None
+
+
+def tree(found):
+    root = Node()
+    for calls in found:
+        node = root
+        for piece in pieces(calls):
+            node = node.children.setdefault(piece, Node(node.text + piece))
+        node.plan = calls
+    return root
+
+
+def continuations(node):
+    """[(piece, next node, or None for the end)]: what the grammar allows after this partial sentence."""
+    out = list(node.children.items())
+    return out + [(ENDING, None)] if node.plan is not None else out
+
+
+def sentences(node):
+    """The complete sentences under a node, in text order."""
+    out = [node] if node.plan is not None else []
+    for child in node.children.values():
+        out += sentences(child)
+    return sorted(out, key=lambda found: found.text)
+
+
+BUILD_FRAME = ('A user typed this request to a terminal assistant:\n{request}\n\n'
+               'The assistant rewrites the request as a command in its own fixed wording, one piece at a time. '
+               'The command must do exactly what the request asks: the same operations in the same order, with '
+               'the same details, and nothing more.')
+STEP_QUESTION = 'Which continuation keeps the command true to the request?'
+WHOLE_QUESTION = 'Which command does exactly what the request asks, no more and no less?'
+WHOLE_GROUP = 24        # complete sentences ranked in one question
+
+
+def build(request, choose):
+    """(calls, steps): the plan whose sentence the model builds, and every
+    question's answer with its odds. Two readings must agree: one choice of
+    continuation at a time, each shown as the whole sentence so far plus the
+    piece, and a ranking of the complete sentences as wholes. `calls` is empty
+    when there is no plan, or when the two disagree."""
+    steps = []
+
+    def ask(kind, state, question, options):
+        ranked = choose(state, question, options)
+        steps.append({'kind': kind, 'pick': ranked[0][0], 'p': ranked[0][1],
+                      'odds': {key: round(value, 4) for key, value in ranked}})
+        return ranked[0][0]
+
+    def refused(kind):
+        steps.append({'kind': 'refused', 'pick': kind, 'p': 0.0, 'odds': {}})
+        return [], steps
+
+    found = plans(request)
+    if not found:
+        return refused('unnamed' if not possible(request) else 'no plan')
+    root = tree(found)
+    _paths, texts, _models, masked, _plain = spans(request)
+    full, base = _frames(request, masked, texts)
+    ask('gate', base, GATE_QUESTION, KINDS)
+    state = BUILD_FRAME.format(request=request)
+    node = root
+    while True:     # left to right
+        offered = {str(number): child for number, (_piece, child) in enumerate(continuations(node), 1)}
+        if node.plan is not None:       # the end is offered as "0"
+            offered['0'] = offered.pop(str(len(offered)))
+        if len(offered) == 1:
+            child = next(iter(offered.values()))
+        else:
+            options = {key: (node.text + '   ' + ENDING if child is None else
+                             child.text + (' ...' if child.children else '   ' + ENDING))
+                       for key, child in offered.items()}
+            child = offered[ask('step', state, STEP_QUESTION, options)]
+        if child is None:
+            break
+        node = child
+    greedy = node.plan
+    nodes = sentences(root)
+    while len(nodes) > 1:       # whole sentences, a group at a time
+        kept = []
+        for start in range(0, len(nodes), WHOLE_GROUP):
+            group = nodes[start:start + WHOLE_GROUP]
+            kept.append(group[int(ask('whole', state, WHOLE_QUESTION,
+                                      {str(number): found.text for number, found in enumerate(group, 1)})) - 1]
+                        if len(group) > 1 else group[0])
+        nodes = kept
+    if nodes[0].plan != greedy:
+        return refused('disagree')
+    ask('verify', full + "\n\nThe assistant's plan:\n" + plan_text(greedy), VERIFY_QUESTION, VERIFY_OPTIONS)
+    return greedy, steps
+
+
 def suggest(request, choose=None, *, propose=None, limits=(GATE, STEP, VERIFY)):
     """{'request': a wording the grammar reads, 'calls': what it reads it as,
     'source': where the plan came from} for a request the grammar cannot
     read, or None.
 
-    `choose` asks a decision model, which walks to a plan of its own.
+    `choose` asks a decision model, which builds the grammar's sentence for
+    a plan of its own (build()).
     `propose` returns the calls a command model proposes for the request.
     Every plan is held to refusal() and to the grammar. With a decision model
-    alone, its plan is offered when every answer was sure enough ('walk').
+    alone, its plan is offered when every answer was sure enough ('built').
     With a command model alone, its proposal is offered ('proposal'). With
     both, a wording is offered only when the two plans are the same
-    ('agreed'); the command model is not asked when the walk gave no plan.
+    ('agreed'); the command model is not asked when the decision model gave
+    no plan.
     A decision model that cannot be asked offers nothing."""
     if not possible(request):
         return None
-    walked = None
+    built = None
     if choose is not None:
         try:
-            calls, steps = walk(request, choose)
+            calls, steps = build(request, choose)
         except SuggestError:
             return None
-        walked = _carried(calls) if calls and refusal(request, calls) is None else None
-        if not walked:
+        built = _carried(calls) if calls and refusal(request, calls) is None else None
+        if not built:
             return None
         if propose is None:
             sure = all(value >= limit for value, limit in zip(signals(steps), limits))
-            return {**walked, 'source': 'walk'} if sure else None
+            return {**built, 'source': 'built'} if sure else None
     plan = tidy(propose()) if propose is not None else None
     found = _carried(plan) if plan and refusal(request, plan) is None else None
     if not found:
         return None
-    if walked is None:
+    if built is None:
         return {**found, 'source': 'proposal'}
-    same = contract._canonical(found['calls']) == contract._canonical(walked['calls'])
+    same = contract._canonical(found['calls']) == contract._canonical(built['calls'])
     return {**found, 'source': 'agreed'} if same else None

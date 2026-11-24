@@ -148,16 +148,37 @@ class Walk(unittest.TestCase):
         self.assertEqual(model.questions("Which plan does exactly"), [])
 
 
+def toward(wording):
+    """A rule's answer: the option on the way to `wording`, or that whole sentence when it is offered."""
+    def pick(options):
+        def score(text):
+            text = text.replace("   (complete)", "").removesuffix(" ...")
+            return 2 if text == wording else 1 if wording.startswith(text) else 0
+        return max(options, key=lambda key: score(options[key]))
+    return pick
+
+
+SPLIT = "Bring up Codex in a split pane."      # six plans: a tab, four splits, or a wait
+
+
+def builds(wording, *extra):
+    return Model(COMMAND, ("Which continuation", toward(wording)), ("Which command does exactly", toward(wording)),
+                 *extra, YES)
+
+
 class Suggest(unittest.TestCase):
-    MODEL = (COMMAND, ("Which operation", "start_codex"), ("Where should", "right"), YES)
+    MODEL = (COMMAND, YES)
 
     def test_the_suggestion_is_the_grammars_reading_of_the_plans_wording(self):
-        request = "Open Codex in a split on the right."
+        request = "Codex in a split on the right, please."
         self.assertFalse(contract.exact_calls(request))
-        found = suggest.suggest(request, Model(*self.MODEL))
+        model = Model(*self.MODEL)
+        found = suggest.suggest(request, model)
         self.assertEqual(found, {"request": "start codex in a split to the right",
-                                 "calls": [call("start_codex", place="right")], "source": "walk"})
+                                 "calls": [call("start_codex", place="right")], "source": "built"})
         self.assertEqual(contract.exact_calls(found["request"]), found["calls"])
+        # One wording only: nothing to choose, so only the kind of request and the final check are asked.
+        self.assertEqual([question for question, _, _ in model.asked], [suggest.GATE_QUESTION, suggest.VERIFY_QUESTION])
 
     def test_a_request_the_grammar_reads_is_never_sent_to_the_model(self):
         model = Model()
@@ -167,25 +188,24 @@ class Suggest(unittest.TestCase):
         self.assertEqual(model.asked, [])
 
     def test_an_unsure_answer_anywhere_means_no_suggestion(self):
-        request = "Open Codex in a split on the right."
-        for words in ("What kind of request", "Where should", "Does the plan do exactly"):
+        wording = "start codex in a split below"
+        self.assertEqual(suggest.suggest(SPLIT, builds(wording))["request"], wording)
+        for words in ("What kind of request", "Which continuation", "Which command does exactly",
+                      "Does the plan do exactly"):
             with self.subTest(unsure=words):
-                rules = [(rule[0], rule[1], 0.45) if rule[0] == words else rule for rule in self.MODEL]
-                self.assertIsNone(suggest.suggest(request, Model(*rules)))
-        self.assertIsNone(suggest.suggest(request, Model(*self.MODEL[:-1], ("Does the plan do exactly", "no"))))
+                rules = [(rule[0], rule[1], 0.45) if rule[0] == words else rule for rule in builds(wording).rules]
+                self.assertIsNone(suggest.suggest(SPLIT, Model(*rules)))
+        self.assertIsNone(suggest.suggest(SPLIT, Model(*builds(wording).rules[:-1], ("Does the plan do exactly", "no"))))
 
     def test_a_plan_the_grammar_does_not_read_back_is_not_suggested(self):
         model = Model(COMMAND, ("Which operation", "start_codex"), ("Which model", "1"), YES)
         request = "Start Codex using the model gpt-9-zeta."
         self.assertEqual(suggest.walk(request, model)[0], [call("start_codex", model="gpt-9-zeta")])
         self.assertIsNone(suggest.suggest(request, model))
-        pdf = Model(COMMAND, ("Which operation", "open_app"), ("Which application", "kilix-pdf"),
-                    ("Which file", "1"), YES)
-        self.assertIsNone(suggest.suggest('Show "tax form 2025.pdf" in the pdf viewer', pdf))
+        self.assertIsNone(suggest.suggest('Show "tax form 2025.pdf" in the pdf viewer', Model(*self.MODEL)))
         # A wording the grammar reads as some other plan is no suggestion either.
-        right = Model(COMMAND, ("Which operation", "start_codex"), ("Where should", "right"), YES)
         with mock.patch.object(suggest, "sentence", return_value="start codex in a split to the left"):
-            self.assertIsNone(suggest.suggest("Open Codex in a split on the right.", right))
+            self.assertIsNone(suggest.suggest("Codex in a split on the right, please.", Model(*self.MODEL)))
 
     def test_the_wording_carries_every_kind_of_call_through_the_grammar(self):
         plans = [
@@ -200,6 +220,135 @@ class Suggest(unittest.TestCase):
             with self.subTest(calls=calls):
                 read = contract.exact_calls(suggest.sentence(calls))
                 self.assertEqual(contract._canonical(read), contract._canonical(calls))
+
+
+SAMPLE = (
+    SPLIT, "Codex in a split on the right, please.", "Codex in a new tab, please",
+    'Run codex in dusk-ferry and tell it "lint only"', "Fire up Codex in mill-pond, then Claude in the same directory",
+    "The calculator and the notepad, please", "Claude and codex in ./tide-pool, please",
+    'Claude gets "hi", and hang on for codex in /x/y', 'Claude in "plum harbor", model opus, task "open the log"',
+    '~/papers/fern\u00e9.pdf in the pdf viewer please, then wait till claude is done', "Let Codex know: the tests pass now",
+    'give claude in ./a.b the task "start; then wait" and open the file manager',
+    "Wait for Claude in ./alpha and for Codex in ./beta, then open the notepad",
+)
+
+
+class Build(unittest.TestCase):
+    """plans() and build(): the decision model builds the grammar's own sentence."""
+
+    def test_every_sentence_the_generator_can_make_is_read_back_as_its_plan(self):
+        sizes = []
+        for request in SAMPLE:
+            with self.subTest(request=request):
+                found = suggest.plans(request)
+                sizes.append(len(found))
+                paths, texts, models, _masked, _plain = suggest.spans(request)
+                root = suggest.tree(found)
+                complete = suggest.sentences(root)
+                self.assertEqual(len(complete), len(found))
+                for node in complete:
+                    self.assertEqual(node.text, suggest.sentence(node.plan))
+                    self.assertEqual("".join(suggest.pieces(node.plan)), node.text)
+                    read = contract.exact_calls(node.text)
+                    self.assertEqual(contract._canonical(read), contract._canonical(node.plan))
+                    self.assertTrue(contract.admit(node.text, read).actions)
+                    self.assertIsNone(suggest.refusal(request, node.plan))
+                    for value in (v for c in node.plan for k, v in c["arguments"].items()
+                                  if k in ("directory", "file_path", "task", "text", "model")):
+                        self.assertIn(value, paths + texts + models)     # copied, never made up
+
+                def walk(node):     # every partial sentence goes on to a complete one
+                    offered = suggest.continuations(node)
+                    self.assertTrue(offered)
+                    for piece, child in offered:
+                        if child is None:
+                            self.assertIsNotNone(node.plan)
+                        else:
+                            self.assertEqual(child.text, node.text + piece)
+                            walk(child)
+                walk(root)
+        self.assertTrue(all(sizes) and max(sizes) > 5, sizes)
+        pdf = suggest.plans(SAMPLE[9])      # a PDF is a file to open, never a directory
+        self.assertEqual(pdf, [[call("open_app", app="kilix-pdf", file_path="~/papers/fern\u00e9.pdf"),
+                                call("wait_for_agent", agent="claude")]])
+
+    def test_the_fewest_operations_in_the_requests_order(self):
+        self.assertEqual(suggest.plans("The calculator and the notepad, please"),
+                         [[call("open_app", app="kilix-calculator"), call("open_app", app="kilix-notepad")]])
+        found = suggest.plans("Claude and codex in ./tide-pool, please")
+        self.assertTrue(found and all(len(calls) == 2 for calls in found))
+        self.assertTrue(all("claude" in json.dumps(calls[0]) for calls in found))     # claude is named first
+        # An operation that adds nothing the request names is never offered: no third call, no extra wait.
+        self.assertEqual(suggest.plans('Run codex in dusk-ferry and tell it "lint only"'),
+                         [[call("message_agent", agent="codex", directory="dusk-ferry", text="lint only")]])
+
+    def test_a_plan_the_grammar_does_not_read_back_whole_is_not_in_the_tree(self):
+        carried = suggest._carried
+        with mock.patch.object(suggest, "_carried", lambda calls: carried(calls) if len(calls) < 2 else None):
+            self.assertEqual(suggest.plans("The calculator and the notepad, please"), [])
+        self.assertTrue(suggest.plans("The calculator and the notepad, please"))
+
+    def test_an_operation_must_add_something_the_request_names(self):
+        context = suggest._context('Run codex in dusk-ferry and tell it "lint only"')
+        start = call("start_codex", directory="dusk-ferry")
+        self.assertFalse(suggest._gains(context, [start], call("wait_for_agent", agent="codex", directory="dusk-ferry")))
+        self.assertTrue(suggest._gains(context, [start], call("message_agent", agent="codex", text="lint only")))
+        self.assertTrue(suggest._gains(context, [], start))
+        twice = suggest._context("Fire up Codex in mill-pond, then Claude in the same directory")
+        self.assertTrue(suggest._gains(twice, [call("start_codex", directory="mill-pond")],
+                                       call("start_claude", directory="mill-pond")))
+
+    def test_what_the_requests_words_rule_in_and_out(self):
+        tab = suggest.plans("Codex in a new tab, please")
+        self.assertNotIn("place", json.dumps(tab))         # "a new tab" says no split
+        self.assertTrue(any(c["arguments"].get("place") == "down" for p in suggest.plans(SPLIT) for c in p))
+        same = suggest.plans("Fire up Codex in mill-pond, then Claude in the same directory")
+        self.assertTrue(same and all([c["arguments"].get("directory") for c in p] == ["mill-pond"] * 2 for p in same))
+        # A model the request names as one is never left out, and one the grammar cannot carry means no plan.
+        self.assertTrue(all("opus" in json.dumps(p) for p in
+                            suggest.plans('Claude in "plum harbor", model opus, task "open the log"')))
+        self.assertEqual(suggest.plans("Claude in ./a, model gpt-9-zeta, please"), [])
+        self.assertIn([call("wait_for_agent", agent="claude", directory="./a")],
+                      suggest.plans("Would you kindly hold on until Claude in ./a finishes"))     # "on until" names no model
+        for request in ("Quit Codex in a split on the right.", "start codex in a split to the right",
+                        "what is the weather like", "Start Codex if the tests pass"):
+            self.assertEqual(suggest.plans(request), [])
+
+    def test_the_model_chooses_only_among_the_grammars_continuations(self):
+        wording = "start codex in a split below"
+        model = builds(wording)
+        calls, steps = suggest.build(SPLIT, model)
+        self.assertEqual(calls, [call("start_codex", place="down")])
+        sentences = [node.text for node in suggest.sentences(suggest.tree(suggest.plans(SPLIT)))]
+        asked = {question: options for question, options, _ in model.asked}
+        self.assertEqual(list(asked), [suggest.GATE_QUESTION, suggest.STEP_QUESTION, suggest.WHOLE_QUESTION,
+                                       suggest.VERIFY_QUESTION])
+        # Each continuation is shown as the whole sentence so far plus the piece; the end only where a plan is complete.
+        self.assertEqual(asked[suggest.STEP_QUESTION]["0"], "start codex   (complete)")
+        for key, text in asked[suggest.STEP_QUESTION].items():
+            if key != "0":
+                self.assertTrue(text.startswith("start codex in a split"), text)
+                self.assertIn(text.replace("   (complete)", ""), sentences)
+        self.assertEqual(sorted(asked[suggest.WHOLE_QUESTION].values()), sorted(sentences))
+        self.assertEqual([step["kind"] for step in steps], ["gate", "step", "step", "whole", "verify"])
+        self.assertTrue(model.asked[-1][2].endswith("The assistant's plan:\n" + suggest.plan_text(calls)))
+        # The two readings disagree: no plan, and the final check is not asked.
+        model = Model(COMMAND, ("Which continuation", toward(wording)),
+                      ("Which command does exactly", toward("start codex")), YES)
+        self.assertEqual(suggest.build(SPLIT, model)[0], [])
+        self.assertNotIn(suggest.VERIFY_QUESTION, [question for question, _, _ in model.asked])
+
+    def test_many_whole_sentences_are_ranked_a_group_at_a_time(self):
+        request = "Wait for Claude in ./alpha and for Codex in ./beta, then open the notepad"
+        found = suggest.plans(request)
+        wanted = 'wait for claude in "./alpha"; then wait for codex in "./beta"; then open the notepad'
+        with mock.patch.object(suggest, "WHOLE_GROUP", 2):
+            model = builds(wanted)
+            calls, _steps = suggest.build(request, model)
+        self.assertEqual(suggest.sentence(calls), wanted)
+        groups = [options for question, options, _ in model.asked if question == suggest.WHOLE_QUESTION]
+        self.assertTrue(len(found) > 2 and len(groups) == len(found) - 1, (len(found), len(groups)))
+        self.assertTrue(all(len(options) <= 2 for options in groups))
 
 
 class Server:
@@ -291,7 +440,13 @@ class Rules(unittest.TestCase):
         for request, calls in cases.items():
             with self.subTest(request=request):
                 self.assertIsNone(suggest.refusal(request, calls))
-                self.assertTrue(suggest.possible(request))
+                # The grammar reads some of these itself now; those need no suggestion.
+                read = contract.exact_calls(request)
+                if read:
+                    self.assertEqual(read, calls)
+                    self.assertFalse(suggest.possible(request))
+                else:
+                    self.assertTrue(suggest.possible(request))
         # An agent's name inside a model's name is not the agent named a second time.
         self.assertIsNone(suggest.refusal("Kick off Claude with model claude-opus-4-5 in the current directory",
                                           [call("start_claude", model="claude-opus-4-5")]))
@@ -361,11 +516,11 @@ class Rules(unittest.TestCase):
 
 class Sources(unittest.TestCase):
     """suggest(): a decision model's walk, a command model's proposal, or both in agreement."""
-    REQUEST = "Open Codex in a split on the right."
+    REQUEST = "Codex in a split on the right, please."
     PLAN = [call("start_codex", place="right")]
     FOUND = {"request": "start codex in a split to the right", "calls": [call("start_codex", place="right")]}
-    WALK = (COMMAND, ("Which operation", "start_codex"), ("Where should", "right"), YES)
-    NO_WALK = (COMMAND, ("Which operation", "other"), YES)
+    WALK = (COMMAND, YES)       # the request has one possible wording
+    NO_WALK = (COMMAND, YES)
 
     def test_a_command_model_alone_offers_a_proposal_that_passes_the_rules(self):
         found = suggest.suggest(self.REQUEST, propose=lambda: [call("start_codex", place="right", directory="here")])
@@ -376,11 +531,10 @@ class Sources(unittest.TestCase):
                 self.assertIsNone(suggest.suggest(self.REQUEST, propose=lambda proposal=proposal: proposal))
         self.assertIsNone(suggest.suggest(self.REQUEST))
 
-    def test_a_decision_model_alone_offers_its_walk_when_every_answer_is_sure(self):
-        self.assertEqual(suggest.suggest(self.REQUEST, Model(*self.WALK)), {**self.FOUND, "source": "walk"})
-        self.assertIsNone(suggest.suggest(self.REQUEST, Model(*self.NO_WALK)))
-        unsure = (COMMAND, ("Which operation", "start_codex"), ("Where should", "right"),
-                  ("Does the plan do exactly", "yes", 0.7))
+    def test_a_decision_model_alone_offers_its_plan_when_every_answer_is_sure(self):
+        self.assertEqual(suggest.suggest(self.REQUEST, Model(*self.WALK)), {**self.FOUND, "source": "built"})
+        self.assertIsNone(suggest.suggest(self.REQUEST, Model(("What kind", "question"), YES)))
+        unsure = (COMMAND, ("Does the plan do exactly", "yes", 0.7))
         self.assertIsNone(suggest.suggest(self.REQUEST, Model(*unsure)))
 
     def test_with_both_the_two_plans_must_be_the_same(self):
@@ -394,28 +548,34 @@ class Sources(unittest.TestCase):
                 self.assertIsNone(suggest.suggest(self.REQUEST, Model(*self.WALK),
                                                   propose=lambda proposal=proposal: proposal))
         # Agreement is the check: the walk's own doubt about a plan both made does not refuse it.
-        unsure = (COMMAND, ("Which operation", "start_codex"), ("Where should", "right"),
-                  ("Does the plan do exactly", "yes", 0.7))
+        unsure = (COMMAND, ("Does the plan do exactly", "yes", 0.7))
         self.assertEqual(suggest.suggest(self.REQUEST, Model(*unsure), propose=lambda: self.PLAN)["source"], "agreed")
 
-    def test_the_command_model_is_not_asked_when_nothing_can_be_suggested_or_the_walk_gives_no_plan(self):
+    def test_the_command_model_is_not_asked_when_nothing_can_be_suggested_or_the_decision_model_gives_no_plan(self):
         propose = mock.Mock(return_value=self.PLAN)
         for request in ("start codex in a split to the right", "what is the weather like",
                         "Open Codex in a split on the right unless it is busy"):
             self.assertIsNone(suggest.suggest(request, Model(), propose=propose))
-        self.assertIsNone(suggest.suggest(self.REQUEST, Model(*self.NO_WALK), propose=propose))
+        # the step-by-step sentence and the ranking of whole sentences disagree: no plan
+        split = Model(COMMAND, ("Which continuation", toward("start codex in a split below")),
+                      ("Which command does exactly", toward("start codex in a split above")), YES)
+        self.assertIsNone(suggest.suggest(SPLIT, split, propose=propose))
         propose.assert_not_called()
 
-    def test_a_walked_plan_is_held_to_the_rules_too(self):
+    def test_a_planned_request_is_held_to_the_rules_too(self):
         request = "Quit Codex in a split on the right."
         self.assertTrue(suggest.possible(request))
-        calls, steps = suggest.walk(request, Model(*self.WALK))
+        model = Model(*self.WALK)
+        self.assertEqual(suggest.build(request, model)[0], [])     # no plan passes refusal(), so none is built
+        self.assertEqual(model.asked, [])
+        walked = (COMMAND, ("Which operation", "start_codex"), ("Where should", "right"), YES)
+        calls, steps = suggest.walk(request, Model(*walked))
         self.assertEqual(calls, self.PLAN)
         self.assertTrue(all(value >= limit for value, limit in
                             zip(suggest.signals(steps), (suggest.GATE, suggest.STEP, suggest.VERIFY))))
         self.assertEqual(suggest.refusal(request, calls), "unsupported")
-        self.assertIsNone(suggest.suggest(request, Model(*self.WALK)))
-        self.assertIsNone(suggest.suggest(request, Model(*self.WALK), propose=lambda: self.PLAN))
+        self.assertIsNone(suggest.suggest(request, Model(*walked)))
+        self.assertIsNone(suggest.suggest(request, Model(*walked), propose=lambda: self.PLAN))
 
     def test_a_decision_model_that_cannot_be_asked_offers_nothing(self):
         def down(*_):
@@ -522,7 +682,7 @@ REFUSED = {"status": 1, "note": "", "items": [{"kind": "k", "outcome": "refused"
 
 
 class Offer(Isolated):
-    REQUEST = "Open Codex in a split on the right."
+    REQUEST = "Codex in a split on the right, please."
 
     def ask(self, jobs, routed, **options):
         with mock.patch.object(router, "route", return_value=routed), mock.patch.object(ask, "_record_unsure"):
@@ -588,7 +748,7 @@ class Session:
 
 class Suggester(Isolated):
     """ask.suggester(): which sources a setting and a command session give."""
-    REQUEST = "Open Codex in a split on the right."
+    REQUEST = "Codex in a split on the right, please."
     PLAN = [call("start_codex", place="right")]
 
     def setUp(self):
@@ -631,18 +791,18 @@ class Suggester(Isolated):
         os.environ.update(KILIX_ASK_SUGGEST=" d3:test ", OLLAMA_HOST=server.host)
         return server
 
-    def test_a_decision_model_with_the_grammar_selected_offers_its_walk(self):
-        answers = {"What kind": "command", "Which operation": "start_codex", "Where should": "right", "Does the": "yes"}
+    def test_a_decision_model_with_the_grammar_selected_offers_its_plan(self):
+        answers = {"What kind": "command", "Does the": "yes"}
         server = self.decision_model(answers)
         for session in (None, Session("grammar")):
             self.assertEqual(ask.suggester(session)(self.REQUEST, dict(NOTHING)),
-                             {**FOUND, "source": "walk", "model": "d3:test"})
-        self.assertEqual(({body["model"] for _, body in server.bodies}, len(server.bodies)), ({"d3:test"}, 8))
-        answers["Which operation"] = "other"
+                             {**FOUND, "source": "built", "model": "d3:test"})
+        self.assertEqual(({body["model"] for _, body in server.bodies}, len(server.bodies)), ({"d3:test"}, 4))
+        answers["What kind"] = "question"
         self.assertIsNone(ask.suggester()(self.REQUEST, dict(NOTHING)))
 
     def test_a_decision_model_and_a_command_model_must_agree(self):
-        answers = {"What kind": "command", "Which operation": "start_codex", "Where should": "right", "Does the": "yes"}
+        answers = {"What kind": "command", "Does the": "yes"}
         self.decision_model(answers)
         session = Session("lfm2", self.PLAN)
         record = {**NOTHING, "interpretation": "lfm2", "calls": self.PLAN}
@@ -652,8 +812,12 @@ class Suggester(Isolated):
         other = {**NOTHING, "interpretation": "lfm2", "calls": [call("start_codex", place="left")]}
         self.assertIsNone(ask.suggester(session)(self.REQUEST, other))
         self.assertIsNone(ask.suggester(session)(self.REQUEST, {**NOTHING, "interpretation": "lfm2", "calls": []}))
-        answers["Which operation"] = "other"         # the walk finds no plan: the proposal alone is not offered
-        self.assertIsNone(ask.suggester(session)(self.REQUEST, record))
+        # The decision model makes no plan (its sentence and its pick of whole sentences differ):
+        # the proposal alone is not offered.
+        answers.update({"Which continuation": "2", "Which command": "1"})       # "wait for codex", "start codex"
+        self.assertIsNone(ask.suggester(session)(SPLIT, record))
+        answers["Which command"] = "6"
+        self.assertIsNone(ask.suggester(session)(SPLIT, record))    # both "wait for codex": not the proposal either
 
     def test_a_decision_model_that_is_not_there_offers_nothing(self):
         session = Session("lfm2", self.PLAN)

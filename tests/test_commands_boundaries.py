@@ -217,3 +217,80 @@ class CommandBoundaries(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class FrameFences(unittest.TestCase):
+    """What a frame reading must never do (see the Frames section of
+    commands_contract): read an unquoted payload, skip the suggestion rules,
+    pick a session that is not the only one meant, or read past an existing
+    spaced path."""
+
+    def test_a_frame_reads_no_unquoted_message_or_task(self):
+        for request in ('Let Claude know: the API key rotation is done', 'ping codex in pewter-x run the tests',
+                        'Kick off Codex with the task: add unit tests', 'say hello to codex in pewter-x',
+                        'Wait for codex in /x and then tell it: write the notes'):
+            with self.subTest(request=request):
+                self.assertIsNone(contract.exact_calls(request))
+
+    def test_quoted_escapes_are_not_guessed(self):
+        self.assertIsNone(contract.exact_calls('Send Claude in /w/t the message: "Use path C:\\Temp\\out.txt"'))
+        self.assertIsNone(contract.exact_calls('say "' + 'x' * 1025 + '" to codex'))
+        self.assertEqual(contract.exact_calls('say "' + 'x' * 1024 + '" to codex'),
+                         [call('message_agent', agent='codex', text='x' * 1024)])
+
+    def test_every_frame_reading_passes_the_suggestion_rules(self):
+        import commands_suggest
+        request = 'launch codex in pewter-x please'
+        self.assertEqual(contract.exact_calls(request), [call('start_codex', directory='pewter-x')])
+        original = commands_suggest.refusal
+        seen = []
+        def refusing(text, calls):
+            seen.append(text)
+            return 'conditional'
+        commands_suggest.refusal = refusing
+        try:
+            self.assertIsNone(contract.exact_calls(request))
+            self.assertEqual(seen, [request])
+            # A reading the fixed shapes make is not held to them.
+            self.assertEqual(contract.exact_calls('start codex in /srv/x'), [call('start_codex', directory='/srv/x')])
+        finally:
+            commands_suggest.refusal = original
+
+    def test_a_wait_or_message_with_two_sessions_in_play_refuses(self):
+        for request in ('Start claude here and claude in ../brisket-x, then forward "pause deploys" to the claude',
+                        'start codex in pewter-x, then tell codex "go"',
+                        'wait for claude in pewter-x and then wait for claude'):
+            with self.subTest(request=request):
+                self.assertIsNone(contract.exact_calls(request))
+        self.assertEqual(contract.exact_calls('wait for claude in pewter-x, then tell codex "go"'),
+                         [call('wait_for_agent', agent='claude', directory='pewter-x'),
+                          call('message_agent', agent='codex', text='go')])
+
+    def test_an_existing_spaced_path_is_left_to_the_fixed_shapes(self):
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as root:
+            os.mkdir(os.path.join(root, 'proj'))
+            request = 'Begin a codex session in ' + root + '/proj new tab'
+            self.assertEqual(contract.exact_calls(request),
+                             [call('start_codex', directory=root + '/proj', place='tab')])
+            os.mkdir(os.path.join(root, 'proj new'))
+            self.assertIsNone(contract.exact_calls(request))
+
+    def test_a_question_mark_needs_a_polite_opener(self):
+        self.assertEqual(contract.exact_calls('Could you launch codex in pewter-x?'),
+                         [call('start_codex', directory='pewter-x')])
+        for request in ('launch codex in pewter-x?', 'Can I launch codex in pewter-x?', 'launch codex in pewter-x?!'):
+            with self.subTest(request=request):
+                self.assertIsNone(contract.exact_calls(request))
+
+    def test_a_frame_refuses_on_its_own_before_the_suggestion_rules(self):
+        # Each of these is refused by the frame itself, not only by the rules applied after it.
+        for clause in ('Open the notepad or the calculator', 'start codex in pewter-x in birch-y',
+                       'Kick off codex with model gpt-6, model gpt-6.1-sol', 'start codex in a right split in a left split',
+                       'say "x" "y" to codex', 'would you mind start claude', 'begin a codex session in ~/fig-x)'):
+            with self.subTest(clause=clause):
+                self.assertIsNone(contract._frame_calls(clause))
+                self.assertIsNone(contract.exact_calls(clause))
+        self.assertIsNone(contract._referred('start codex there', [call('wait_for_agent', agent='claude')]))
+        self.assertEqual(contract._referred('start codex there', [call('wait_for_agent', agent='claude', directory='a-b')]),
+                         'start codex in "a-b"')
