@@ -91,11 +91,45 @@ of pieces: a fixed phrase (`start codex`, ` in a split below`,
 `: "run the tests"`). Every complete path through the tree is a sentence the
 grammar reads. A request with no such plan gets no question at all.
 
-Three more rules shape the list: a split is offered only when the request
-says split, pane, side or a direction (`a new tab` says none); `the same
-directory` names the directory again; and a model named as one (`model o3`)
-must be in the plan, so a model the grammar cannot carry means no suggestion
-rather than a plan without it.
+More rules shape the list, all from the request's own words:
+
+- Some requests get no plan at all: a question asked with `is`, `do` or
+  `has` first, or one that ends in a question mark after its text; a
+  hypothetical, a report of what was done, or a time other than now (`at
+  6pm`, `in an hour`, `after lunch`); an action or application no tool has
+  (`then delete the build folder`, `as root`, `take a screenshot`, the
+  calendar), another agent (`aider`), or many sessions at once; a split or
+  pane without its direction; `it` or `the codex` after two such sessions
+  have been named; a labelled field (`Model: x.`), a task with no text, or a
+  request that stops after `:` or `second,`.
+- A detail no plan's wording can say means no plan unless the plan's own
+  sentence says it: a pane or session by number or id, `resume`, an effort
+  level, a title, a flag (`--yolo`), another host, a file left in the
+  request's own words (`draft.txt`).
+- A model the request names, as one (`model o3`), after `with`, or bare
+  (`opus model`), must be in the plan, so a model the grammar cannot carry
+  means no suggestion rather than a plan without it.
+- Each operation verb asks for an operation of its kind (`start`, `wait`,
+  `tell`), and so do `it` after a join (`then wait for it`), `for both`, and
+  `here` next to a directory (`start codex here and in ~/x` is two). The
+  plan's calls must come in the order the request states them: `start codex,
+  wait for it, then tell it "x"` is never `start; then tell; then wait`.
+- A plan uses every directory and text the request copies, and names one
+  agent's directory alike in all its waits and messages.
+- Where some plans fit the request's words more closely, only those are
+  kept: `it` and a directory said in front (`In ~/x, start codex and
+  claude`) are the same session and the same directory; a text is a task
+  when the request says task, a message when it says tell; and each call
+  takes the directory, text and direction said in its own clause, a
+  directory said elsewhere only when `the same folder`, `there` or `both`
+  carries it there (`claude and codex in ./x` puts both in ./x).
+- A split is offered only when the request says split, pane, side or a
+  direction (`a new tab` says none), and `the same directory` names the
+  directory again.
+
+These rules narrow the tree, often to a single sentence, so fewer questions
+are asked; where a rule leaves no plan, nothing is asked and nothing is
+suggested.
 
 The model is then asked:
 
@@ -166,6 +200,29 @@ selected, agreement answered 495 (LFM2) and 483 (Needle3) of the 600 with the
 built plan, against 494 and 480 with the walk, with the same wrong
 suggestions (0 and 1).
 
+### The built sentence on what the grammar leaves unread
+
+Not blind. Every set below was written by an author who saw only the tool
+schema, the scorer and a brief, and each was cut to the requests the grammar
+does not read. The rules above were written while looking at the
+development sets, so their numbers are a ceiling. The unseen set was written
+by a fresh author, its labels checked by a second reader, and it was run
+once after the code was frozen; no rule was changed after it. Suggestions
+from the decision model alone (`d3:2b`), the grammar selected:
+
+| Set | Requests (supported) | Before: right | wrong | questions | Now: right | wrong | questions |
+|---|---|---|---|---|---|---|---|
+| development, pooled | 1,063 (242) | 108 | 93 | 1.39 | 141 | 0 | 0.31 |
+| unseen | 197 (117) | 75 | 15 | 2.62 | 90 | 1 | 1.23 |
+| unseen, the walk | 197 (117) | 71 | 13 | 5.72 | | | |
+
+"Before" is the built sentence as it was. On the unseen set it now leaves
+all 80 must-not-act requests alone (before, 9 got a suggestion), answers 16
+requests it did not and loses 1. Prompt tokens per request fell from 852 to
+283. The one wrong suggestion starts two agents in a directory and then
+tells each one something: the messages leave the directory out, and the
+labels name it.
+
 ### The walk, blind
 
 Each set has 100 requests, 72 supported and 28 that must not act, written by
@@ -231,13 +288,16 @@ has already been made. A decision model adds its questions.
   suggestion is offered and never run, and the setting is off unless chosen.
 - An unsupported second action joined with `and` can get through a decision
   model alone, as above. Agreement with a command model caught it.
-- `it` for an agent's session in a directory named earlier is not followed
-  by the rules, and a directory named once in front of several operations
-  ("In ~/x, start codex ..., then start claude ...") can go to one of them
-  only. Both leave a choice to the model, which then often withholds the
+- A message for an agent started earlier in the same request leaves its
+  directory out when the request does not repeat it (`start claude in ~/x
+  ..., and tell claude "y"`), and that can be the wrong plan.
+- The rules read words, not grammar: a word they list (`close`, `memory`,
+  `terminal`) rules a request out wherever it stands outside quotes, and a
+  wording they do not list gets through to the model.
+- A plan with the same operation twice on one agent, such as two messages
+  for it or two waits, is refused, so a request that asks for that gets no
   suggestion.
-- A request whose operations exceed its joins (`and`, `then`, commas) by more
-  than one, such as a numbered list without them, gets no suggestion.
+- A request of more than four operations gets no suggestion.
 - A plan the grammar's wording cannot carry gets no suggestion: a model name
   the grammar does not list, or a PDF given by a relative path.
 - Requests for the other jobs (panes, files, system) are not suggested.
