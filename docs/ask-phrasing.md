@@ -59,9 +59,10 @@ frame takes part in must also pass the rules suggestions are held to
 
 Also refused:
 
-- a message or task that is not quoted (`let claude know: the build is
-  done`). The fixed shapes still read their own unquoted forms (`tell claude
-  to ...`, `tell claude: ...`);
+- a message or task that is not quoted and has no marker (`let claude know
+  the build is done`). With a marker it is read as in
+  [Unquoted payloads](#unquoted-payloads). The fixed shapes still read their
+  own unquoted forms (`tell claude to ...`, `tell claude: ...`);
 - a backslash inside quotes, since an escape is not guessed at;
 - one plain word after "in" (`in parallel`); a hyphenated word that says how
   or when, not where (`in read-only`, `in dry-run`, `in mid-december`); a
@@ -73,6 +74,69 @@ Also refused:
   directory (`start claude here and claude in ../x, then tell the claude ...`);
 - "it" after a launch, and "it" or "there" with nothing single to point at.
 
+## Unquoted payloads
+
+Agents that use Ask send long requests: a head that names the session or the
+launch, a colon, and then a message or task that is not quoted and has
+sentences of its own.
+
+    Tell the Codex agent in /srv/oast-galliard/run-4: fix the flaky test; if it
+    still fails, skip it and say why.
+
+    Start codex in /srv/oast-galliard/v2.1 using model gpt-6 in a new tab. Task:
+    Read NOTES.md; reply with OK.
+
+Where neither the fixed shapes nor a frame reads such a request, it is read
+under this rule:
+
+- The payload starts after the first colon that is followed by a space and
+  is outside quotes. The head before it may quote only with double quotes.
+- The head must be one frame shape with a marker in front of the colon. For a
+  launch: `Task:`, `Its task:`, `Instructions:`, `with the task:`, `give it
+  the following task:`, `with these instructions:`, or a bare colon after the
+  launch. For a message: `tell`, `message`, `ping`, `notify`, `instruct` or
+  `write to` X, `send X this message:`, `send the following to X:`, `relay
+  this to X:`, `let X know:`, or `then tell it:` after a wait. The head is
+  read like any frame. A condition, a time, a negation, a second session, a
+  pane, a broker or a model outside the four refuses it, and so does any word
+  outside the shape. A directory may end its own sentence before the marker
+  (`in /srv/x. Task:`).
+- The payload runs to the end of the request and is copied byte for byte. It
+  is data: its "if", "then", "do not" and "run" are the receiving session's
+  (`tell claude in /srv/x: start codex if the tests pass` is one message to
+  Claude). The rules suggestions are held to do not read it either.
+- It is refused when it may be a second instruction for Ask. That is when one
+  of its later clauses (after a comma, a semicolon, a full stop, "and",
+  "then" and the like) has a verb Ask has and names something Ask acts on (an
+  agent, an application, a session, a tab, a split, a pane): `...: fix it,
+  then tell codex in /srv/y: rebase`, `...: fix it. Then open the
+  calculator`. It is also refused when a later clause waits on "it", or when
+  a later clause starts with an action word the fixed shapes stop at (open,
+  start, tell, wait, delete, close and the like). "run", "do not", "if" and
+  "unless" at the start of a later clause stay data unless the clause names
+  something Ask acts on.
+- It is refused when it is no message at all. That is a client command
+  (starting with `/`, `!`, `#`, `@` or `-`), a word that ends the session
+  (`exit`, `quit`, `bye`), more than 1,024 bytes, or empty. A launch task
+  with a question mark outside quotes is also refused, since it may be a
+  question for Ask (`start codex in ../x: would that pick the parent
+  folder?`).
+- `agents:` or `apps:` before a request names the job. The rest must read as
+  that job's actions only.
+
+Some of these rules apply to every reading, including the fixed shapes'.
+They follow the payload rule of the agents job (`agents.py`):
+
+- the client-command and exit-word rules;
+- for a payload that is not wholly quoted, the later-clause rule (a verb Ask
+  has and something Ask acts on, or a wait on "it") and the question-mark
+  rule for launches;
+- "nothing else" outside the payloads must end the request.
+
+Before 0.2.4 the fixed shapes sent `tell codex here: /compact` as a message
+and read `tell codex in /srv/x: fix it, and pop open the calculator` as one
+message.
+
 ## What is still not read
 
 - a model other than the four the contract admits (sonnet, opus, gpt-6,
@@ -80,8 +144,16 @@ Also refused:
 - a PDF given by a relative path, which the runner cannot open;
 - "both in DIR" and "the same directory" across launches, and "there is a
   Claude session; send it ...";
-- "bring the calculator to the foreground", "nothing else", and other
-  one-off phrasings.
+- "bring the calculator to the foreground" and other one-off phrasings;
+- an unquoted payload without a colon (`message codex only. Fix the test`),
+  or after "to" or "and" in a frame (`tell codex in /srv/x to fix it` is the
+  fixed shapes' and reads; `ask codex in /srv/x, when it is free, to ...`
+  does not);
+- the same wait twice in one request, `both in new tabs`, `~/` alone as a
+  directory, and `do not give it a task`;
+- what the five tools cannot say: a pane or tab number, a broker or session
+  id, another agent, resuming a session, a reasoning effort, or a model
+  outside the four.
 
 ## Measured, 2026-11-24
 
@@ -113,3 +185,29 @@ the first, 20 and 53 on the second, no wrong action, and all 56 must-not-act
 requests refused. Of the 19 supported requests still unread on the second, a
 [suggestion](ask-suggestions.md) covers 12, and the other 7 name a model
 outside the contract or give a PDF by a relative path.
+
+## Measured, unquoted payloads, 2026-11-24
+
+On the 1,200 requests of the earlier sets, every reading is the same as
+before: the payload rule only reads what nothing read before, and the fences
+it adds to every reading change none of them.
+
+On a set written for this work in the style agents really send (long heads,
+unquoted payloads of several sentences; 100 requests, 66 supported) and
+looked at while growing it: 31 read before, 63 after, no wrong action, all
+34 must-not-act requests refused.
+
+On a second set like it, not looked at and run once with the code frozen:
+28 read before, 55 after, no wrong action, all 34 must-not-act refused. Of
+the 11 supported requests it misses, 4 launch with words no frame has ("no
+initial task", "with the working directory set to", "; the default model is
+fine and it should open in a new tab", "in a split below, in DIR, using
+sonnet. Task:"), 2 use "relay to X:" and "reply to X:", 2 are waits said in
+new ways ("wait on X until it finishes the turn it is on"), 1 starts two
+agents with "there", and 1 has a later sentence in its message that starts
+like an instruction, which the fixed shapes' rule refuses.
+
+A red-team set of 150 must-not-act requests in this style found 7 wrong
+actions, all of them in the fixed shapes before this change: 6 client
+commands sent as messages and 1 question sent as a launch task. All 150 are
+now refused.

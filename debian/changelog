@@ -21,6 +21,18 @@ kilix-needle (0.20261116+packaging8) UNRELEASED; urgency=medium
     A message or task read this way must be quoted, and the whole request
     must also pass the rules suggestions are held to. See
     docs/ask-phrasing.md.
+  * Read an unquoted message or task after a marker, as agents send them:
+    "Tell the Codex agent in DIR: ...", "Start codex in DIR in a new tab.
+    Task: ...", "send the following to claude in DIR: ...", "then tell it:
+    ...". The payload runs to the end of the request and is data; it is
+    refused when a later clause may be a second instruction for Ask. Also
+    read "agents:" or "apps:" before a request, "in a new Kilix tab",
+    "wait ... again" and "and do nothing else".
+  * Never send a client command ("/compact", "!make clean", "-h"), a word
+    that ends the session ("exit") or an unquoted question as a launch task,
+    and never take a later clause that may be an instruction for Ask into an
+    unquoted message ("tell codex: fix it, and pop open the calculator"):
+    the fixed shapes did these too.
 
  -- itsmygithubacct <itsmygithubacct@users.noreply.github.com>  Tue, 24 Nov 2026 08:50:00 +0000
 

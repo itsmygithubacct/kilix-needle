@@ -287,9 +287,10 @@ class FramedPhrasing(unittest.TestCase):
         self.check('wait for claude in yarrow-x to finish, then start codex there in a right split',
                    [call('wait_for_agent', agent='claude', directory='yarrow-x'),
                     call('start_codex', directory='yarrow-x', place='right')])
-        # "it" after a launch, after two sessions or with an unquoted message; "there" with no directory.
+        # "it" after a launch or after two sessions; "there" with no directory.
+        # (An unquoted message after "tell it:" is read: see MarkedPayload.)
         self.refused('start codex in /x and tell it "y"', 'wait for claude and codex, then tell it "y"',
-                     'wait for codex in /x then tell it: run the tests', 'wait for claude, then start codex there',
+                     'wait for claude and codex then tell it: run the tests', 'wait for claude, then start codex there',
                      'wait for claude in /x, then start codex there is a bug', 'wait for codex in /x and then tell it')
 
     def test_listed_steps(self):
@@ -304,3 +305,63 @@ class FramedPhrasing(unittest.TestCase):
                      'second open the notepad, first open the calculator', 'first open the notepad, third open the calculator',
                      'First open the notepad, second delete /tmp/x', '2) open the notepad 1) open the calculator',
                      '1) open the notepad 2) open the calculator 3)')
+
+
+class MarkedPayload(unittest.TestCase):
+    """An unquoted message or task after a marker (":", "Task:", "with the
+    following instructions:", "let X know:") is the rest of the request, taken
+    whole as data: its sentences, semicolons and "if"/"then" words are the
+    receiving session's (docs/ask-phrasing.md, "Unquoted payloads")."""
+
+    def check(self, text, expected):
+        self.assertEqual(contract.exact_calls(text), expected)
+        self.assertTrue(contract.admit(text, expected).actions)
+
+    def test_a_message_runs_to_the_end(self):
+        where = '/srv/oast-galliard/run-4'
+        for text, payload in (
+            ('Tell the Codex agent in /srv/oast-galliard/run-4: ', 'fix the flaky test; if it still fails, skip it and say why.'),
+            ('Send the following to codex in /srv/oast-galliard/run-4: ', 'run the tests, and do not merge. Reply with the count.'),
+            ('Let codex in /srv/oast-galliard/run-4 know: ', 'the fixture moved to fixtures/v2.'),
+            ('Pass this along to the codex session in /srv/oast-galliard/run-4: ', 'is the build green?'),
+            ('Message the Codex session that is working in /srv/oast-galliard/run-4: ', 'store the notes and wait.'),
+        ):
+            with self.subTest(text=text):
+                self.check(text + payload, [call('message_agent', agent='codex', text=payload, directory=where)])
+
+    def test_words_for_ask_inside_the_payload_are_data(self):
+        # The receiving session is told to start something; Ask starts nothing.
+        self.check('Tell claude in /srv/oast-galliard: start codex if the tests pass',
+                   [call('message_agent', agent='claude', text='start codex if the tests pass', directory='/srv/oast-galliard')])
+
+    def test_a_task_after_a_framed_launch(self):
+        task = 'Read NOTES.md; reply with OK.'
+        self.check('Start codex in /srv/oast-galliard/v2.1 using model gpt-6 in a new tab. Task: ' + task,
+                   [call('start_codex', directory='/srv/oast-galliard/v2.1', model='gpt-6', place='tab', task=task)])
+        self.check('Start claude in /srv/oast-galliard/v2.1. Task: ' + task,     # the path ends its sentence
+                   [call('start_claude', directory='/srv/oast-galliard/v2.1', task=task)])
+        self.check('Start codex in /srv/oast-galliard with these instructions: ' + task,
+                   [call('start_codex', directory='/srv/oast-galliard', task=task)])
+        self.check('Open a new tab with codex in /srv/oast-galliard: ' + task,
+                   [call('start_codex', directory='/srv/oast-galliard', place='tab', task=task)])
+        self.check('Start codex in a new Kilix tab in /srv/oast-galliard: ' + task,
+                   [call('start_codex', directory='/srv/oast-galliard', place='tab', task=task)])
+
+    def test_tell_it_after_a_wait(self):
+        self.check('Wait for claude in /srv/oast-galliard to finish, then tell it: Read NOTES.md.',
+                   [call('wait_for_agent', agent='claude', directory='/srv/oast-galliard'),
+                    call('message_agent', agent='claude', text='Read NOTES.md.', directory='/srv/oast-galliard')])
+
+    def test_job_prefixes_and_nothing_else(self):
+        self.check('agents: start codex in /srv/oast-galliard in a new tab',
+                   [call('start_codex', directory='/srv/oast-galliard', place='tab')])
+        self.check('apps: open the calculator', [call('open_app', app='kilix-calculator')])
+        self.check('Start codex in /srv/oast-galliard and do nothing else.', [call('start_codex', directory='/srv/oast-galliard')])
+        for text in ('agents: open the calculator', 'apps: start codex', 'agents:'):
+            with self.subTest(text=text):
+                self.assertIsNone(contract.exact_calls(text))
+
+    def test_the_fixed_shapes_still_read_first(self):
+        # Where the fixed shapes read a request, the new reader never runs.
+        self.check('Tell Codex: compare A and B; then C.',
+                   [call('message_agent', agent='codex', text='compare A and B; then C.')])

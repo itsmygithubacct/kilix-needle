@@ -519,12 +519,12 @@ _F_SIDE = {'right': 'right', 'right-hand': 'right', 'left': 'left', 'left-hand':
            'top': 'up', 'above': 'up', 'down': 'down', 'lower': 'down', 'bottom': 'down', 'below': 'down',
            'underneath': 'down', 'beneath': 'down'}
 _F_PLACE = re.compile(
-    r'(?:(?:and\s+)?put\s+it\s+)?(?:(?:in|into|as|using|use|with|on|open\s+it\s+in)\s+)?(?:(?:a|an|the)\s+)?(?:new\s+)?'
+    r'(?:(?:and\s+)?put\s+it\s+)?(?:(?:in|into|as|using|use|with|on|open\s+it\s+in)\s+)?(?:(?:a|an|the)\s+)?(?:new\s+)?(?:kilix\s+)?'
     r'(?:(?P<adj>right-hand|left-hand|right|left|up|down|upper|lower|top|bottom)\s+(?:split|pane)'
     r'|(?:split|pane)\s+(?:(?:to|on)\s+(?:the\s+|my\s+)?)?(?P<after>right|left|above|below|underneath|beneath|up|down)'
     r'(?:\s+(?:me|this\s+(?:pane|one)|the\s+current\s+(?:pane|one)))?)\b'
     r'|\b(?:on|to)\s+(?:the\s+|my\s+)(?P<side>right|left)\b'
-    r'|\b(?P<tab>(?:in\s+)?(?:a\s+)?(?:(?:new|fresh)\s+)?tab)\b', re.I)
+    r'|\b(?P<tab>(?:in\s+)?(?:a\s+)?(?:(?:new|fresh)\s+)?(?:kilix\s+)?tab)\b', re.I)
 _F_MODEL = re.compile(r'(?:\b(?:with|using|on)\s+(?:the\s+)?model\s+|\b(?:and\s+)?(?:set|switch)\s+the\s+model\s+to\s+'
                       r'|\b(?:and\s+)?use\s+(?:the\s+)?model\s+|\bmodel\s+)(' + _MODEL_NAME + r')', re.I)
 _F_AGENT = re.compile(r'\b(claude)(?:\s+code)?\b|\b(codex)\b', re.I)
@@ -580,7 +580,8 @@ _F_DESC = (r'(?:\s*(?:,|—|-)?\s*(?:the\s+one\s+)?(?:(?:that[\'’]?s|that\s+is
            r'(?:(?:working|running|over)\s+)?' + _D + r'(?:\s*(?:,|—|-))?)')
 _F_END = (r'(?:\s+(?:until\s+it\s+|to\s+|is\s+|has\s+)?(?:be\s+)?(?:finish(?:es|ed)?(?:\s+(?:up|responding|replying|working))?|complete[sd]?|end(?:s|ed)?'
           r'|done|finished|over|idle|wrap(?:s|ped)?\s+up)(?:\s+(?:with\s+)?(?:its|the)\s+(?:(?:current|active)\s+)?turn)?)')
-_F_WAIT = re.compile(_F_WAIT_OPEN + r'\s+' + _F_WAIT_SUBJ + r'(?:' + _F_DESC + r'?' + _F_END + r'?|' + _F_END + _F_DESC + r')')
+_F_WAIT = re.compile(_F_WAIT_OPEN + r'\s+' + _F_WAIT_SUBJ + r'(?:' + _F_DESC + r'?' + _F_END + r'?|' + _F_END + _F_DESC + r')'
+                     r'(?:\s+again)?')
 _F_AR = (r'(?:the\s+)?(?:(?:running|current|existing)\s+)?' + _A + r'(?:\s+(?:session|agent|instance))?'
          r'(?:\s+(?:(?:that[\'’]?s|that\s+is|who[\'’]?s)\s+)?(?:already\s+)?(?:(?:working|running|over)\s+)?' + _D + r')?')
 _F_INTRO = (r'(?:exactly\s+this\s*:|exactly\s*:|exactly|verbatim\s*,?|with|saying\s*:?|this\s*:|:|text\s*:|'
@@ -597,6 +598,36 @@ _F_MESSAGE = re.compile(
     r'|' + _D + r'\s*,\s*(?:send|tell|message)\s+' + _A + r'(?:\s+this)?\s*:?\s*' + _T +
     r'|to\s+' + _F_AR + r'\s*,\s*send(?:\s+this)?\s*:?\s*' + _T +
     r'|(?:send|pass)\s+' + _A + r'\s+(?:this|the)\s+(?:message|text|note)\s+' + _D + r'\s*:?\s*' + _T)
+
+# A payload that runs to the end (grown 2026-11-24 from real agent traffic).
+# A head read by the frames above, a marker (a colon, or "Task:" after the
+# launch's own sentence), and the rest of the request, unquoted, as the task
+# or message. The head is tokenized as usual; the payload is one \0u<n>\0
+# token at its end and is never read for words (see _marked_parts).
+_U = r'\0u\d+\0'
+_F_TASK_MARK = (r'(?:\s*[.,;]?\s*(?:(?:the|its|your|initial|first)\s+)*(?:task|instructions?|prompt)\s*:'
+                r'|\s*(?:,\s*)?(?:and\s+)?(?:give\s+it|hand\s+it|with)\s+(?:the|this|these|a)\s+(?:following\s+)?(?:task|instructions?)\s*:'
+                r'|\s*:)\s*' + _U)
+# "Open a new Kilix tab with Claude in /w and give it the task: ...": the tab first.
+_F_TAB_HEAD = (r'(?:open|start|create|launch)\s+\0ptab\0\s+(?:with|running|for)\s+(?:(?:a|an)\s+)?(?:(?:new|fresh)\s+)?'
+               + _A + _F_NOUN)
+_F_LAUNCH_U = re.compile(r'(?:' + _F_LAUNCH_HEAD + r'|' + _F_TAB_HEAD + r')(?:' + _F_SEP + _F_SLOT + r')*' + _F_TASK_MARK)
+# What may follow a path that ends its sentence in a head: the marker.
+_F_MARKER_AFTER = re.compile(r'\s*(?:(?:the|its|your|initial|first)\s+)*(?:task|instructions?|prompt|message|text)\s*:\s*', re.I)
+_F_MSG_INTRO = (r'(?:with|saying|exactly|verbatim|this|the\s+following(?:\s+(?:message|text|note|instructions?))?'
+                r'|(?:the|this|a)\s+(?:message|text|note|notice|update)(?:\s+saying)?)')
+_F_MESSAGE_U = re.compile(
+    r'(?:tell|message|ping|text|ask|send|write\s+to|instruct|notify|update)\s+' + _F_AR + r'\s*,?\s*(?:'
+    + _F_MSG_INTRO + r'\s*)?:\s*' + _U +
+    r'|(?:send|pass|relay|forward|write|deliver)\s+(?:(?:a|this|the|the\s+following)\s+)?(?:message|note|text|notice|update)'
+    r'(?:\s+along)?\s+to\s+' + _F_AR + r'\s*:\s*' + _U +
+    r'|(?:relay|forward|pass|send)\s+(?:this|the\s+following)(?:\s+along)?\s+to\s+' + _F_AR + r'\s*:\s*' + _U +
+    r'|let\s+' + _F_AR + r'\s+know\s*:\s*' + _U +
+    r'|(?:send|give)\s+' + _F_AR + r'\s+(?:a|this|the\s+following)\s+(?:message|note)\s*:\s*' + _U +
+    r'|(?:tell|message|send\s+(?:a\s+)?message\s+to)\s+' + _F_AR + r'\s*\.?\s*(?:message|text)\s*:\s*' + _U +
+    r'|' + _D + r'\s*,\s*(?:send|tell|message)\s+(?:the\s+)?(?:(?:running|current|existing)\s+)?' + _A
+    + r'(?:\s+(?:session|agent|instance))?(?:\s+this)?\s*:\s*' + _U +
+    r'|to\s+' + _F_AR + r'\s*,\s*send(?:\s+this)?\s*:\s*' + _U)
 
 
 def _f_quotes(text):
@@ -625,8 +656,10 @@ def _f_quotes(text):
     return found
 
 
-def _frame_calls(clause):
-    """(calls, meta) for one clause read by a frame, or None."""
+def _frame_calls(clause, payload=None):
+    """(calls, meta) for one clause read by a frame, or None. With payload,
+    the clause is a head that ends at its marker, and payload is the task or
+    message that follows it, taken whole (see _marked_parts)."""
     text = clause.strip()
     quotes = _f_quotes(text)
     if quotes is None:
@@ -660,7 +693,7 @@ def _frame_calls(clause):
         colon = raw.endswith(':')
         raw = raw[:-1] if colon else raw
         if raw[-1:] in ('.', '!'):
-            if rest.strip():
+            if rest.strip() and not (payload is not None and _F_MARKER_AFTER.fullmatch(rest)):
                 refused.append(raw)
             raw = raw.rstrip('.!')
         spaced = _spaced_words(rest)
@@ -697,9 +730,13 @@ def _frame_calls(clause):
         side = found.group('adj') or found.group('after') or found.group('side')
         return f' \0p{_F_SIDE[side.casefold()]}\0 '
     words = _F_PLACE.sub(placed, words)
-    words = _F_MODEL.sub(lambda found: token('m', found.group(1)), words)
+    # A model name never ends with a full stop: one there ends the sentence ("model opus. Task: ...").
+    words = _F_MODEL.sub(lambda found: token('m', found.group(1).rstrip('.')) + found.group(1)[len(found.group(1).rstrip('.')):],
+                         words)
     words = _F_AGENT.sub(lambda found: f" \0a{(found.group(1) or found.group(2)).casefold()}\0 ", words)
     words = _F_APP.sub(lambda found: f" \0x{next(_F_APPS[key] for key in _F_APPS if found.group(key))}\0 ", words)
+    if payload is not None:
+        words += token('u', payload)
 
     # 5. The words left: one space apart, no space before punctuation.
     words = ' '.join(words.split())
@@ -712,6 +749,8 @@ def _frame_calls(clause):
         if not verb or verb[0].casefold() not in _F_GERUND:
             return None
         body = _F_GERUND[verb[0].casefold()] + body[verb.end():]
+    # "...; do nothing else": the request asks for this step and no other.
+    body = re.sub(r'(?:\s*[;,.]\s*|\s+)(?:and\s+)?(?:do\s+)?nothing\s+else(?=[.!]*$)', '', body, flags=re.I)
     tail = _F_TAIL.search(body)
     end, body = tail['end'], body[:tail.start()].strip()
     if len(end) > 1 or end == '?' and not polite:
@@ -721,6 +760,8 @@ def _frame_calls(clause):
     kinds = [kind for kind, _ in tokens]
     if any(kinds.count(kind) > 1 for kind in 'dpmtf'):
         return None
+    if payload is not None:
+        return _marked_frame(body, tokens, values)
     agents = [value for kind, value in tokens if kind == 'a']
     args, meta = {}, {'frame': True}
     for kind, value in tokens:
@@ -761,11 +802,79 @@ def _frame_calls(clause):
     return None
 
 
+def _marked_frame(body, tokens, values):
+    """The calls of a frame head followed by its payload token, or None."""
+    folded = body.casefold()
+    kinds = [kind for kind, _ in tokens]
+    agents = [value for kind, value in tokens if kind == 'a']
+    if len(agents) != 1 or {'x', 'f', 't'} & set(kinds):
+        return None
+    payload = values[int(tokens[-1][1])]
+    args, meta = {}, {'frame': True}
+    for kind, value in tokens:
+        if kind == 'd' and values[int(value)] != 'here':
+            args['directory'] = values[int(value)]
+    if _F_LAUNCH_U.fullmatch(folded):
+        for kind, value in tokens:
+            if kind == 'p':
+                args['place'] = value
+            elif kind == 'm':
+                args['model'] = values[int(value)]
+        order = ''.join(kinds)
+        inside = 'm' in order and bool({'d', 'p'} & set(order[order.find('m'):]))
+        meta.update(located='d' in kinds, inside=inside, comma_model=False, front=False)
+        return [_call('start_' + agents[0], **args, task=payload)], meta
+    if _F_MESSAGE_U.fullmatch(folded):
+        return [_call('message_agent', agent=agents[0], text=payload, **args)], meta
+    return None
+
+
 def exact_calls(request, *, _depth=0, _bare=False):
     """A complete reading of supported actions, or None; no partial match.
 
     _bare: a launch earlier in the whole request states no model.
     """
+    calls = _exact_calls(request, _depth=_depth, _bare=_bare)
+    if calls and _depth == 0 and isinstance(request, str) and not _sendable(request, calls):
+        return None
+    return calls
+
+
+def _sendable(request, calls):
+    """Whether every message and task is one a session takes as text, whatever
+    shape read it (the payload rule of agents.py):
+
+    - it starts with a letter or digit, so it is no client command
+      ("/compact", "!make clean", "-h"), and is not a word that ends the
+      session ("exit");
+    - unless it is wholly quoted, no later clause of it may be a second
+      instruction for Ask (_ask_clause), and a launch task has no question
+      mark outside its quotes, since it may be a question for Ask ("start
+      codex in ../x: would that pick the parent?").
+
+    And "nothing else" outside the payloads ends the request."""
+    quoted = [inner for _start, _end, inner in (_f_quotes(request) or ())]
+    rest = _unquoted(request)
+    for found in calls:
+        arguments = found['arguments']
+        for key in ('task', 'text'):
+            value = arguments.get(key)
+            if value is None:
+                continue
+            bare = unicodedata.normalize('NFKC', value).lstrip(agents._QUOTES_AND_BLANKS)
+            if bare and not bare[0].isalnum() or bare.lower().rstrip(agents._QUOTES_AND_BLANKS + '.!') in agents._EXIT_WORDS:
+                return False
+            rest = rest.replace(value, ' ')
+            if any(value in inner for inner in quoted) or any(
+                    form in request for form in (json.dumps(value, ensure_ascii=False), '"' + value + '"',
+                                                 "'" + value + "'", '\u201c' + value + '\u201d', '\u2018' + value + '\u2019')):
+                continue
+            if _ask_clause(value) or key == 'task' and '?' in _unquoted(value):
+                return False
+    return not re.search(r'\bnothing\s+else\b(?![.!\s]*$)', rest, re.I)
+
+
+def _exact_calls(request, *, _depth=0, _bare=False):
     if _PATH_CHOICE.get() is not None:
         return _read_calls(request, _depth=_depth, _bare=_bare)
     # An unquoted spaced path takes its longest existing reading. When a shorter
@@ -787,7 +896,19 @@ def exact_calls(request, *, _depth=0, _bare=False):
     return longest if _canonical(longest) == _canonical(shortest) else None
 
 
+# "agents: start codex in a new tab": a person may name the job first. The
+# rest must read whole, as that job's actions only.
+_JOB_PREFIX = re.compile(r'(?P<job>agents|apps)\s*:\s+(?=\S)', re.I)
+
+
 def _read_calls(request, *, _depth=0, _bare=False):
+    prefix = _JOB_PREFIX.match(request) if _depth == 0 and isinstance(request, str) else None
+    if prefix:
+        calls = _read_calls(request[prefix.end():])
+        apps_only = prefix['job'].casefold() == 'apps'
+        if calls and all((call['name'] == 'open_app') == apps_only for call in calls):
+            return calls
+        return None
     parts = _read_parts(request, _depth=_depth, _bare=_bare)
     if not parts and _depth == 0:
         listed = _enumerated(request)
@@ -824,6 +945,15 @@ def _two_sessions(calls):
                for index, call in enumerate(calls))
 
 
+# After an unquoted payload, a clause that starts like this may be a second
+# instruction rather than part of the payload ("Message Codex: ready; then
+# delete the logs"): the request has no single reading.
+_ACTION_TAIL = re.compile(r'^(?:(?:please|then|next|also)\s+)*(?:'
+                          r'open|launch|start|bring|show|get|wait|tell|send|message|ask|'
+                          r'kick|run|create|delete|erase|remove|close|quit|reboot|'
+                          r'do not|don[\x27’]t|if|unless)\b', re.I)
+
+
 # A separator that ends a sentence or a step (";", "then") rather than joining
 # a list ("," or "and"). A verbless launch after it is its own request, and a
 # model set off by a comma after it cannot be shared with launches before it.
@@ -844,6 +974,109 @@ def _leaf(calls, meta=None):
 
 
 def _read_parts(request, *, _depth=0, _bare=False, _list_bare=False):
+    """The reading as (call, meta) parts (see _read_clauses), or, only where
+    that reads nothing, a head with a payload that runs to the end of the
+    request (_marked_parts)."""
+    parts = _read_clauses(request, _depth=_depth, _bare=_bare, _list_bare=_list_bare)
+    if parts is None and isinstance(request, str):
+        parts = _marked_parts(request)
+    return parts
+
+
+# A payload after its marker is data, but a later clause of it that names
+# what Ask itself could act on ("..., then start codex in /b") may be a
+# second instruction to Ask: the request then has two readings, and neither
+# is taken. A clause starts after a comma, semicolon, colon, sentence end,
+# dash or bracket, or before "and", "then", "but", "or", "so", "also".
+_P_BOUNDARY = re.compile(r'[,;:.!?)(\]\[]\s*|\s+(?:[-–—]+|and|then|but|or|so|also|after\s+that|afterwards|next|finally)\s+'
+                         r'|\s*[–—]\s*', re.I)
+_P_JOB_VERB = re.compile(r'\b(?:start|launch|open|run|spin|fire|bring|boot|kick|create|spawn|wait|tell|message|send|ping|ask'
+                         r'|relay|forward|pass|let|show|pull|pop|get|resume|close|kill|stop|quit|exit)\b', re.I)
+_P_TARGET = re.compile(r'(?<![\w./-])(?:claude|codex|calculator|notepad|kilix-[\w-]+|pdf\s+(?:viewer|reader)'
+                       r'|file\s+(?:manager|browser)|session|agent|instance|tab|split|pane)s?(?![\w/-])', re.I)
+_P_SESSION_TAIL = re.compile(r'^(?:(?:please|then|next|also)\s+)*(?:run|do not|don[\x27’]t|if|unless)\b', re.I)
+_P_WAIT_ON = re.compile(r'^(?:(?:and|then|also|now|please|just|next|so)\s+)*wait\s+(?:for|on|till|until)\s+(?:it|its|them|their|him|her)\b', re.I)
+
+
+def _payload_split(request):
+    """(head, payload) at the request's first colon outside quotes that is
+    followed by a space; the payload is the rest, stripped. Only double
+    quotes may come before it: with single or typographic quotes there,
+    where the payload starts is not plain (the suggestion rules, which
+    refusal() applies, find quotes their own way)."""
+    for count, found in enumerate(re.finditer(r':\s', request)):
+        if count == 8:
+            return None     # colon after colon inside open quotes: not a plain head
+        head = request[:found.start() + 1]
+        quotes = _f_quotes(head)
+        if quotes is None:
+            continue        # the colon is inside a quote that is still open
+        if any(head[start] != '"' for start, _end, _inner in quotes):
+            return None
+        return head, request[found.end():].strip()
+    return None
+
+
+def _payload_ok(payload):
+    """Whether an unquoted payload after its marker can be taken whole: at
+    most 1,024 bytes, and no later clause starts like a second instruction.
+    (What every payload must also be, whatever read it, is _sendable's.)"""
+    if not payload or len(payload.encode()) > 1024:
+        return False
+    plain = _unquoted(payload)
+    # The fixed shapes' rule for the verbs of things Ask itself does: after a
+    # separator they may be a second instruction (a bare "wait" is data, as
+    # there). "run", "do not", "if" and "unless" there are the receiving
+    # session's ("; do not merge", ", and run the tests") unless their clause
+    # names something Ask acts on, which _ask_clause catches.
+    for separator in _SEPARATOR.finditer(plain):
+        right = plain[separator.end():].strip()
+        if (_ACTION_TAIL.match(right) and not _P_SESSION_TAIL.match(right)
+                and not re.fullmatch(r'wait[.!]?', right, re.I)):
+            return False
+    return True
+
+
+def _ask_clause(payload):
+    """Whether a later clause of an unquoted payload may be an instruction for
+    Ask: it has a verb Ask has and names something Ask acts on ("..., then
+    spin up claude in /w"), or it waits on "it"."""
+    for clause in _P_BOUNDARY.split(_unquoted(payload))[1:]:
+        if _P_JOB_VERB.search(clause) and _P_TARGET.search(clause) or _P_WAIT_ON.match(clause.strip()):
+            return True
+    return False
+
+
+def _marked_parts(request):
+    """A head the readers take, its marker, and a payload that runs to the
+    end: "tell the codex agent in /w: <message>", "start a new Claude agent in
+    a new tab, working directory /w, model opus. Task: <task>". The reading
+    is marked as a frame's, so the whole request must pass refusal(), which
+    leaves out the words after the colon."""
+    split = _payload_split(request.strip())
+    if split is None or not _payload_ok(split[1]):
+        return None
+    head, payload = split
+    meta = {}
+    found = _extended_agent_calls(request, _meta=meta)
+    if (found and len(found) == 1
+            and payload in (found[0]['arguments'].get('task'), found[0]['arguments'].get('text'))):
+        framed = found, {**meta, 'frame': True}
+    else:
+        framed = _frame_calls(head, payload=payload)
+    if not framed:
+        return None
+    return _leaf(*framed)
+
+
+def _unquoted(text):
+    """text with its quoted spans blanked."""
+    for start, end, _inner in reversed(_f_quotes(text) or ()):
+        text = text[:start] + ' ' * (end - start) + text[end:]
+    return text
+
+
+def _read_clauses(request, *, _depth=0, _bare=False, _list_bare=False):
     """The reading as (call, meta) parts. meta['shares']: the call shares the
     verb of the call before it ("start codex and claude"); the other keys come
     from _extended_agent_calls.
@@ -892,10 +1125,7 @@ def _read_parts(request, *, _depth=0, _bare=False, _list_bare=False):
                     continue
                 # With an unquoted payload, an apparent second instruction
                 # could be data or a new action. Neither interpretation wins.
-                if re.match(r'^(?:(?:please|then|next|also)\s+)*(?:'
-                            r'open|launch|start|bring|show|get|wait|tell|send|message|ask|'
-                            r'kick|run|create|delete|erase|remove|close|quit|reboot|'
-                            r'do not|don[\x27’]t|if|unless)\b',right,re.I):
+                if _ACTION_TAIL.match(right):
                     return None
                 continue
         launches = all(c['name'].startswith('start_') for c in first)
@@ -918,6 +1148,10 @@ def _read_parts(request, *, _depth=0, _bare=False, _list_bare=False):
             if referred:
                 rest = _read_parts(referred,_depth=_depth+1,_bare=bare,_list_bare=list_bare)
                 quoted = [inner for _a, _b, inner in _f_quotes(right) or ()]
+                # "then tell it: <message>": a payload after a colon that runs to the end
+                marked = _payload_split(right)
+                if marked and _payload_ok(marked[1]):
+                    quoted.append(marked[1])
                 if rest and all(value in quoted for call, _m in rest for key, value in call['arguments'].items()
                                 if key in ('task', 'text')):
                     rest = [(call, {**m, 'frame': True}) for call, m in rest]

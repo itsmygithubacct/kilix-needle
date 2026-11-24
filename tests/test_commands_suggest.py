@@ -237,7 +237,7 @@ SAMPLE = (
     'Run codex in dusk-ferry and tell it "lint only"', "Fire up Codex in mill-pond, then Claude in the same directory",
     "The calculator and the notepad, please", "Claude and codex in ./tide-pool, please",
     'Claude gets "hi", and hang on for codex in /x/y', 'Claude in "plum harbor", model opus, task "open the log"',
-    '~/papers/fern\u00e9.pdf in the pdf viewer please, then wait till claude is done', "Let Codex know: the tests pass now",
+    '~/papers/fern\u00e9.pdf in the pdf viewer please, then wait till claude is done', "Let Codex know, the tests pass now",
     'give claude in ./a.b the task "start; then wait" and open the file manager',
     "Wait for Claude in ./alpha and for Codex in ./beta, then open the notepad",
 )
