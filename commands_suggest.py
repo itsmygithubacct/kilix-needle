@@ -193,6 +193,24 @@ def _quotes(request):
     return found
 
 
+_PANE_SPAN = re.compile(contract.PANE_SPAN, re.I)
+
+
+def targets(request):
+    """[{'pane', 'broker'}]: each session the request names by its Kilix pane,
+    outside quotes, as written; 'broker' is None when it names none. A
+    suggestion copies these, never a number of its own."""
+    outside = request
+    for start, end, _ in _quotes(request):
+        outside = outside[:start] + _GONE * (end - start) + outside[end:]
+    found = []
+    for match in _PANE_SPAN.finditer(outside):
+        broker = match['broker'] or match['paren']
+        found.append({'pane': match['pane'],
+                      'broker': broker if broker and contract._BROKER_ID.fullmatch(broker) else None})
+    return found
+
+
 def spans(request):
     """(paths, texts, models, masked, plain): the request's copyable spans, the
     request with each quoted text replaced by a placeholder, and its own words
@@ -211,7 +229,8 @@ def _scan(request):
     colon = re.search(r':\s', outside)
     rest = request[colon.end():].strip() if colon else ''
     tail = ''
-    if rest and rest[0] not in QUOTES and any(cue.search(outside[:colon.start()]) for cue in AGENT_CUE.values()):
+    if rest and rest[0] not in QUOTES and (any(cue.search(outside[:colon.start()]) for cue in AGENT_CUE.values())
+                                           or _PANE_SPAN.search(outside[:colon.start()])):
         tail = rest
         quotes = [quote for quote in quotes if quote[1] <= colon.start()]
         outside = outside[:colon.end()]
@@ -236,6 +255,7 @@ def _scan(request):
     for found in BARE_PATH.finditer(outside):
         paths.append(found.group(1).rstrip('.,:!)'))
     plain = BARE_PATH.sub(_blank, outside)
+    plain = _PANE_SPAN.sub(_blank, plain)      # a pane number or broker id is no name or model
     for found in list(BARE_NAME.finditer(plain)):
         group = 1 if found.group(1) else 2
         name = found.group(group).rstrip('.,:!)')
@@ -270,10 +290,15 @@ def describe(call, texts=()):
         if 'task' in args:
             text += f", giving it the task {shown(args['task'])}"
         return text
+    who = f"the existing {AGENTS[args['agent']]} session" if args.get('agent') in AGENTS else None
+    if 'pane' in args:
+        who = (f"the existing {args['agent'].capitalize()} session" if 'agent' in args
+               else 'the existing coding-agent session')
+        where = f" in pane {args['pane']}" + (f" with broker {args['broker']}" if 'broker' in args else '')
     if name == 'wait_for_agent':
-        return f"wait for the existing {AGENTS[args['agent']]} session{where} to finish its turn"
+        return f"wait for {who}{where} to finish its turn"
     if name == 'message_agent':
-        return f"send the existing {AGENTS[args['agent']]} session{where} the message {shown(args['text'])}"
+        return f"send {who}{where} the message {shown(args['text'])}"
     text = 'open ' + APPS[args['app']]
     return text + (f" with the file {args['file_path']}" if 'file_path' in args else '')
 
@@ -341,7 +366,8 @@ def refusal(request, calls):
     mentions, texts, models, _masked, plain = _scan(request)
     paths = list(dict.fromkeys(mentions))
     agents, apps, directions = _named(paths, plain)
-    if not (agents or apps):
+    panes = targets(request)
+    if not (agents or apps or panes):
         return 'unnamed'
     if NOT_NOW.search(plain):
         return 'conditional'
@@ -349,7 +375,8 @@ def refusal(request, calls):
         return 'cut off'
     if NOT_OFFERED.search(plain):
         return 'unsupported'
-    pools = {'directory': paths, 'file_path': paths, 'task': texts, 'text': texts, 'model': models}
+    pools = {'directory': paths, 'file_path': paths, 'task': texts, 'text': texts, 'model': models,
+             'pane': [found['pane'] for found in panes], 'broker': [found['broker'] for found in panes]}
     for call in calls:
         name, args = call['name'], call['arguments']
         agent = name.split('_')[1] if name.startswith('start_') else args.get('agent')
@@ -365,6 +392,10 @@ def refusal(request, calls):
         return 'repeated'
     if _left_out(calls, paths, texts, directions):
         return 'unused'
+    if any({key: call['arguments'].get(key) for key in ('pane', 'broker')} not in panes for call in calls
+           if 'pane' in call['arguments']) or any(found['pane'] not in [call['arguments'].get('pane') for call in calls]
+                                                  for found in panes):
+        return 'unused'     # a pane the plan leaves out, or a pane paired with another broker
     used = [call['name'].split('_')[1] if call['name'].startswith('start_') else
             call['arguments'].get('agent') or call['arguments'].get('app') for call in calls]
     if set(agents + apps) - set(used):
@@ -600,9 +631,9 @@ def sentence(calls):
             if 'task' in args:
                 text += f" with task {_quote(args['task'])}"
         elif name == 'wait_for_agent':
-            text = f"wait for {args['agent']}{where}"
+            text = f"wait for {contract.pane_words(args) if 'pane' in args else args['agent'] + where}"
         elif name == 'message_agent':
-            text = f"message {args['agent']}{where}: {_quote(args['text'])}"
+            text = f"message {contract.pane_words(args) if 'pane' in args else args['agent'] + where}: {_quote(args['text'])}"
         elif 'file_path' in args:
             text = f"open {_quote(args['file_path'])} in the pdf viewer"
         else:

@@ -841,3 +841,49 @@ class Suggester(Isolated):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PaneTargetWording(unittest.TestCase):
+    """The grammar's own sentence says a pane target and reads back as it;
+    a pane number or broker id is a target span, never a name or model."""
+    BROKER = '0c9e1f2a3b4d5e6f'
+
+    def test_sentence_reads_back_as_the_same_pane_plan(self):
+        for calls in ([call('message_agent', pane='9', text='run it')],
+                      [call('message_agent', agent='codex', pane='9', broker=self.BROKER, text='run it')],
+                      [call('wait_for_agent', pane='31'), call('message_agent', pane='31', text='next batch')],
+                      [call('wait_for_agent', agent='grok', pane='4')],
+                      [call('start_codex', directory='/tmp/sandpiper-bay'),
+                       call('message_agent', agent='claude', pane='5', text='x')]):
+            with self.subTest(calls=calls):
+                carried = suggest._carried(calls)
+                self.assertIsNotNone(carried, suggest.sentence(calls))
+                self.assertEqual(carried['calls'], calls)
+
+    def test_plan_wording_names_the_pane(self):
+        self.assertEqual(suggest.describe(call('message_agent', agent='codex', pane='9', broker=self.BROKER, text='x')),
+                         f'send the existing Codex session in pane 9 with broker {self.BROKER} the message "x"')
+        self.assertEqual(suggest.describe(call('wait_for_agent', pane='9')),
+                         'wait for the existing coding-agent session in pane 9 to finish its turn')
+        self.assertEqual(suggest.describe(call('wait_for_agent', agent='claude', directory='/w')),
+                         'wait for the existing Claude session in /w to finish its turn')
+
+    def test_spans_copy_the_target_and_offer_no_broker_as_a_model(self):
+        request = f'tell pane 32 on broker {self.BROKER}: rerun with gpt-6 later'
+        paths, texts, models, _masked, plain = suggest.spans(request)
+        self.assertEqual((paths, texts, models), ([], ['rerun with gpt-6 later'], []))
+        self.assertNotIn('32', plain)
+        self.assertEqual(suggest.targets(request), [{'pane': '32', 'broker': self.BROKER}])
+        self.assertEqual(suggest.targets('tell "pane 4" to codex here; and pane 7'), [{'pane': '7', 'broker': None}])
+        self.assertEqual(suggest.targets('tell pane 7 broker 0C9E1F2A3B4D5E6F: x'), [{'pane': '7', 'broker': None}])
+
+    def test_refusal_knows_a_named_pane(self):
+        request = "message pane 59 'hello'"
+        self.assertIsNone(suggest.refusal(request, [call('message_agent', pane='59', text='hello')]))
+        self.assertEqual(suggest.refusal(request, [call('message_agent', pane='58', text='hello')]), 'reworded')
+        self.assertEqual(suggest.refusal("message pane 59 and pane 60 'hello'",
+                                         [call('message_agent', pane='59', text='hello')]), 'unused')
+        self.assertEqual(suggest.refusal(f"message pane 59 broker {self.BROKER} 'hello'",
+                                         [call('message_agent', pane='59', text='hello')]), 'unused')
+        self.assertEqual(suggest.refusal("message my other pane 'hello'",
+                                         [call('message_agent', pane='59', text='hello')]), 'unnamed')

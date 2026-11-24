@@ -8,7 +8,8 @@ request the grammar does not read is not run (at most it gets a
 The grammar has two kinds of reader. The fixed shapes take each operation in
 a few set word orders ("start codex in /srv/x to the right", "tell claude to
 ...", "wait for codex in /srv/x"). Frames, added in November 2026, read the
-many other ways people say the same five operations.
+many other ways people say the same five operations. A wait or a message
+may also name its session by Kilix pane: see [ask-pane-targets.md](ask-pane-targets.md).
 
 ## What a frame reads
 

@@ -149,9 +149,18 @@ class Host:
                 if name in a:params[name]=a[name]
             step.update(operation='agent.launch',params=params,agent=a['agent'],cwd=directory)
         else:
-            agent,_,directory=a['session'].partition('@')
-            directory=ak.resolve_dir(directory,cwd=cwd)
-            pane=ak.find_session(agent,directory,caller_pane=source['pane_id'])
+            if 'pane' in a:
+                # A session named by its pane: verified there, then held to the
+                # same state rules and bound to the broker observed now.
+                pane=ak.find_pane(a['pane'],agent=a.get('agent'),broker=a.get('broker'),
+                                  caller_pane=source['pane_id'],snapshot=self.snapshot())
+                coding=pane['coding_session']
+                agent=ak.PROVIDER_AGENT[coding['provider']]
+                directory=Path(coding.get('cwd') or pane['cwd']).resolve()
+            else:
+                agent,_,directory=a['session'].partition('@')
+                directory=ak.resolve_dir(directory,cwd=cwd)
+                pane=ak.find_session(agent,directory,caller_pane=source['pane_id'])
             if pane.get('activity') not in ('idle','working'):
                 raise WorkflowError('the existing agent state is unreadable or waiting for input')
             if action.kind=='tell' and agent not in ak._WORKING_STEER_AGENTS and pane['activity']!='idle':

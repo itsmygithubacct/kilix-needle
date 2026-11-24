@@ -53,5 +53,7 @@ def decide(request, *, provider=None, backend="grammar", grammar_first=True, cwd
             or not isinstance(reply["calls"], list)):
         raise ProposalError("the command model returned an incomplete or error-marked response")
     calls = reply["calls"]
-    admission = contract.admit(request, calls, cwd=cwd)
+    # A model knows only the published tools: a grammar-only argument (a pane
+    # target) is never admitted from it, so its admissions are unchanged.
+    admission = contract.admit(request, calls, cwd=cwd, published=True)
     return Decision(backend, calls, admission, time.monotonic() - started, elapsed)
