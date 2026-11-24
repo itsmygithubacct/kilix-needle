@@ -383,7 +383,9 @@ SAMPLE = (
     'Run codex in dusk-ferry and tell it "lint only"', "Fire up Codex in mill-pond, then Claude in the same directory",
     "The calculator and the notepad, please", "Claude and codex in ./tide-pool, please",
     'Claude gets "hi", and hang on for codex in /x/y', 'Claude in "plum harbor", model opus, task "open the log"',
-    '~/papers/fern\u00e9.pdf in the pdf viewer please, then wait till claude is done', "Let Codex know, the tests pass now",
+    '~/papers/fern\u00e9.pdf in the pdf viewer please, then wait till claude is done',
+    "Codex needs to know: the tests pass now, please",
+    "Ping pane 12 with this: the tests pass now",
     'give claude in ./a.b the task "start; then wait" and open the file manager',
     "Wait for Claude in ./alpha and for Codex in ./beta, then open the notepad",
 )
@@ -423,7 +425,7 @@ class Build(unittest.TestCase):
                             self.assertEqual(child.text, node.text + piece)
                             walk(child)
                 walk(root)
-        self.assertTrue(all(sizes) and max(sizes) > 3, sizes)
+        self.assertTrue(all(sizes) and max(sizes) > 1, sizes)     # some trees branch
         pdf = suggest.plans(SAMPLE[9])      # a PDF is a file to open, never a directory
         self.assertEqual(pdf, [[call("open_app", app="kilix-pdf", file_path="~/papers/fern\u00e9.pdf"),
                                 call("wait_for_agent", agent="claude")]])
@@ -529,7 +531,12 @@ class BuiltRules(unittest.TestCase):
 
     def test_a_request_whose_words_leave_no_plan_gets_none(self):
         cases = {
-            'Tell codex in pane 9: "lint only"': "unsaid",            # an address no wording says
+            'From pane 4, tell pane 9 "lint only"': "unsaid",         # a sender is no part of a plan
+            'Tell the reviewer in pane 4: "lint only"': "unnamed",    # an agent by its role
+            "Start codex in ./quill-moss. Step 2: wait for it": "unsaid",   # a step's label, not a task
+            'Tell the codex in the pane on the left: "go"': "unsaid",      # a pane with no number
+            "As soon as pane 8 errors out, send it: stop the sweep": "not now",
+            'I just started codex in ./quill-moss, tell it "go"': "not now",   # a past start is no start
             "Start codex in ./quill-moss. Model: opus.": "unsaid",       # a field label, not a text
             "Start codex in ./quill-moss with the task": "unsaid",       # a task with no text
             "Start codex in ./quill-moss in a split": "unsaid",          # a split with no direction
@@ -538,6 +545,8 @@ class BuiltRules(unittest.TestCase):
             "is claude running in ./quill-moss": "question",
             'start codex in ./quill-moss: "would it pick the parent?"': "question",
             "Start codex in ./quill-moss, then delete the build folder": "unsupported",
+            "Start codex in ./quill-moss and set the theme to dark": "unsupported",
+            "Start codex in ./quill-moss, then water the plants": "unsupported",   # a verb no tool has
             "Start codex in ./quill-moss as root": "unsupported",
             "I need four codex sessions in ./quill-moss": "unsupported",
             "Don't start codex in ./quill-moss": "not now",
@@ -545,7 +554,7 @@ class BuiltRules(unittest.TestCase):
             "At 7pm, start codex in ./quill-moss": "not now",
             "Start codex in ./quill-moss in an hour": "not now",
             "Codex in ./quill-moss and aider in ./reed-lark": "unnamed",
-            "Start codex in that folder we talked about": "unnamed",
+            "Start codex in that folder, please": "unnamed",
             "Start codex in ./quill-moss and claude in ./reed-lark, then wait for it": "ambiguous",
             "Let claude in ./quill-moss know:": "incomplete",
             "Start codex in ./quill-moss; second,": "incomplete",
@@ -556,17 +565,18 @@ class BuiltRules(unittest.TestCase):
                 self.assertEqual(suggest._ruled_out(suggest._context(request)), why)
                 self.assertEqual(suggest.plans(request), [])
         # Requests of the same shape without such a word have a plan.
-        for request in ("Let codex in ./quill-moss know: lint only, please",
+        for request in ("Relay to codex in ./quill-moss: lint only, please",
                         "Codex in ./quill-moss, a split below, please",
                         "Codex in ./quill-moss, and claude in ./reed-lark please"):
             with self.subTest(request=request):
                 self.assertIsNone(suggest._ruled_out(suggest._context(request)))
                 self.assertTrue(suggest.plans(request))
-        self.assertEqual(worded("Let codex in ./quill-moss know: lint only, please"),
+        self.assertEqual(worded("Relay to codex in ./quill-moss: lint only, please"),
                          ['message codex in "./quill-moss": "lint only, please"'])
 
     def test_a_detail_no_wording_says_means_no_plan(self):
         for request in ("resume claude in ./quill-moss", "Start codex in ./quill-moss with high effort",
+                        'Tell codex in tab 9: "lint only"',
                         "Start claude in ./quill-moss, opus model",
                         "Start claude with model gpt-5.5-mint in ./quill-moss"):
             with self.subTest(request=request):
@@ -619,9 +629,19 @@ class BuiltRules(unittest.TestCase):
             with self.subTest(request=request):
                 self.assertEqual(worded(request), [wording])
         # "Claude and codex in ./x" shares the directory and the kind of operation, whichever that is.
-        self.assertEqual(worded("Claude and codex in ./quill-moss, please"),
-                         ['start claude in "./quill-moss"; then start codex in "./quill-moss"',
-                          'wait for claude in "./quill-moss"; then wait for codex in "./quill-moss"'])
+        self.assertEqual(worded("Claude and codex in ./quill-moss, please"),     # nothing asks for a wait
+                         ['start claude in "./quill-moss"; then start codex in "./quill-moss"'])
+        # "claude and codex" go with one verb, "them" is both, and "claude in ./alpha" is in ./alpha
+        for request in ("Open claude and codex in ./quill-moss and wait, please",
+                        "Claude and codex in ./quill-moss, then wait for them, please",
+                        "Claude in ./alpha, codex in ./beta, then wait till done"):
+            with self.subTest(request=request):
+                self.assertEqual(suggest.plans(request), [])
+        self.assertEqual(worded("Claude in ./alpha, codex in ./beta, a notepad, then wait till done"), [
+            'start claude in "./alpha"; then start codex in "./beta"; then open the notepad; '
+            'then wait for claude in "./alpha"',
+            'start claude in "./alpha"; then start codex in "./beta"; then open the notepad; '
+            'then wait for codex in "./beta"'])
 
     def test_a_plan_uses_every_directory_and_text_the_request_copies(self):
         context = suggest._context('Start codex in ./quill-moss and tell it "fix the parser"')
@@ -641,6 +661,54 @@ class BuiltRules(unittest.TestCase):
         # When the one plan that names it alike is refused (a repeated message), there is no plan at all.
         self.assertEqual(suggest.plans('Start claude in ./quill-moss; tell it "use the test config"; wait for it; '
                                        'tell it "now the real one".'), [])
+
+    def test_a_session_named_by_its_pane(self):
+        cases = {
+            'Nudge pane 41 with "rebase now"': ['message the session in pane 41: "rebase now"'],
+            "Drop a note to pane 77 broker 0c9e1f2a3b4d5e6f: fixture rebuilt":
+                ['message the session in pane 77 with broker 0c9e1f2a3b4d5e6f: "fixture rebuilt"'],
+            "Let the claude in pane 5 wrap up": ["wait for claude in pane 5"],
+            # the agent beside a pane is the one named next to it, never one named for another call
+            'Start codex in ./quill-moss, then nudge pane 9 with "pull main"':
+                ['start codex in "./quill-moss"; then message the session in pane 9: "pull main"'],
+            'Start codex in ./quill-moss, then nudge the codex in pane 9 with "pull main"':
+                ['start codex in "./quill-moss"; then message codex in pane 9: "pull main"'],
+            # "it" carries the pane to the next call
+            'nudge pane 3 with "a", then hold off until it is done':
+                ['message the session in pane 3: "a"; then wait for the session in pane 3'],
+            # no plan: the same agent with and without its pane, a pane beside a directory, a sender
+            'tell claude in pane 2 "x", then wait for claude': [],
+            "Tell codex in pane 5 in ./quill-moss: hi": [],
+            'Nudge pane 41 with "rebase now" from pane 2': [],
+            # a wait needs words that ask for one, and "let it finish" is one
+            "Make pane 52 wider": [],
+            "Let pane 99 finish, then pass it this: the base is main now":
+                ['wait for the session in pane 99; then message the session in pane 99: "the base is main now"'],
+        }
+        for request, wordings in cases.items():
+            with self.subTest(request=request):
+                self.assertFalse(contract.exact_calls(request))
+                self.assertEqual(worded(request), wordings)
+                for calls in suggest.plans(request):
+                    for found in calls:
+                        args = found["arguments"]
+                        if "pane" in args:      # copied from targets(), and never beside a directory
+                            self.assertIn({"pane": args["pane"], "broker": args.get("broker")},
+                                          suggest.targets(request))
+                            self.assertNotIn("directory", args)
+        context = suggest._context('Start codex in ./quill-moss, then nudge pane 9 with "pull main"')
+        start = call("start_codex", directory="./quill-moss")
+        self.assertTrue(suggest._paned(context, [start, call("message_agent", pane="9", text="pull main")]))
+        self.assertFalse(suggest._paned(context, [start, call("message_agent", agent="codex", pane="9",
+                                                              text="pull main")]))
+
+    def test_a_message_for_a_session_the_plan_started_names_its_directory(self):
+        request = ('Start claude in ./quill-moss, start codex in the same folder split below, tell claude '
+                   '"you own the API", and tell codex "you own the UI"')
+        self.assertEqual(worded(request), [
+            'start claude in "./quill-moss"; then start codex in "./quill-moss" in a split below; '
+            'then message claude in "./quill-moss": "you own the API"; '
+            'then message codex in "./quill-moss": "you own the UI"'])
 
     def test_copied_values_are_found_whole(self):
         request = 'Wait for claude in ./quill-moss and codex in ./quill-moss/web. Tell it "also done"'

@@ -96,14 +96,18 @@ More rules shape the list, all from the request's own words:
 - Some requests get no plan at all: a question asked with `is`, `do` or
   `has` first, or one that ends in a question mark after its text; a
   hypothetical, a report of what was done, or a time other than now (`at
-  6pm`, `in an hour`, `after lunch`); an action or application no tool has
-  (`then delete the build folder`, `as root`, `take a screenshot`, the
-  calendar), another agent (`aider`), or many sessions at once; a split or
-  pane without its direction; `it` or `the codex` after two such sessions
-  have been named; a labelled field (`Model: x.`), a task with no text, or a
-  request that stops after `:` or `second,`.
+  6pm`, `in an hour`, `after lunch`) or a condition (`whenever`, `in case`,
+  `errors out`); an action or application no tool has (`then delete the
+  build folder`, `as root`, `take a screenshot`, `set the theme`, the
+  calendar, a clause that opens with a verb none of the tools has), another
+  agent (`aider`, `the reviewer`), or many sessions at once; a split without
+  its direction, or a pane without its number (`the pane on the left`); a
+  sender (`from pane 4, tell pane 9 ...`); `it` or `the codex` after two
+  such sessions have been named; a labelled field (`Model: x.`) or step
+  (`Step 2: wait for it`), a task with no text, or a request that stops
+  after `:` or `second,`.
 - A detail no plan's wording can say means no plan unless the plan's own
-  sentence says it: a pane or session by number or id, `resume`, an effort
+  sentence says it: a tab, window or session by number or id, `resume`, an effort
   level, a title, a flag (`--yolo`), another host, a file left in the
   request's own words (`draft.txt`).
 - A model the request names, as one (`model o3`), after `with`, or bare
@@ -126,6 +130,22 @@ More rules shape the list, all from the request's own words:
 - A split is offered only when the request says split, pane, side or a
   direction (`a new tab` says none), and `the same directory` names the
   directory again.
+- A session named by its Kilix pane (`nudge pane 41 with "rebase now"`)
+  is waited for or messaged with the pane and broker copied from
+  `targets()`, never with a directory. The agent goes beside the pane only
+  when it is named next to it (`the codex in pane 9`), never because it was
+  named for another call, and an agent waited for or messaged by its pane is
+  never also addressed without one (`tell claude in pane 2 ..., then wait for
+  claude` may mean another claude). A pane goes only with the calls of its
+  own clause, or of a later one that says `it`.
+- A message or wait for a session this plan started in a directory names
+  that directory (`start claude in ./x ..., tell claude "..."`), unless the
+  clause says `here`.
+- A wait needs words that ask for one (`wait`, `hold on`, `let it finish`,
+  `done`): `make pane 311 wider` gets no plan. `wait for them` and `tell
+  both` are one operation on every agent the plan has, and `claude and codex`
+  go with one verb, so `open claude and codex and wait` never starts one and
+  waits for the other.
 
 These rules narrow the tree, often to a single sentence, so fewer questions
 are asked; where a rule leaves no plan, nothing is asked and nothing is
