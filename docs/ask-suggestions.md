@@ -153,25 +153,30 @@ next.
 ## How the walk plans
 
 The walk asks for the plan one operation at a time instead of building the
-grammar's sentence. Since November 2026 it works in this order.
+grammar's sentence. It works in this order.
 
 1. **Words the tools cannot express refuse before any question**
    (`walk_refuses()`). These rules belong to the walk only. They read the
    request's own words, with quoted texts and paths left out, and come on top
    of the rules above:
-   - a session addressed by pane, tab, window, number, id or title (`tell
-     claude in pane 4: ...`, `codex session 0a1b...`);
+   - a session addressed by tab, window, number, id or title, or a pane not
+     given as `pane N` (`tell claude in tab 4`, `the pane on the left`, `in
+     #2207`, `codex session 0a1b...`); for a pane, see below;
    - a reasoning effort, or a level after a model (`model gpt-6 high`);
    - resuming or restarting a session;
    - a command-line flag (`--yolo`);
    - another agent or program (`grok`, `the supervisor`, `the other claude`);
    - an SSH host;
-   - `as root`, or memory or a GPU;
+   - `as root`, `yourself`, or memory or a GPU;
    - many copies (`five claude sessions`);
-   - a time of day (`at 6pm`);
+   - a time other than now (`at 6pm`, `in an hour`, `after lunch`);
+   - a negated operation (`don't start codex`; `don't do anything else, just
+     wait` is not one);
+   - a question (`is the codex in ~/x done?`; `could you ...?` is a request);
    - a hypothetical, an example, a quote or past events (`imagine`, `the
      tutorial says`, `yesterday I started`);
-   - a model the grammar cannot carry;
+   - a model the grammar cannot carry (`model claude-opus-9`, `on haiku`);
+   - `it` after both agents are named;
    - a split without a side;
    - a request that ends on `with the task`;
    - a place the copier cannot copy (`in ~/`, `the folder pine-cone`);
@@ -179,18 +184,21 @@ grammar's sentence. Since November 2026 it works in this order.
    - text after a colon that nothing before the colon calls a message or a
      task;
    - a clause whose first word is a verb none of the five tools does (`push
-     the branch`, `email the team`, `work out 18%`).
+     the branch`, `email the team`, `work out 18%`, `run git push`), also
+     after `but`; a file named for an application (`open notes.txt in the
+     notepad`).
 2. **The kind of request**, as for the built sentence.
 3. **Each operation in turn.** The first question offers the operations the
-   named agents and applications allow, and `other` (something none of them
-   can do). Later questions see the operations already planned and may also
-   answer `nothing more`. That answer is offered only once the plan leaves
-   nothing the request names unused. There are at most as many operations as
-   the request has clauses (joined by `and`, `then`, commas, semicolons,
-   colons, dashes, sentences or list numbers), one more for a `both` that
-   points back at two agents, and four in all. A request that begins with a
-   launch verb and an agent (`open codex in ...`) begins with that launch.
-   `other` refuses the whole request.
+   named agents, applications and panes allow, and `other` (something none of
+   them can do). Later questions see the operations already planned and may
+   also answer `nothing more`. That answer is offered only once the plan
+   leaves nothing the request names unused. There are at most as many
+   operations as the request has clauses (joined by `and`, `then`, `but`,
+   commas, semicolons, colons, dashes, sentences or list numbers), one more
+   for a `both` that points back at two agents, and four in all. A request
+   that begins with a launch verb and an agent (`open codex in ...`) begins
+   with that launch. `other` refuses the whole request; the same call again,
+   once the plan is whole, ends it.
 4. **Each argument the words leave open.** An argument the words already fix
    is taken without a question:
    - the one agent named, for a wait or a message;
@@ -199,56 +207,87 @@ grammar's sentence. Since November 2026 it works in this order.
      one direction not yet used, the only model, the only text left;
    - the message, when one text is left.
    Other choices are asked, among the request's own spans only, with `none`
-   where leaving the argument out is a fair answer.
+   where leaving the argument out is a fair answer. A text the words call a
+   task (`with the task '...'`, `task: ...`) is never a message, and one they
+   call a message (`message it "..."`, `tell it: ...`) is never a task.
+   `right here` and `right now` name no side.
 5. **The rules.** A repeated operation, anything named left out, a named
-   model left out, or a `both` without a second operation on each agent ends
-   the walk. So does any reason `refusal()` gives, before the final question
-   is asked.
+   model left out, a pane named twice and used once, or a `both` without a
+   second operation on each agent ends the walk. So does any reason
+   `refusal()` gives, before the final question is asked.
 6. **The plan against its near misses.** The plan is ranked against the
    variants of it that the rules also allow (one operation fewer, an argument
-   dropped, another named path or side, the other agent) and `none of
+   dropped, another named path, side or pane, the other agent) and `none of
    these`. It must win with odds of at least `WALK_CHECK` (0.5). A plan with
    no such variant gets the yes/no question instead, and needs `yes` with at
-   least `VERIFY` (0.8).
+   least `WALK_VERIFY` (0.7).
 
 `walk_signals()` reads a walk's (gate, least sure choice, final ranking), and
 `suggest(..., plan=walk)` holds them to (`GATE`, `STEP`, `WALK_CHECK`).
 
+### A session named by its pane
+
+The grammar reads the plain pane shapes itself
+([ask-pane-targets.md](ask-pane-targets.md)). For a pane request it does not
+read (an unusual verb or order, a payload introduced oddly, a wait and a
+message mixed), the walk plans as follows:
+
+- **The session question.** A wait or a message asks "which session" among
+  each pane the request names (`targets()`) and each agent it names without
+  one. With one choice, it is taken without a question.
+- **Copied, never written.** The pane and its broker are copied from
+  `targets()`.
+- **The agent beside a pane.** The agent is the one named right before the
+  pane (`the Codex agent in pane 9`). Otherwise it is left out.
+- **No directory.** A pane call is never given a directory, so a request that
+  names one beside the pane has nothing to put it in and gets no plan.
+- **No plan at all** for:
+  - a sender (`from pane 4, tell pane 9 ...`);
+  - a broker `targets()` cannot copy (not lowercase hex);
+  - one pane with two brokers;
+  - `the same pane` when two are named;
+  - an agent named both with a pane and without one;
+  - a Grok session, since `refusal()` holds the agent to Claude or Codex.
+
+  Two calls of the same kind on two panes are refused by `refusal()` as
+  repeated, so they get no plan either.
+
 ### The walk on requests the grammar does not read (not blind)
 
-Three development sets, all requests that the grown grammar does not read:
+On the merged grammar (pane targets and unquoted payloads read), with
+`d3:2b`. Questions and tokens are averages per request that reaches a plan
+source. The rows for "before" are the walk as it was merged; the built
+sentence is the merged one, for reference.
 
-- the residue of the authored sets v1-v8 and of four later fresh sets (581
-  requests, 261 of them reaching a plan source, 73 supported);
-- real requests sent to kilix-needle (88 that reach a plan source; under the
-  conventions only 2 are supported, plus 2 contestable; most address a
-  session by pane or name a model or effort Ask cannot express);
-- a fresh set of hard requests written for this work, residue of 143 (95
-  supported).
-
-These sets shaped the rules above, so the numbers are not blind. Questions
-and tokens are averages per request that reaches a plan source.
-
-| Set | Plan source | Right | Wrong | Questions | Tokens |
+| Set (unread, reaching a plan source, supported) | Plan source | Right | Wrong | Questions | Tokens |
 |---|---|---|---|---|---|
-| authored residue | walk before | 40 | 21 | 5.75 | 1079 |
-| | built sentence | 40 | 20 | 3.00 | 1625 |
-| | walk now | 44 | 0 | 1.90 | 390 |
-| real | walk before | 1 | 51 | 6.47 | 1734 |
-| | built sentence | 1 | 48 | 1.66 | 481 |
-| | walk now | 2 | 0 | 0.15 | 29 |
-| fresh hard | walk before | 54 | 10 | 7.05 | 1413 |
-| | built sentence | 59 | 8 | 3.59 | 1446 |
-| | walk now | 63 | 0 | 3.80 | 823 |
+| hard pane requests and neighbours (108, 90, 68) | walk before | 6 | 1 | 1.72 | 410 |
+| | built sentence | 6 | 2 | 0.26 | 61 |
+| | walk now | 40 | 0 | 3.39 | 793 |
+| hard requests, set 1 (139, 107, 92) | walk before | 62 | 0 | 3.96 | 858 |
+| | built sentence | 58 | 3 | 1.59 | 345 |
+| | walk now | 63 | 0 | 3.85 | 833 |
+| hard requests, set 2 (140, 113, 93) | walk before | 46 | 4 | 3.46 | 737 |
+| | built sentence | 51 | 3 | 1.56 | 344 |
+| | walk now | 52 | 0 | 3.40 | 734 |
+| authored residue (577, 253, 69) | walk before | 40 | 0 | 1.91 | 391 |
+| | built sentence | 41 | 0 | 0.37 | 81 |
+| | walk now | 40 | 0 | 1.64 | 335 |
+| real requests (42 reaching a plan source, 2 supported) | walk before | 1 | 0 | 0.43 | 93 |
+| | built sentence | 1 | 0 | 0.05 | 12 |
+| | walk now | 2 | 0 | 0.43 | 98 |
 
-The rows for "before" are the code of 2026-11-24 before this change. "Now"
-replays the recorded answers of `d3:2b` through the final code, which matches
-a fresh run question for question except in two requests of the fresh hard
-set whose questions changed, which are counted as unanswered here. Most of the wrong suggestions before were messages to a
-session named by its pane, plans that dropped a model or effort, and
-unsupported second actions. The lexical rules of step 1 remove most of them.
-They read only words, so they would serve the built sentence too: with them,
-the built sentence made 40/0, 1/0 and 59/1 (right/wrong).
+These sets shaped the rules above, so the numbers are not blind, except
+two:
+
+- **Hard set 2, "walk before".** It was run once on the walk as merged, before
+  any change; its four wrong suggestions led to the task-or-message rule, the
+  `right here` rule and the colon rule's `mid-task`.
+- **A fresh set of 80 pane and other hard requests** (63 unread, 54 reaching
+  a plan source, 37 supported), written and labelled by two readers who agreed
+  on every label. It was run once with the code frozen:
+  - the walk: 18 right, 0 wrong, 44 of 63 answered, 2.8 questions;
+  - the built sentence: 6 right, 0 wrong, 32 answered.
 
 ## Measured, 2026-11-24
 
