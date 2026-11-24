@@ -681,13 +681,13 @@ class BuiltRules(unittest.TestCase):
                 self.assertEqual(suggest._ruled_out(suggest._context(request)), why)
                 self.assertEqual(suggest.plans(request), [])
         # Requests of the same shape without such a word have a plan.
-        for request in ("Relay to codex in ./quill-moss: lint only, please",
+        for request in ("Remind codex in ./quill-moss: lint only, please",
                         "Codex in ./quill-moss, a split below, please",
                         "Codex in ./quill-moss, and claude in ./reed-lark please"):
             with self.subTest(request=request):
                 self.assertIsNone(suggest._ruled_out(suggest._context(request)))
                 self.assertTrue(suggest.plans(request))
-        self.assertEqual(worded("Relay to codex in ./quill-moss: lint only, please"),
+        self.assertEqual(worded("Remind codex in ./quill-moss: lint only, please"),
                          ['message codex in "./quill-moss": "lint only, please"'])
 
     def test_a_detail_no_wording_says_means_no_plan(self):
