@@ -97,11 +97,13 @@ under this rule:
   the following task:`, `with these instructions:`, or a bare colon after the
   launch. For a message: `tell`, `message`, `ping`, `notify`, `instruct` or
   `write to` X, `send X this message:`, `send the following to X:`, `relay
-  this to X:`, `let X know:`, or `then tell it:` after a wait. The head is
-  read like any frame. A condition, a time, a negation, a second session, a
-  pane, a broker or a model outside the four refuses it, and so does any word
-  outside the shape. A directory may end its own sentence before the marker
-  (`in /srv/x. Task:`).
+  this to X:`, `relay to X:`, `reply to X:`, `let X know:`, or `then tell
+  it:` after a wait. A session named by its pane takes the pane shapes' own
+  heads (see [ask-pane-targets.md](ask-pane-targets.md)), and its payload is
+  held to the same rule. The head is read like any frame. A condition, a
+  time, a negation, a second session or a model outside the four refuses it,
+  and so does any word outside the shape. A directory may end its own
+  sentence before the marker (`in /srv/x. Task:`).
 - The payload runs to the end of the request and is copied byte for byte. It
   is data: its "if", "then", "do not" and "run" are the receiving session's
   (`tell claude in /srv/x: start codex if the tests pass` is one message to
@@ -109,21 +111,32 @@ under this rule:
 - It is refused when it may be a second instruction for Ask. That is when one
   of its later clauses (after a comma, a semicolon, a full stop, "and",
   "then" and the like) has a verb Ask has and names something Ask acts on (an
-  agent, an application, a session, a tab, a split, a pane): `...: fix it,
-  then tell codex in /srv/y: rebase`, `...: fix it. Then open the
-  calculator`. It is also refused when a later clause waits on "it", or when
-  a later clause starts with an action word the fixed shapes stop at (open,
-  start, tell, wait, delete, close and the like). "run", "do not", "if" and
-  "unless" at the start of a later clause stay data unless the clause names
-  something Ask acts on.
+  agent, Grok included, an application, a session, a tab, a split, a pane):
+  `...: fix it, then tell codex in /srv/y: rebase`, `...: fix it, then
+  message pane 3`, `...: fix it. Then open the calculator`. It is also
+  refused when a later clause waits on "it" or tells "it" (`then tell it to
+  rebase`), or when a later clause starts with an action word the fixed
+  shapes stop at (open, start, tell, wait, delete, close and the like).
+- Two kinds of later clause are the receiving session's, whatever their
+  verb:
+  - one addressed to the sender (`..., and tell me if it still fails`, `let
+    us know`, `report back to me`, `send me the diff`);
+  - one that only says what not to do (`do not open another tab`), unless it
+    is about sending (`do not send this yet` refuses).
+
+  "run", "do not", "if" and "unless" at the start of a later clause stay
+  data unless the clause names something Ask acts on.
 - It is refused when it is no message at all. That is a client command
   (starting with `/`, `!`, `#`, `@` or `-`), a word that ends the session
   (`exit`, `quit`, `bye`), more than 1,024 bytes, or empty. A launch task
   with a question mark outside quotes is also refused, since it may be a
   question for Ask (`start codex in ../x: would that pick the parent
   folder?`).
-- `agents:` or `apps:` before a request names the job. The rest must read as
-  that job's actions only.
+- `agents:` or `apps:` before a request names the job (`agents` with no
+  colon too, before a verb: `agents message pane 59 'hello'`). The rest must
+  read as that job's actions only.
+- A launch may say it has no task: `start codex in /srv/x in a left split,
+  with no initial task`.
 
 Some of these rules apply to every reading, including the fixed shapes'.
 They follow the payload rule of the agents job (`agents.py`):
@@ -132,7 +145,11 @@ They follow the payload rule of the agents job (`agents.py`):
 - for a payload that is not wholly quoted, the later-clause rule (a verb Ask
   has and something Ask acts on, or a wait on "it") and the question-mark
   rule for launches;
-- "nothing else" outside the payloads must end the request.
+- "nothing else" outside the payloads must end the request;
+- a wait or message that names its session by the agent alone, after the
+  same request launched that agent in another directory, is refused: in
+  `start codex in ~/x, then wait for the codex`, "the codex" may be the new
+  one or the one here.
 
 Before 0.2.4 the fixed shapes sent `tell codex here: /compact` as a message
 and read `tell codex in /srv/x: fix it, and pop open the calculator` as one
@@ -150,10 +167,16 @@ message.
   or after "to" or "and" in a frame (`tell codex in /srv/x to fix it` is the
   fixed shapes' and reads; `ask codex in /srv/x, when it is free, to ...`
   does not);
-- the same wait twice in one request, `both in new tabs`, `~/` alone as a
-  directory, and `do not give it a task`;
-- what the five tools cannot say: a pane or tab number, a broker or session
-  id, another agent, resuming a session, a reasoning effort, or a model
+- the same wait twice in one request, `both in new tabs`, and `~/` alone as
+  a directory;
+- `do not give it a task` and `it does not need an initial task`, which the
+  suggestion rules' negation check refuses, `with the working directory set
+  to DIR` ("set" is the suggestion rules' word for a model), and `with no
+  model override and no initial task`;
+- what the five tools and the pane target cannot say: a tab number, a
+  session id, an agent named by its role ("the supervisor in pane 498",
+  "the parent Codex session"), a pane with another label beside it ("Codex
+  pane 13 worker 02"), resuming a session, a reasoning effort, or a model
   outside the four.
 
 ## Measured, 2026-11-24

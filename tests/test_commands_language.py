@@ -365,3 +365,59 @@ class MarkedPayload(unittest.TestCase):
         # Where the fixed shapes read a request, the new reader never runs.
         self.check('Tell Codex: compare A and B; then C.',
                    [call('message_agent', agent='codex', text='compare A and B; then C.')])
+
+
+class PayloadsAndPanes(unittest.TestCase):
+    """The unquoted-payload rule on the merged grammar: a pane head, a clause
+    addressed to the sender, the new markers and launch endings
+    (docs/ask-phrasing.md, "Unquoted payloads")."""
+
+    def check(self, text, expected):
+        self.assertEqual(contract.exact_calls(text), expected)
+        self.assertTrue(contract.admit(text, expected).actions)
+
+    def test_a_clause_for_the_sender_is_the_sessions(self):
+        for head, payload in (
+            ('tell claude in pane 6: ', 'fix the cache. Run the tests and tell me if it still fails.'),
+            ('Tell codex here: ', 'fix it, and let me know when done.'),
+            ('Tell codex in /srv/oast-galliard: ', 'fix it; report back to me with the diff.'),
+            ('Tell codex in /srv/oast-galliard: ', 'fix it, and tell me when claude finishes.'),
+            ('Tell codex in /srv/oast-galliard: ', 'fix it. Do not open another tab.'),
+            ('Tell pane 3: ', 'fix it, and tell me when done'),
+        ):
+            with self.subTest(head=head, payload=payload):
+                read = contract.exact_calls(head + payload)
+                self.assertEqual([found['arguments']['text'] for found in read], [payload])
+                self.assertTrue(contract.admit(head + payload, read).actions)
+        self.assertEqual(contract.exact_calls('Tell pane 3: fix it, and tell me when done'),
+                         [call('message_agent', pane='3', text='fix it, and tell me when done')])
+
+    def test_relay_and_reply_to(self):
+        self.check('Relay to the Codex agent in /srv/oast-galliard: the grader was wrong; rerun it.',
+                   [call('message_agent', agent='codex', text='the grader was wrong; rerun it.', directory='/srv/oast-galliard')])
+        self.check('Reply to the Codex session in ~/oast-galliard/split: Yes, go ahead with option B.',
+                   [call('message_agent', agent='codex', text='Yes, go ahead with option B.', directory='~/oast-galliard/split')])
+
+    def test_a_launch_that_says_it_has_no_task(self):
+        self.check('Start codex in /srv/oast-galliard in a left split, with no initial task.',
+                   [call('start_codex', directory='/srv/oast-galliard', place='left')])
+        for text in ('Start codex in /srv/oast-galliard with the task "x" and no initial task',
+                     'Tell codex in /srv/oast-galliard no task', 'Open the calculator with no initial task'):
+            with self.subTest(text=text):
+                self.assertIsNone(contract.exact_calls(text))
+
+    def test_a_job_named_without_a_colon_and_a_pane_wait_said_another_way(self):
+        self.assertEqual(contract.exact_calls("agents message pane 59 'hello'"),
+                         [call('message_agent', pane='59', text='hello')])
+        self.assertEqual(contract.exact_calls('agents start codex in /srv/oast-galliard'),
+                         [call('start_codex', directory='/srv/oast-galliard')])
+        self.assertIsNone(contract.exact_calls('agents open the calculator'))
+        self.assertIsNone(contract.exact_calls('agents please start codex in /srv/oast-galliard'))   # a job, then a verb
+        self.assertEqual(contract.exact_calls("Wait for the existing Claude agent in pane 418 (broker 5c2e9a7d1b3f4086) "
+                                              "to finish what it's doing."),
+                         [call('wait_for_agent', agent='claude', pane='418', broker='5c2e9a7d1b3f4086')])
+
+    def test_nothing_else_inside_a_payload_with_quoted_words(self):
+        payload = 'Reply with the list and nothing else. Use "start" and "stop" as the state names.'
+        self.check('Tell codex in /srv/oast-galliard: ' + payload,
+                   [call('message_agent', agent='codex', text=payload, directory='/srv/oast-galliard')])

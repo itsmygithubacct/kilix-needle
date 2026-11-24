@@ -31,7 +31,17 @@ first:
 
 After a colon the message is the rest of the request, as for `tell claude
 here: ...`; without one it must be quoted. A message is at most 1024 bytes and
-a single line.
+a single line. An unquoted message after a pane is held to the payload rule of
+[ask-phrasing.md](ask-phrasing.md#unquoted-payloads):
+
+- a later clause that may be an instruction for Ask refuses the request
+  (`tell pane 3: fix it, then message pane 4`, `..., then wait for it`);
+- one addressed to the sender stays in the message (`tell pane 3: fix it,
+  and tell me when done`);
+- a client command or `exit` is never sent.
+
+`agents message pane 59 'hello'` (the job named first, no colon) and `wait
+for ... in pane N to finish what it's doing` are read too.
 
 These are not targets, and such a request has no reading: a number not said
 as `pane N` (`pane503`, `session 518`, `tab 12`, `window 3`), a pane not named

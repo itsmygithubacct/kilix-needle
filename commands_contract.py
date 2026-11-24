@@ -250,6 +250,8 @@ _P_MARKER = re.compile(r'\s*,?\s*(?:with\s+this\s+exact\s+(?:text|message|instru
 _P_WAIT = re.compile(r'(?:wait(?:\s+(?:for|until|on))?|block\s+until|hold(?:\s+(?:on|off))?\s+until|pause\s+until)\s+'
                      + _P_TARGET + r'(?P<tail>.*)', re.I | re.S)
 _P_WAIT_TAILS = ('', 'to finish', 'finishes', 'is idle', 'is done', 'is finished', 'becomes idle', 'to be idle',
+                 "to finish what it's doing", 'to finish what it is doing', "finishes what it's doing",
+                 "to finish what it\u2019s doing", "finishes what it\u2019s doing",
                  'to become idle', 'to finish its turn', 'finishes its turn', 'to finish its current turn',
                  'finishes its current turn', 'to complete its turn', 'completes its turn')
 
@@ -603,7 +605,8 @@ _F_NOT_BARE = re.compile(r'(?:read|write)-only|full-auto|auto-(?:edit|approve)|d
                          r'|minutes?|hours?|days?|weeks?|months?|years?|now|later|soon|eod)(?:[-.].*)?', re.I)
 # Words of their own that a bare name never is: an application, a side.
 _F_OWN_WORDS = re.compile(r'(?:right|left)-hand|kilix-(?:pdf|calculator|notepad|file)', re.I)
-_F_LOC_INTRO = (r'(?:\b(?:working\s+)?(?:in|inside|within|at)\s+(?:the\s+)?(?:(?:directory|folder|dir|repo|repository)\s+)?'
+_F_LOC_INTRO = (r'(?:\bwith\s+(?:the|its|a)\s+working\s+(?:directory|dir|folder)\s+(?:set\s+to|of|at|as)\s+'
+                r'|\b(?:working\s+)?(?:in|inside|within|at)\s+(?:the\s+)?(?:(?:directory|folder|dir|repo|repository)\s+)?'
                 r'|\b(?:(?:working|the)\s+)?(?:directory|dir|folder)\s+(?:called\s+|named\s+)?)')
 _F_LOC_NOUN = r'(?:\s+(?:directory|folder|dir|repo|repository))?'
 _F_HERE = re.compile(r'\bin\s+(?:this|the\s+current|my\s+current)\s+(?:directory|folder)\b'
@@ -715,7 +718,7 @@ _F_MESSAGE_U = re.compile(
     + _F_MSG_INTRO + r'\s*)?:\s*' + _U +
     r'|(?:send|pass|relay|forward|write|deliver)\s+(?:(?:a|this|the|the\s+following)\s+)?(?:message|note|text|notice|update)'
     r'(?:\s+along)?\s+to\s+' + _F_AR + r'\s*:\s*' + _U +
-    r'|(?:relay|forward|pass|send)\s+(?:this|the\s+following)(?:\s+along)?\s+to\s+' + _F_AR + r'\s*:\s*' + _U +
+    r'|(?:relay|forward|pass|send|reply|respond)\s+(?:(?:this|the\s+following)(?:\s+along)?\s+)?to\s+' + _F_AR + r'\s*:\s*' + _U +
     r'|let\s+' + _F_AR + r'\s+know\s*:\s*' + _U +
     r'|(?:send|give)\s+' + _F_AR + r'\s+(?:a|this|the\s+following)\s+(?:message|note)\s*:\s*' + _U +
     r'|(?:tell|message|send\s+(?:a\s+)?message\s+to)\s+' + _F_AR + r'\s*\.?\s*(?:message|text)\s*:\s*' + _U +
@@ -885,6 +888,13 @@ def _frame_calls(clause, payload=None):
         body = _F_GERUND[verb[0].casefold()] + body[verb.end():]
     # "...; do nothing else": the request asks for this step and no other.
     body = re.sub(r'(?:\s*[;,.]\s*|\s+)(?:and\s+)?(?:do\s+)?nothing\s+else(?=[.!]*$)', '', body, flags=re.I)
+    # "..., with no initial task", "It does not need an initial task.": a
+    # launch that states it has no task (and no model, when it says so).
+    no_task = re.search(r'(?:\s*[;,.]\s*|\s+)(?:(?:and|with)\s+)?(?P<model>no\s+model\s+override\s+and\s+)?'
+                        r'(?:no\s+(?:initial\s+)?task|it\s+(?:does\s+not|doesn[\'’]t)\s+need\s+(?:an?\s+)?(?:initial\s+)?task'
+                        r'|do\s+not\s+give\s+it\s+(?:a|any)\s+(?:initial\s+)?task)(?=[.!]*$)', body, re.I)
+    if no_task:
+        body = body[:no_task.start()]
     tail = _F_TAIL.search(body)
     end, body = tail['end'], body[:tail.start()].strip()
     if len(end) > 1 or end == '?' and not polite:
@@ -903,6 +913,9 @@ def _frame_calls(clause, payload=None):
             args['directory'] = values[int(value)]
     if 'n' in kinds:
         return _frame_pane(folded, tokens, values, agents, kinds, meta)
+    if no_task and ('t' in kinds or no_task['model'] and 'm' in kinds or len(agents) != 1
+                    or not _F_LAUNCH.fullmatch(folded)):
+        return None
     if len(agents) == 1 and not {'x', 'f'} & set(kinds) and _F_LAUNCH.fullmatch(folded):
         for kind, value in tokens:
             if kind == 'p':
@@ -971,9 +984,27 @@ def exact_calls(request, *, _depth=0, _bare=False):
     _bare: a launch earlier in the whole request states no model.
     """
     calls = _exact_calls(request, _depth=_depth, _bare=_bare)
-    if calls and _depth == 0 and isinstance(request, str) and not _sendable(request, calls):
+    if calls and _depth == 0 and isinstance(request, str) and (
+            not _sendable(request, calls) or _unnamed_after_launch(calls)):
         return None
     return calls
+
+
+def _unnamed_after_launch(calls):
+    """Whether a wait or message names its session by the agent alone (no
+    directory, no pane) after this request launched that agent somewhere
+    else: "start codex in ~/x, then wait for the codex" may mean the new one
+    or the one here, so it has no single reading."""
+    launched = {}
+    for found in calls:
+        arguments = found['arguments']
+        if found['name'].startswith('start_'):
+            launched[found['name'][len('start_'):]] = arguments.get('directory')
+        elif (found['name'] in ('wait_for_agent', 'message_agent') and arguments.get('agent') in launched
+              and not {'directory', 'pane'} & set(arguments)
+              and launched[arguments['agent']] not in (None, 'here', '.', './')):
+            return True
+    return False
 
 
 def _sendable(request, calls):
@@ -1000,7 +1031,7 @@ def _sendable(request, calls):
             bare = unicodedata.normalize('NFKC', value).lstrip(agents._QUOTES_AND_BLANKS)
             if bare and not bare[0].isalnum() or bare.lower().rstrip(agents._QUOTES_AND_BLANKS + '.!') in agents._EXIT_WORDS:
                 return False
-            rest = rest.replace(value, ' ')
+            rest = rest.replace(value, ' ').replace(_unquoted(value), ' ')
             if any(value in inner for inner in quoted) or any(
                     form in request for form in (json.dumps(value, ensure_ascii=False), '"' + value + '"',
                                                  "'" + value + "'", '\u201c' + value + '\u201d', '\u2018' + value + '\u2019')):
@@ -1034,7 +1065,8 @@ def _exact_calls(request, *, _depth=0, _bare=False):
 
 # "agents: start codex in a new tab": a person may name the job first. The
 # rest must read whole, as that job's actions only.
-_JOB_PREFIX = re.compile(r'(?P<job>agents|apps)\s*:\s+(?=\S)', re.I)
+_JOB_PREFIX = re.compile(r'(?P<job>agents|apps)(?:\s*:\s+(?=\S)'
+                         r'|\s+(?=(?:start|launch|open|message|tell|send|ping|wait|relay|ask)\b))', re.I)
 
 
 def _read_calls(request, *, _depth=0, _bare=False):
@@ -1141,14 +1173,28 @@ def _read_parts(request, *, _depth=0, _bare=False, _list_bare=False):
 # second instruction to Ask: the request then has two readings, and neither
 # is taken. A clause starts after a comma, semicolon, colon, sentence end,
 # dash or bracket, or before "and", "then", "but", "or", "so", "also".
-_P_BOUNDARY = re.compile(r'[,;:.!?)(\]\[]\s*|\s+(?:[-–—]+|and|then|but|or|so|also|after\s+that|afterwards|next|finally)\s+'
+_PL_BOUNDARY = re.compile(r'[,;:.!?)(\]\[]\s*|\s+(?:[-–—]+|and|then|but|or|so|also|after\s+that|afterwards|next|finally)\s+'
                          r'|\s*[–—]\s*', re.I)
-_P_JOB_VERB = re.compile(r'\b(?:start|launch|open|run|spin|fire|bring|boot|kick|create|spawn|wait|tell|message|send|ping|ask'
+_PL_JOB_VERB = re.compile(r'\b(?:start|launch|open|run|spin|fire|bring|boot|kick|create|spawn|wait|tell|message|send|ping|ask'
                          r'|relay|forward|pass|let|show|pull|pop|get|resume|close|kill|stop|quit|exit)\b', re.I)
-_P_TARGET = re.compile(r'(?<![\w./-])(?:claude|codex|calculator|notepad|kilix-[\w-]+|pdf\s+(?:viewer|reader)'
+_PL_TARGET = re.compile(r'(?<![\w./-])(?:claude|codex|grok|calculator|notepad|kilix-[\w-]+|pdf\s+(?:viewer|reader)'
                        r'|file\s+(?:manager|browser)|session|agent|instance|tab|split|pane)s?(?![\w/-])', re.I)
-_P_SESSION_TAIL = re.compile(r'^(?:(?:please|then|next|also)\s+)*(?:run|do not|don[\x27’]t|if|unless)\b', re.I)
-_P_WAIT_ON = re.compile(r'^(?:(?:and|then|also|now|please|just|next|so)\s+)*wait\s+(?:for|on|till|until)\s+(?:it|its|them|their|him|her)\b', re.I)
+# A clause whose object is the sender is the receiving session's, whatever
+# its verb: "..., and tell me if it still fails", "let us know", "report back
+# (to me)", "send me the diff". "tell claude", "tell it", "tell pane 3" stay
+# Ask's.
+_PL_TO_SENDER = re.compile(r'^(?:(?:please|then|next|also|and|just|so|finally)\s+)*(?:'
+                           r'(?:tell|let|ping|message|notify|update|remind|show|send|give|ask|email)\s+(?:me|us|the\s+user)\b'
+                           r'|(?:report|reply|respond|write|get|come|check)\s+back\b'
+                           r'|(?:reply|respond|report|write)\s+to\s+(?:me|us|the\s+user)\b)', re.I)
+# "do not open another tab" acts on nothing; it is the session's, unless it is
+# about sending ("do not send this yet", which takes Ask's message back).
+_PL_NEGATED = re.compile(r'^(?:(?:and|but|so|also|then|please|just)\s+)*(?:do\s+not|don[\x27’]t|never)\b', re.I)
+_PL_SENDING = re.compile(r'\b(?:send|tell|message|relay|forward|pass|deliver|ping|notify)\b', re.I)
+# A message verb on "it" is Ask's: "..., then tell it to rebase".
+_PL_TELL_IT = re.compile(r'\b(?:tell|message|ping|notify|relay\s+to|forward\s+to)\s+(?:it|them|him|her)\b', re.I)
+_PL_SESSION_TAIL = re.compile(r'^(?:(?:please|then|next|also)\s+)*(?:run|do not|don[\x27’]t|if|unless)\b', re.I)
+_PL_WAIT_ON = re.compile(r'^(?:(?:and|then|also|now|please|just|next|so)\s+)*wait\s+(?:for|on|till|until)\s+(?:it|its|them|their|him|her)\b', re.I)
 
 
 def _payload_split(request):
@@ -1184,8 +1230,8 @@ def _payload_ok(payload):
     # names something Ask acts on, which _ask_clause catches.
     for separator in _SEPARATOR.finditer(plain):
         right = plain[separator.end():].strip()
-        if (_ACTION_TAIL.match(right) and not _P_SESSION_TAIL.match(right)
-                and not re.fullmatch(r'wait[.!]?', right, re.I)):
+        if (_ACTION_TAIL.match(right) and not _PL_SESSION_TAIL.match(right)
+                and not _PL_TO_SENDER.match(right) and not re.fullmatch(r'wait[.!]?', right, re.I)):
             return False
     return True
 
@@ -1193,9 +1239,16 @@ def _payload_ok(payload):
 def _ask_clause(payload):
     """Whether a later clause of an unquoted payload may be an instruction for
     Ask: it has a verb Ask has and names something Ask acts on ("..., then
-    spin up claude in /w"), or it waits on "it"."""
-    for clause in _P_BOUNDARY.split(_unquoted(payload))[1:]:
-        if _P_JOB_VERB.search(clause) and _P_TARGET.search(clause) or _P_WAIT_ON.match(clause.strip()):
+    spin up claude in /w", "then message pane 3"), it waits on "it", or it
+    tells "it". A clause addressed to the sender ("tell me when claude is
+    done") or one that only says what not to do ("do not open another tab")
+    is the receiving session's."""
+    for clause in _PL_BOUNDARY.split(_unquoted(payload))[1:]:
+        clause = clause.strip()
+        if _PL_TO_SENDER.match(clause) or _PL_NEGATED.match(clause) and not _PL_SENDING.search(clause):
+            continue
+        if (_PL_JOB_VERB.search(clause) and _PL_TARGET.search(clause) or _PL_WAIT_ON.match(clause)
+                or _PL_TELL_IT.search(clause)):
             return True
     return False
 

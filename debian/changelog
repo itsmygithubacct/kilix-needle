@@ -41,6 +41,16 @@ kilix-needle (0.20261116+packaging8) UNRELEASED; urgency=medium
     client is refused. The tool schema the command models use is
     unchanged, and their proposals cannot carry a pane. See
     docs/ask-pane-targets.md.
+  * Keep a clause addressed to the sender in an unquoted message ("...,
+    and tell me if it still fails", "let us know", "report back to me"),
+    and a clause that only says what not to do ("do not open another tab"):
+    such messages were not read. A later clause about a pane, Grok or "it"
+    ("then message pane 3", "then tell it to rebase") is still Ask's and
+    refuses the request. Also read "relay to X:", "reply to X:", "with no
+    initial task", "agents" before a verb without a colon, and "wait for
+    ... in pane N to finish what it's doing".
+  * Refuse "start codex in DIR, then wait for the codex": the wait may mean
+    the new session or another one here.
 
  -- itsmygithubacct <itsmygithubacct@users.noreply.github.com>  Tue, 24 Nov 2026 08:50:00 +0000
 

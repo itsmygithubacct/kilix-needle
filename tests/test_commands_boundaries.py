@@ -373,3 +373,44 @@ class MarkedPayloadFences(unittest.TestCase):
                          [call('start_codex', directory='/srv/oast-galliard', task='fix the "why?" banner')])
         self.assertEqual(contract.exact_calls('Tell Codex: "ready, then start claude"'),
                          [call('message_agent', agent='codex', text='ready, then start claude')])
+
+
+class PayloadAndPaneFences(unittest.TestCase):
+    """Where a payload meets a pane target: a later clause that may be an
+    instruction for Ask about a pane, "it" or another agent is refused by the
+    clause rule itself; a pane message is held to _sendable; a pane head keeps
+    its conditions, times and negations."""
+
+    def refuse(self, *texts):
+        for text in texts:
+            with self.subTest(text=text):
+                self.assertIsNone(contract.exact_calls(text))
+
+    def test_a_later_clause_about_a_pane_it_or_an_agent_is_asks(self):
+        for payload in ('fix it, then message pane 3', 'fix it, then wait for pane 3', 'fix it, then tell it to rebase',
+                        'fix it, then wait for it', 'fix it. Then tell pane 4: rebase', 'fix it, then start grok',
+                        'fix it, then ping pane 12 with the result', 'fix it. Do not send this to claude yet.'):
+            with self.subTest(payload=payload):
+                self.assertTrue(contract._ask_clause(payload))      # by the rule, not by another check
+                self.refuse('Tell codex in /srv/oast-galliard: ' + payload, 'Tell pane 3: ' + payload)
+        for payload in ('fix it, and tell me when claude finishes.', 'fix it. Do not open another tab.',
+                        'fix it; report back to me.', 'fix it, and let us know if pane 4 breaks.'):
+            with self.subTest(payload=payload):
+                self.assertFalse(contract._ask_clause(payload))
+        self.refuse('Tell codex in pane 3: fix it. Let us know if the build breaks; then wait for pane 4',
+                    'Tell codex in /srv/oast-galliard: fix it, and tell claude to rebase')
+
+    def test_a_pane_message_is_held_to_the_payload_rule(self):
+        self.refuse('Tell pane 3: /compact', 'Tell pane 3: exit', 'Tell pane 3: !make clean', 'Tell codex in pane 3: -h',
+                    'Tell pane 3: ship it, nothing else; open the calculator')
+
+    def test_a_pane_head_keeps_its_conditions_times_and_negations(self):
+        self.refuse('If the build is green, tell pane 3: ship it', 'Tell pane 3 tomorrow: ship it',
+                    'Do not tell pane 3: ship it', 'Tell pane 3 or pane 4: ship it', 'I told pane 3: ship it')
+
+    def test_a_session_named_by_its_agent_after_a_launch_elsewhere(self):
+        # "the codex" may be the one just started in ~/oast-wicket or the one here.
+        self.refuse('Open the notepad, start claude in ~/oast-wicket, start codex in ~/oast-wicket, and wait for the codex.',
+                    'start codex in ~/oast-wicket, then tell codex "hi"')
+        self.assertEqual(contract.exact_calls('start codex in ~/oast-wicket, then wait for codex in ~/oast-wicket'),
+                         [call('start_codex', directory='~/oast-wicket'), call('wait_for_agent', agent='codex', directory='~/oast-wicket')])
