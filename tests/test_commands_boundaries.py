@@ -322,7 +322,7 @@ class MarkedPayloadFences(unittest.TestCase):
                     'I told codex in /srv/oast-galliard: ship it',
                     'Tell codex or claude in /srv/oast-galliard: ship it',
                     'Tell grok in /srv/oast-galliard: ship it',
-                    'Tell codex in pane 3: ship it',
+                    'Tell codex in tab 3: ship it',
                     'Start codex in /srv/oast-galliard with reasoning effort high. Task: Read NOTES.md.',
                     "Tell codex in 'oast galliard': ship it")     # only double quotes in the head
 
