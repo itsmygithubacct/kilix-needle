@@ -687,8 +687,8 @@ What an agent should know (measured in a Codex route benchmark, 2026-09-29):
   A plain split also reads "open a new pane directly to the right of the pane
   I am running in and run a shell there" without loading the model.
 - **The agents job accepts an explicit directory**: "start codex in /abs/dir",
-  also "an interactive Codex session in a new tab, working in the directory
-  /abs/dir. Do not give it a task." The grammar also reads "working directory
+  also "open a Codex session in a new tab, working in /abs/dir. Do not give
+  it a task." The grammar also reads "working directory
   /abs/dir", "leave the session without a task", and "leave it at its
   interactive prompt". A task combined with an instruction to give no task
   still refuses; text after a task delimiter remains literal. "Launch claude
