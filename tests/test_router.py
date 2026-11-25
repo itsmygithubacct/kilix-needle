@@ -453,6 +453,27 @@ class Stages(unittest.TestCase):
                 route = router.route(text)
             self.assertEqual((route.stage, route.job, route.candidates), ("error", None, []), text)
 
+    def test_grammar_only_package_routes_exact_requests_and_clarifies_the_rest(self):
+        import ask
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(router, "MODEL_DIR", Path(tmp) / "router-model"), \
+                mock.patch.object(router, "_model", None):
+            self.assertEqual(router.route("split right").stage, "error")
+            (Path(tmp) / "router-grammar-only").touch()
+            for text, job in (("split right", "panes"), ("show recent files in here", "files")):
+                route = router.route(text)
+                self.assertEqual((route.stage, route.job, route.p), (0, job, None))
+                self.assertIn(job, ask.explain(text))
+            for text in ("hide the clock then split right", "hide the clock followed by split right"):
+                route = router.route(text)
+                self.assertEqual((route.stage, route.job, route.candidates), ("multi", None, ["panes", "apps"]))
+            with mock.patch.object(router, "claims", return_value=["apps", "panes"]):
+                self.assertEqual(router.route("an overlapping request").stage, 2)
+            route = router.route("tell me a joke")
+            self.assertEqual((route.stage, route.job, route.candidates), (2, None, []))
+            router.MODEL_DIR.mkdir()
+            self.assertEqual(router.route("split right").stage, "error")
+
     def test_an_altered_artifact_routes_nothing(self):
         with tempfile.TemporaryDirectory() as tmp:
             copy = Path(tmp) / "router-model"

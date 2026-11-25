@@ -128,10 +128,15 @@ class CommandBoundaries(unittest.TestCase):
         self.check('Start Claude and Codex.', [call('start_claude'), call('start_codex')])
         self.check('Start Claude here and Codex in /projects/a.', [
             call('start_claude'), call('start_codex', directory='/projects/a')])
-        for text in ('Start Claude and Codex in /projects/a',
-                     'Start a new Claude session and a new Codex session in /projects/a.',
-                     'Start Claude on the left and Codex in /projects/a',
-                     'Start Claude and Codex on the right',
+        # One directory or placement after launches that share a verb and
+        # state nothing else is every launch's (0.2.3).
+        self.check('Start Claude and Codex in /projects/a', [
+            call('start_claude', directory='/projects/a'), call('start_codex', directory='/projects/a')])
+        self.check('Start a new Claude session and a new Codex session in /projects/a.', [
+            call('start_claude', directory='/projects/a'), call('start_codex', directory='/projects/a')])
+        self.check('Start Claude and Codex on the right', [
+            call('start_claude', place='right'), call('start_codex', place='right')])
+        for text in ('Start Claude on the left and Codex in /projects/a',
                      'Start Claude and Codex with task "inspect"'):
             self.refuse(text)
 
@@ -212,3 +217,200 @@ class CommandBoundaries(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class FrameFences(unittest.TestCase):
+    """What a frame reading must never do (see the Frames section of
+    commands_contract): read an unquoted payload without a marker, skip the
+    suggestion rules, pick a session that is not the only one meant, or read
+    past an existing spaced path. An unquoted payload after a marker is read
+    under the rule tested in MarkedPayload."""
+
+    def test_a_frame_reads_no_unquoted_message_or_task_without_a_marker(self):
+        for request in ('ping codex in pewter-x run the tests', 'say hello to codex in pewter-x',
+                        'Let Claude know the API key rotation is done', 'Kick off Codex with the task add unit tests'):
+            with self.subTest(request=request):
+                self.assertIsNone(contract.exact_calls(request))
+
+    def test_quoted_escapes_are_not_guessed(self):
+        self.assertIsNone(contract.exact_calls('Send Claude in /w/t the message: "Use path C:\\Temp\\out.txt"'))
+        self.assertIsNone(contract.exact_calls('say "' + 'x' * 1025 + '" to codex'))
+        self.assertEqual(contract.exact_calls('say "' + 'x' * 1024 + '" to codex'),
+                         [call('message_agent', agent='codex', text='x' * 1024)])
+
+    def test_every_frame_reading_passes_the_suggestion_rules(self):
+        import commands_suggest
+        request = 'launch codex in pewter-x please'
+        self.assertEqual(contract.exact_calls(request), [call('start_codex', directory='pewter-x')])
+        original = commands_suggest.refusal
+        seen = []
+        def refusing(text, calls):
+            seen.append(text)
+            return 'conditional'
+        commands_suggest.refusal = refusing
+        try:
+            self.assertIsNone(contract.exact_calls(request))
+            self.assertEqual(seen, [request])
+            # A reading the fixed shapes make is not held to them.
+            self.assertEqual(contract.exact_calls('start codex in /srv/x'), [call('start_codex', directory='/srv/x')])
+        finally:
+            commands_suggest.refusal = original
+
+    def test_a_wait_or_message_with_two_sessions_in_play_refuses(self):
+        for request in ('Start claude here and claude in ../brisket-x, then forward "pause deploys" to the claude',
+                        'start codex in pewter-x, then tell codex "go"',
+                        'wait for claude in pewter-x and then wait for claude'):
+            with self.subTest(request=request):
+                self.assertIsNone(contract.exact_calls(request))
+        self.assertEqual(contract.exact_calls('wait for claude in pewter-x, then tell codex "go"'),
+                         [call('wait_for_agent', agent='claude', directory='pewter-x'),
+                          call('message_agent', agent='codex', text='go')])
+
+    def test_an_existing_spaced_path_is_left_to_the_fixed_shapes(self):
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as root:
+            os.mkdir(os.path.join(root, 'proj'))
+            request = 'Begin a codex session in ' + root + '/proj new tab'
+            self.assertEqual(contract.exact_calls(request),
+                             [call('start_codex', directory=root + '/proj', place='tab')])
+            os.mkdir(os.path.join(root, 'proj new'))
+            self.assertIsNone(contract.exact_calls(request))
+
+    def test_a_question_mark_needs_a_polite_opener(self):
+        self.assertEqual(contract.exact_calls('Could you launch codex in pewter-x?'),
+                         [call('start_codex', directory='pewter-x')])
+        for request in ('launch codex in pewter-x?', 'Can I launch codex in pewter-x?', 'launch codex in pewter-x?!'):
+            with self.subTest(request=request):
+                self.assertIsNone(contract.exact_calls(request))
+
+    def test_a_frame_refuses_on_its_own_before_the_suggestion_rules(self):
+        # Each of these is refused by the frame itself, not only by the rules applied after it.
+        for clause in ('Open the notepad or the calculator', 'start codex in pewter-x in birch-y',
+                       'Kick off codex with model gpt-6, model gpt-6.1-sol', 'start codex in a right split in a left split',
+                       'say "x" "y" to codex', 'would you mind start claude', 'begin a codex session in ~/fig-x)'):
+            with self.subTest(clause=clause):
+                self.assertIsNone(contract._frame_calls(clause))
+                self.assertIsNone(contract.exact_calls(clause))
+        self.assertIsNone(contract._referred('start codex there', [call('wait_for_agent', agent='claude')]))
+        self.assertEqual(contract._referred('start codex there', [call('wait_for_agent', agent='claude', directory='a-b')]),
+                         'start codex in "a-b"')
+
+
+class MarkedPayloadFences(unittest.TestCase):
+    """Where an unquoted payload after a marker is not taken: the request has
+    a second instruction for Ask, a condition or time outside the payload, or a
+    payload that is no message at all (docs/ask-phrasing.md, "Unquoted payloads")."""
+
+    def refuse(self, *texts):
+        for text in texts:
+            with self.subTest(text=text):
+                self.assertIsNone(contract.exact_calls(text))
+
+    def test_a_later_clause_for_ask_is_a_second_reading(self):
+        self.refuse('Tell claude in /srv/oast-galliard: tidy the notes, then tell codex in /srv/fen-x: rebase',
+                    'Tell codex in /srv/oast-galliard: fix it, then wait for it to finish',
+                    'Tell codex in /srv/oast-galliard: fix it; then open the calculator',
+                    'Tell codex in /srv/oast-galliard: fix it. Then start claude in /srv/fen-x.',
+                    'Tell codex in /srv/oast-galliard: ship it, then close the session',
+                    'Start codex in /srv/oast-galliard and tell it: Read NOTES.md.')
+
+    def test_the_head_keeps_its_conditions_times_and_negations(self):
+        self.refuse('If the build is green, tell codex in /srv/oast-galliard: ship it',
+                    'Tell codex in /srv/oast-galliard if it is idle: ship it',
+                    'Do not tell codex in /srv/oast-galliard: ship it',
+                    'Tomorrow, tell codex in /srv/oast-galliard: ship it',
+                    'I told codex in /srv/oast-galliard: ship it',
+                    'Tell codex or claude in /srv/oast-galliard: ship it',
+                    'Tell grok in /srv/oast-galliard: ship it',
+                    'Tell codex in tab 3: ship it',
+                    'Start codex in /srv/oast-galliard with reasoning effort high. Task: Read NOTES.md.',
+                    "Tell codex in 'oast galliard': ship it")     # only double quotes in the head
+
+    def test_payloads_that_are_no_message(self):
+        self.refuse('Start codex in /srv/oast-galliard with these instructions: /compact',
+                    'Start codex in /srv/oast-galliard. Task: -h',
+                    'Let codex in /srv/oast-galliard know: !make clean',
+                    'Let codex in /srv/oast-galliard know: quit',
+                    'Start codex in /srv/oast-galliard with these instructions: Exit!',
+                    'Let codex in /srv/oast-galliard know: ' + 'x' * 1025,
+                    'Tell codex in /srv/oast-galliard:',
+                    'Start codex in /srv/oast-galliard. Task:')
+        self.assertEqual(contract.exact_calls('Let codex in /srv/oast-galliard know: quit the old approach.'),
+                         [call('message_agent', agent='codex', text='quit the old approach.', directory='/srv/oast-galliard')])
+
+    def test_a_launch_task_that_is_a_question_is_asked_of_ask(self):
+        self.refuse('Start codex in ../oast-galliard: would that pick the parent folder?')
+        self.assertEqual(contract.exact_calls('Let codex in /srv/oast-galliard know: is the build green?'),
+                         [call('message_agent', agent='codex', text='is the build green?', directory='/srv/oast-galliard')])
+
+    def test_no_shape_sends_a_client_command_or_an_exit(self):
+        # The fixed shapes too: what a session would run as a command of its
+        # own, or that ends it, is not a message (agents.py's payload rule).
+        self.refuse('Tell codex in /srv/oast-galliard: /compact', 'Tell claude in /srv/oast-galliard: !make clean',
+                    'Tell codex here: -h', 'Message Codex: "/clear"', 'Tell codex in /srv/oast-galliard: exit',
+                    'Start codex in /srv/oast-galliard with task "/resume"',
+                    'Start codex in /srv/oast-galliard/x: is that the same folder the last session used?')
+        self.assertEqual(contract.exact_calls('Start codex in /srv/oast-galliard with task "why does the parser fail?"'),
+                         [call('start_codex', directory='/srv/oast-galliard', task='why does the parser fail?')])
+        self.assertEqual(contract.exact_calls('Message Codex: "exit early when the cache is warm"'),
+                         [call('message_agent', agent='codex', text='exit early when the cache is warm')])
+
+    def test_every_shape_keeps_a_later_instruction_for_ask_out_of_a_payload(self):
+        # The fixed shapes read "tell X: ..." themselves; the same clause rule
+        # holds there ("Afterwards spin up ..." is not in their own list).
+        self.refuse('Tell codex in /srv/oast-galliard: fix it. Afterwards spin up claude in /srv/fen-x.',
+                    'Tell codex in /srv/oast-galliard: fix it, and pop open the calculator.',
+                    'Tell codex in /srv/oast-galliard: fix it. Just wait for it to finish.',
+                    'Wait for codex in /srv/oast-galliard, then tell it: fix it. Afterwards spin up claude in /srv/fen-x.',
+                    'Start codex in /srv/oast-galliard, nothing else; open the calculator',
+                    'Start codex in /srv/oast-galliard: fix it? "x"',
+                    'Start codex in /srv/oast-galliard. with model opus. Task: fix it')
+        for text, payload in (('Tell codex in /srv/oast-galliard: ', 'change nothing else in the file; reply OK.'),
+                              ('Tell codex in /srv/oast-galliard: ', 'why does it fail?')):
+            self.assertEqual(contract.exact_calls(text + payload),
+                             [call('message_agent', agent='codex', text=payload, directory='/srv/oast-galliard')])
+        self.assertEqual(contract.exact_calls('Start codex in /srv/oast-galliard. Task: fix the "why?" banner'),
+                         [call('start_codex', directory='/srv/oast-galliard', task='fix the "why?" banner')])
+        self.assertEqual(contract.exact_calls('Tell Codex: "ready, then start claude"'),
+                         [call('message_agent', agent='codex', text='ready, then start claude')])
+
+
+class PayloadAndPaneFences(unittest.TestCase):
+    """Where a payload meets a pane target: a later clause that may be an
+    instruction for Ask about a pane, "it" or another agent is refused by the
+    clause rule itself; a pane message is held to _sendable; a pane head keeps
+    its conditions, times and negations."""
+
+    def refuse(self, *texts):
+        for text in texts:
+            with self.subTest(text=text):
+                self.assertIsNone(contract.exact_calls(text))
+
+    def test_a_later_clause_about_a_pane_it_or_an_agent_is_asks(self):
+        for payload in ('fix it, then message pane 3', 'fix it, then wait for pane 3', 'fix it, then tell it to rebase',
+                        'fix it, then wait for it', 'fix it. Then tell pane 4: rebase', 'fix it, then start grok',
+                        'fix it, then ping pane 12 with the result', 'fix it. Do not send this to claude yet.'):
+            with self.subTest(payload=payload):
+                self.assertTrue(contract._ask_clause(payload))      # by the rule, not by another check
+                self.refuse('Tell codex in /srv/oast-galliard: ' + payload, 'Tell pane 3: ' + payload)
+        for payload in ('fix it, and tell me when claude finishes.', 'fix it. Do not open another tab.',
+                        'fix it; report back to me.', 'fix it, and let us know if pane 4 breaks.'):
+            with self.subTest(payload=payload):
+                self.assertFalse(contract._ask_clause(payload))
+        self.refuse('Tell codex in pane 3: fix it. Let us know if the build breaks; then wait for pane 4',
+                    'Tell codex in /srv/oast-galliard: fix it, and tell claude to rebase')
+
+    def test_a_pane_message_is_held_to_the_payload_rule(self):
+        self.refuse('Tell pane 3: /compact', 'Tell pane 3: exit', 'Tell pane 3: !make clean', 'Tell codex in pane 3: -h',
+                    'Tell pane 3: ship it, nothing else; open the calculator')
+
+    def test_a_pane_head_keeps_its_conditions_times_and_negations(self):
+        self.refuse('If the build is green, tell pane 3: ship it', 'Tell pane 3 tomorrow: ship it',
+                    'Do not tell pane 3: ship it', 'Tell pane 3 or pane 4: ship it', 'I told pane 3: ship it')
+
+    def test_a_session_named_by_its_agent_after_a_launch_elsewhere(self):
+        # "the codex" may be the one just started in ~/oast-wicket or the one here.
+        self.refuse('Open the notepad, start claude in ~/oast-wicket, start codex in ~/oast-wicket, and wait for the codex.',
+                    'start codex in ~/oast-wicket, then tell codex "hi"')
+        self.assertEqual(contract.exact_calls('start codex in ~/oast-wicket, then wait for codex in ~/oast-wicket'),
+                         [call('start_codex', directory='~/oast-wicket'), call('wait_for_agent', agent='codex', directory='~/oast-wicket')])

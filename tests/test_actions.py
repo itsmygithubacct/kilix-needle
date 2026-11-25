@@ -1403,6 +1403,17 @@ class ReviewR10Rows(unittest.TestCase):
         [r] = interpret("go to the tab labelled other", [call("go_to_tab", tab="other")])
         self.assertEqual(r, Action("go_to_tab", {"tab": "name:other"}))
 
+    def test_bare_courtesies_cannot_supply_a_missing_target(self):
+        for unit in ("pane", "tab"):
+            for word in ("thanks", "thank you", "asap", "pls", "plz", "already", "kindly"):
+                proposal = call("close_" + unit, **{unit: word})
+                with self.subTest(unit=unit, word=word):
+                    [result] = interpret(f"close the {unit} {word}", [proposal])
+                    self.assertIsInstance(result, Refusal)
+                    for explicit in (f'{unit} named "{word}"', f'{unit} "{word}"', f'the {word} {unit}'):
+                        [result] = interpret(f"close {explicit}", [proposal])
+                        self.assertEqual(result, Action("close_" + unit, {unit: "name:" + word}))
+
     def test_a_target_ending_a_sentence_keeps_its_number(self):           # KN-R10-04
         # The model copies the full stop; the reference is still tab 3 (mutant M140).
         [r] = interpret("close tab 3.", [call("close_tab", tab="3.")])

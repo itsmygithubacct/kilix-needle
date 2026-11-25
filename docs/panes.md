@@ -61,12 +61,14 @@ added because a measured model output got past the one before:
 - A tab close needs a clause that says *tab*. A pane action is never taken
   from a clause that names only a tab.
 - A typed command must be the whole text after the run verb ("make test", not
-  "test"). Its pane must be named outside the command. It is typed only into a
-  pane at a shell prompt.
+  "test"). Its pane must be named outside the command, and the command must be
+  one line. Submission requires the shell editor to verify a fresh, empty
+  primary prompt.
 - Every program, name and command must appear in the request. A target made
   only of filler words is no reference.
 
-Closing, typing and starting a program wait for `y`, and the question names
+Closing, starting a program and running a command in an existing pane wait
+for `y`, and the question names
 the pane or tab it resolved to. `--yes` (and MCP's `confirm_risky`) answers in
 advance, for scripts and agents, but only for a **plain instruction**. What
 that means, exactly:
@@ -105,12 +107,19 @@ name, nor a close of the pane or tab the request was made from.
 Anything else waits for a person, who sees the target. Every action in one
 request is resolved against the one desktop the request was made on and
 performed by id, so "close tab 2 and close tab 3" closes the tabs that were
-2 and 3. Just before a command is typed, its pane is read again: if an earlier
-command in the request started a program there, nothing is typed. With the
-usual emacs-style line editing, anything half-typed on a one-line prompt is
-first cut to the shell's kill ring (Ctrl-E, Ctrl-U; Ctrl-Y brings it back), so
-it is never run with the command appended; see Known issues for where that
-does not hold. Once any
+2 and 3. A command in an existing pane runs only where the shell itself can
+prove a fresh, empty primary prompt. A prompt mark, title, foreground process
+or screen text proves nothing about the line editor, so Needle uses only the
+`shell_input` report in `kilix @ ls`, which Kilix 0.2.4 builds from its shell
+integration (Bash with readline, see *Verified shell input* below). The plan
+binds the request to the pane's identity and to that exact prompt; submission
+goes through `kilix @ shell-submit`, which Kilix refuses if anything was typed,
+a command started or the pane changed since, and which the shell accepts only
+with an empty buffer at a primary prompt. Otherwise the item is `refused` with
+`code=shell_input_unverified`, the resolved pane, the reason as `cause`, and
+no input sent; enter the command manually. A submission whose confirmation is
+lost is `failed` with `code=shell_input_unconfirmed`: check the pane, never
+resend blindly. Once any
 action is refused, cannot be resolved or fails, nothing later in the request
 runs on a yes given in advance. Nine reviews shaped this; their records are
 in the release's research notes.
@@ -123,3 +132,27 @@ risky runs at all.
 
 Everything runs as `kilix @ ...` argv over the instance socket, never through a
 shell. Programs are split with `shlex` and executed directly.
+
+### Verified shell input
+
+The proof is split between the shell, which alone knows its editor, and Kilix,
+which alone sees every byte sent to the pane:
+
+1. Before each primary prompt, Kilix's Bash integration reports a fresh random
+   token, its process id and whether type-ahead is already waiting. Kilix lists
+   the prompt as `shell_input: {"verifiable": true, "prompt_id": ...}`.
+2. `kilix @ shell-submit --match id:N --expect-prompt ID` (the command on
+   stdin) is refused unless, at that moment, the pane is at that prompt, no byte
+   has reached it since, no command started, the reporting shell owns the
+   terminal and no full-screen program is showing. Kilix then puts the command
+   in a private request file and sends one inert key that only the integration
+   binds.
+3. That key's handler runs inside readline. It accepts only with an empty
+   buffer, in emacs or vi insert mode, on a primary line, for its current
+   token; it claims the request atomically and accepts the line. In any other
+   state it reports a refusal and leaves the buffer as it was.
+
+Kilix never sees the buffer's contents, only whether it was empty, and a
+request that is neither accepted nor refused within three seconds is cancelled
+so it can never run late. The receipt records that the shell accepted the
+command, not that the command finished.

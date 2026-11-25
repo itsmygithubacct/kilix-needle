@@ -21,16 +21,27 @@ the fast path and validate every model proposal against the same complete
 request. All four modes keep the other Ask jobs' deterministic parsing; their
 older generative fallbacks are disabled. The routing classifier remains in use.
 Set `KILIX_ASK_COMMANDS_BACKEND` to select a mode for the `kilix ask` launcher.
-Without an override, Ask selects LFM2. An empty setting also uses that default.
-The grammar fast path works without loading the model. Model requests need the
-installed, licensed bundle; `install --commands` shows its full terms before
-installation. LFM2's terms, including its commercial-use limitation, are a
+Without an override or a saved selection, Ask uses LFM2 when this release's
+bundle is installed with its receipt, and the grammar when it is not. An empty
+setting means the same. Ask never downloads the model on its own: `kilix ask`
+at a terminal asks whether to install it, and the Kilix model wizard's Kilix
+Ask page offers it too. Declining at `kilix ask` saves the grammar as the
+selection. Declining on the wizard page is recorded by the wizard, and the
+next `kilix ask` at a terminal saves the grammar without asking. Either way
+the question is not repeated; an unanswered or failed offer is made again on a
+later run. A request the stand-in grammar cannot read says that
+the model is not installed. The grammar fast path works without loading the
+model. Model requests need the installed bundle; `install --commands` and
+`workflows setup --model lfm2` show its full terms before installation. LFM2's terms, including its commercial-use limitation, are a
 notice by the owner's 2026-11-07 determination: the install is confirmed, and
 no agreement is typed or recorded. The selected CPU runtime requires x86-64
 Linux.
 
-The pinned LFM2 delivery is `lfm2-kilix-commands-20261106-v9`, with weight
-revision `lfm2-kilix-v5e1-wse-20261106.9`. It retains the fine-tuned V5 lineage
+The pinned LFM2 delivery is `lfm2-kilix-commands-20261115-v10`, with weight
+revision `lfm2-kilix-v5e1-wse-20261106.9`. Its model file and runtime build are
+those of `lfm2-kilix-commands-20261106-v9`, byte for byte; v10 ships each
+versioned runtime library once, under the name the other runtime files load,
+instead of three times. It retains the fine-tuned V5 lineage
 and changes output rows 568 and 8110 of `20261106.8`; all internal tensors, the
 prompt and the CPU runtime remain unchanged. The repair uses regularized
 output-row optimization on frozen activations with analytic gradients. The
@@ -41,8 +52,30 @@ and licence record that the Plebian-OS image installs.
 New installations use a manifest-specific directory, preserving earlier model
 bytes and receipts for catalog rollback. `.21` remains available as the rollback
 release. A previous receipt does not silently authorize a new manifest.
-Plebian-OS 0.2.3 rc1 stages the verified archive during installation or upgrade;
-first selection still follows the model's own licence terms.
+Plebian-OS 0.2.3 does not carry the archive on its installation media and
+does not download it during an upgrade. A download happens only when the user
+asks for the model, and that installation shows the model's own licence terms.
+Installing a delivery reuses the files of an earlier delivery already on the
+machine when they verify against the new manifest, so moving from
+`lfm2-kilix-commands-20261106-v9` needs no download. The earlier copy is kept.
+`tools/build_delivery.py` is the program that built the v10 archive from the
+extracted v9 delivery; it is deterministic and checks every kept file against
+its source.
+
+A request that plans nothing can be answered with a wording the command
+grammar reads ("did you mean: start codex in a split below"). By default
+the decision model `d3:2b` builds it where the local Ollama server lists that
+model, and nothing is offered elsewhere; `kilix-needle workflows suggest --set
+off` turns this off, `--set model` takes the wording from the selected command
+model's own proposal, and `--set d3:2b` (or another decision model) uses that
+model on the local Ollama server (with a command model selected as well, only
+when both make the same plan). Every wording is held to the
+request's own words and must be read back by the grammar as the same plan.
+It is offered, never run. On a blind set of 100 requests the grammar alone
+answered 49; with suggestions 87 (LFM2's proposal, 2 wrong of 40), 94
+(`d3:2b`, 1 wrong of 47) and 87 (both agreeing, 0 wrong of 38). See
+[Ask suggestions](ask-suggestions.md) for how it works and what was
+measured.
 
 ## LFM2 benchmark: upstream, V5, .21 and .8
 
@@ -70,7 +103,8 @@ The [earlier stage-by-stage benchmark](lfm2-output-format-benchmark.md) and
 application revisions and results; they do not describe the current default.
 
 Install the Needle 3 alternate with `kilix-needle install --commands needle3`,
-then use `kilix ask --model needle3 "open calculator"`. LFM2 remains the default.
+then use `kilix ask --model needle3 "open calculator"`. LFM2 remains the default
+on a machine that has it installed.
 For subsequent requests, set `export KILIX_ASK_COMMANDS_BACKEND=needle3` in your
 shell (or its startup file to keep the preference). `--model lfm2` selects LFM2
 for one request without changing that preference; `--model grammar` uses no model.
@@ -85,7 +119,7 @@ LFM3-1.7B is an optional model for Plebian-OS 0.2.3 rc1. Install it with
 `kilix-needle workflows select --model lfm3`. It uses unchanged upstream Q8_0
 weights and a pinned LFM3-compatible CPU runtime. It has not been fine-tuned
 for Kilix. The full model terms and runtime notices accompany the bundle under
-`notices/`; LFM2 remains the default. Adding the model does not establish
+`notices/`; LFM2 remains the default where it is installed. Adding the model does not establish
 benchmark superiority or qualify an OS release.
 
 Needle 3 prepares its fixed tool prefix once when an owned runtime starts. The

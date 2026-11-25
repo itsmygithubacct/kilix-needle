@@ -1,6 +1,7 @@
 """Ask backend selection shared by the CLI, workflow setup and model loaders."""
 import json
 import os
+import re
 from pathlib import Path
 import stat
 import tempfile
@@ -8,7 +9,12 @@ import tempfile
 import state
 
 BACKENDS = ('lfm2', 'lfm3', 'needle3', 'grammar')
+# The release command model. It is the default only on a machine that has it:
+# nothing here downloads it, and without it Ask reads requests with the grammar.
 DEFAULT = 'lfm2'
+FALLBACK = 'grammar'
+# Where a choice came from, most specific first.
+SOURCES = ('option', 'environment', 'saved', 'installed', 'not-installed')
 ASSETS = {'lfm3': 'lfm3-kilix-commands', 'lfm2': 'lfm2-kilix-commands', 'needle3': 'needle3-kilix-commands'}
 SCHEMA = 'kilix.ask.selection/v1'
 REPAIR = ('choose a model for this request with --commands-backend (kilix ask --model) '
@@ -42,39 +48,84 @@ def _saved(path):
         os.close(fd)
 
 
-def resolve(explicit=None):
-    """Explicit option, environment, saved preference, then the release default.
+def installed(backend=DEFAULT, root=None):
+    """Whether this release's model for ``backend`` is installed and covered.
 
-    Reading a preference never creates state or loads a model. An explicit
-    choice can also repair an invalid saved preference, which is refused
-    with that guidance rather than rewritten.
+    Read-only and cheap: the pinned catalog asset, a platform its runtime
+    supports, its install directory with every member present at its manifest
+    size, and a covering receipt. No file
+    is hashed here, and nothing is created. A missing, short or uncovered
+    install is "no" and Ask uses the grammar. An install whose files have the
+    right sizes and the wrong bytes is "yes": loading verifies every byte, so
+    such a model is refused there with an error and is never run.
     """
+    if backend not in ASSETS:
+        return False
+    try:
+        import asset
+        import workflows
+        content, first_use, lic = asset._content()
+        spec = content.verified_packaged_catalog().require_asset(ASSETS[backend])
+        verify_catalog(backend, spec)
+        require_platform(backend)
+        destination = workflows._content_root(root) / 'assets' / spec.install_name
+        if destination.is_symlink() or not destination.is_dir():
+            return False
+        for item in spec.files:
+            info = os.lstat(destination / item.path)
+            if not stat.S_ISREG(info.st_mode) or info.st_size != item.bytes:
+                return False
+        return not first_use.needs_agreement(
+            spec, records=lic.load_determined_records(), store=workflows._readonly_store(lic))
+    except Exception:       # noqa: BLE001 - every failure means "not installed"
+        return False
+
+
+def choice(explicit=None, root=None):
+    """The backend and where it came from: one of ``SOURCES``.
+
+    Explicit option, environment, saved preference, then the release model when
+    it is installed, otherwise the grammar. Reading never creates state, loads
+    a model or downloads one. An explicit choice can also repair an invalid
+    saved preference, which is refused with that guidance rather than rewritten.
+    """
+    source = 'option' if explicit else 'environment'
     value = explicit or os.environ.get('KILIX_ASK_COMMANDS_BACKEND')
     if not value:
         path = preference_path()
         try:
-            return _saved(path)
+            return _saved(path), 'saved'
         except FileNotFoundError:
-            return DEFAULT
+            if installed(DEFAULT, root):
+                return DEFAULT, 'installed'
+            return FALLBACK, 'not-installed'
         except (OSError, ValueError) as error:
             raise PreferenceError(f'unusable Ask preference {path}: {error}; {REPAIR}') from error
     if value not in BACKENDS:
         raise ValueError('Ask model must be lfm2, lfm3, needle3 or grammar')
-    return value
+    return value, source
+
+
+def resolve(explicit=None, root=None):
+    """The backend ``choice`` selects."""
+    return choice(explicit, root)[0]
 
 
 def save(backend):
     """Atomically save an explicitly selected backend after readiness checks."""
     if backend not in BACKENDS:
         raise ValueError('Ask model must be lfm2, lfm3, needle3 or grammar')
-    path = preference_path()
+    _write(preference_path(), {'schema': SCHEMA, 'backend': backend})
+
+
+def _write(path, record):
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     if path.parent.is_symlink():
         raise ValueError('Ask preferences need a real state directory')
     fd, temporary = tempfile.mkstemp(prefix='.ask-', dir=path.parent)
     try:
         with os.fdopen(fd, 'w') as stream:
-            json.dump({'schema': SCHEMA, 'backend': backend}, stream)
+            json.dump(record, stream)
             stream.write('\n')
             stream.flush()
             os.fsync(stream.fileno())
@@ -82,6 +133,59 @@ def save(backend):
     finally:
         if os.path.lexists(temporary):
             os.unlink(temporary)
+
+
+# What Ask offers when a request plans nothing: no wording ('off'), one made
+# from the selected command model's own proposal ('model'), or one that a
+# decision model on the local Ollama server chooses (its name); with a command
+# model selected as well, the two must agree.
+SUGGEST_SCHEMA = 'kilix.ask.suggest/v1'
+SUGGEST_DEFAULT = 'd3:2b'     # used only while the local Ollama server lists it (ask.suggester)
+_DECISION_MODEL = re.compile(r'[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}\Z')
+
+
+def suggest_path():
+    return state.home() / 'ask-suggest.json'
+
+
+def _suggest_value(value):
+    value = value.strip() if isinstance(value, str) else ''
+    if value.casefold() in ('off', 'model'):
+        return value.casefold()
+    if not _DECISION_MODEL.match(value):
+        raise ValueError('Ask suggestions take off, model or the name of a decision model in Ollama')
+    return value
+
+
+def suggest_choice():
+    """(value, source): 'off', 'model' or a decision model's name, from the
+    environment, the saved preference or the default. Reading creates
+    nothing and contacts nothing."""
+    value = os.environ.get('KILIX_ASK_SUGGEST', '').strip()
+    if value:
+        return _suggest_value(value), 'environment'
+    path = suggest_path()
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK)
+    except FileNotFoundError:
+        return SUGGEST_DEFAULT, 'default'
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_size > 4096:
+            raise ValueError('Ask suggestion preference must be a small regular file')
+        record = json.loads(os.read(fd, 4097))
+        if not isinstance(record, dict) or record.get('schema') != SUGGEST_SCHEMA:
+            raise ValueError('invalid Ask suggestion preference')
+        return _suggest_value(record.get('suggest')), 'saved'
+    finally:
+        os.close(fd)
+
+
+def save_suggest(value):
+    """Atomically save how Ask suggests wordings; returns the saved value."""
+    value = _suggest_value(value)
+    _write(suggest_path(), {'schema': SUGGEST_SCHEMA, 'suggest': value})
+    return value
 
 
 def release(backend):

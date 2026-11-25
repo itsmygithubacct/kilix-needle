@@ -2,6 +2,9 @@
 import io
 import json
 import os
+from pathlib import Path
+import shlex
+import tempfile
 import sys
 import unittest
 from unittest import mock
@@ -113,6 +116,21 @@ class Pipeline(unittest.TestCase):
             self.assertIn(f"for the {cli.split()[-1]} job", record["note"])
             self.assertEqual(jobs.runs, [])
 
+    def test_logs_handoff_is_an_accepted_cli_command(self):
+        from needle_logs.cli import _parser
+        for term in ("error", "two words", "-option", "don't expand $HOME"):
+            request = f'search the session in pane 12 for "{term}"'
+            with mock.patch.object(router, "model", side_effect=AssertionError("loaded a router model")):
+                record = ask.ask(request, FakeJobs(), act=False)
+            self.assertEqual(record["route"]["job"], "logs")
+            hint = record["hint"].split("  (MCP:", 1)[0]
+            command = shlex.split(hint)
+            self.assertEqual(command[:2], ["kilix-needle", "logs"])
+            args = _parser().parse_args(command[2:])
+            self.assertEqual((args.operation, args.session, args.query), ("search", "12", term))
+        self.assertTrue(ask._named("logs", "which recording should I look at?")["hint"].startswith(
+            "kilix-needle logs --help "))
+
     def test_stage_2_plans_quietly_and_never_acts(self):
         jobs = FakeJobs({"system": REFUSED})
         with mock.patch.object(router, "route",
@@ -125,6 +143,16 @@ class Pipeline(unittest.TestCase):
         self.assertIn("planned, not run", act["note"])
         self.assertIn("kilix-needle ", act["hint"])
 
+    def test_handoff_commands_preserve_the_request_as_one_shell_argument(self):
+        request = 'focus window "Café d\'été"'
+        hint = ask._named("desktop", request)["hint"]
+        self.assertEqual(shlex.split(hint.split("  (MCP:", 1)[0])[-1], request)
+        jobs = FakeJobs({"system": REFUSED})
+        with mock.patch.object(router, "route", return_value=route(2, candidates=["system", "panes"])):
+            hint = ask.ask(request, jobs, act=True)["hint"]
+        command = hint.split("that job: ", 1)[1].split(" (MCP:", 1)[0]
+        self.assertEqual(shlex.split(command), ["kilix-needle", request])
+
     def test_two_or_no_admitting_plans_ask_the_person(self):
         for records in ({}, {"system": REFUSED, "panes": REFUSED}):
             jobs = FakeJobs(records)
@@ -132,6 +160,7 @@ class Pipeline(unittest.TestCase):
                                    return_value=route(2, candidates=["system", "panes"], p=0.5)):
                 record = ask.ask("show me htop", jobs, act=True, assume_yes=True)
             self.assertEqual((record["status"], record["route"]["stage"]), (1, "clarify"))
+            self.assertEqual(ask.no_job(record["route"]), bool(records))
             self.assertIn("system: show memory", record["hint"])
             self.assertIn("panes: split right and run htop", record["hint"])
 
@@ -274,6 +303,38 @@ class Mcp(unittest.TestCase):
             self.assertEqual(len([c for c in fake.calls() if c[0][0] == "close-tab"]), 1)
         self.assertEqual(refused["items"][0]["outcome"], "skipped")
         self.assertEqual(done["items"][0]["outcome"], "done")
+
+    def test_routed_file_read_reports_the_same_mcp_error_as_a_direct_read(self):
+        server = mcp_server.Server(lambda job="panes": None)
+        with tempfile.TemporaryDirectory() as folder, mock.patch("agents_kilix.calling_cwd", return_value=None):
+            for exists in (False, True):
+                if exists:
+                    (Path(folder) / "readme.txt").write_text("hello")
+                request = f'preview "readme.txt" in {folder}'
+                direct = server.call_tool("kilix_files_read", {"request": request})
+                routed = server.call_tool("kilix_ask_act", {"request": "files: " + request})
+                self.assertEqual(direct["isError"], not exists, direct)
+                self.assertEqual(routed["isError"], direct["isError"], routed)
+                self.assertEqual(routed["structuredContent"]["status"], direct["structuredContent"]["status"])
+
+    def test_routed_file_scope_uses_the_caller_and_requires_it_for_relative_paths(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            caller = root / "caller"
+            caller.mkdir()
+            (caller / "marker.txt").write_text("caller")
+            (root / "marker.txt").write_text("server")
+            with mock.patch("os.getcwd", return_value=str(root)), \
+                    mock.patch("agents_kilix.calling_cwd", return_value=str(caller)):
+                record = self.call("kilix_ask_act", request='files: preview "marker.txt" in here')
+                self.assertEqual(record["observation"]["results"][0]["text"], "caller")
+            with mock.patch("agents_kilix.calling_cwd", return_value=None):
+                for tool in ("kilix_ask_act", "kilix_ask_plan"):
+                    for scope in ("here", "this folder", "./caller"):
+                        record = self.call(tool, request=f'files: preview "marker.txt" in {scope}')
+                        self.assertEqual(record["status"], 1)
+                        self.assertIsNone(record["observation"])
+                        self.assertIn("absolute directory", record["note"])
 
     def test_ask_tools_refuse_other_arguments(self):
         server = mcp_server.Server(lambda job="panes": None)
@@ -435,6 +496,85 @@ class Cli(unittest.TestCase):
             finally:
                 sys.stdout = saved
             self.assertEqual([c for c in fake.calls() if c[0][0] == "close-tab"], [])
+        # The panes plan admits "close tab 2", so a plan was shown: not "no job".
+        self.assertEqual(status, 1)
+
+    def test_no_job_has_its_own_status_and_every_other_failure_stays_1(self):
+        cases = (
+            ("none", route(1, "none"), ask.NO_JOB),
+            ("unsure, no plan admits it", route(2, candidates=["system", "panes"], p=0.5), ask.NO_JOB),
+            ("two jobs", router.Route("multi", None, candidates=["panes", "apps"]), 1),
+            ("two admitted jobs", route(2, candidates=["pty", "tmux"], claims=["pty", "tmux"]), 1),
+            ("router error", router.Route("error", None, note="router failed"), 1),
+        )
+        # A plan that admits the request is covered by the unsure-route test above.
+        refuse = {"status": 1, "items": []}
+        for name, chosen, wanted in cases:
+            plans = lambda job, *a, **k: refuse  # noqa: E731
+            for mode in (["--interactive"], ["--yes"]):
+                with self.subTest(name=name, mode=mode), FakeKilix(desktop()) as fake, \
+                        mock.patch.object(router, "route", return_value=chosen), \
+                        mock.patch.object(ask, "_yes", side_effect=AssertionError("asked")), \
+                        mock.patch.object(ask.Jobs, "run", side_effect=plans):
+                    saved, sys.stdout = sys.stdout, io.StringIO()
+                    try:
+                        status = ask.main([*mode, "--", "what is the capital of france"])
+                    finally:
+                        sys.stdout = saved
+                    self.assertEqual([c for c in fake.calls() if c[0][0] not in ("ls", "list")], [])
+                self.assertEqual(status, wanted, (name, mode))
+        # Plans, JSON records and agents keep their old statuses.
+        for extra in (["--plan"], ["--json"], ["--agent", "--yes"], ["--yes", "--json"]):
+            with self.subTest(extra=extra), FakeKilix(desktop()), \
+                    mock.patch.object(router, "route", return_value=route(1, "none")):
+                saved, sys.stdout = sys.stdout, io.StringIO()
+                try:
+                    status = ask.main([*extra, "what is the capital of france"])
+                finally:
+                    sys.stdout = saved
+            self.assertEqual(status, 1, extra)
+
+    def test_an_inventory_read_is_shown_without_asking(self):
+        with FakeKilix(desktop()) as fake, mock.patch.object(ask, "_yes", side_effect=AssertionError("asked")):
+            saved, sys.stdout = sys.stdout, io.StringIO()
+            try:
+                status = ask.main(["--interactive", "list my panes"])
+                out = sys.stdout.getvalue()
+            finally:
+                sys.stdout = saved
+            self.assertEqual([c for c in fake.calls() if c[0][0] not in ("ls", "list")], [])
+        self.assertEqual(status, 0)
+        self.assertIn("done: pane", out)
+        self.assertNotIn("not run", out)
+        # A plan that would act still asks, even next to a read.
+        with FakeKilix(desktop()), mock.patch.object(ask, "_yes", return_value=False) as asked:
+            saved, sys.stdout = sys.stdout, io.StringIO()
+            try:
+                self.assertEqual(ask.main(["--interactive", "close tab 2"]), 1)
+            finally:
+                sys.stdout = saved
+        asked.assert_called_once()
+        # Only the inventory's own reads count; any other "done" still asks.
+        done = {"status": 0, "items": [{"kind": "close_tab", "args": {}, "outcome": "done", "summary": "x"}]}
+        with FakeKilix(desktop()), mock.patch.object(router, "route", return_value=route(1, "panes")), \
+                mock.patch.object(ask.Jobs, "run", return_value=done), \
+                mock.patch.object(ask, "_yes", return_value=False) as asked:
+            saved, sys.stdout = sys.stdout, io.StringIO()
+            try:
+                self.assertEqual(ask.main(["--interactive", "close tab 2"]), 1)
+            finally:
+                sys.stdout = saved
+        asked.assert_called_once()
+
+    def test_a_declined_plan_is_not_no_job(self):
+        with FakeKilix(desktop()), mock.patch.object(sys, "stdin") as stdin:
+            stdin.isatty.return_value = True
+            stdin.readline.return_value = "n\n"
+            saved, sys.stdout = sys.stdout, io.StringIO()
+            try:
+                status = ask.main(["--interactive", "close tab 2"])
+            finally:
+                sys.stdout = saved
         self.assertEqual(status, 1)
 
 

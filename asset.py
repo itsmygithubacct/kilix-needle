@@ -35,7 +35,14 @@ PINNED_BYTES = 14_888_896
 # same revision: the runtime for tuned weights (see libengine.py).
 PINNED_LIB_SHA256 = "9fa5386d3e3a8ee17914fb23643bc5f5c906b683fa33561e79c5445dd78bc389"
 PINNED_LIB_BYTES = 14_315_600
-_CONTENT_SRC = Path(__file__).resolve().parent / "third_party" / "kilix-content" / "src"
+PACKAGED_CONTENT = Path("/usr/share/kilix-content/src")
+
+
+def content_src() -> Path:
+    """The catalog sources: the installed package, then a checkout submodule."""
+    if (PACKAGED_CONTENT / "kilix_content" / "__init__.py").is_file():
+        return PACKAGED_CONTENT
+    return Path(__file__).resolve().parent / "third_party" / "kilix-content" / "src"
 
 
 class AssetError(RuntimeError):
@@ -133,8 +140,9 @@ def content_root(explicit: str | None = None) -> str:
 
 
 def _content():
-    if _CONTENT_SRC.is_dir() and str(_CONTENT_SRC) not in sys.path:
-        sys.path.insert(0, str(_CONTENT_SRC))
+    src = content_src()
+    if src.is_dir() and str(src) not in sys.path:
+        sys.path.insert(0, str(src))
     try:
         import kilix_content
         from kilix_content import first_use
@@ -169,8 +177,10 @@ def _not_covered(asset_id: str, spec, install_hint: str) -> str:
     """
     if spec.licenses[0].decision == "affirmative":
         return f"the {asset_id} licence has not been accepted; {install_hint}"
-    return (f"no receipt records that the {asset_id} licence terms were shown; "
-            f"{install_hint}")
+    # "This delivery": a machine may hold a receipt for an earlier delivery of
+    # the same model, whose terms were shown. Each delivery has its own notice.
+    return (f"no receipt records that the licence terms of this delivery of {asset_id} "
+            f"were shown; {install_hint}")
 
 
 def _installed_spec(asset_id: str, root: str | None):

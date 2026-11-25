@@ -97,6 +97,313 @@ class ResolveTests(unittest.TestCase):
                     _claude_session_path("12345678-1234-1234-1234-123456789abc")
             self.assertEqual(raised.exception.code, "source_lookup_limit")
 
+    def _homes(self):
+        return mock.patch.dict(os.environ, {"CODEX_HOME": str(self.root / "codex"),
+                                            "CLAUDE_CONFIG_DIR": str(self.root / "other-provider"),
+                                            "GROK_HOME": str(self.root / "grok"),
+                                            "PI_CODING_AGENT_DIR": str(self.root / "omp")})
+
+    def test_omp_and_qwen_use_structured_recording_by_id_or_pane(self):
+        import json
+        from needle_logs.cli import read
+        session = "12345678-1234-1234-1234-123456789abc"
+        folder = self.root / "omp" / "sessions" / "--workspace--"
+        folder.mkdir(parents=True)
+        path = folder / f"2026-11-12T00-00-00_{session}.jsonl"
+        path.write_text(json.dumps({"type": "session", "id": session}) + "\n" + json.dumps({
+            "type": "message", "message": {"role": "user", "content": "Read this."}}) + "\n")
+        cache = str(self.root / "cache" / "index.sqlite3")
+        with self._homes(), mock.patch("needle_logs.resolve.snapshot") as listing:
+            binding = resolve_source(session)
+            self.assertEqual((binding["path"], binding["provider"]), (str(path), "omp"))
+            result = read({"operation": "brief", "session": session, "cache_path": cache})
+            self.assertEqual((result["status"], result["errors"]), ("ok", []))
+            listing.assert_not_called()
+            for provider in ("omp", "qwen"):
+                result = read({"operation": "brief", "file": str(path), "provider": provider, "cache_path": cache})
+                self.assertEqual((result["status"], result["source"]["provider"]), ("ok", "omp"))
+                self.pane["coding_session"] = {"provider": provider, "session_id": session}
+                binding = resolve_source("23", tree=self.tree)
+                self.assertEqual((binding["path"], binding["provider"]), (str(path), "omp"))
+            duplicate = folder / f"2026-11-12T01-00-00_{session}.jsonl"
+            duplicate.write_bytes(path.read_bytes())
+            with self.assertRaises(ResolveError) as raised:
+                resolve_source(session)
+            self.assertEqual(raised.exception.code, "ambiguous_source")
+
+    def test_omp_lookup_is_bounded_and_rejects_links(self):
+        from needle_logs.resolve import _omp_session_path
+        session = "12345678-1234-1234-1234-123456789abc"
+        folder = self.root / "omp" / "sessions" / "--workspace--"
+        folder.mkdir(parents=True)
+        (folder / f"time_{session}.jsonl").symlink_to(self.root / f"{self.broker}.log")
+        with self._homes():
+            self.assertEqual(_omp_session_path(session), "")
+            self.assertEqual(_omp_session_path("../../escape"), "")
+            with mock.patch("needle_logs.resolve.time.monotonic", side_effect=[0, 3]):
+                with self.assertRaises(ResolveError) as raised:
+                    _omp_session_path(session)
+            self.assertEqual(raised.exception.code, "source_lookup_limit")
+
+    def _rollout(self, thread, folder="sessions/2026/11/12"):
+        import json
+        directory = self.root / "codex" / folder
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / f"rollout-2026-11-12T01-02-03-{thread}.jsonl"
+        path.write_text(json.dumps({"type": "session_meta", "payload": {"id": thread}}) + "\n"
+                        + json.dumps({"type": "response_item", "payload": {
+                            "type": "message", "role": "user",
+                            "content": [{"type": "input_text", "text": "Read this."}]}}) + "\n")
+        return path
+
+    def test_library_search_checks_header_identity_even_after_indexing_by_file(self):
+        from needle_logs.library_cli import read
+        thread = "11111111-2222-4333-8444-000000000001"
+        other = "11111111-2222-4333-8444-000000000002"
+        path = self._rollout(thread)
+        path.write_text(path.read_text().replace(thread, other))
+        options = {"provider": "codex", "cache_path": str(self.root / "cache/index")}
+        search = options | {"operation": "search", "session": thread, "query": "Read"}
+        with self._homes():
+            self.assertEqual(read(search)["errors"][0]["code"], "source_mismatch")
+            self.assertEqual(read(options | {"operation": "index", "file": str(path)})["exit_status"], 0)
+            for request in (search, search | {"cached": True}, options | {"operation": "index", "session": thread}):
+                result = read(request)
+                self.assertEqual(result["errors"][0]["code"], "source_mismatch", result)
+                self.assertNotEqual(result["exit_status"], 0)
+                self.assertFalse(result.get("matches"))
+            # A failed selector must leave the correctly identified snapshot usable.
+            result = read(search | {"session": other, "cached": True})
+            self.assertEqual([m["session_id"] for m in result["matches"]], [other])
+
+    def test_library_session_search_detects_duplicates_and_follows_archiving(self):
+        from needle_logs.library_cli import read
+        thread = "11111111-2222-4333-8444-000000000003"
+        path = self._rollout(thread)
+        options = {"provider": "codex", "cache_path": str(self.root / "cache/index")}
+        index = options | {"operation": "index", "session": thread}
+        search = options | {"operation": "search", "session": thread, "query": "Read"}
+        with self._homes():
+            self.assertEqual(read(index)["exit_status"], 0)
+            archived = self._rollout(thread, folder="archived_sessions")
+            for request in (index, search, search | {"cached": True}):
+                self.assertEqual(read(request)["errors"][0]["code"], "ambiguous_source")
+            path.replace(archived)
+            self.assertEqual(read(search | {"cached": True})["errors"][0]["code"], "not_found")
+            self.assertEqual(read(index)["exit_status"], 0)
+            for cached in (False, True):
+                result = read(search | {"cached": cached})
+                self.assertEqual(result["exit_status"], 0, result)
+                self.assertEqual([m["path"] for m in result["matches"]], [str(archived)])
+
+    def test_cached_inventory_id_can_read_its_indexed_copy_offline(self):
+        from needle_logs.library_cli import read
+        thread = "11111111-2222-4333-8444-000000000004"
+        path = self._rollout(thread)
+        options = {"provider": "codex", "cache_path": str(self.root / "cache/index")}
+        with self._homes():
+            self.assertEqual(read(options | {"operation": "index", "file": str(path)})["exit_status"], 0)
+            item = read(options | {"operation": "list", "cached": True})["sessions"][0]
+            path.unlink()
+            result = read(options | {"operation": "search", "session": item["inventory_id"],
+                                     "cached": True, "query": "Read"})
+            self.assertEqual([m["session_id"] for m in result["matches"]], [thread])
+
+    def test_thread_id_reads_without_any_pane_listing(self):
+        # Behind a shared Codex app-server the pane list is refused. A full
+        # session ID names one recording, so it must not need the pane list.
+        from needle_logs.cli import read
+        thread = "01a1cf05-b66a-7992-806c-e1f87b5e5881"
+        path = self._rollout(thread)
+        refused = ResolveError("caller_context_unverified", "unverified")
+        with self._homes(), \
+                mock.patch("needle_logs.resolve.snapshot", side_effect=refused) as listing:
+            for selector in (thread, thread.upper(), f" {thread} "):
+                with self.subTest(selector=selector):
+                    binding = resolve_source(selector)
+                    self.assertEqual((binding["path"], binding["provider"], binding["pane_id"],
+                                      binding["expected_session_id"]),
+                                     (str(path), "codex", None, thread))
+            result = read({"operation": "brief", "session": thread,
+                           "cache_path": str(self.root / "cache" / "index.sqlite3")})
+            listing.assert_not_called()
+        self.assertEqual((result["status"], result["errors"]), ("ok", []))
+        self.assertEqual([event["kind"] for event in result["events"]], ["request"])
+
+    def test_thread_id_lookup_covers_archives_and_refuses_duplicates(self):
+        thread = "01a1cf05-b66a-7992-806c-e1f87b5e5882"
+        archived = self._rollout(thread, "archived_sessions")
+        with self._homes():
+            self.assertEqual(resolve_source(thread)["path"], str(archived))
+            self._rollout(thread)
+            with self.assertRaises(ResolveError) as raised:
+                resolve_source(thread)
+            self.assertEqual(raised.exception.code, "ambiguous_source")
+
+    def test_unrecorded_session_id_still_selects_a_live_pane(self):
+        session = "01a1cf05-b66a-7992-806c-e1f87b5e5883"
+        self.pane["coding_session"] = {"provider": "grok", "session_id": session}
+        with self._homes():
+            binding = resolve_source(session, tree=self.tree)
+            self.assertEqual((binding["pane_id"], binding["provider"]), (23, "raw"))
+            with self.assertRaises(ResolveError) as raised:
+                resolve_source(session.replace("5883", "5884"), tree=self.tree)
+            self.assertEqual(raised.exception.code, "not_found")
+
+    def test_session_id_claimed_by_both_providers_is_refused(self):
+        session = "01a1cf05-b66a-7992-806c-e1f87b5e5886"
+        self._rollout(session)
+        project = self.root / "other-provider" / "projects" / "synthetic-project"
+        project.mkdir(parents=True)
+        (project / (session + ".jsonl")).write_text("{}\n")
+        with self._homes():
+            with self.assertRaises(ResolveError) as raised:
+                resolve_source(session)
+        self.assertEqual(raised.exception.code, "ambiguous_source")
+
+    def test_replaced_rollout_refuses_thread_binding(self):
+        thread = "01a1cf05-b66a-7992-806c-e1f87b5e5885"
+        path = self._rollout(thread)
+        with self._homes():
+            binding = resolve_source(thread)
+            check_binding(binding)
+            replacement = path.with_suffix(".new")
+            replacement.write_bytes(path.read_bytes())
+            replacement.replace(path)
+            with self.assertRaisesRegex(ResolveError, "changed"):
+                check_binding(binding)
+
+    def _grok_session(self, session, folder="%2Fwork"):
+        import json
+        directory = self.root / "grok" / "sessions" / folder / session
+        directory.mkdir(parents=True, exist_ok=True)
+        updates = directory / "updates.jsonl"
+        updates.write_text(json.dumps({"timestamp": 1794300000, "method": "session/update", "params": {
+            "sessionId": session, "update": {"sessionUpdate": "user_message_chunk",
+                                             "content": {"type": "text", "text": "Read this."}}}}) + "\n")
+        (directory / "events.jsonl").write_text("{}\n")
+        return updates
+
+    def test_grok_session_reads_by_id_folder_sibling_or_pane(self):
+        from needle_logs.cli import read
+        session = "01a1cf05-b66a-7992-806c-e1f87b5e5887"
+        updates = self._grok_session(session)
+        cache = str(self.root / "cache" / "index.sqlite3")
+        refused = ResolveError("caller_context_unverified", "unverified")
+        with self._homes(), mock.patch("needle_logs.resolve.snapshot", side_effect=refused) as listing:
+            binding = resolve_source(session)
+            self.assertEqual((binding["path"], binding["provider"], binding["pane_id"]),
+                             (str(updates), "grok", None))
+            result = read({"operation": "brief", "session": session, "cache_path": cache})
+            listing.assert_not_called()
+            self.assertEqual((result["status"], result["errors"]), ("ok", []))
+            self.assertEqual([event["kind"] for event in result["events"]], ["request"])
+            # The session folder and its other files name the same conversation.
+            for target in (updates.parent, updates.parent / "events.jsonl"):
+                result = read({"operation": "brief", "file": str(target), "provider": "grok",
+                               "cache_path": cache})
+                self.assertEqual((result["status"], result["source"]["path"]), ("ok", str(updates)))
+            # Kilix lists a live Grok pane by session ID, without a path.
+            self.pane["coding_session"] = {"provider": "grok", "session_id": session}
+            binding = resolve_source("23", tree=self.tree)
+            self.assertEqual((binding["provider"], binding["path"], binding["pane_id"]),
+                             ("grok", str(updates), 23))
+            self._grok_session(session, folder="%2Fother")
+            with self.assertRaises(ResolveError) as raised:
+                resolve_source(session)
+            self.assertEqual(raised.exception.code, "ambiguous_source")
+
+    def test_shared_mcp_reader_uses_one_instance_and_rechecks_that_instance(self):
+        import mcp_server
+        session = "12345678-1234-1234-1234-123456789abc"
+        updates = self._grok_session(session)
+        tree = {"panes": [{"pane_id": 5, "coding_session": {"provider": "grok", "session_id": session}}],
+                "instance": 1234, "instance_start": 777}
+        refused = ResolveError("caller_context_unverified", "unverified")
+        server = mcp_server.Server(mock.Mock(side_effect=AssertionError("unexpected engine")))
+        args = {"operation": "brief", "provider": "grok"}
+        with self._homes(), mock.patch.dict(os.environ, {"KITTY_PID": "", "KITTY_LISTEN_ON": "",
+                    "GPU_TERMINAL_HOME": str(self.root / "state")}), \
+                mock.patch("needle_logs.resolve.listening_instances", return_value=[1234]), \
+                mock.patch("needle_logs.resolve.snapshot", side_effect=[refused, tree, tree]) as listing:
+            pane = server.call_tool("kilix_logs_read", args | {"session": "5"})
+            file = server.call_tool("kilix_logs_read", args | {"file": str(updates.with_name("events.jsonl"))})
+        self.assertEqual(listing.call_args_list, [mock.call(), mock.call(1234), mock.call(1234)])
+        self.assertFalse(pane["isError"])
+        self.assertFalse(file["isError"])
+        source = pane["structuredContent"]["source"]
+        self.assertEqual((source["session_id"], source["path"]), (session, str(updates)))
+        self.assertEqual(source, file["structuredContent"]["source"])
+
+    def test_multiple_instances_require_selection_before_looking_for_a_pane(self):
+        from needle_logs.cli import read
+        session = "12345678-1234-1234-1234-123456789abc"
+        self._grok_session(session)
+        args = {"operation": "brief", "session": "23", "cache_path": str(self.root / "cache/db")}
+        refused = ResolveError("caller_context_unverified", "unverified")
+        first = self._grok_session("12345678-1234-1234-1234-123456789abd")
+        first_pane = self.pane | {"coding_session": {"provider": "grok", "session_id": first.parent.name}}
+        trees = {1234: dict(self.tree, panes=[first_pane], instance=1234, instance_start=9),
+                 5678: dict(self.tree, instance=5678, instance_start=10)}
+
+        def snapshot(instance=None):
+            if instance is None:
+                raise refused
+            return trees[instance]
+
+        with self._homes(), mock.patch("needle_logs.resolve.listening_instances", return_value=[1234, 5678]), \
+                mock.patch("needle_logs.resolve.snapshot", side_effect=snapshot) as listing:
+            blocked = read(args)
+            self.assertEqual(blocked["errors"][0]["code"], "ambiguous_instance")
+            self.assertIn("printenv KITTY_PID", blocked["errors"][0]["message"])
+            listing.assert_called_once_with()
+            # Both instances have a pane 23 with a different recording.
+            self.assertEqual(read(args | {"instance": 1234})["source"]["path"], str(first))
+            self.assertEqual(read(args | {"instance": 5678})["source"]["provider"], "raw")
+            wrong_provider = read(args | {"instance": 5678, "provider": "grok"})
+            self.assertEqual(wrong_provider["errors"][0]["code"], "source_mismatch")
+            # Even a UUID on disk cannot escape an explicit live-instance selection.
+            missing = read(args | {"instance": 5678, "session": session})
+            self.assertEqual(missing["errors"][0]["code"], "not_found")
+            self.assertEqual(listing.call_args_list[1:], [mock.call(1234)] * 2 + [mock.call(5678)] * 4)
+
+    def test_scoped_cached_search_refuses_a_replaced_pane_recording(self):
+        from needle_logs import library_cli
+        session = "12345678-1234-1234-1234-123456789abc"
+        updates = self._grok_session(session)
+        self.pane["coding_session"] = {"provider": "grok", "session_id": session}
+        tree = dict(self.tree, instance=5678, instance_start=10)
+        args = {"session": "23", "instance": 5678, "cache_path": str(self.root / "cache/db")}
+        with self._homes(), mock.patch("needle_logs.resolve.snapshot", return_value=tree):
+            self.assertEqual(library_cli.read(args | {"operation": "index"})["exit_status"], 0)
+            search = args | {"operation": "search", "query": "Read this", "cached": True}
+            self.assertEqual(library_cli.read(search)["matches"][0]["session_id"], session)
+            replacement = updates.with_suffix(".new")
+            replacement.write_bytes(updates.read_bytes())
+            replacement.replace(updates)
+            self.assertEqual(library_cli.read(search)["errors"][0]["code"], "source_changed")
+
+    def test_conflicting_route_and_other_host_failures_do_not_auto_select(self):
+        for code, listen, pid in (("caller_context_unverified", "unix:@kilix-7", ""),
+                                  ("caller_context_unverified", "", "7"),
+                                  ("pane_context_unavailable", "", ""),
+                                  ("snapshot_invalid", "", "")):
+            with self.subTest(code=code, listen=listen, pid=pid), \
+                    mock.patch.dict(os.environ, {"KITTY_LISTEN_ON": listen, "KITTY_PID": pid}), \
+                    mock.patch("needle_logs.resolve.listening_instances", return_value=[1234]), \
+                    mock.patch("needle_logs.resolve.snapshot", side_effect=ResolveError(code, "refused")) as listing:
+                with self.assertRaises(ResolveError) as error:
+                    resolve_source("23")
+                self.assertEqual(error.exception.code, code)
+                listing.assert_called_once_with()
+
+    def test_recycled_instance_pid_fails_binding_even_with_same_pane_and_file(self):
+        tree = dict(self.tree, instance=5678, instance_start=10)
+        with mock.patch("needle_logs.resolve.snapshot", side_effect=[tree, dict(tree, instance_start=11)]):
+            binding = resolve_source("23", instance=5678)
+            with self.assertRaisesRegex(ResolveError, "source changed"):
+                check_binding(binding)
+
     def test_discovered_file_swap_cannot_read_outside_root(self):
         candidate = self.root / f"{self.broker}.log"
         outside = self.root.parent / f"{self.root.name}-outside-synthetic.log"

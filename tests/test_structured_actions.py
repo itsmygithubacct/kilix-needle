@@ -193,6 +193,23 @@ class Adapters(unittest.TestCase):
             with self.assertRaises(ValueError):
                 action_cli.mcp(args)
 
+    def test_field_errors_name_what_to_change(self):
+        # Agents guessed request shapes and got no hint which field was wrong.
+        guessed = {"action": "pane.open", "argv": ["bash"]}
+        with self.assertRaises(ValueError) as raised:
+            backend.validate(guessed)
+        message = str(raised.exception)
+        for part in ("missing operation, operation_id, params, schema, source, target",
+                     "unknown action, argv", backend.SCHEMA, "kilix agent-control list"):
+            self.assertIn(part, message)
+        with self.assertRaises(ValueError) as raised:
+            backend.validate(request("pane.open", program="firefox"))
+        self.assertEqual(str(raised.exception), "pane.open params: unknown program. It takes argv, cwd, "
+                         "placement, title; optional bias, direction")
+        out = action_cli.run({**request(), "extra": True}, agent=True)
+        self.assertEqual((out["status"], out["error"].split(".")[0]),
+                         ("blocked", "action request: unknown extra"))
+
     def test_status_is_read_only_and_pending_uncertain_are_not_completed(self):
         for state in ("pending", "uncertain", "not_found"):
             with mock.patch("action_backend.dispatch", side_effect=lambda r: receipt(r, state)) as dispatch:

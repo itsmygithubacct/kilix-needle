@@ -9,27 +9,21 @@ Reference for [kilix-needle](../README.md).
   closes its own pane or tab, and when its pane cannot be identified nothing
   risky runs. `kilix-needle setup` registers the MCP server at user scope,
   in each harness it finds, only when you run it.
-- **Typing assumes a fresh, one-line, emacs-mode prompt.** Kilix reports a
-  pane "at a shell prompt" in states where the line clear (Ctrl-E Ctrl-U) is
-  not enough:
-  - at a continuation prompt (after a trailing `\` or an open quote), the
-    clear reaches only the new line, so the command completes the earlier one,
-    or lands inside the open quote and runs nothing while the record says
-    `done`;
-  - in vi editing mode (`set -o vi`), in command mode the keys are vi commands
-    (measured: the previous command re-ran), and in insert mode text right of
-    the cursor is kept;
-  - with a reverse history search pending, the command joins the match.
-
-  No key sequence tried is safe in every mode, so these are disclosed rather
-  than papered over. Keep a yes given in advance for panes you know are at a
-  plain prompt. zsh and fish were not measured.
+- **Commands in existing panes need a shell that can prove its state.** Only
+  Bash (4.4 or later, with readline editing and `promptvars` on) loaded with
+  Kilix's shell integration reports a verifiable prompt. dash, `sh`, a shell
+  without the integration, a remote shell over ssh, and zsh, fish and
+  PowerShell (whose integrations do not implement the proof yet) are refused,
+  whatever their prompt looks like. Any key typed at the prompt, even one that
+  leaves the line empty, makes it unverifiable until the next prompt, and so
+  does type-ahead left from a running command. Enter and Ctrl-C are the
+  exception: after an empty Enter or a draft abandoned with Ctrl-C the new
+  prompt can be used at once. After leaving a full-screen program the pane is
+  usually verifiable again only once a command has run.
 - **Some notation still passes as a shell argument**: "5 p.m", "now/later"
   (it has the shape of a relative path), and a leading dash turned into a flag.
   The models have not produced these, but a hand-written call through the
   bridge could.
-- **The pane is read again about a second before Enter, not at it.** A
-  program started in that pane within that second could receive the command.
 - **"The pane or tab the request was made from" needs the requester to be
   known**: from `KITTY_WINDOW_ID`, or failing that from process ancestry.
   When neither identifies it, agent mode runs nothing risky, and the CLI treats
@@ -38,13 +32,11 @@ Reference for [kilix-needle](../README.md).
   mistake the request states plainly ("close the left pane" in a row of three
   closes the pane adjacent on the left). Names, commands and programs are
   taken as given once the checks have found them verbatim in the request.
-- **A word after "tab" or "pane" is a name unless it is known not to be.**
-  "close tab logs" names a tab, and "the next tab over", "the tab please" and
-  "that tab quickly" do not, but the lists of placing and courtesy words are
-  not complete: "close the tab thanks" (asap, pls, already, ...) is read as a
-  tab named "thanks". Such a close only ever waits for a person's yes, and it
-  can only reach a tab with exactly that title. Refusing every unknown word
-  would refuse real short names ("tab nightly", "tab back-end").
+- **Short titles and courtesy words.** "Close tab logs" names the tab called
+  `logs`. After "tab" or "pane", words such as "thanks", "pls", "asap" and
+  "already" leave the target unspecified. For a tab actually called
+  `thanks`, say "close the tab named thanks". Other bare words can still
+  match a short title, such as `nightly` or `back-end`.
 - **A program is bound to the clause that asks for it, by wording.** In a
   request with several clauses, a program starts only in the kind of open,
   and on the side, that its clause asks for. A bare "run htop" belongs to the
@@ -61,8 +53,3 @@ Reference for [kilix-needle](../README.md).
   selecting and marking, can still be resumed. That runs only its gates:
   the model's bytes are never written again. If those gates then fail, the
   run's `gates.json` records the failure while the run stays selected.
-- **"At a shell prompt" is checked twice, not proven.** Typing needs the
-  shell's prompt marks (OSC 133), and, from what Kilix reports out of band,
-  that the pane is not in the alternate screen and that what holds its
-  terminal is a shell. A program that launches a shell to trick this, in a
-  pane you already run it in, is outside what it can see.

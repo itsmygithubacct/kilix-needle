@@ -207,7 +207,7 @@ def run_request(engine: Engine, request: str, options: Options,
                                       "title": pane.get("title", ""),
                                       "summary": f"pane {pane['id']} in tab {tab['id']}: "
                                                  f"{pane.get('title', '')}"})
-            return {"request": request, "status": 0, "items": items}
+            return {"request": request, "status": 0, "note": "", "items": items}
         # "help" sent as a request answers with the jobs, not a refused open_tab.
         if re.fullmatch(r"\s*(?:(?:show|print|get)\s+(?:me\s+)?(?:the\s+)?)?(?:help|usage|--help|-h)"
                         r"(?:\s+(?:please|text|page))?[\s.!?]*", request, re.I):
@@ -351,6 +351,8 @@ def _hint(job: str, request: str, result: dict) -> str | None:
     if (not result.get("status") and (job != "panes" or items)) \
             or any(i.get("outcome") in ("done", "would") for i in items):
         return None
+    if any(i.get("code") == "shell_input_unverified" for i in items):
+        return None  # The refusal already explains how to enter the command.
     other = _other_job(job, request)
     if other:
         inner = _unwrapped(request)[1]
@@ -498,6 +500,8 @@ def run_calls(request: str, calls: list, options: Options,
             step = kilix.resolve(action, tree)
         except kilix.KilixError as error:
             entry.update(outcome="unresolved", reason=str(error))
+            if isinstance(error, kilix.ShellInputUnverified):
+                _shell_input_refusal(entry, error)
             record["status"] = 1
             broken = True
             continue
@@ -545,21 +549,21 @@ def run_calls(request: str, calls: list, options: Options,
                                  "(MCP: confirm_risky=true). Otherwise ask the user first.")
             record["status"] = 1
             continue
-        if step.types_into is not None:
-            try:
-                ready = kilix.still_at_prompt(step.types_into, under_overlay=options.under_overlay)
-            except kilix.KilixError:
-                ready = False
-            if not ready:
-                entry.update(outcome="unresolved",
-                             reason="that pane is no longer at a shell prompt; nothing typed")
-                record["status"] = 1
-                broken = True
-                continue
         try:
             receipt = kilix.perform(step)
             if receipt is not None:
                 entry["receipt"] = receipt
+        except kilix.ShellInputUnverified as error:
+            # Refused at submission: the prompt or pane changed after planning,
+            # or the shell found input. Nothing reached the editor.
+            entry.update(reason=str(error))
+            _shell_input_refusal(entry, error)
+            record["status"] = 1
+            return record
+        except kilix.ShellInputUnconfirmed as error:
+            entry.update(outcome="failed", reason=str(error), code="shell_input_unconfirmed")
+            record["status"] = 1
+            return record
         except kilix.KilixError as error:
             entry.update(outcome="failed", reason=str(error))
             record["status"] = 1
@@ -568,6 +572,12 @@ def run_calls(request: str, calls: list, options: Options,
         # made: its step was resolved above to an id, never to a position.
         entry["outcome"] = "done"
     return record
+
+
+def _shell_input_refusal(entry: dict, error: "kilix.ShellInputUnverified") -> None:
+    entry.update(outcome="refused", code="shell_input_unverified")
+    if error.cause:
+        entry["cause"] = error.cause
 
 
 def run_agents_request(engine, request: str, options: Options,
@@ -711,14 +721,15 @@ def render(record: dict) -> str:
     """The human form of a request record."""
     lines = []
     items = record["items"]
-    if not items and record["note"]:
+    note = record.get("note", "")
+    if not items and note:
         prefix = "kilix-needle: " if record["status"] else ""
-        return prefix + record["note"]
+        return prefix + note
     for item in items:
         if item["outcome"] == "refused" and "summary" not in item:
             lines.append(f"  refused {item['kind']}: {item['reason']}")
-    if record["note"]:
-        lines.append(f"  {record['note']}")
+    if note:
+        lines.append(f"  {note}")
     for item in items:
         outcome = item["outcome"]
         if outcome == "refused" and "summary" not in item:

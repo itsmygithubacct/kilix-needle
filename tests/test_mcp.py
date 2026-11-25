@@ -5,7 +5,7 @@ import os
 import unittest
 from unittest import mock
 
-from support import FakeKilix, desktop
+from support import PROMPT, FakeKilix, desktop, verified
 import mcp_server
 import needle_cli
 
@@ -124,6 +124,42 @@ class Tools(unittest.TestCase):
             replies, _ = converse([call(1, "kilix_act", request="close the left pane",
                                         confirm_risky=True)], calls=request)
             self.assertEqual(fake.calls(), [(["close-window", "--match=id:301"], None)])
+
+    def test_both_mcp_tools_report_an_unverified_prompt_without_writing(self):
+        with FakeKilix(desktop()) as fake:
+            replies, _ = converse([
+                call(1, "kilix_plan", request="run pwd in the build pane"),
+                call(2, "kilix_act", request="run pwd in the build pane", confirm_risky=True)])
+            plan, act, parse_error = replies
+            self.assertIn("error", parse_error)
+            for reply in (plan, act):
+                record = reply["result"]["structuredContent"]
+                item, = record["items"]
+                self.assertEqual((record["status"], item["code"]), (1, "shell_input_unverified"))
+                self.assertIn("pane 301", item["reason"])
+            self.assertEqual(fake.calls(), [])
+
+    def test_plan_act_and_ask_act_use_the_verified_submission(self):
+        tree = desktop()
+        tree[0]["tabs"][2]["windows"][1]["shell_input"] = verified()
+        os.environ["KITTY_WINDOW_ID"] = "300"
+        self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
+        with FakeKilix(tree) as fake:
+            fake.answer(stdout=b'{"status": "submitted", "prompt_id": "%s", "window_id": 301}' % PROMPT.encode())
+            replies, _ = converse([
+                call(1, "kilix_plan", request="run pwd in the build pane"),
+                call(2, "kilix_act", request="run pwd in the build pane", confirm_risky=True),
+                call(3, "kilix_ask_act", request="panes: run pwd in the build pane", confirm_risky=True)])
+            plan, act, ask, _parse_error = replies
+            self.assertEqual(plan["result"]["structuredContent"]["items"][0]["outcome"], "would")
+            for reply in (act, ask):
+                record = reply["result"]["structuredContent"]
+                item, = record["items"]
+                self.assertEqual((record["status"], item["outcome"], item["receipt"]["prompt_id"]),
+                                 (0, "done", PROMPT))
+            submit = ["shell-submit", "--match=id:301", f"--expect-prompt={PROMPT}"]
+            self.assertEqual([c for c in fake.calls() if c[0][:1] == ["shell-submit"]],
+                             [(submit, b"pwd"), (submit, b"pwd")])
 
     def test_confirm_risky_covers_only_a_plain_instruction(self):
         # Review R1/R2: "avoid closing tab 2" and new phrasings closed tab 2

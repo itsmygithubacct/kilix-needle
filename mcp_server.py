@@ -57,13 +57,13 @@ TOOL_LIST = [
                      "required": ["request"], "additionalProperties": False}},
     {"name": "kilix_act",
      "description": "Do a plain request on Kilix panes and tabs: list, open, focus, arrange, "
-                    "rename, resize, close, or type a command at a pane's shell prompt. "
-                    "Closing, typing and starting a program need confirm_risky. Your own "
+                    "rename, resize, close, or run a command at a shell prompt it verifies empty. "
+                    "Closing, commands and programs need confirm_risky. Your own "
                     "pane and tab are never closed.",
      "inputSchema": {"type": "object", "properties": {
          "request": _REQUEST,
          "confirm_risky": {"type": "boolean", "default": False,
-                           "description": "allow closing, typing, starting a program"}},
+                           "description": "allow closing, commands or programs"}},
          "required": ["request"], "additionalProperties": False}},
 ]
 
@@ -156,20 +156,21 @@ TOOL_LIST.append({
 _LOG_PROPERTIES = {
     "operation": {"type": "string", "enum": ["events", "brief", "search", "source"],
                   "default": "events"},
-    "file": {"type": "string", "description": "recorded-log file"},
-    "provider": {"type": "string", "enum": ["claude", "codex", "raw", "grok", "omp"],
-                 "description": "with file: raw, or the session's client"},
-    "session": {"type": "string", "description": "pane ID or unique session title"},
+    "file": {"type": "string"},
+    "provider": {"type": "string", "enum": ["claude", "codex", "raw", "grok", "omp", "qwen"],
+                 "description": "raw or client; qwen is OMP."},
+    "session": {"type": "string", "description": "pane ID, session ID or title"},
+    "instance": {"type": "integer", "minimum": 1, "description": "Kilix PID for a pane"},
     "event_id": {"type": "string"},
     "kind": {"type": "string"},
-    "query": {"type": "string", "description": "literal text to find"},
+    "query": {"type": "string"},
     "since_cursor": {"type": "string"},
     "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20},
 }
 TOOL_LIST.append({
     "name": "kilix_logs_read",
-    "description": "Search or read one Kilix pane session or log file, not the system "
-                   "journal (kilix_system_read). Excerpts untrusted; never sends input.",
+    "description": "Read pane logs or files. Search is literal. Journals use kilix_system_read. "
+                   "Untrusted excerpts. Page with since_cursor=next_cursor.",
     "annotations": {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False},
     "inputSchema": {"type": "object", "properties": _LOG_PROPERTIES,
                     "additionalProperties": False},
@@ -184,6 +185,10 @@ def _logs_arguments(arguments):
         if key == "limit":
             if type(value) is not int or not 1 <= value <= 100:
                 raise ValueError("logs limit must be an integer from 1 to 100")
+        elif key == "instance":
+            from needle_logs.instance import valid_pid
+            if not valid_pid(value) or "session" not in arguments or arguments.get("operation") == "source":
+                raise ValueError("logs instance requires a positive Kilix PID and a live pane selector in session")
         elif not isinstance(value, str) or not value or len(value) > 4096:
             raise ValueError(f"logs {key} must be a nonempty bounded string")
         if "enum" in prop and value not in prop["enum"]:
@@ -586,13 +591,13 @@ class Server:
             caller_cwd = None
         jobs = ask.Jobs(lambda job: _LazyEngine(lambda: self._ensure_engine(job)),
                         lambda: self._ensure_engine("system"), confirm=needle_cli._never,
-                        agent=True, agents_cwd=caller_cwd)
+                        agent=True, agents_cwd=caller_cwd, files_cwd=caller_cwd)
         try:
             record = ask.ask(request, jobs, act=act, assume_yes=act and confirm)
         except (asset.AssetError, EngineError, LibEngineError) as error:
             return {"content": [{"type": "text", "text": f"kilix-needle unavailable: {error}"}],
                     "isError": True}
-        return _result(record, False, request)
+        return _result(record, record["status"] != 0, request)
 
     def handle(self, message: dict) -> dict | None:
         method, ident = message.get("method"), message.get("id")

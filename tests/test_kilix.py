@@ -3,7 +3,7 @@ import copy
 import os
 import unittest
 
-from support import FakeKilix, desktop, tab, window
+from support import PROMPT, FakeKilix, desktop, tab, verified, window
 from actions import Action
 import kilix
 
@@ -139,41 +139,140 @@ class Commands(unittest.TestCase):
 
 
 class Typing(unittest.TestCase):
-    def test_broker_pane_is_matched_by_session_text_then_enter(self):
-        step = resolve(Action("run_in_pane", {"pane": "left", "command": "make test"}))
-        match = "--match=env:KITTY_PTY_BROKER_SESSION=" + "ab" * 8
-        # A half-typed line is cut to the kill ring first (KN-R6-01).
-        self.assertEqual(step.commands, ((("send-text", match, "--stdin"), b"\x05\x15"),
-                                         (("send-text", match, "--stdin"), b"make test"),
-                                         (("send-text", match, "--stdin"), b"\r")))
+    def test_prompt_marks_and_broker_identity_leave_shell_input_unverified(self):
+        for pane, wid in (("left", 301), ("name:notes", 302), ("name:editor", 200)):
+            with self.subTest(pane=pane), self.assertRaisesRegex(
+                    kilix.ShellInputUnverified, f"pane {wid} .*manually"):
+                resolve(Action("run_in_pane", {"pane": pane, "command": "pwd"}))
 
-    def test_plain_pane_is_matched_by_id(self):
-        step = resolve(Action("run_in_pane", {"pane": "name:notes", "command": "ls"}))
-        self.assertEqual(step.commands[0][0], ("send-text", "--match=id:302", "--stdin"))
+    def test_unmarked_shells_and_pane_metadata_cannot_authorize_submission(self):
+        for shell in ("bash", "-dash", "sh", "zsh", "fish"):
+            for at_prompt in (False, True, None):
+                tree = desktop()
+                window = tree[0]["tabs"][2]["windows"][1]
+                window.update(at_prompt=at_prompt, foreground_processes=[{"cmdline": [shell]}],
+                              user_vars={"shell_input_state": "verified"},
+                              env={"SHELL_INPUT_STATE": "verified"})
+                with self.subTest(shell=shell, mark=at_prompt), self.assertRaises(
+                        kilix.ShellInputUnverified):
+                    resolve(Action("run_in_pane", {"pane": "left", "command": "pwd"}), tree=tree)
 
-    def test_never_types_into_a_pane_not_at_a_prompt(self):
-        for pane in ("name:htop", "name:editor"):
-            with self.assertRaisesRegex(kilix.KilixError, "not at a shell prompt"):
-                resolve(Action("run_in_pane", {"pane": pane, "command": "q"}))
 
-    def test_malformed_broker_session_falls_back_to_id(self):
-        tree = copy.deepcopy(desktop())
-        tree[0]["tabs"][2]["windows"][1]["env"]["KITTY_PTY_BROKER_SESSION"] = "x|id:1"
-        step = resolve(Action("run_in_pane", {"pane": "left", "command": "ls"}), tree=tree)
-        self.assertEqual(step.commands[0][0], ("send-text", "--match=id:301", "--stdin"))
+def proven(tree=None, wid=301, proof=None):
+    """The desktop with one pane reporting a verifiable prompt."""
+    tree = tree or desktop()
+    for t in tree[0]["tabs"]:
+        for w in t["windows"]:
+            if w["id"] == wid:
+                w["shell_input"] = verified() if proof is None else proof
+    return tree
+
+
+class VerifiedSubmission(unittest.TestCase):
+    """The engine's shell_input report is the only signal that permits a run."""
+
+    def test_a_verified_prompt_resolves_to_one_guarded_submission(self):
+        for pane, wid in (("left", 301), ("name:notes", 302)):
+            with self.subTest(pane=pane):
+                step = resolve(Action("run_in_pane", {"pane": pane, "command": "make 'a b' $X"}),
+                               tree=proven(wid=wid))
+                self.assertEqual(step.commands, (((
+                    "shell-submit", f"--match=id:{wid}", f"--expect-prompt={PROMPT}"),
+                    b"make 'a b' $X"),))
+                self.assertIn("verified empty shell prompt", step.summary)
+                self.assertEqual((step.verification["target_id"], step.verification["prompt_id"]),
+                                 (wid, PROMPT))
+
+    def test_an_unverifiable_report_is_refused_with_its_reason(self):
+        for proof, words in (
+                ({"verifiable": False, "code": "input", "reason": "input reached the pane after its prompt appeared"},
+                 "input reached the pane"),
+                ({"verifiable": False, "code": "unavailable", "reason": "no Kilix shell integration"},
+                 "no Kilix shell integration"),
+                ({"verifiable": True}, "reports no shell editor state"),
+                ({"verifiable": True, "prompt_id": "../x"}, "reports no shell editor state"),
+                ({"verifiable": "yes", "prompt_id": PROMPT}, "reports no shell editor state"),
+                ("verified", "reports no shell editor state")):
+            with self.subTest(proof=proof), self.assertRaisesRegex(
+                    kilix.ShellInputUnverified, f"pane 301 .*{words}.*manually") as cm:
+                resolve(Action("run_in_pane", {"pane": "left", "command": "pwd"}), tree=proven(proof=proof))
+            if isinstance(proof, dict) and proof.get("code"):
+                self.assertEqual(cm.exception.cause, proof["code"])
+
+    def test_a_command_must_be_one_line(self):
+        for command in ("pwd\nrm -rf x", "pwd\r", "echo \x1b[2J", "a\x7f"):
+            with self.subTest(command=command), self.assertRaisesRegex(kilix.KilixError, "one shell command line"):
+                resolve(Action("run_in_pane", {"pane": "left", "command": command}), tree=proven())
+
+    def step(self, tree=None):
+        return resolve(Action("run_in_pane", {"pane": "left", "command": "make test"}), tree=tree or proven())
+
+    def test_submission_sends_the_command_on_stdin_and_reads_the_receipt(self):
+        step = self.step()
+        with FakeKilix(proven()) as fake, Caller(300):
+            fake.answer(stdout=b'{"status": "submitted", "prompt_id": "%s", "window_id": 301}\n' % PROMPT.encode())
+            receipt = kilix.perform(step)
+            self.assertEqual(fake.calls(), [(["shell-submit", "--match=id:301", f"--expect-prompt={PROMPT}"],
+                                             b"make test")])
+        self.assertEqual((receipt["submitted"], receipt["target_id"], receipt["prompt_id"],
+                          receipt["completion_verified"]), (True, 301, PROMPT, False))
+
+    def test_a_changed_pane_is_refused_before_any_input(self):
+        step = self.step()
+        for change in ("pid", "closed", "broker"):
+            tree = proven()
+            build = tree[0]["tabs"][2]["windows"][1]
+            if change == "pid":
+                build["pid"] += 1
+            elif change == "broker":
+                build["env"]["KITTY_PTY_BROKER_SESSION"] = "cd" * 8
+            else:
+                tree[0]["tabs"][2]["windows"].remove(build)
+            with self.subTest(change=change), FakeKilix(tree) as fake, Caller(300):
+                with self.assertRaisesRegex(kilix.ShellInputUnverified, "changed after the request was planned") as cm:
+                    kilix.perform(step)
+                self.assertEqual((fake.calls(), cm.exception.cause), ([], "stale"))
+
+    def test_engine_and_shell_refusals_keep_their_codes(self):
+        step = self.step()
+        for code, reason in (("stale", "the prompt changed after the request was planned"),
+                             ("input", "input reached the pane after its prompt appeared"),
+                             ("draft", "the shell editor already holds input; it was left untouched"),
+                             ("busy", "the shell that reported the prompt is not in the foreground")):
+            with self.subTest(code=code), FakeKilix(proven()) as fake, Caller(300):
+                fake.answer(stderr=f"Error: {code}: {reason}\n".encode(), status=1)
+                with self.assertRaisesRegex(kilix.ShellInputUnverified, f"pane 301 .*{reason}.*manually") as cm:
+                    kilix.perform(step)
+                self.assertEqual(cm.exception.cause, code)
+
+    def test_an_engine_without_guarded_submission_is_a_refusal(self):
+        with FakeKilix(proven()) as fake, Caller(300):
+            fake.answer(stderr=b"Error: Unknown subcommand: shell-submit\n", status=1)
+            with self.assertRaises(kilix.ShellInputUnverified) as cm:
+                kilix.perform(self.step())
+        self.assertEqual(cm.exception.cause, "unavailable")
+
+    def test_an_unconfirmed_submission_is_never_reported_as_refused(self):
+        for stdout, stderr, status in ((b"", b"Error: unconfirmed: the shell claimed the command\n", 1),
+                                       (b"not json", b"", 0),
+                                       (b'{"status": "submitted", "prompt_id": "other", "window_id": 301}', b"", 0),
+                                       (b'{"status": "submitted", "prompt_id": "%s", "window_id": 302}'
+                                        % PROMPT.encode(), b"", 0)):
+            with self.subTest(stdout=stdout, stderr=stderr), FakeKilix(proven()) as fake, Caller(300):
+                fake.answer(stdout=stdout, stderr=stderr, status=status)
+                with self.assertRaises(kilix.ShellInputUnconfirmed):
+                    kilix.perform(self.step())
 
 
 class Perform(unittest.TestCase):
-    def test_runs_exactly_the_resolved_argv_and_bytes(self):
-        with FakeKilix(desktop()) as fake, Caller(300):
-            step = kilix.resolve(Action("run_in_pane", {"pane": "left", "command": "make test"}),
-                                 kilix.snapshot())
-            kilix.perform(step)
-            calls = fake.calls()
-        match = "--match=env:KITTY_PTY_BROKER_SESSION=" + "ab" * 8
-        self.assertEqual(calls, [(["send-text", match, "--stdin"], b"\x05\x15"),
-                                 (["send-text", match, "--stdin"], b"make test"),
-                                 (["send-text", match, "--stdin"], b"\r")])
+    def test_previously_resolved_typing_commands_cannot_reach_the_terminal(self):
+        action = Action("run_in_pane", {"pane": "left", "command": "pwd"})
+        old_step = kilix.Step(action, "run pwd in the build pane",
+                              ((("send-text", "--match=id:301", "--stdin"), b"pwd\r"),))
+        with FakeKilix(desktop()) as fake:
+            with self.assertRaises(kilix.ShellInputUnverified):
+                kilix.perform(old_step)
+            self.assertEqual(fake.calls(), [])
 
     def test_a_failing_command_is_reported(self):
         with FakeKilix(desktop()) as fake, Caller(300):
@@ -228,42 +327,16 @@ class TypedLength(unittest.TestCase):
         with self.assertRaisesRegex(kilix.KilixError, "too long"):
             resolve(Action("run_in_pane", {"pane": "name:build",
                                            "command": "x" * (kilix.MAX_TYPED + 1)}))
-        step = resolve(Action("run_in_pane", {"pane": "name:build",
-                                              "command": "x" * kilix.MAX_TYPED}))
-        self.assertEqual(len(step.commands[1][1]), kilix.MAX_TYPED)
+        with self.assertRaises(kilix.ShellInputUnverified):
+            resolve(Action("run_in_pane", {"pane": "name:build", "command": "x" * kilix.MAX_TYPED}))
 
 
-class ShellInFront(unittest.TestCase):
-    """KN-09 / KN-R2-10: prompt marks are not enough; the state kilix reports
-    out of band must agree."""
-
-    def run_into(self, **changes):
-        tree = copy.deepcopy(desktop())
-        build = tree[0]["tabs"][2]["windows"][1]
-        build.update(changes)
-        return resolve(Action("run_in_pane", {"pane": "name:build", "command": "ls"}), tree=tree)
-
-    def test_the_alternate_screen_or_a_foreground_program_refuses_typing(self):
-        with self.assertRaisesRegex(kilix.KilixError, "not at a shell prompt"):
-            self.run_into(in_alternate_screen=True)
-        with self.assertRaisesRegex(kilix.KilixError, "not at a shell prompt"):
-            self.run_into(foreground_processes=[{"cmdline": ["python3"], "pid": 1}])
-        self.run_into(foreground_processes=[{"cmdline": ["-bash"], "pid": 1}])   # a login shell
-
+class ExactTitle(unittest.TestCase):
     def test_an_exact_title_wins_over_a_whole_word_match(self):           # R17
         tree = kilix.Tree([{"id": 1, "is_active": True, "is_focused": True, "tabs": [
             tab(10, "a", [window(100, "notes", "bash", active=True)], active=True),
             tab(20, "b", [window(200, "old notes", "bash", active=True)])]}])
         self.assertEqual(tree.pane("name:notes")["id"], 100)
-
-
-class ShellInFrontStrict(ShellInFront):
-    def test_a_program_beside_the_shell_or_no_report_refuses(self):   # R3 K02, KN-R3-07
-        with self.assertRaisesRegex(kilix.KilixError, "not at a shell prompt"):
-            self.run_into(foreground_processes=[{"cmdline": ["bash"], "pid": 1},
-                                                {"cmdline": ["python3"], "pid": 2}])
-        with self.assertRaisesRegex(kilix.KilixError, "not at a shell prompt"):
-            self.run_into(foreground_processes=[])
 
 
 class AsciiTabNumbers(unittest.TestCase):
@@ -349,9 +422,10 @@ class ReviewR6Resolution(unittest.TestCase):
 
     def test_a_whole_word_typing_target_is_fuzzy(self):                   # F03
         def rename(d): d[0]["tabs"][2]["windows"][2]["title"] = "api server"
-        step = kilix.resolve(Action("run_in_pane", {"pane": "name:api", "command": "make"}),
-                             self.tree(rename))
-        self.assertTrue(step.fuzzy)
+        tree = self.tree(rename)
+        with self.assertRaisesRegex(kilix.ShellInputUnverified, "pane 302"):
+            kilix.resolve(Action("run_in_pane", {"pane": "name:api", "command": "make"}), tree)
+        self.assertTrue(tree.fuzzy)
 
     def test_every_keyword_titled_tab_is_ambiguous_in_any_case(self):     # K01, K02
         for title, ref in (("previous", "previous"), ("Last", "last"), ("NEXT", "next")):
@@ -375,49 +449,6 @@ class ReviewR6Resolution(unittest.TestCase):
     def test_a_lowercase_name_keeps_the_local_pane_first(self):          # N01
         def twin(d): d[0]["tabs"][1]["windows"][1]["title"] = "build"
         self.assertEqual(self.tree(twin).pane("name:build")["id"], 301)
-
-
-class StillAtPrompt(unittest.TestCase):
-    """R6 mutants R02-R04: the re-read before typing checks both signals and
-    fails closed."""
-
-    def setUp(self):
-        os.environ["KITTY_WINDOW_ID"] = "300"
-        self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
-
-    def check(self, **changes):
-        from unittest import mock
-        data = copy.deepcopy(desktop())
-        data[0]["tabs"][2]["windows"][1].update(changes)
-        with mock.patch.object(kilix, "snapshot", return_value=kilix.Tree(data)):
-            return kilix.still_at_prompt(301)
-
-    def test_both_signals_are_needed(self):
-        self.assertTrue(self.check())
-        self.assertFalse(self.check(at_prompt=False))                                    # R03
-        self.assertFalse(self.check(foreground_processes=[{"cmdline": ["ssh", "h"], "pid": 1}]))   # R02
-
-    def test_a_plain_sh_pane_is_ready_on_the_out_of_band_signals(self):
-        sh = [{"cmdline": ["sh"], "pid": 1}]
-        self.assertTrue(self.check(at_prompt=False, foreground_processes=sh))
-        self.assertTrue(self.check(at_prompt=False, foreground_processes=[{"cmdline": ["-dash"], "pid": 1}]))
-        # Still refused: a program in front, the alternate screen, or an
-        # integrable shell that reports no prompt.
-        self.assertFalse(self.check(at_prompt=False, foreground_processes=sh + [{"cmdline": ["vim"], "pid": 2}]))
-        self.assertFalse(self.check(at_prompt=False, foreground_processes=sh, in_alternate_screen=True))
-        self.assertFalse(self.check(at_prompt=False, foreground_processes=[{"cmdline": ["bash"], "pid": 1}]))
-
-    def test_a_failed_read_is_not_ready(self):                                          # R04
-        import needle_cli
-        from unittest import mock
-        with FakeKilix(desktop()) as fake, \
-                mock.patch.object(kilix, "still_at_prompt", side_effect=kilix.KilixError("gone")):
-            record = needle_cli.run_calls("run make in the build pane",
-                                          [{"name": "run_in_pane",
-                                            "arguments": {"pane": "build", "command": "make"}}],
-                                          needle_cli.Options(assume_yes=True))
-            self.assertEqual(fake.calls(), [])
-        self.assertEqual(record["items"][0]["outcome"], "unresolved")
 
 
 class ReviewR9Resolution(unittest.TestCase):

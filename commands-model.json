@@ -24,18 +24,10 @@
       "sha256": "571c0295ffbb60b79627a8956e2990826448eee7678b8d9a1e37c82bbf779f4c"
     },
     "notices/NOTICE.txt": {
-      "bytes": 1545,
-      "sha256": "65e4cd26f6f63d2ad45c64df2a6876bc33b17c4af5272c90bd44dd072b0e6601"
-    },
-    "runtime/libggml-base.so": {
-      "bytes": 897792,
-      "sha256": "2c6ac9a8ae7c1455382c50587fe7d275e0607dfdaec4dcdb18689f31f6174c65"
+      "bytes": 2031,
+      "sha256": "ad951c9680c6bcb084a38582514b75ae90e0b85fd022495b4a38d2a6c6810a0f"
     },
     "runtime/libggml-base.so.0": {
-      "bytes": 897792,
-      "sha256": "2c6ac9a8ae7c1455382c50587fe7d275e0607dfdaec4dcdb18689f31f6174c65"
-    },
-    "runtime/libggml-base.so.0.27.0": {
       "bytes": 897792,
       "sha256": "2c6ac9a8ae7c1455382c50587fe7d275e0607dfdaec4dcdb18689f31f6174c65"
     },
@@ -99,15 +91,7 @@
       "bytes": 319776,
       "sha256": "e28139e2d982fb057b88d243e5b2e9d72c52f8b98ae910b1cf751240ef1f9803"
     },
-    "runtime/libggml.so": {
-      "bytes": 51040,
-      "sha256": "8643a58bb37af6fb153e2ea98b48efa227855725ee51c05f4ca76b9867956463"
-    },
     "runtime/libggml.so.0": {
-      "bytes": 51040,
-      "sha256": "8643a58bb37af6fb153e2ea98b48efa227855725ee51c05f4ca76b9867956463"
-    },
-    "runtime/libggml.so.0.27.0": {
       "bytes": 51040,
       "sha256": "8643a58bb37af6fb153e2ea98b48efa227855725ee51c05f4ca76b9867956463"
     },
@@ -123,15 +107,7 @@
       "bytes": 259600,
       "sha256": "2cdd7c33a556ea1b7f395e9d07ae4e36738fe7bbcb1d9fbe2561d6c611b5d04d"
     },
-    "runtime/libllama-common.so": {
-      "bytes": 6499104,
-      "sha256": "462f7e9ce1c4c537533f1d4530b37201452599d90128c3c602507b315934e795"
-    },
     "runtime/libllama-common.so.0": {
-      "bytes": 6499104,
-      "sha256": "462f7e9ce1c4c537533f1d4530b37201452599d90128c3c602507b315934e795"
-    },
-    "runtime/libllama-common.so.0.7.0": {
       "bytes": 6499104,
       "sha256": "462f7e9ce1c4c537533f1d4530b37201452599d90128c3c602507b315934e795"
     },
@@ -155,27 +131,11 @@
       "bytes": 7533552,
       "sha256": "9119be58c6ffa251c824cdf51677215735d6f4bdab131b17e7e549ff4e1ddcf1"
     },
-    "runtime/libllama.so": {
-      "bytes": 5095048,
-      "sha256": "522213ae6b6019ba8d2673e9254990c52f0a1a5fb047c75bfb93be1b34fad839"
-    },
     "runtime/libllama.so.0": {
       "bytes": 5095048,
       "sha256": "522213ae6b6019ba8d2673e9254990c52f0a1a5fb047c75bfb93be1b34fad839"
     },
-    "runtime/libllama.so.0.7.0": {
-      "bytes": 5095048,
-      "sha256": "522213ae6b6019ba8d2673e9254990c52f0a1a5fb047c75bfb93be1b34fad839"
-    },
-    "runtime/libmtmd.so": {
-      "bytes": 1938632,
-      "sha256": "5dc23ec9996bacb9d2791e06848cce30e33901d131a0c61f9cf2b821a587b17e"
-    },
     "runtime/libmtmd.so.0": {
-      "bytes": 1938632,
-      "sha256": "5dc23ec9996bacb9d2791e06848cce30e33901d131a0c61f9cf2b821a587b17e"
-    },
-    "runtime/libmtmd.so.0.7.0": {
       "bytes": 1938632,
       "sha256": "5dc23ec9996bacb9d2791e06848cce30e33901d131a0c61f9cf2b821a587b17e"
     },
@@ -184,7 +144,7 @@
       "sha256": "3f2b53013c2eb596c8aca87e4740240a41f95bcebf72e61084d6d5ba0db761cc"
     }
   },
-  "version": "lfm2-kilix-commands-20261106-v9",
+  "version": "lfm2-kilix-commands-20261115-v10",
   "platform": "linux-x86_64",
   "role": "default Kilix Ask command model",
   "weight_version": "lfm2-kilix-v5e1-wse-20261106.9",
@@ -198,5 +158,9 @@
       8110
     ],
     "internal_tensors_changed": false
+  },
+  "packaging": {
+    "parent_version": "lfm2-kilix-commands-20261106-v9",
+    "change": "each versioned runtime library is shipped once, under its SONAME; model and remaining runtime files are byte-identical"
   }
 }

@@ -1,7 +1,8 @@
-"""Bounded immutable-prefix reads of explicit regular-file log sources."""
+"""Bounded snapshots of explicit regular-file log sources."""
 from __future__ import annotations
 
 import hashlib
+from collections import deque
 import importlib.util
 from pathlib import Path
 import json
@@ -16,6 +17,9 @@ from .normalize import stable_id
 from .schema import DEFAULT_MAX_BYTES, RECORD_SCHEMA
 from .terminal import plain_lines
 
+HEADER_BYTES = 1024 * 1024
+MAX_EXPANDED_BYTES = 1024 * 1024 * 1024
+
 
 class SourceError(Exception):
     def __init__(self, code: str, message: str):
@@ -23,9 +27,30 @@ class SourceError(Exception):
         self.code = code
 
 
-def _readers():
-    """Load the pinned adapter by path, independent of installed packages."""
-    adapter = Path(__file__).resolve().parents[1] / "third_party" / "kilix-tui-utils" / "src" / "kilix_rollout" / "records.py"
+PACKAGED_RECORDS = Path("/usr/share/kilix-tui-utils/src/kilix_rollout/records.py")
+PACKAGED_REPLAY = Path("/usr/share/kilix-transcript-clean/src/kilix_transcript_clean")
+
+
+def _records_path() -> Path:
+    """The rollout adapter: the installed package, then the checkout submodule."""
+    if PACKAGED_RECORDS.is_file():
+        return PACKAGED_RECORDS
+    return (Path(__file__).resolve().parents[1] / "third_party" / "kilix-tui-utils"
+            / "src" / "kilix_rollout" / "records.py")
+
+
+def _replay_package() -> Path:
+    """The screen replay package: the installed tree, then the checkout submodule."""
+    if (PACKAGED_REPLAY / "__init__.py").is_file():
+        return PACKAGED_REPLAY
+    return (Path(__file__).resolve().parents[1] / "third_party" / "kilix-transcript-clean"
+            / "src" / "kilix_transcript_clean")
+
+
+def _readers(adapter: Path | None = None):
+    """Load the pinned adapter by path, independent of an ambient import path."""
+    if adapter is None:
+        adapter = _records_path()
     if not adapter.is_file():
         raise SourceError("adapter_unavailable", "pinned kilix_rollout.records is unavailable")
     try:
@@ -51,8 +76,7 @@ def _replayer():
     loaded = sys.modules.get(_REPLAY_MODULE)
     if loaded is not None:
         return loaded.clean_bytes
-    package = (Path(__file__).resolve().parents[1] / "third_party" / "kilix-transcript-clean"
-               / "src" / "kilix_transcript_clean")
+    package = _replay_package()
     if not (package / "__init__.py").is_file():
         return None
     try:
@@ -104,14 +128,14 @@ def _open_bound(path: str, binding: dict) -> tuple[int, int]:
         raise SourceError("source_changed", "discovered source path changed") from exc
 
 
-def _read_prefix(fd: int, size: int, deadline: float) -> bytes:
+def _read_prefix(fd: int, size: int, deadline: float, *, start: int = 0) -> bytes:
     parts = []
     offset = 0
     while offset < size:
         if time.monotonic() > deadline:
             raise SourceError("source_timeout", "source read exceeded deadline")
         try:
-            part = os.pread(fd, min(65536, size - offset), offset)
+            part = os.pread(fd, min(65536, size - offset), start + offset)
         except OSError as exc:
             raise SourceError("source_read_failed", str(exc)) from exc
         if not part:
@@ -121,7 +145,68 @@ def _read_prefix(fd: int, size: int, deadline: float) -> bytes:
     return b"".join(parts)
 
 
-def _decompress(compressed: bytes, max_bytes: int, deadline: float) -> tuple[bytes, bool]:
+def _recent_lines(data: bytes, start: int, max_bytes: int) -> tuple[bytes, int]:
+    # The extra byte before the window tells us whether it starts on a row
+    # boundary. Never turn a fragment into an invalid JSON record or citation.
+    if start or len(data) > max_bytes:
+        cut = data.find(b"\n") + 1
+        if not cut:
+            cut = len(data)
+        return data[cut:], start + cut
+    return data, start
+
+
+def _identity(provider: str, row: dict) -> str:
+    value = None
+    if provider == "claude":
+        value = row.get("sessionId")
+    elif provider == "codex" and row.get("type") == "session_meta":
+        payload = row.get("payload")
+        value = payload.get("id") if isinstance(payload, dict) else None
+    elif provider == "grok":
+        params = row.get("params")
+        value = params.get("sessionId") if isinstance(params, dict) else None
+    elif provider == "omp" and row.get("type") == "session":
+        value = row.get("id")
+    return value if isinstance(value, str) and value else ""
+
+
+def _accept_identity(provider: str, row: dict, identities: set[str]) -> bool:
+    identity = _identity(provider, row)
+    if not identity:
+        return True
+    if identities and identity not in identities:
+        return False
+    identities.add(identity)
+    if provider == "codex":
+        # Forks copy their ancestor's rollout, including session_meta. Only an
+        # already accepted header can declare that ancestry; parent_thread_id
+        # alone describes a worker relationship, not inherited history.
+        parent = row["payload"].get("forked_from_id")
+        if isinstance(parent, str) and parent:
+            identities.add(parent)
+    return True
+
+
+def _header_identity(provider: str, data: bytes, *, lineage: set[str] | None = None) -> str:
+    identities = lineage if lineage is not None else set()
+    first = ""
+    for line in data.split(b"\n")[:-1]:
+        try:
+            row = json.loads(line)
+        except (ValueError, RecursionError):
+            continue
+        if isinstance(row, dict):
+            value = _identity(provider, row)
+            if value:
+                if not _accept_identity(provider, row, identities):
+                    raise SourceError("session_conflict", "conflicting session identities in source header")
+                first = first or value
+    return first
+
+
+def _decompress(compressed: bytes, max_bytes: int, deadline: float, *, recent: bool = False
+                ) -> tuple[bytes, bool, int, int, bytes]:
     if not (compressed.startswith(b"\x28\xb5\x2f\xfd") or
             (len(compressed) >= 4 and 0x184D2A50 <= int.from_bytes(compressed[:4], "little") <= 0x184D2A5F)):
         raise SourceError("invalid_archive", "source is not a zstd archive")
@@ -135,7 +220,9 @@ def _decompress(compressed: bytes, max_bytes: int, deadline: float) -> tuple[byt
     except OSError as exc:
         snapshot_file.close()
         raise SourceError("unsupported_archive", f"zstd unavailable: {exc}") from exc
-    parts = []
+    parts = deque()
+    header = bytearray()
+    retained = 0
     total = 0
     limited = False
     try:
@@ -146,19 +233,32 @@ def _decompress(compressed: bytes, max_bytes: int, deadline: float) -> tuple[byt
                 raise SourceError("source_timeout", "archive decompression exceeded deadline")
             if not select.select([proc.stdout], [], [], wait)[0]:
                 raise SourceError("source_timeout", "archive decompression exceeded deadline")
-            chunk = os.read(proc.stdout.fileno(), min(65536, max_bytes + 1 - total))
+            chunk = os.read(proc.stdout.fileno(), 65536 if recent else min(65536, max_bytes + 1 - total))
             if not chunk:
                 break
             parts.append(chunk)
             total += len(chunk)
+            if recent:
+                header.extend(chunk[:max(0, HEADER_BYTES - len(header))])
+                retained += len(chunk)
+                while parts and retained - len(parts[0]) >= max_bytes + 1:
+                    retained -= len(parts.popleft())
+                if total > MAX_EXPANDED_BYTES:
+                    raise SourceError("source_too_large", "archive expansion exceeds the recent-read bound")
+                continue
             if total > max_bytes:
                 limited = True
                 break
         if limited:
-            return b"".join(parts)[:max_bytes], True
+            return b"".join(parts)[:max_bytes], True, 0, max_bytes, b""
         if proc.wait(timeout=max(0.01, deadline - time.monotonic())):
             raise SourceError("invalid_archive", "zstd decompression failed")
-        return b"".join(parts), False
+        data = b"".join(parts)
+        if recent:
+            data = data[-(max_bytes + 1):]
+            data, start = _recent_lines(data, total - len(data), max_bytes)
+            return data, start > 0, start, total, bytes(header)
+        return data, False, 0, total, b""
     except subprocess.TimeoutExpired as exc:
         raise SourceError("source_timeout", "archive decompression exceeded deadline") from exc
     finally:
@@ -172,13 +272,15 @@ def _decompress(compressed: bytes, max_bytes: int, deadline: float) -> tuple[byt
 
 def _read_source_once(path: str, provider: str, *, max_bytes: int = DEFAULT_MAX_BYTES,
                       binding: dict | None = None) -> dict:
-    """Read a fixed prefix and export records with replayable byte/pointer origins.
+    """Read a fixed window and export records with replayable byte/pointer origins.
 
-    Providers: claude, codex, raw. Archives may end in .zst. Errors in a valid
-    file are returned in the result; invalid source arguments raise SourceError.
+    Providers: claude, codex, grok (updates.jsonl), omp (also qwen), raw. Archives
+    may end in .zst. Errors in a valid file are returned in the result; invalid
+    source arguments raise SourceError.
     """
-    if not isinstance(provider, str) or provider not in {"claude", "codex", "raw"}:
+    if not isinstance(provider, str) or provider not in {"claude", "codex", "grok", "omp", "qwen", "raw"}:
         raise SourceError("unsupported_provider", f"unsupported provider: {provider}")
+    provider = "omp" if provider == "qwen" else provider
     if not isinstance(max_bytes, int) or isinstance(max_bytes, bool) or max_bytes < 1:
         raise SourceError("invalid_limit", "max_bytes must be a positive integer")
     try:
@@ -205,11 +307,23 @@ def _read_source_once(path: str, provider: str, *, max_bytes: int = DEFAULT_MAX_
         if archive and snapshot > max_bytes * 2:
             raise SourceError("source_too_large", "compressed archive exceeds input bound")
         deadline = time.monotonic() + 30
-        read_size = snapshot if archive else min(snapshot, max_bytes)
-        compressed = _read_prefix(fd, read_size, deadline)
-        # A second pass detects in-place mutation of the captured prefix.
-        if compressed != _read_prefix(fd, read_size, deadline):
-            raise SourceError("source_changed", "source prefix changed during read")
+        recent = provider != "raw"
+        start = max(0, snapshot - max_bytes - 1) if recent and not archive else 0
+        read_size = snapshot if archive else min(snapshot, max_bytes + int(recent))
+        if start:
+            compressed = _read_prefix(fd, read_size, deadline, start=start)
+            verify = _read_prefix(fd, read_size, deadline, start=start)
+        else:
+            compressed = _read_prefix(fd, read_size, deadline)
+            verify = _read_prefix(fd, read_size, deadline)
+        if compressed != verify:
+            raise SourceError("source_changed", "source window changed during read")
+        header = b""
+        if recent and not archive and snapshot > max_bytes:
+            header_size = min(snapshot, HEADER_BYTES)
+            header = _read_prefix(fd, header_size, deadline)
+            if header != _read_prefix(fd, header_size, deadline):
+                raise SourceError("source_changed", "source header changed during read")
         after = os.fstat(fd)
         try:
             named = (os.stat(Path(binding["relative_path"]).name, dir_fd=parent_fd,
@@ -218,12 +332,22 @@ def _read_source_once(path: str, provider: str, *, max_bytes: int = DEFAULT_MAX_
             raise SourceError("source_changed", "source path disappeared") from exc
         if (before.st_dev, before.st_ino) != (named.st_dev, named.st_ino) or (before.st_dev, before.st_ino) != (after.st_dev, after.st_ino) or after.st_size < snapshot or (after.st_size == snapshot and (after.st_mtime_ns != before.st_mtime_ns or after.st_ctime_ns != before.st_ctime_ns)):
             raise SourceError("source_changed", "source replaced or truncated during read")
-        data, limited = _decompress(compressed, max_bytes, deadline) if archive else (compressed, snapshot > max_bytes)
+        if archive:
+            data, limited, start, total, header = _decompress(compressed, max_bytes, deadline, recent=recent)
+        elif recent:
+            data, start = _recent_lines(compressed, start, max_bytes)
+            limited, total = start > 0, snapshot
+        else:
+            data, limited, total = compressed, snapshot > max_bytes, snapshot
+        lineage = set()
+        identity = _header_identity(provider, header, lineage=lineage) if start else ""
         digest = hashlib.sha256(compressed).hexdigest()
         source_id = stable_id("src-", os.path.abspath(path), provider, before.st_dev, before.st_ino)
         # A full-snapshot generation changes on both rewrites and appends.
-        generation = stable_id("gen-", before.st_dev, before.st_ino, digest, snapshot)
-        source = {"source_id": source_id, "session_id": "", "generation": generation,
+        generation = stable_id("gen-", before.st_dev, before.st_ino, digest, snapshot,
+                               start, hashlib.sha256(header).hexdigest(),
+                               before.st_mtime_ns, before.st_ctime_ns)
+        source = {"source_id": source_id, "session_id": identity, "generation": generation,
                   "path": os.path.abspath(path), "provider": provider, "digest": digest,
                   "size": snapshot, "device": before.st_dev, "inode": before.st_ino,
                   "mtime_ns": before.st_mtime_ns, "compressed_digest": digest if archive else None,
@@ -231,13 +355,14 @@ def _read_source_once(path: str, provider: str, *, max_bytes: int = DEFAULT_MAX_
         records = []
         errors = []
         coverage = {"complete": True, "processed_bytes": 0,
-                    "snapshot_bytes": len(data) if archive else snapshot,
+                    "snapshot_bytes": total, "window_start": start, "window_end": start + len(data),
+                    "window": "recent" if recent else "prefix",
                     "gaps": [], "excluded": []}
         if limited:
             coverage["complete"] = False
-            coverage["gaps"].append({"code": "byte_limit", "byte_start": len(data),
-                                      "byte_end": None if archive else snapshot,
-                                      "message": "source byte limit reached"})
+            coverage["gaps"].append({"code": "byte_limit", "byte_start": 0 if recent else len(data),
+                                      "byte_end": start if recent else (None if archive else snapshot),
+                                      "message": "older history omitted from recent window" if recent else "source byte limit reached"})
             errors.append({"code": "byte_limit", "message": "source byte limit reached"})
         def add_record(item, start, end, sequence, origin):
             # Replayed lines all span the whole snapshot, so their position in
@@ -289,16 +414,16 @@ def _read_source_once(path: str, provider: str, *, max_bytes: int = DEFAULT_MAX_
                                        {"replay": {"line": sequence, "program": section.provider}})
                             sequence += 1
                     coverage["processed_bytes"] = len(data)
-            for seq, (start, end, value) in enumerate(lines):
+            for seq, (line_start, end, value) in enumerate(lines):
                 if time.monotonic() > deadline:
-                    coverage["gaps"].append({"code": "source_timeout", "byte_start": start,
+                    coverage["gaps"].append({"code": "source_timeout", "byte_start": line_start,
                                              "byte_end": len(data), "message": "normalization exceeded deadline"})
                     errors.append({"code": "source_timeout", "message": "normalization exceeded deadline"})
                     coverage["complete"] = False
                     break
                 add_record({"timestamp": None, "timestamp_basis": "unknown", "role": "unknown",
                             "channel": "message", "turn_id": None, "tool_call_id": None,
-                            "text": value}, start, end, seq, {"spans": [{"byte_start": start, "byte_end": end - 1}]})
+                            "text": value}, line_start, end, seq, {"spans": [{"byte_start": line_start, "byte_end": end - 1}]})
                 coverage["processed_bytes"] = end
             coverage["gaps"].extend(gaps)
             if gaps:
@@ -306,13 +431,13 @@ def _read_source_once(path: str, provider: str, *, max_bytes: int = DEFAULT_MAX_
                 errors.extend({"code": gap["code"], "message": gap["message"]} for gap in gaps)
         else:
             adapt_record = _readers()
-            offset = 0
+            offset = start
             sequence = 0
             for line in data.splitlines(keepends=True):
                 end = offset + len(line)
                 if time.monotonic() > deadline:
                     coverage["gaps"].append({"code": "source_timeout", "byte_start": offset,
-                                             "byte_end": len(data), "message": "normalization exceeded deadline"})
+                                             "byte_end": start + len(data), "message": "normalization exceeded deadline"})
                     errors.append({"code": "source_timeout", "message": "normalization exceeded deadline"})
                     coverage["complete"] = False
                     break
@@ -335,20 +460,14 @@ def _read_source_once(path: str, provider: str, *, max_bytes: int = DEFAULT_MAX_
                     continue
                 if time.monotonic() > deadline:
                     coverage["gaps"].append({"code": "source_timeout", "byte_start": offset,
-                                             "byte_end": len(data), "message": "normalization exceeded deadline"})
+                                             "byte_end": start + len(data), "message": "normalization exceeded deadline"})
                     errors.append({"code": "source_timeout", "message": "normalization exceeded deadline"})
                     coverage["complete"] = False
                     break
-                identity = None
-                if provider == "claude" and isinstance(row.get("sessionId"), str) and row["sessionId"]:
-                    identity = row["sessionId"]
-                if provider == "codex" and row.get("type") == "session_meta" and isinstance(row.get("payload"), dict):
-                    value = row["payload"].get("id")
-                    if isinstance(value, str) and value:
-                        identity = value
-                if identity and source["session_id"] and identity != source["session_id"]:
+                identity = _identity(provider, row)
+                if not _accept_identity(provider, row, lineage):
                     coverage["gaps"].append({"code": "session_conflict", "byte_start": offset,
-                                             "byte_end": len(data), "message": "conflicting session identity; remaining rows omitted"})
+                                             "byte_end": start + len(data), "message": "conflicting session identity; remaining rows omitted"})
                     errors.append({"code": "session_conflict", "message": "conflicting session identity; remaining rows omitted"})
                     coverage["complete"] = False
                     break
@@ -356,8 +475,8 @@ def _read_source_once(path: str, provider: str, *, max_bytes: int = DEFAULT_MAX_
                     if records:
                         prior_spans = sorted({(record["origin"]["byte_start"], record["origin"]["byte_end"])
                                               for record in records})
-                        for start, stop in prior_spans:
-                            coverage["gaps"].append({"code": "identity_unknown", "byte_start": start,
+                        for prior_start, stop in prior_spans:
+                            coverage["gaps"].append({"code": "identity_unknown", "byte_start": prior_start,
                                                      "byte_end": stop,
                                                      "message": "row preceded validated session identity"})
                         errors.append({"code": "identity_unknown",
@@ -373,7 +492,7 @@ def _read_source_once(path: str, provider: str, *, max_bytes: int = DEFAULT_MAX_
                         {"code": "unsupported_record", "message": f"adapter rejected malformed row: {type(exc).__name__}"}]}
                 if time.monotonic() > deadline:
                     coverage["gaps"].append({"code": "source_timeout", "byte_start": offset,
-                                             "byte_end": len(data), "message": "normalization exceeded deadline"})
+                                             "byte_end": start + len(data), "message": "normalization exceeded deadline"})
                     errors.append({"code": "source_timeout", "message": "normalization exceeded deadline"})
                     coverage["complete"] = False
                     break
@@ -388,11 +507,12 @@ def _read_source_once(path: str, provider: str, *, max_bytes: int = DEFAULT_MAX_
                     coverage["gaps"].append({"code": err["code"], "byte_start": offset,
                                              "byte_end": end, "message": err["message"]})
                     coverage["complete"] = False
-                coverage["processed_bytes"] = end
+                coverage["processed_bytes"] = end - start
                 offset = end
         if archive:
             source["decompressed_digest"] = hashlib.sha256(data).hexdigest()
-            source["decompressed_size"] = len(data)
+            source["decompressed_size"] = total
+            source["decompressed_window_start"] = start
         # Session identity is part of the source key; a formerly unidentified
         # snapshot cannot collide with a later validated session in the index.
         source_id = stable_id("src-", os.path.abspath(path), provider,
@@ -409,7 +529,7 @@ def _read_source_once(path: str, provider: str, *, max_bytes: int = DEFAULT_MAX_
 
 def read_source(path: str, provider: str, *, max_bytes: int = DEFAULT_MAX_BYTES,
                 binding: dict | None = None) -> dict:
-    """Read one immutable prefix, retrying one changed-generation race."""
+    """Read one snapshot, retrying one changed-generation race."""
     for attempt in range(2):
         try:
             return _read_source_once(path, provider, max_bytes=max_bytes, binding=binding)

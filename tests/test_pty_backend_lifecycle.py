@@ -132,8 +132,15 @@ def interrupt_fixture():
             assert cancelled and observed_exit, "real transport did not propagate cancellation"
             assert time.monotonic() - start < 4, "cancellation cleanup exceeded its bound"
             helper, leader = map(int, identities.read_text().split())
-            exited = os.waitid(os.P_PID, helper, os.WEXITED | os.WNOHANG | os.WNOWAIT)
-            assert exited is not None, "owned pipe-holding helper remained running"
+            # Pipe EOF can reach the transport before the kernel publishes the
+            # adopted helper's exit status. Keep the same cleanup deadline.
+            while time.monotonic() - start < 4:
+                exited = os.waitid(os.P_PID, helper, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+                if exited is not None:
+                    break
+                time.sleep(0.01)
+            else:
+                raise AssertionError("owned pipe-holding helper remained running")
             assert exited.si_code == os.CLD_KILLED and exited.si_status == signal.SIGKILL
         finally:
             signal.setitimer(signal.ITIMER_REAL, 0)

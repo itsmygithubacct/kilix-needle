@@ -4,7 +4,7 @@ import os
 import sys
 import unittest
 
-from support import FakeKilix, desktop
+from support import PROMPT, FakeKilix, desktop, verified
 import needle_cli
 
 
@@ -128,7 +128,7 @@ class Handle(unittest.TestCase):
             "run q in the htop pane", call("run_in_pane", pane="htop", command="q"),
             tty=False, yes=True)
         self.assertEqual((status, calls), (1, []))
-        self.assertIn("not at a shell prompt", out)
+        self.assertIn("cannot verify the shell input state", out)
 
     def test_dry_run_runs_nothing(self):
         status, calls, out, _ = self.run_request(
@@ -301,7 +301,7 @@ class OneSnapshotPerRequest(unittest.TestCase):
 
 
 class ReviewR5Run(unittest.TestCase):
-    """KN-R5-01 (fuzzy never waived), KN-R5-02 (prompt re-read), N04 (own-guard breaks)."""
+    """Confirmation, unverified shell input and the agent's own-pane guard."""
 
     def setUp(self):
         os.environ["KITTY_WINDOW_ID"] = "300"
@@ -318,24 +318,20 @@ class ReviewR5Run(unittest.TestCase):
             self.assertEqual(fake.calls(), [])
         self.assertIn("word of its title", record["items"][0]["reason"])
 
-    def test_a_second_command_after_a_program_started_is_not_typed(self):
-        from unittest import mock
-        import copy, kilix
-        before = desktop()
-        after = copy.deepcopy(before)
-        build = after[0]["tabs"][2]["windows"][1]
-        build.update(at_prompt=False, foreground_processes=[{"cmdline": ["vim", "notes.txt"], "pid": 1}])
-        sent = []
-        with mock.patch.object(kilix, "snapshot",
-                               side_effect=[kilix.Tree(before), kilix.Tree(before), kilix.Tree(after)]), \
-                mock.patch.object(kilix, "perform", side_effect=sent.append):
-            record = needle_cli.run_calls(
-                "run vim notes.txt in the build pane and run make in the build pane",
-                [call("run_in_pane", pane="build", command="vim notes.txt"),
-                 call("run_in_pane", pane="build", command="make")],
-                needle_cli.Options(assume_yes=True))
-        self.assertEqual(len(sent), 1)
-        self.assertEqual(record["items"][1]["outcome"], "unresolved")
+    def test_confirming_a_visible_prompt_cannot_submit_a_command(self):
+        with FakeKilix(desktop()) as fake:
+            def unexpected_confirmation(question):
+                self.fail(f"offered an unverified command: {question}")
+            for options in (needle_cli.Options(), needle_cli.Options(assume_yes=True),
+                            needle_cli.Options(dry_run=True)):
+                record = needle_cli.run_calls("run pwd in the build pane",
+                                              [call("run_in_pane", pane="build", command="pwd")],
+                                              options, confirm=unexpected_confirmation)
+                item, = record["items"]
+                self.assertEqual((record["status"], item["outcome"], item["code"]),
+                                 (1, "refused", "shell_input_unverified"))
+                self.assertIn("pane 301", item["reason"])
+                self.assertEqual(fake.calls(), [])
 
     def test_an_own_pane_refusal_holds_the_rest_for_an_agent(self):    # N04
         with FakeKilix(desktop()) as fake:
@@ -352,42 +348,15 @@ class ReviewR6Run(unittest.TestCase):
         os.environ["KITTY_WINDOW_ID"] = "300"
         self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
 
-    def test_a_pane_no_longer_at_a_prompt_holds_the_rest(self):          # R05
-        from unittest import mock
-        import copy, kilix
-        before = desktop()
-        after = copy.deepcopy(before)
-        after[0]["tabs"][2]["windows"][1].update(
-            at_prompt=False, foreground_processes=[{"cmdline": ["vim"], "pid": 1}])
-        sent = []
-        with mock.patch.object(kilix, "snapshot",
-                               side_effect=[kilix.Tree(before), kilix.Tree(before), kilix.Tree(after)]), \
-                mock.patch.object(kilix, "perform", side_effect=sent.append):
-            record = needle_cli.run_calls(
-                "run vim in the build pane and run make in the build pane and close tab 2",
-                [call("run_in_pane", pane="build", command="vim"),
-                 call("run_in_pane", pane="build", command="make"), call("close_tab", tab="2")],
-                needle_cli.Options(assume_yes=True), confirm=lambda _q: False)
-        self.assertEqual(len(sent), 1)
-        self.assertEqual([i["outcome"] for i in record["items"]], ["done", "unresolved", "skipped"])
-
-
-class FuzzyAtTheGate(unittest.TestCase):
-    """R6 mutant F03 (still alive at R7): the gate, not resolve(), must hold a
-    whole-word typing target."""
-
-    def test_a_whole_word_typing_target_is_not_waived(self):
-        import copy
-        os.environ["KITTY_WINDOW_ID"] = "300"
-        self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
-        tree = copy.deepcopy(desktop())
-        tree[0]["tabs"][2]["windows"][2]["title"] = "api server"
-        with FakeKilix(tree) as fake:
-            record = needle_cli.run_calls("run make in the api pane",
-                                          [call("run_in_pane", pane="api", command="make")],
+    def test_unverified_shell_input_holds_later_actions_on_a_yes_given_in_advance(self):
+        with FakeKilix(desktop()) as fake:
+            record = needle_cli.run_calls("run pwd in the build pane and close tab 2",
+                                          [call("run_in_pane", pane="build", command="pwd"),
+                                           call("close_tab", tab="2")],
                                           needle_cli.Options(assume_yes=True), confirm=lambda _q: False)
             self.assertEqual(fake.calls(), [])
-        self.assertIn("word of its title", record["items"][0]["reason"])
+        self.assertEqual([i["outcome"] for i in record["items"]], ["refused", "skipped"])
+        self.assertIn("earlier action", record["items"][1]["reason"])
 
 
 class ReviewR8Case(unittest.TestCase):
@@ -413,18 +382,20 @@ class ReviewR8Case(unittest.TestCase):
         self.answer = lambda _q: False
         record, sent = self.request(tree, text, calls, assume_yes=True)
         self.assertEqual(sent, [])
-        self.assertEqual([i["outcome"] for i in record["items"]], ["skipped", "skipped"])
-        for item in record["items"]:
-            self.assertIn("another tab has a pane by that name", item["reason"])
-        # A person who sees the target and says yes gets the current tab's pane.
+        typing, closing = record["items"]
+        self.assertEqual(typing["code"], "shell_input_unverified")
+        self.assertEqual(closing["outcome"], "skipped")
+        record, sent = self.request(tree, "close the Build pane", calls[1:], assume_yes=True)
+        self.assertIn("another tab has a pane by that name", record["items"][0]["reason"])
+        self.assertEqual(sent, [])
+        # A person can confirm the close after seeing the selected pane.
         questions = []
         self.answer = lambda q: questions.append(q) or True
         record, sent = self.request(tree, text, calls)
-        self.assertEqual([i["outcome"] for i in record["items"]], ["done", "done"])
-        self.assertTrue(all("301" in q or "build" in q for q in questions), questions)
-        ids = [a for argv, _ in sent for a in argv if a.startswith("--match")]
-        broker = "--match=env:KITTY_PTY_BROKER_SESSION=" + "ab" * 8    # pane 301's
-        self.assertEqual(ids, [broker, broker, broker, "--match=id:301"])
+        self.assertEqual([i["outcome"] for i in record["items"]], ["refused", "done"])
+        self.assertEqual(len(questions), 1)
+        self.assertIn("301", questions[0])
+        self.assertEqual(sent, [(["close-window", "--match=id:301"], None)])
 
 
 class ReviewR9KeywordPane(unittest.TestCase):
@@ -449,3 +420,88 @@ class ReviewR9KeywordPane(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def proven_desktop(prompt=PROMPT):
+    tree = desktop()
+    tree[0]["tabs"][2]["windows"][1]["shell_input"] = verified(prompt)
+    return tree
+
+
+SUBMITTED = b'{"status": "submitted", "prompt_id": "%s", "window_id": 301}\n' % PROMPT.encode()
+SUBMIT = ["shell-submit", "--match=id:301", f"--expect-prompt={PROMPT}"]
+
+
+class VerifiedRun(unittest.TestCase):
+    """A run in an existing pane reaches it only through the guarded submission."""
+
+    def setUp(self):
+        os.environ["KITTY_WINDOW_ID"] = "300"
+        self.addCleanup(os.environ.pop, "KITTY_WINDOW_ID", None)
+
+    def run_pwd(self, fake, options, confirm=lambda _q: False, extra=()):
+        return needle_cli.run_calls("run pwd in the build pane" + (" and close tab 2" if extra else ""),
+                                    [call("run_in_pane", pane="build", command="pwd"), *extra],
+                                    options, confirm=confirm)
+
+    def test_a_yes_given_in_advance_submits_exactly_once(self):
+        with FakeKilix(proven_desktop()) as fake:
+            fake.answer(stdout=SUBMITTED)
+            record = self.run_pwd(fake, needle_cli.Options(assume_yes=True, agent=True))
+            self.assertEqual(fake.calls(), [(SUBMIT, b"pwd")])
+        item, = record["items"]
+        self.assertEqual((record["status"], item["outcome"], item["receipt"]["submitted"]), (0, "done", True))
+        self.assertIn("verified empty shell prompt", item["summary"])
+
+    def test_a_dry_run_and_a_declined_question_send_nothing(self):
+        questions = []
+        with FakeKilix(proven_desktop()) as fake:
+            record = self.run_pwd(fake, needle_cli.Options(dry_run=True))
+            self.assertEqual(record["items"][0]["outcome"], "would")
+            record = self.run_pwd(fake, needle_cli.Options(), confirm=lambda q: questions.append(q) or False)
+            self.assertEqual(record["items"][0]["outcome"], "skipped")
+            self.assertEqual(fake.calls(), [])
+        self.assertIn("pane 301", questions[0])
+
+    def test_a_pane_that_changes_while_a_person_confirms_is_refused(self):
+        changed = proven_desktop()
+        changed[0]["tabs"][2]["windows"][1]["pid"] += 1   # another process in the pane
+        with FakeKilix(proven_desktop()) as fake:
+            record = self.run_pwd(fake, needle_cli.Options(),
+                                  confirm=lambda _q: fake.serve(changed) or True,
+                                  extra=[call("close_tab", tab="2")])
+            self.assertEqual(fake.calls(), [])
+        first, = record["items"]   # nothing after a refusal is even resolved
+        self.assertEqual((record["status"], first["outcome"], first["code"], first["cause"]),
+                         (1, "refused", "shell_input_unverified", "stale"))
+        self.assertIn("pane 301", first["reason"])
+
+    def test_a_prompt_that_changes_while_a_person_confirms_is_refused_by_kilix(self):
+        def confirm(_q):
+            # The person typed in the pane, or a command ran: Kilix itself
+            # refuses the planned prompt. The planner has no other way to know.
+            fake.answer(stderr=b"Error: stale: the prompt changed after the request was planned\n", status=1)
+            return True
+        with FakeKilix(proven_desktop()) as fake:
+            record = self.run_pwd(fake, needle_cli.Options(), confirm=confirm)
+            self.assertEqual(fake.calls(), [(SUBMIT, b"pwd")])
+        item, = record["items"]
+        self.assertEqual((item["outcome"], item["code"], item["cause"]), ("refused", "shell_input_unverified", "stale"))
+        self.assertIn("manually", item["reason"])
+
+    def test_a_shell_that_holds_a_draft_refuses_and_nothing_else_runs(self):
+        with FakeKilix(proven_desktop()) as fake:
+            fake.answer(stderr=b"Error: draft: the shell editor already holds input; it was left untouched\n",
+                        status=1)
+            record = self.run_pwd(fake, needle_cli.Options(assume_yes=True), extra=[call("close_tab", tab="2")])
+            self.assertEqual(fake.calls(), [(SUBMIT, b"pwd")])
+        self.assertEqual((record["items"][0]["code"], record["items"][0]["cause"]), ("shell_input_unverified", "draft"))
+        self.assertEqual(len(record["items"]), 1)
+
+    def test_an_unconfirmed_submission_is_a_failure_not_a_refusal(self):
+        with FakeKilix(proven_desktop()) as fake:
+            fake.answer(stderr=b"Error: unconfirmed: the shell claimed the command but did not confirm it\n",
+                        status=1)
+            record = self.run_pwd(fake, needle_cli.Options(assume_yes=True))
+        item, = record["items"]
+        self.assertEqual((item["outcome"], item["code"]), ("failed", "shell_input_unconfirmed"))

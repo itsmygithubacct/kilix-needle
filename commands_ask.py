@@ -8,7 +8,8 @@ import compact_runner
 
 class NoProposal:
     """Keep legacy deterministic jobs available without loading their models."""
-    label = 'grammar only'
+    def __init__(self, label='grammar only'):
+        self.label = label
 
     def reset(self):
         pass
@@ -28,6 +29,7 @@ class Session:
         self.model_only, self.operation_id = model_only, operation_id
         self.host, self.journal = host, journal
         self.decisions, self.operations = {}, {}
+        self.previews = {}
 
     @staticmethod
     def recognizes(request, job=None):
@@ -59,13 +61,18 @@ class Session:
         if not decision.admission.actions:
             return {**metadata, 'status': 1, 'items': [], 'note': decision.admission.reason}
         kwargs = dict(operation_id=operation_id, cwd=self.cwd, host=self.host, journal=self.journal)
-        plan = compact_runner.run(request, decision.calls, dry_run=True, **kwargs)
+        plan = None if dry_run else self.previews.pop(request, None)
+        if plan is None:
+            plan = compact_runner.run(request, decision.calls, dry_run=True, **kwargs)
+        if dry_run:
+            self.previews[request] = plan
         if dry_run or plan['status']:
             return {**plan, **metadata}
         if not assume_yes and not confirm('Run the planned command actions?'):
             return {**plan, **metadata, 'status': 1, 'note': 'not run',
                     'items': [{**item, 'outcome': 'declined'} for item in plan['items']]}
-        return {**compact_runner.run(request, decision.calls, **kwargs), **metadata}
+        return {**compact_runner.run(request, decision.calls, expected_plan=plan['plan_id'], **kwargs),
+                **metadata}
 
 
 def render(record):
@@ -75,6 +82,8 @@ def render(record):
         detail = step.get('kind', '')
         if step.get('args'):
             detail += ' ' + repr(step['args'])
+        if step.get('target'):
+            detail += f" (pane {step['target']['pane_id']})"
         lines.append((item.get('outcome', '') + ': ' + detail).rstrip(': '))
     if record.get('note'):
         lines.append(record['note'])

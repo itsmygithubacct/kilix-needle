@@ -9,6 +9,17 @@ import panes_exact
 
 
 class Forms(unittest.TestCase):
+    def test_close_requires_a_named_target_when_the_last_word_is_a_courtesy(self):
+        for word in ("thanks", "asap", "already", "pls", "kindly"):
+            with self.subTest(word=word):
+                self.assertIsNone(panes_exact.admitted(f"close the pane {word}"))
+                self.assertIsNone(panes_exact.admitted(f"find pane {word} and close it"))
+                self.assertIsNone(panes_exact.admitted(f"type the exact command `pwd` in pane {word} and press Enter"))
+                for target in (f"pane named {word}", f'pane "{word}"', f"the {word} pane"):
+                    parsed = panes_exact.admitted(f"close {target}")
+                    self.assertIsNotNone(parsed, target)
+                    self.assertEqual(parsed[0], [{"name": "close_pane", "arguments": {"pane": word}}])
+
     def test_canonical_commands_become_calls(self):
         cases = {
             "Close the pane titled bench-target in this tab.": ("close_pane", {"pane": "bench-target"}),

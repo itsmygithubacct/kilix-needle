@@ -143,8 +143,9 @@ reported as submitted; it does not imply the recipient completed the task.
 ## Agent harnesses
 
 `kilix-needle mcp` is an MCP server over stdio. It offers `kilix_plan`, which
-resolves a request and runs nothing, and `kilix_act`, which runs it; closing,
-typing and starting a program need `confirm_risky=true`. The plain CLI works
+resolves a request and runs nothing, and `kilix_act`, which runs it. Closing,
+starting a program and a command in an existing pane need `confirm_risky=true`.
+The plain CLI works
 too: `kilix-needle --agent --json --yes REQUEST` prints one JSON record. Don't
 expose it inside omp.sh's Docker sandbox: its network namespace cannot reach
 Kilix's abstract socket.
@@ -165,14 +166,14 @@ What an agent should know (measured in a Codex route benchmark, 2026-09-29):
   Navigation also reads "go to the tab before this one" and "focus whichever
   pane comes next" directly. Next/previous count from the caller's pane or tab
   and wrap at an edge; an ambiguous title still refuses resolution.
-- **A yes given in advance covers these typing forms:** "run 'X' in the NAME
+- **The grammar recognizes existing-pane command requests** such as "run 'X' in the NAME
   pane", "type the command X into pane NAME", with an optional "and press
   Enter", and "In the pane titled NAME, type and press Enter on: X".
-  Missing command text refuses before loading the model.
+  The command runs only at a verified empty prompt
+  ([verified shell input](docs/panes.md#verified-shell-input)). Missing command
+  text refuses before loading the model.
   A plain split also reads "open a new pane directly to the right of the pane
   I am running in and run a shell there" without loading the model.
-- **Plain `sh` panes accept typed commands** when only the shell holds the
-  terminal. `bash`, `zsh` and `fish` still need shell integration's prompt mark.
 - **The agents job accepts an explicit directory**: "start codex in /abs/dir",
   also "an interactive Codex session in a new tab, working in the directory
   /abs/dir. Do not give it a task." The grammar also reads "working directory
@@ -189,37 +190,45 @@ than a Needle call. Needle is for requests in a person's words.
 
 ## Read pane logs
 
-The experimental `logs` command reads recorded evidence without loading an
-action model. It can index Claude and Codex JSONL sources or committed plain
-UTF-8 recording lines. Structured tool output retains its tool role even when
-its text looks like a user message.
+`kilix-needle logs` inventories Claude, Codex, Grok, OMP/Qwen and raw Kilix
+recordings together. It reads local files without an action model or network
+service. Session names come from saved titles, prompts, or the pane's directory
+and command. Lists sort by most recent activity, including live, recent and
+archived recordings.
 
 ```sh
-kilix-needle logs brief --session claude-needle
-kilix-needle logs events --file /path/to/rollout.jsonl --provider codex --json
-kilix-needle logs search --session claude-needle --query "parser" --limit 10
-kilix-needle logs source --event evt-ID --json
-kilix-needle logs cache status
+kilix-needle logs list --json
+kilix-needle logs list --provider codex --query parser
+kilix-needle logs index --json
+kilix-needle logs search --query "parser failure" --json
+kilix-needle logs search --provider omp --query "parser failure" --rank recent --json
+kilix-needle logs search --query "parser failure" --cached --json
+kilix-needle logs brief --session log-INVENTORY_ID --json
+kilix-needle logs events --session SESSION_UUID --limit 100 --json
+kilix-needle logs show rec-RECORD_ID --start 0 --chars 8000 --json
+kilix-needle logs source --event evt-EVENT_ID --json
+kilix-needle logs source --event evt-EVENT_ID --since-cursor CURSOR --json
+kilix-needle logs cache status --json
 kilix-needle logs cache clear
 ```
 
-`--session` selects a pane by ID, coding-session ID, broker ID, or unique title;
-ambiguous selectors fail. `--file` requires an explicit provider: `claude`,
-`codex`, or `raw`. Zstandard archives additionally require `zstd`. The pinned
-`third_party/kilix-tui-utils` submodule supplies structured adapters.
+`--session` accepts an inventory ID, a full session UUID, or a live pane selector.
+UUID searches check the current recording locations, including the Codex archive.
+An inventory ID selects one file even when session IDs are duplicated, and
+`search --cached --session log-INVENTORY_ID` can read its indexed copy offline.
+Other ambiguous selectors fail. `--file` requires `claude`, `codex`, `grok`, `omp`,
+`qwen` (an OMP alias), or `raw`. Grok reads `updates.jsonl`; its session directory
+or sibling `events.jsonl`/`chat_history.jsonl` selects that file. OMP discovery
+uses `$PI_CODING_AGENT_DIR/sessions`, defaulting to `~/.omp/agent/sessions`.
+Zstandard archives require `zstd` and decompress onto the cache disk for
+streamed indexing; citations use decompressed byte offsets. Malformed rows and
+unfinished final rows create explicit coverage gaps. An individual JSONL row
+over 64 MiB is skipped with a `row_too_large` gap; later rows are still indexed.
+An unfinished row is retried when more bytes arrive.
+Codex forks retain the child session's identity and accept copied ancestor
+headers only when that ancestry is explicitly declared in the recording.
 
-A raw pane recording that contains terminal controls is replayed on a virtual
-screen by the pinned `third_party/kilix-transcript-clean` submodule. Records
-are the lines that screen showed, in reading order, without the program's
-status lines and prompt boxes. This covers full-screen programs such as Grok,
-omp and the shell around them. A screen line cannot be traced to one byte
-range, so each replayed record spans the whole snapshot. Its `origin.replay`
-gives its line number and the program that drew it, and the source's `replay`
-says whether the recording's start was cut and whether it carried the pane
-size. Without the submodule, such a recording is reported as a
-`terminal_controls` gap, as before.
-
-Citations, coverage, exit codes, the cache and the limits of raw recordings are
+Indexing, search, instances, the evidence API, the cache and exit codes are
 described in [docs/logs.md](docs/logs.md).
 
 ## The agents job

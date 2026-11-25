@@ -23,7 +23,10 @@ grants no access their own entry points do not.
 
 --interactive (the `kilix ask` launcher verb, the Run dialog, voice) shows the
 route and the plan and acts only on an explicit yes, for every act. Exit status:
-0 when done or nothing to do, 1 when refused, unsure or declined, 2 on a usage error.
+0 when done or nothing to do, 3 when no job takes the request and nothing was
+offered (the route is none, or unsure with no job's plan admitting it), 1 when
+refused, declined, or otherwise not run, 2 on a usage error. --yes without
+--plan, --json, --agent or --job uses the same 3.
 """
 from __future__ import annotations
 
@@ -31,6 +34,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import sys
 
 import history
@@ -43,7 +47,7 @@ PHRASES = {
     "agents": "start codex in /abs/dir",
     "files": "find pdf files in Downloads",
     "system": "show memory",
-    "logs": 'search the session in pane 12 for "error" (structured: kilix_logs_read)',
+    "logs": 'search the session in pane 12 for "error"',
     "tmux": "list sessions (with --socket /abs/socket)",
     "pty": "list sessions",
     "desktop": 'focus window "Notes"',
@@ -86,11 +90,11 @@ class Jobs:
 
     def __init__(self, engine, classify_system, *, confirm, agent: bool,
                  agents_cwd=None, files_cwd=None, under_overlay: bool = False,
-                 commands=None):
+                 commands=None, suggest=None):
         self.engine, self.classify_system = engine, classify_system
         self.confirm, self.agent = confirm, agent
         self.agents_cwd, self.files_cwd, self.under_overlay = agents_cwd, files_cwd, under_overlay
-        self.commands = commands
+        self.commands, self.suggest = commands, suggest
 
     def run(self, job: str, request: str, *, dry_run: bool, assume_yes: bool = False) -> dict:
         import needle_cli
@@ -119,7 +123,8 @@ class Jobs:
                                             model_label=lambda: source["label"])
         if job == "files":
             import files_cli
-            return files_cli.run(request, dry_run=dry_run, cwd=self.files_cwd, agent=self.agent)
+            return files_cli.run(request, dry_run=dry_run, cwd=self.files_cwd, agent=self.agent,
+                                 require_caller_cwd=True)
         if job == "agents":
             record = needle_cli.run_agents_request(self.engine("agents"), request, options,
                                                    self.confirm, cwd=self.agents_cwd)
@@ -151,9 +156,20 @@ def _named(job: str, request: str) -> dict:
         if desktop_windows.in_wsl():
             job, phrase = "windows", _WINDOWS_PHRASE
             cli, tools, what = _WINDOWS
+    if job == "logs":
+        search = router.log_search(request)
+        if search:
+            pane, term = search
+            option = [f"--query={term}"] if term.startswith("-") else ["--query", term]
+            command = shlex.join(["kilix-needle", "logs", "search", "--session", pane, *option])
+            hint = f"{command}  (MCP: {tools})"
+        else:
+            hint = f"{cli} --help  (MCP: {tools}); select a session, or a file and provider"
+    else:
+        hint = f"{cli} {shlex.quote(request)}  (MCP: {tools}); accepted form: {phrase}"
     return {"request": request, "status": 1, "items": [],
             "note": f"this reads as a request for the {job} job ({what}); ask names it but does not run it",
-            "hint": f"{cli} {json.dumps(request)}  (MCP: {tools}); accepted form: {phrase}"}
+            "hint": hint}
 
 
 def _none(request: str) -> dict:
@@ -170,9 +186,91 @@ def _clarify(request: str, candidates: list, note: str = "") -> dict:
                     + "  (two jobs' work goes as two requests)"}
 
 
+_COMMAND_MODELS = ("lfm2", "lfm3", "needle3")
+
+
+def suggester(commands=None):
+    """How Ask suggests a wording for a request that planned nothing, or None
+    when that is off. `commands` is the command session, whose model's own
+    proposal for the request is one source of a wording."""
+    import commands_selection
+    try:
+        value, source = commands_selection.suggest_choice()
+    except (OSError, ValueError):
+        return None
+    if value == "off":
+        return None
+
+    def suggest(request, record=None):
+        import commands_suggest
+        record = record or {}
+        made = record.get("interpretation") if record.get("interpretation") in _COMMAND_MODELS else None
+        backend = made or (commands.backend if commands is not None and commands.backend in _COMMAND_MODELS else None)
+
+        def propose():
+            if made:
+                return record.get("calls")      # the model was already asked; admission refused its proposal
+            decision = commands.decide(request)
+            return decision.calls if decision.source in _COMMAND_MODELS else None
+
+        choose = None
+        if value != "model":
+            try:
+                decider = commands_suggest.Decider(value)
+            except commands_suggest.SuggestError:
+                return None
+            choose = decider.choose
+            if source == "default":
+                # Nobody chose this model: ask it only where the server lists it, and look
+                # that up only once a question is about to be asked.
+                listed = []
+
+                def choose(state, question, options):
+                    if not listed:
+                        listed.append(commands_suggest.available(value))
+                    if not listed[0]:
+                        raise commands_suggest.SuggestError(f"the decision model {value} is not on the local Ollama server")
+                    return decider.choose(state, question, options)
+        found = commands_suggest.suggest(request, choose, propose=propose if backend else None)
+        if not found:
+            return None
+        return {**found, "model": backend if found["source"] == "proposal" else value}
+    return suggest
+
+
+def _suggest(jobs, request: str, record: dict) -> None:
+    """A request that planned and ran nothing may get a wording the command
+    grammar reads. It is offered, never run: sending it is a new request."""
+    suggest = getattr(jobs, "suggest", None)
+    if suggest is None or not record.get("status") or record.get("items") or record.get("plan"):
+        return
+    named, text = labelled(request)
+    if named is not None:
+        return
+    try:
+        found = suggest(text, record)
+    except Exception:       # noqa: BLE001 - a suggestion never breaks a request
+        return
+    if found:
+        record["suggestion"] = found
+        record["hint"] = "  |  ".join(part for part in (f"did you mean: {found['request']}", record.get("hint"))
+                                      if part)
+
+
 def ask(request: str, jobs: Jobs, *, act: bool, assume_yes: bool = False,
         job: str | None = None, route: router.Route | None = None,
         default: str | None = None) -> dict:
+    """`_ask`, and for a request that no job was chosen for and that planned
+    nothing, the suggester's wording when one is configured."""
+    record = _ask(request, jobs, act=act, assume_yes=assume_yes, job=job, route=route, default=default)
+    if job is None and route is None:
+        _suggest(jobs, request, record)
+    return record
+
+
+def _ask(request: str, jobs: Jobs, *, act: bool, assume_yes: bool = False,
+         job: str | None = None, route: router.Route | None = None,
+         default: str | None = None) -> dict:
     """One routed request, as the chosen job's record plus a `route` block.
 
     `job` skips routing; `route` reuses one already made (an interactive act
@@ -184,6 +282,7 @@ def ask(request: str, jobs: Jobs, *, act: bool, assume_yes: bool = False,
     and consent. A clarification or a router error never acts."""
     if not isinstance(request, str) or not request.strip():
         raise ValueError("ask needs a request")
+    given = request
     named, request = labelled(request)
     if named is not None:
         chosen = route.job if route is not None else job
@@ -222,8 +321,14 @@ def ask(request: str, jobs: Jobs, *, act: bool, assume_yes: bool = False,
         elif route.job in router.NAMED:
             record = _named(route.job, request)
         else:
+            # A labelled or --job request that the command session answers is
+            # recorded as the unlabelled one is (the job's own engines record
+            # the rest), with the label kept as given.
+            recorded = commands is not None and commands.recognizes(request)
             with history.routed(route.record()):
                 record = jobs.run(route.job, request, dry_run=not act, assume_yes=assume_yes)
+                if recorded:
+                    _record_unsure(given, record, act, checked=request)
         record["route"] = route.record()
         return record
     if route.stage == "multi":
@@ -263,7 +368,7 @@ def ask(request: str, jobs: Jobs, *, act: bool, assume_yes: bool = False,
             record["status"] = 1
             record["note"] = (f"unsure route: only the {chosen} job's plan admits this, so it was "
                               "planned, not run")
-            record["hint"] = f"to run it, send it to that job: {_CLI[chosen]} {json.dumps(request)} " \
+            record["hint"] = f"to run it, send it to that job: {_CLI[chosen]} {shlex.quote(request)} " \
                              f"(MCP: {_MCP[chosen]})"
     elif len(admitted) == 1:
         route.job = admitted[0]
@@ -273,17 +378,20 @@ def ask(request: str, jobs: Jobs, *, act: bool, assume_yes: bool = False,
         record = _clarify(request, route.candidates,
                           route.note and "the router is unavailable; nothing was run")
     record["route"] = route.record()
-    with history.routed(route.record()):
+    if route.stage == "clarify" and not (admitted or failures or route.note):
+        record["route"]["unmatched"] = True
+    with history.routed(record["route"]):
         _record_unsure(request, record, act)
     return record
 
 
-def _record_unsure(request: str, record: dict, act: bool) -> None:
-    """A stage-2 or clarified request is recorded once, under the job `ask`."""
+def _record_unsure(request: str, record: dict, act: bool, checked: str | None = None) -> None:
+    """A stage-2, clarified or command-session request is recorded once, under
+    the job `ask`. `checked` is the text the job saw, when a label was removed."""
     try:
         options = type("Options", (), {"agent": True, "dry_run": not act, "assume_yes": False})()
         engine = type("Engine", (), {"label": "router"})()
-        history.record("ask", request, None, engine, None, options, record, 0.0)
+        history.record("ask", request, checked, engine, None, options, record, 0.0)
     except Exception:       # noqa: BLE001
         pass
 
@@ -334,7 +442,10 @@ def render(record: dict) -> str:
 
 def explain(request: str) -> str:
     model = router.model()
-    lines = [f"claims: {', '.join(router.claims(request)) or 'none'}"]
+    claims = ["logs"] if router.log_search(request) is not None else router.claims(request)
+    lines = [f"claims: {', '.join(claims) or 'none'}"]
+    if model is None:
+        return "\n".join(lines + ["This package routes by exact grammar."])
     for job, p in model.rank(request)[:4]:
         top = ", ".join(f"{k!r} {v:+.2f}" for k, v in model.explain(request, job, 5))
         lines.append(f"{job:8} {p:.3f}  {top}")
@@ -363,6 +474,8 @@ def cli_jobs(args, *, interactive: bool, engines: dict | None = None) -> tuple:
 
     def engine(job):
         if commands is not None:
+            if job == 'system' and backend != 'grammar':
+                return commands_ask.NoProposal(f'system grammar ({backend} selected for commands)')
             return commands_ask.NoProposal()
         if job not in engines:
             engines[job] = stack.enter_context(needle_cli.LazyRuntime(
@@ -374,10 +487,26 @@ def cli_jobs(args, *, interactive: bool, engines: dict | None = None) -> tuple:
         return engine("system")
 
     confirm = needle_cli._never if args.agent else needle_cli._terminal_confirm
+    cwd = os.getcwd()
     jobs = Jobs(engine, classify_system, confirm=confirm, agent=args.agent,
-                agents_cwd=os.getcwd(), files_cwd=None,
-                under_overlay=getattr(args, "under_overlay", False), commands=commands)
+                agents_cwd=cwd, files_cwd=cwd,
+                under_overlay=getattr(args, "under_overlay", False), commands=commands,
+                suggest=None if args.agent else suggester(commands))
     return jobs, stack
+
+
+# Exit status when no job takes the request and nothing was offered: the route
+# was "none", or unsure with no job's plan admitting it. Callers such as
+# `kilix ask` use it to try their own fallbacks; any other failure stays 1.
+NO_JOB = 3
+# Items a plan completes on its own: the pane and tab inventory reads them.
+READS = ("list_tabs", "list_panes")
+
+
+def no_job(route: dict) -> bool:
+    """Only a sure "none" or a completed candidate search with zero admissions."""
+    stage, job = route.get("stage"), route.get("job")
+    return (stage in (0, 1, "forced") and job == "none") or (stage == "clarify" and route.get("unmatched") is True)
 
 
 def _yes(question: str) -> bool:
@@ -397,7 +526,11 @@ def interactive(request: str, jobs: Jobs) -> int:
     # "forced" here is a request that names its job; --job cannot reach it.
     if route.get("stage") not in (0, 1, "forced") or route.get("job") not in runnable \
             or not admits(route["job"], plan):
-        return 1
+        return NO_JOB if no_job(route) else 1
+    items = [item for item in plan.get("items") or [] if isinstance(item, dict)]
+    if plan.get("status") == 0 and items and all(
+            item.get("outcome") == "done" and item.get("kind") in READS for item in items):
+        return 0  # the plan already read the panes or tabs; nothing is left to confirm
     if not _yes("Do it? [y/N] "):
         print("not run")
         return 1
@@ -432,7 +565,8 @@ def main(argv=None) -> int:
     parser.add_argument("--root", help=argparse.SUPPRESS)
     import commands_selection
     parser.add_argument('--commands-backend', choices=commands_selection.BACKENDS,
-                        help='command interpreter (saved preference, otherwise lfm2); grammar skips model loading')
+                        help='command interpreter (saved preference; otherwise lfm2 when it is '
+                             'installed, else grammar); grammar skips model loading')
     parser.add_argument('--commands-candidate', help='override the installed Needle3 model with a verified local candidate manifest')
     parser.add_argument('--commands-bundle', help='local LFM2 bundle matching the selected release pins')
     parser.add_argument('--commands-manifest', help='explicit LFM2 artifact manifest for a local bundle')
@@ -441,7 +575,7 @@ def main(argv=None) -> int:
     parser.add_argument('--operation-id', help='reuse an incomplete command operation without replaying actions')
     args = parser.parse_args(argv)
     try:
-        args.commands_backend = commands_selection.resolve(args.commands_backend)
+        args.commands_backend, chosen_by = commands_selection.choice(args.commands_backend, args.root)
     except (OSError, ValueError) as error:
         parser.error(str(error))
     request = " ".join(args.request).strip()
@@ -484,12 +618,22 @@ def main(argv=None) -> int:
                 record = ask(request, jobs, act=not args.plan, assume_yes=args.yes, job=args.job)
                 print(json.dumps(record, ensure_ascii=False) if args.json else render(record))
                 status = 0 if record.get("status") == 0 else 1
+                if status and args.yes and not (args.plan or args.json or args.agent or args.job) \
+                        and no_job(record.get("route") or {}):
+                    status = NO_JOB
     except KeyboardInterrupt:
         print("\nkilix-needle ask: interrupted", file=sys.stderr)
         status = 1
     except Exception as error:      # noqa: BLE001 - engines and assets fail with a message
         print(f"kilix-needle ask: {error}", file=sys.stderr)
         status = 2 if not args.interactive else 1
+    if status == NO_JOB and chosen_by == 'not-installed' and not (args.agent or args.json):
+        # Nothing was chosen and the release model is absent, so only the grammar
+        # read this. Say so once; a saved or explicit grammar choice says nothing.
+        print("kilix-needle ask: this release's LFM2 command model is not installed, so only "
+              "the grammar read this request. `kilix ask` at a terminal asks whether to "
+              "install it; `kilix-needle workflows setup --model lfm2` installs it.",
+              file=sys.stderr)
     if args.interactive and args.hold and sys.stdin.isatty():
         try:
             input("Press Enter to close.")

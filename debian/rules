@@ -1,0 +1,28 @@
+#!/usr/bin/make -f
+# The runtime lives under /usr/share/kilix-needle. The command model and the
+# router weights stay out of the package. Developer checkouts are unchanged.
+
+D := debian/kilix-needle/usr/share/kilix-needle
+
+%:
+	dh $@
+
+override_dh_auto_build:
+
+override_dh_auto_test:
+
+override_dh_auto_install:
+	install -d $(D)/needle_logs $(D)/tools $(D)/corpus-supplement debian/kilix-needle/usr/bin
+	cp -a *.py $(D)/
+	cp -a needle_logs/. $(D)/needle_logs/
+	cp -a tools/. $(D)/tools/
+	cp -a corpus-supplement/. $(D)/corpus-supplement/
+	cp -a kilix-needle kilix-desktop $(D)/
+	cp -a commands-model.json commands-lfm3-model.json commands-tools.json needle3-model.json $(D)/
+	touch $(D)/router-grammar-only
+	find $(D) -depth -name __pycache__ -type d -exec rm -rf {} +
+	find $(D) -type f -name '*.pyc' -delete
+	chmod -R a+rX $(D)
+	chmod a+x $(D)/kilix-needle $(D)/kilix-desktop
+	ln -s ../share/kilix-needle/kilix-needle debian/kilix-needle/usr/bin/kilix-needle
+	ln -s ../share/kilix-needle/kilix-desktop debian/kilix-needle/usr/bin/kilix-desktop

@@ -136,6 +136,160 @@ class CommandGrammar(unittest.TestCase):
             call('start_codex', model='gpt-6'), call('open_app', app='kilix-calculator'),
             call('start_codex', model='gpt-6.1-sol')])
 
+    def test_one_directory_or_placement_for_launches_that_share_a_verb(self):
+        # Gap 2 (0.2.3): stated once after launches that share one verb and state
+        # nothing else, a directory or placement is each launch's.
+        both = lambda **args: [call('start_codex', **args), call('start_claude', **args)]
+        self.check('start codex and claude in /w', both(directory='/w'))
+        self.check('start codex and claude to the right', both(place='right'))
+        self.check('start codex and claude in /w to the right', both(directory='/w', place='right'))
+        self.check('start codex and a new claude session in /w', both(directory='/w'))
+        self.check('start codex and claude and codex in /w',
+                   both(directory='/w') + [call('start_codex', directory='/w')])
+        self.check('start codex and claude in /w and open the calculator',
+                   both(directory='/w') + [call('open_app', app='kilix-calculator')])
+        self.check('open the calculator and start codex and claude in /w',
+                   [call('open_app', app='kilix-calculator')] + both(directory='/w'))
+        # A fronted directory scopes the launches that share its verb.
+        self.check('in /w, start codex and claude', both(directory='/w'))
+        self.check('in /w, start codex and open the calculator', [
+            call('start_codex', directory='/w'), call('open_app', app='kilix-calculator')])
+        self.check('in /w, start codex; start claude in /v', [
+            call('start_codex', directory='/w'), call('start_claude', directory='/v')])
+        # Only launches that share the verb are compared; a later action with
+        # its own verb keeps its own reading.
+        self.check('start codex in /a and claude in /b; open the calculator', [
+            call('start_codex', directory='/a'), call('start_claude', directory='/b'),
+            call('open_app', app='kilix-calculator')])
+        self.check('start codex and claude; start codex in /c', both() + [call('start_codex', directory='/c')])
+        self.check('start codex in /a and claude in /b; start codex using gpt-6', [
+            call('start_codex', directory='/a'), call('start_claude', directory='/b'),
+            call('start_codex', model='gpt-6')])
+        # Unchanged per-launch readings.
+        self.check('start codex here and claude in /w', [call('start_codex'), call('start_claude', directory='/w')])
+        self.check('start codex in /a and claude', [call('start_codex', directory='/a'), call('start_claude')])
+        for request in (
+                # A launch states its own field beside one that does not.
+                'start codex in /a and claude to the right',
+                'start codex to the right and claude in /w',
+                'start codex and claude in /w and codex',
+                'start codex and claude in /w and codex in /v',
+                # A sequence, a singular "its", a task or a model are not shared.
+                'start codex and then claude in /w',
+                'start codex and claude with /w as its working directory',
+                'start codex and claude with task "x"',
+                'start codex and claude gpt-6',
+                # A fronted directory, then an agent action that states none.
+                'in /w, start codex and then claude',
+                'in /w, start codex and then start claude',
+                'in /w, start codex; start claude',
+                'in /w, start codex and claude in /v',
+                'in /w, start codex and claude to the right',
+                'in /w, start codex and wait for codex',
+                'in /w, start codex; tell claude: hi',
+                # A member's own "here" is never replaced by the fronted directory.
+                'in /w, start codex and claude here',
+                'in /w, start codex and claude in the current directory',
+                'in ~/w, start claude and codex in this folder',
+                'in /w, start codex and a new claude session here',
+                # After a shared directory, a wait or message that states none
+                # may be meant for an agent just started there.
+                'start codex and claude in /w and wait for codex',
+                'start codex and claude in /w, then tell codex to fix the tests',
+                'start codex and claude in /w; wait for claude',
+                'start codex and claude in /w; send codex: hi',
+                'start codex and claude in /w and open the calculator and wait for codex',
+                'open the calculator and start codex and claude in /w and wait for codex',
+                'start codex and claude and codex in /w and wait for codex'):
+            with self.subTest(request=request):
+                self.assertIsNone(contract.exact_calls(request))
+        # A wait that states its directory, or a shared placement only, still reads.
+        self.check('start codex and claude in /w and wait for codex in /w',
+                   both(directory='/w') + [call('wait_for_agent', agent='codex', directory='/w')])
+        self.check('start codex and claude to the right and wait for codex',
+                   both(place='right') + [call('wait_for_agent', agent='codex')])
+
+    def test_a_model_before_a_verb_sharing_launchs_own_field_is_its_own(self):
+        # Gap 3 (0.2.3): a model followed by the launch's own directory or
+        # placement, of a kind the left launch also states, is that launch's.
+        self.check('start codex in /a and codex using gpt-6 in /b', [
+            call('start_codex', directory='/a'), call('start_codex', directory='/b', model='gpt-6')])
+        self.check('start codex in /a and codex gpt-6 in /b', [
+            call('start_codex', directory='/a'), call('start_codex', directory='/b', model='gpt-6')])
+        self.check('start codex to the right and codex using gpt-6 to the left', [
+            call('start_codex', place='right'), call('start_codex', place='left', model='gpt-6')])
+        self.check('start codex in /a and a new codex session using gpt-6 in /b', [
+            call('start_codex', directory='/a'), call('start_codex', directory='/b', model='gpt-6')])
+        self.check('start codex in /a and codex using gpt-6 in /b and claude in /c', [
+            call('start_codex', directory='/a'), call('start_codex', directory='/b', model='gpt-6'),
+            call('start_claude', directory='/c')])
+        for request in (
+                # The left launch states no directory, so "in /a" may be shared.
+                'start codex and codex using gpt-6 in /a',
+                # The placement is of a kind the left launch does not state.
+                'start codex in /a and codex with model gpt-6 to the right',
+                # The model trails its launch.
+                'start codex in /a and codex in /b using gpt-6',
+                'start codex in /a and then a new codex session in /b using gpt-6',
+                # "in /c" after a launch with only a model may be shared.
+                'start codex in /a and codex using gpt-6 and claude in /c'):
+            with self.subTest(request=request):
+                self.assertIsNone(contract.exact_calls(request))
+
+    def test_a_verbless_launch_in_a_clause_of_its_own_keeps_its_model(self):
+        # Gap 4 (0.2.3): after ";" or "then", or opening with "please" or
+        # "I need", a launch is a request of its own, so its model is its own.
+        second = [call('start_codex', directory='/a'), call('start_codex', directory='/b', model='gpt-6')]
+        for request in ('start codex in /a; a new codex session in /b using gpt-6',
+                        'start codex in /a then a new codex session in /b using gpt-6',
+                        'start codex in /a, then a new codex session in /b using gpt-6',
+                        'start codex in /a and please a new codex session in /b using gpt-6',
+                        'start codex in /a and I need a new codex in /b using gpt-6',
+                        'start codex in /a; I need a new codex in /b using gpt-6'):
+            with self.subTest(request=request):
+                self.check(request, second)
+        self.check('start codex in /a and open the calculator; a new codex session, model gpt-6', [
+            call('start_codex', directory='/a'), call('open_app', app='kilix-calculator'),
+            call('start_codex', model='gpt-6')])
+        # After "and" (or "and then") a verbless launch still shares the verb.
+        for request in ('start codex in /a and a new codex session in /b using gpt-6',
+                        'start codex in /a and then a new codex session in /b using gpt-6',
+                        'start codex in /a; open the calculator and a new codex session using gpt-6'):
+            with self.subTest(request=request):
+                self.assertIsNone(contract.exact_calls(request))
+
+    def test_a_comma_model_after_a_list_of_launches_refuses(self):
+        # Gap 5 (0.2.3): ", model X" after a comma or "and" list of complete
+        # launches may be meant for each of them when an earlier one states none.
+        for request in ('start codex in /a, start codex in /b, model gpt-6',
+                        'start codex in /a and start codex in /b, model gpt-6',
+                        # "and then" joins a list here, as it does for a shared verb.
+                        'start codex in /a and then start codex in /b, model gpt-6',
+                        'start codex in /a, start codex in /b, --model gpt-6',
+                        'start codex in /a, start codex in /b, using gpt-6',
+                        'start codex in /a, open the calculator, start codex in /b, model gpt-6',
+                        'start codex in /a, start codex in /b, model gpt-6, then open the calculator'):
+            with self.subTest(request=request):
+                self.assertIsNone(contract.exact_calls(request))
+        two = [call('start_codex', directory='/a'), call('start_codex', directory='/b', model='gpt-6')]
+        # Without the comma, after ";" or "then", the model is the last launch's.
+        for request in ('start codex in /a, start codex in /b with model gpt-6',
+                        'start codex in /a; start codex in /b, model gpt-6',
+                        'start codex in /a then start codex in /b, model gpt-6'):
+            with self.subTest(request=request):
+                self.check(request, two)
+        # No earlier launch in the list lacks a model.
+        self.check('start codex gpt-6.1-sol in /a, start codex in /b, model gpt-6', [
+            call('start_codex', directory='/a', model='gpt-6.1-sol'), two[1]])
+        self.check('open the calculator, start codex in /b, model gpt-6', [
+            call('open_app', app='kilix-calculator'), two[1]])
+        self.check('start codex in /a; open the calculator, start codex in /b, model gpt-6', [
+            two[0], call('open_app', app='kilix-calculator'), two[1]])
+        self.check('start codex in /b, model gpt-6', [two[1]])
+        # A comma-set model followed by the launch's own field is inside it,
+        # as at base: the comma does not set off a trailing model.
+        self.check('start codex in /a, start codex, using gpt-6 in /b', two)
+
     def test_a_model_is_not_read_across_a_removed_location_or_placement(self):
         for request in ('start codex model in /w gpt-6', 'start codex --model on the right gpt-6',
                         'start codex model here gpt-6', 'start codex using in /w gpt-6',
@@ -327,6 +481,150 @@ class CommandGrammar(unittest.TestCase):
             with self.subTest(request=request):
                 self.assertIsNone(contract.exact_calls(request))
 
+    def test_single_and_typographic_quotes_around_a_whole_payload_delimit_it(self):
+        text = call('message_agent', agent='claude', text='if the build breaks, revert the last commit')
+        for quoted in ("'if the build breaks, revert the last commit'",
+                       "'if the build breaks, revert the last commit'.",
+                       '\u2018if the build breaks, revert the last commit\u2019',
+                       '\u201cif the build breaks, revert the last commit\u201d!',
+                       '"if the build breaks, revert the last commit"'):
+            with self.subTest(quoted=quoted):
+                self.assertEqual(contract.exact_calls('Please pass this along to claude here: ' + quoted), [text])
+        self.assertEqual(contract.exact_calls("tell claude: 'don't stop'"),
+                         [call('message_agent', agent='claude', text="don't stop")])
+        self.assertEqual(contract.exact_calls("start codex here with task: 'fix it'"), [call('start_codex', task='fix it')])
+        self.assertEqual(contract.exact_calls("tell codex: 'run it', then wait for codex"),
+                         [call('message_agent', agent='codex', text='run it'), call('wait_for_agent', agent='codex')])
+
+    def test_quote_marks_that_do_not_wrap_the_whole_payload_stay_text(self):
+        for payload in ("'tis done", "it's 'fine'", "fix the 'tests'", "' '", "\u2018a\u2019 or \u2018b\u2019 first"):
+            with self.subTest(payload=payload):
+                self.assertEqual(contract.exact_calls('tell claude: ' + payload),
+                                 [call('message_agent', agent='claude', text=payload)])
+        self.assertIsNone(contract.exact_calls("tell claude: 'a' and 'b'"))
+
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class PaneTargets(unittest.TestCase):
+    """A wait or message may name its session by Kilix pane (grammar-only
+    arguments); the runner verifies the pane before anything is typed."""
+    BROKER = '0c9e1f2a3b4d5e6f'
+
+    def check(self, request, wanted):
+        self.assertEqual(contract.exact_calls(request), wanted, request)
+        self.assertTrue(contract.admit(request, wanted).actions, request)
+
+    def test_pane_messages_said_the_ways_agents_say_them(self):
+        text = 'the fixture rebuild is done; rerun step 4 in /tmp/sandpiper-bay and report.'
+        for head, target in (
+                ('Tell pane 812', {'pane': '812'}),
+                ('Send this message to the Codex session in Kilix pane 77', {'agent': 'codex', 'pane': '77'}),
+                ('Send a message to the existing Codex agent in pane 39', {'agent': 'codex', 'pane': '39'}),
+                ('Message the session in pane 7', {'pane': '7'}),
+                ('tell the coding agent in pane 31', {'pane': '31'}),
+                ('Tell Claude in pane 2', {'agent': 'claude', 'pane': '2'}),
+                ('tell claude code in pane 2', {'agent': 'claude', 'pane': '2'}),
+                ('Tell the grok session in pane 119', {'agent': 'grok', 'pane': '119'}),
+                ('Message existing agent pane 32 broker ' + self.BROKER, {'pane': '32', 'broker': self.BROKER}),
+                ('Tell existing Codex pane 544 broker ' + self.BROKER, {'agent': 'codex', 'pane': '544', 'broker': self.BROKER}),
+                ('tell pane 32 on broker ' + self.BROKER, {'pane': '32', 'broker': self.BROKER}),
+                ('Send this message to the existing agent in pane 32, broker ' + self.BROKER, {'pane': '32', 'broker': self.BROKER}),
+                ('message the claude session in pane 4 (broker ' + self.BROKER + ')',
+                 {'agent': 'claude', 'pane': '4', 'broker': self.BROKER}),
+                ('tell the agent in pane 32 with broker session ' + self.BROKER, {'pane': '32', 'broker': self.BROKER})):
+            with self.subTest(head=head):
+                self.check(head + ': ' + text, [call('message_agent', **target, text=text)])
+        self.check('Send a message to the existing agent in pane 32 with broker session ' + self.BROKER + '. Message: ' + text,
+                   [call('message_agent', pane='32', broker=self.BROKER, text=text)])
+
+    def test_quoted_and_short_forms(self):
+        self.check("message pane 59 'hello'", [call('message_agent', pane='59', text='hello')])
+        self.check('Tell pane 498: "Source INCOMPLETE, keep the reader."',
+                   [call('message_agent', pane='498', text='Source INCOMPLETE, keep the reader.')])
+        self.check('tell the codex session in pane 9 "run the tests"',
+                   [call('message_agent', agent='codex', pane='9', text='run the tests')])
+        self.check('send "x" to the session in pane 4', [call('message_agent', pane='4', text='x')])
+        self.check('tell pane 5 to rerun the linter', [call('message_agent', pane='5', text='rerun the linter')])
+
+    def test_pane_waits(self):
+        self.check('wait for pane 5 to finish', [call('wait_for_agent', pane='5')])
+        self.check('wait for the codex session in pane 9', [call('wait_for_agent', agent='codex', pane='9')])
+        self.check('wait until the claude in pane 2 is idle', [call('wait_for_agent', agent='claude', pane='2')])
+        self.check('wait for grok in pane 4 to finish', [call('wait_for_agent', agent='grok', pane='4')])
+        self.check('wait for pane 31 to finish, then tell it "next batch"',
+                   [call('wait_for_agent', pane='31'), call('message_agent', pane='31', text='next batch')])
+        self.check('wait for the codex session in pane 3, then tell it "go"',
+                   [call('wait_for_agent', agent='codex', pane='3'), call('message_agent', agent='codex', pane='3', text='go')])
+
+    def test_what_is_no_pane_target(self):
+        for request in (
+                'tell codex in pane 5 in /tmp/sandpiper-bay: hi',        # a pane and a directory
+                'tell the codex session here in pane 4 "x"',
+                'tell pane 4 "x" in ./sandpiper-bay', 'tell pane 4 "x" here',
+                "wait for pane 4 that's working in ./sandpiper-bay to finish",
+                'tell pane 5 "x" and pane 6 "y"',
+                'tell the grok session in pane 18 and the grok session in pane 19 to say hello',
+                'Tell pane503: hi', 'Tell session 518: hi', 'tell tab 7: hi', 'tell window 3: hi',
+                'tell the codex session in the pane on the left: hi', 'tell my other pane: hi',
+                'Tell pane 503 broker 0C9E1F2A3B4D5E6F: hi',             # a broker id is lowercase hex
+                'Tell pane 503 broker 0c9e1f2a: hi',                     # too short to be one
+                'Tell pane503 broker' + self.BROKER + ' from pane493: hi',
+                'Tell pane 3 from pane 9: hi', 'tell pane 0: hi',
+                'if it is idle, tell pane 4 "x"', 'is pane 7 idle?', 'close pane 7', 'run ls in pane 5',
+                'tell the supervisor in pane 4 to go on',
+                'Message existing Grok pane 377 only. Do not open a new agent. Read the brief.',
+                'tell pane 5:', 'wait for pane 5 for ten minutes', 'wait for pane 5 to ask for approval',
+                'tell pane 5: ' + 'x' * 1025):
+            with self.subTest(request=request):
+                self.assertIsNone(contract.exact_calls(request))
+
+    def test_a_pane_and_an_unpaned_session_of_that_agent_have_no_reading(self):
+        # "wait for claude" may mean the claude in pane 2.
+        self.assertIsNone(contract.exact_calls('tell claude in pane 2: "x"; then wait for claude'))
+        self.assertIsNone(contract.exact_calls('tell pane 2: "x"; then wait for codex'))
+        self.check('start claude here, then tell claude in pane 5: "x"',
+                   [call('start_claude'), call('message_agent', agent='claude', pane='5', text='x')])
+
+    def test_admission_is_complete_and_held_to_the_request(self):
+        request = 'Tell existing Codex pane 544 broker ' + self.BROKER + ': waiters deferred'
+        wanted = contract.exact_calls(request)
+        for changed in ({'pane': '545'}, {'broker': 'f' * 16}, {'agent': 'claude'}, {'text': 'waiters deferred.'}):
+            proposal = [call('message_agent', **{**wanted[0]['arguments'], **changed})]
+            self.assertFalse(contract.admit(request, proposal).actions, changed)
+        dropped = {key: value for key, value in wanted[0]['arguments'].items() if key != 'broker'}
+        self.assertFalse(contract.admit(request, [call('message_agent', **dropped)]).actions)
+        action = contract.admit(request, wanted).actions[0]
+        self.assertEqual((action.kind, action.args),
+                         ('tell', {'pane': '544', 'broker': self.BROKER, 'agent': 'codex', 'text': 'waiters deferred'}))
+        wait = contract.admit('wait for pane 5', [call('wait_for_agent', pane='5')]).actions[0]
+        self.assertEqual((wait.kind, wait.args), ('wait', {'pane': '5', 'for': 'idle'}))
+
+    def test_a_command_model_is_held_to_the_published_tools(self):
+        request = 'tell codex in pane 179: test'
+        wanted = contract.exact_calls(request)
+        self.assertTrue(contract.admit(request, wanted).actions)
+        refused = contract.admit(request, wanted, published=True)
+        self.assertFalse(refused.actions)
+        self.assertEqual(refused.reason, 'unexpected, missing or non-string arguments')
+        # a five-tool proposal is no reading of a pane request
+        self.assertFalse(contract.admit(request, [call('message_agent', agent='codex', text='test')], published=True).actions)
+        # and the published path admits exactly what it did before
+        self.assertTrue(contract.admit('tell codex here: run it', [call('message_agent', agent='codex', text='run it')],
+                                       published=True).actions)
+
+    def test_canonical_form_of_a_pane_target(self):
+        good = [call('message_agent', pane='5', text='x')]
+        self.assertEqual(contract._canonical(good), good)
+        for args in ({'pane': '5', 'directory': '/x', 'text': 'x'}, {'pane': '05', 'text': 'x'},
+                     {'pane': 'five', 'text': 'x'}, {'pane': '5', 'broker': 'XYZ', 'text': 'x'},
+                     {'pane': '5', 'agent': 'kimi', 'text': 'x'}, {'agent': 'grok', 'text': 'x'},
+                     {'agent': 'codex', 'broker': self.BROKER, 'text': 'x'}):
+            with self.subTest(args=args), self.assertRaises(ValueError):
+                contract._canonical([call('message_agent', **args)])
+        with self.assertRaises(ValueError):
+            contract._canonical([call('start_codex', pane='5')])
+        with self.assertRaises(ValueError):
+            contract._canonical(good, published=True)

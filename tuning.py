@@ -48,14 +48,23 @@ PACKS = {"panes": "kilix_panes", "apps": "kilix_apps",   # kilix-ml domain per j
          "agents": "kilix_agents"}
 
 
+PACKAGED_ML = Path("/usr/share/kilix-ml")
+
+
 def library_path(job: str = jobs.DEFAULT) -> Path:
     """kilix-ml's pack for a job: the tuning library has one source, kilix-ml.
 
-    KILIX_ML_HOME names a kilix-ml checkout (a workspace's live copy);
-    otherwise the pinned third_party/kilix-ml submodule is used.
+    KILIX_ML_HOME names a kilix-ml checkout (a workspace's live copy).
+    Otherwise the installed package is used when it is present, and the
+    pinned third_party/kilix-ml submodule remains the checkout fallback.
     """
     configured = os.environ.get("KILIX_ML_HOME")
-    ml = Path(configured).expanduser() if configured else REPO / "third_party" / "kilix-ml"
+    if configured:
+        ml = Path(configured).expanduser()
+    elif (PACKAGED_ML / "domains").is_dir():
+        ml = PACKAGED_ML
+    else:
+        ml = REPO / "third_party" / "kilix-ml"
     return ml / "domains" / PACKS[jobs.get(job).name]
 
 

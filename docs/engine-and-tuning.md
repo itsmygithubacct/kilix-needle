@@ -195,7 +195,8 @@ Execution goes through `run_calls()` in `needle_cli.py`, the same path used by
 Needle 2. The bridge never reads a confirmation answer from its JSONL stream:
 use `--yes` for risky actions, and a partial refusal still prevents execution.
 With `--agent`, closing the caller's own pane or tab remains forbidden. A command
-is only typed when the target is at a shell prompt.
+requested in an existing pane goes through the same verified submission as the
+CLI.
 
 New action details:
 

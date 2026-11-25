@@ -2,11 +2,11 @@
 
 Owner determination 2026-11-07: LFM2's terms are a notice. kilix-needle
 loads the catalog and licence records from third_party/kilix-content, so
-that copy must carry the same delivery and notice record as the image. A
-review found the copy one delivery behind with the old agreement record:
-the image's notice receipt did not cover it, and `install --commands`
-demanded a typed agreement. Nothing here is mocked except the terminal and
-the final download.
+that copy must carry the same delivery and notice record as the catalog
+Kilix selects. A review found the copy one delivery behind with the old
+agreement record: the notice receipt Plebian-OS wrote did not cover it, and
+`install --commands` demanded a typed agreement. Nothing here is mocked
+except the terminal and the final download.
 """
 import support  # noqa: F401
 import io
@@ -16,7 +16,7 @@ from unittest.mock import Mock, patch
 
 import asset
 
-DELIVERY = 'lfm2-kilix-commands-20261106-v9'
+DELIVERY = 'lfm2-kilix-commands-20261115-v10'
 RECORD = 'e4d08e2c53ab514e1e2ca2a812c64895519487d707c441703978bd0f245b5016'
 
 
@@ -39,7 +39,7 @@ class VendoredNotice(unittest.TestCase):
     def record(self, asset_id):
         return self.first_use.license_record_for(self.catalog.require_asset(asset_id), self.records)
 
-    def test_the_vendored_catalog_is_the_image_delivery_with_the_notice_record(self):
+    def test_the_vendored_catalog_is_the_selected_delivery_with_the_notice_record(self):
         spec = self.catalog.require_asset('lfm2-kilix-commands')
         self.assertEqual(spec.version, DELIVERY)
         record = self.record('lfm2-kilix-commands')
@@ -71,7 +71,7 @@ class VendoredNotice(unittest.TestCase):
         self.assertRegex(str(error), 'not accepted')
         install.assert_not_called()
 
-    def test_a_notice_receipt_like_the_image_writes_covers_the_vendored_asset(self):
+    def test_a_notice_receipt_like_plebian_os_writes_covers_the_vendored_asset(self):
         from kilix_content.receipt import _CATALOG_SHA256, release_digest
         spec = self.catalog.require_asset('lfm2-kilix-commands')
         record = self.record('lfm2-kilix-commands')
@@ -94,8 +94,9 @@ class VendoredNotice(unittest.TestCase):
             with self.assertRaises(asset.AssetError) as agreement:
                 asset.installed_asset_dir('lfm3-kilix-commands', root)
         for error in (notice.exception, runtime.exception):
-            self.assertEqual(str(error), 'no receipt records that the lfm2-kilix-commands licence '
-                             'terms were shown; install it with: kilix-needle install --commands')
+            self.assertEqual(str(error), 'no receipt records that the licence terms of this delivery '
+                             'of lfm2-kilix-commands were shown; install it with: '
+                             'kilix-needle install --commands')
         self.assertEqual(str(agreement.exception), 'the lfm3-kilix-commands licence has not been '
                          'accepted; install it with: kilix-needle install --commands lfm3')
 
