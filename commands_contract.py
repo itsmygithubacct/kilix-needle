@@ -230,7 +230,7 @@ def _payload(text, *, closed=False):
     return text
 
 
-# A session named by its pane: "the Codex session in Kilix pane 9", "claude in
+# A session named by its pane: "the Codex instance in Kilix pane 71", "claude in
 # pane 2", "existing agent pane 32 broker <id>", "pane 143". An agent or a noun
 # may come first; with neither, the pane alone is the target.
 _P_AGENT = r'(?P<agent>claude(?:\s+code)?|codex|grok)'

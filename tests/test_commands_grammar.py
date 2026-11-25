@@ -521,24 +521,24 @@ class PaneTargets(unittest.TestCase):
         text = 'the fixture rebuild is done; rerun step 4 in /tmp/sandpiper-bay and report.'
         for head, target in (
                 ('Tell pane 812', {'pane': '812'}),
-                ('Send this message to the Codex session in Kilix pane 77', {'agent': 'codex', 'pane': '77'}),
-                ('Send a message to the existing Codex agent in pane 39', {'agent': 'codex', 'pane': '39'}),
+                ('Send this message to the Codex instance in Kilix pane 77', {'agent': 'codex', 'pane': '77'}),
+                ('Send a message to the running Codex agent in pane 266', {'agent': 'codex', 'pane': '266'}),
                 ('Message the session in pane 7', {'pane': '7'}),
                 ('tell the coding agent in pane 31', {'pane': '31'}),
                 ('Tell Claude in pane 2', {'agent': 'claude', 'pane': '2'}),
                 ('tell claude code in pane 2', {'agent': 'claude', 'pane': '2'}),
                 ('Tell the grok session in pane 119', {'agent': 'grok', 'pane': '119'}),
-                ('Message existing agent pane 32 broker ' + self.BROKER, {'pane': '32', 'broker': self.BROKER}),
+                ('Message existing agent pane 845 broker ' + self.BROKER, {'pane': '845', 'broker': self.BROKER}),
                 ('Tell existing Codex pane 544 broker ' + self.BROKER, {'agent': 'codex', 'pane': '544', 'broker': self.BROKER}),
-                ('tell pane 32 on broker ' + self.BROKER, {'pane': '32', 'broker': self.BROKER}),
-                ('Send this message to the existing agent in pane 32, broker ' + self.BROKER, {'pane': '32', 'broker': self.BROKER}),
+                ('tell pane 845 on broker ' + self.BROKER, {'pane': '845', 'broker': self.BROKER}),
+                ('Send this message to the current agent in pane 845, broker ' + self.BROKER, {'pane': '845', 'broker': self.BROKER}),
                 ('message the claude session in pane 4 (broker ' + self.BROKER + ')',
                  {'agent': 'claude', 'pane': '4', 'broker': self.BROKER}),
-                ('tell the agent in pane 32 with broker session ' + self.BROKER, {'pane': '32', 'broker': self.BROKER})):
+                ('tell the agent in pane 618 with broker session ' + self.BROKER, {'pane': '618', 'broker': self.BROKER})):
             with self.subTest(head=head):
                 self.check(head + ': ' + text, [call('message_agent', **target, text=text)])
-        self.check('Send a message to the existing agent in pane 32 with broker session ' + self.BROKER + '. Message: ' + text,
-                   [call('message_agent', pane='32', broker=self.BROKER, text=text)])
+        self.check('Send a message to the live agent in pane 618 with broker session ' + self.BROKER + '. Message: ' + text,
+                   [call('message_agent', pane='618', broker=self.BROKER, text=text)])
 
     def test_quoted_and_short_forms(self):
         self.check("message pane 59 'hello'", [call('message_agent', pane='59', text='hello')])
@@ -575,7 +575,7 @@ class PaneTargets(unittest.TestCase):
                 'Tell pane 3 from pane 9: hi', 'tell pane 0: hi',
                 'if it is idle, tell pane 4 "x"', 'is pane 7 idle?', 'close pane 7', 'run ls in pane 5',
                 'tell the supervisor in pane 4 to go on',
-                'Message existing Grok pane 377 only. Do not open a new agent. Read the brief.',
+                'Message the existing Grok pane 604 alone; no new agent. Read the notes.',
                 'tell pane 5:', 'wait for pane 5 for ten minutes', 'wait for pane 5 to ask for approval',
                 'tell pane 5: ' + 'x' * 1025):
             with self.subTest(request=request):
